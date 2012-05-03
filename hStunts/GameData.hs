@@ -309,10 +309,10 @@ toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
     md = separateFaces . convertLines $ mdOrig
 
     groupToSubMesh prs@(pr:_) = case prType pr of
-        --Particle    -> undefined -- vsm OT_POINT_LIST (vib id)
-        --Line        -> undefined -- vsm OT_LINE_LIST (vib id)
+        --Particle    -> vsm OT_POINT_LIST (vib id)
+        --Line        -> vsm OT_LINE_LIST (vib id)
         Polygon     -> P_TrianglesI (vib triangulate)
-        _           -> P_Triangles
+        _           -> P_TrianglesI SV.empty
       where
         --vsm pty = VSubMesh "StuntsMaterial" pty Nothing . Just
         vib fun = SV.fromList $ fun . prIndices =<< prs
