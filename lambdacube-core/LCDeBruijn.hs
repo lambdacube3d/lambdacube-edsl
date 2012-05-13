@@ -123,7 +123,7 @@ data OpenGeometryOut env genv t where
                 -> OpenGeometryOut env genv (j,(FTRepr a))
 
 data GeometryShader genv primIn primOut layerNum a b where
-    NoGeometryShader    :: GeometryShader genv prim prim N0 a a
+    NoGeometryShader    :: GeometryShader genv prim prim N1 a a
 
     GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum)
                         => layerNum                                                         -- geometry shader:
@@ -194,7 +194,7 @@ data OpenGP genv t where
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> idx
                     -> GP (Image sh t)
-                    -> OpenGP genv (Image N0 t)
+                    -> OpenGP genv (Image N1 t)
 
 type GP t = OpenGP () t
 deriving instance Typeable2 OpenGP

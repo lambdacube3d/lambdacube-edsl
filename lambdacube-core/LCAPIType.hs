@@ -729,8 +729,8 @@ data CubeTex   deriving Typeable    -- cube texture = array with size 6
 -- helper type level function for texture specification
 -- tells whether a texture is a single or an array texture
 type family TexArrRepr a
-type instance TexArrRepr N0 = SingleTex
-type instance TexArrRepr (Greater t N0 => t) = ArrayTex
+type instance TexArrRepr N1 = SingleTex
+type instance TexArrRepr (Greater t N1 => t) = ArrayTex
 
 -- supported texture component arities
 data Red    = Red  deriving Typeable
@@ -764,13 +764,13 @@ data TextureType dim mip arr layerCount t ar where -- hint: arr - single or arra
                     -> TextureType DIM2 Mip (TexArrRepr layerCount) layerCount t ar
 
     Texture3D       :: TextureDataType (Regular t) ar
-                    -> TextureType DIM3 Mip SingleTex N0 (Regular t) ar
+                    -> TextureType DIM3 Mip SingleTex N1 (Regular t) ar
 
     TextureCube     :: TextureDataType t ar
-                    -> TextureType DIM2 Mip CubeTex N0 t ar
+                    -> TextureType DIM2 Mip CubeTex N1 t ar
 
     TextureRect     :: TextureDataType t ar
-                    -> TextureType Rect NoMip SingleTex N0 t ar
+                    -> TextureType Rect NoMip SingleTex N1 t ar
 
     Texture2DMS     :: Nat layerCount
                     => TextureDataType (Regular t) ar
@@ -778,7 +778,7 @@ data TextureType dim mip arr layerCount t ar where -- hint: arr - single or arra
                     -> TextureType DIM2 NoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
 
     TextureBuffer   :: TextureDataType (Regular t) ar
-                    -> TextureType DIM1 NoMip SingleTex N0 (Buffer t) ar
+                    -> TextureType DIM1 NoMip SingleTex N1 (Buffer t) ar
 
 -- definies a texture
 data Texture (gp :: * -> *) dim layerCount t ar where

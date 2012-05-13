@@ -62,12 +62,12 @@ opaque
 opaqueZBias
 transparent
 -}
-stuntsGFX :: GP (FrameBuffer N0 (Float,V4F))
+stuntsGFX :: GP (FrameBuffer N1 (Float,V4F))
 stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
-    clear   = FrameBuffer (V2 640 480) (DepthImage n0 100000:.ColorImage n0 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (V2 640 480) (DepthImage n1 100000:.ColorImage n1 (zero'::V4F):.ZT)
     rast    = Rasterize rastCtx NoGeometryShader $ Transform vert $ Fetch "streamSlot" Triangle input
     input   = (IV3F "position", IV3F "normal", IV4F "colour", IInt "pattern", IFloat "zBias", IFloat "shininess")
     worldView = Uni (IM44F "worldView")
@@ -124,7 +124,7 @@ stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
 
         (colour,pos,eyePos,normal,pattern,zBias,shiny) = untup7 attr
 
-debugShader :: GP (FrameBuffer N0 (Float,V4F))
+debugShader :: GP (FrameBuffer N1 (Float,V4F))
 debugShader = Accumulate fragCtx PassAll frag rast stuntsGFX
   where
     offset  = NoOffset

@@ -54,7 +54,7 @@ main = do
             - shader descriptor
             - image file: tga or jpg
         -}
-        lcnet :: GP (Image N0 V4F)
+        lcnet :: GP (Image N1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 $ q3GFX $ T.toList shMap
 
         -- extract spawn points

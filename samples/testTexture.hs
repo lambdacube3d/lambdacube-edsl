@@ -25,11 +25,11 @@ import qualified Criterion.Measurement as C
 
 import VSM
 
-simple :: GP (FrameBuffer N0 (Float,V4F))
+simple :: GP (FrameBuffer N1 (Float,V4F))
 simple = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (V2 640 480) (DepthImage n0 1000:.ColorImage n0 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (V2 640 480) (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
     rast    = Rasterize triangleCtx NoGeometryShader prims
     prims   = Transform vert input
     input   = Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
@@ -47,11 +47,11 @@ simple = Accumulate fragCtx PassAll frag rast clear
         c = texture' sampler (drop3 a) (Const 0)
 
     sampler = Sampler LinearFilter Clamp diffuse
-    diffuse = TextureSlot "diffuse" $ Texture2D (Float RGB) n0
+    diffuse = TextureSlot "diffuse" $ Texture2D (Float RGB) n1
 
 main :: IO ()
 main = do
-    let lcnet :: GP (Image N0 V4F)
+    let lcnet :: GP (Image N1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 simple
 
     windowSize <- initCommon "LC DSL Texture Demo"
@@ -86,17 +86,17 @@ main = do
         [ Array ArrWord8 (3 * width * height) imagePixelData0
         , Array ArrWord8 (3 * width * height) imagePixelData1
         ]
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N0) (V2 128 128) Mip $
+    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip $
         [ ImageData pixelBuffer 0 -- mip levels
         , ImageData pixelBuffer 1
         ]
   alternative B:
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N0) (V2 128 128) Mip $
+    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip $
         [ Array ArrWord8 (3 * width * height) imagePixelData0
         , Array ArrWord8 (3 * width * height) imagePixelData1
         ]
   alternative C:
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N0) (V2 128 128) Mip
+    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip
     updateTexture texture $
         [ Array ArrWord8 (3 * width * height) imagePixelData0
         , Array ArrWord8 (3 * width * height) imagePixelData1

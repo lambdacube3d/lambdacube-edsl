@@ -87,7 +87,7 @@ data VertexOut t where
 -- Geometry
 -- describes a geometry shader
 data GeometryShader primIn primOut layerNum a b where
-    NoGeometryShader    :: GeometryShader prim prim N0 a a
+    NoGeometryShader    :: GeometryShader prim prim N1 a a
 
     GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum)
                         => layerNum                                                 -- geometry shader:
@@ -187,6 +187,6 @@ data GP t where
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> idx
                     -> GP (Image layerCount t)
-                    -> GP (Image N0 t)
+                    -> GP (Image N1 t)
 
 deriving instance Typeable1 GP

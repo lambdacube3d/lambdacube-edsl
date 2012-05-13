@@ -32,11 +32,11 @@ drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 drop3 :: Exp s V3F -> Exp s V2F
 drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
 
-simple :: GP (VertexStream Triangle (V3F,V3F)) -> GP (FrameBuffer N0 V4F)
+simple :: GP (VertexStream Triangle (V3F,V3F)) -> GP (FrameBuffer N1 V4F)
 simple objs = Accumulate fragCtx PassAll frag rast clear
   where
     worldViewProj = Uni (IM44F "worldViewProj")
-    clear   = FrameBuffer (V2 256 256) (ColorImage n0 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (V2 256 256) (ColorImage n1 (zero'::V4F):.ZT)
     fragCtx = ColorOp NoBlending (one' :: V4B):.ZT
     rast    = Rasterize triangleCtx NoGeometryShader prims
     prims   = Transform vert objs
@@ -50,10 +50,10 @@ simple objs = Accumulate fragCtx PassAll frag rast clear
     frag :: Exp F V3F -> FragmentOut (Color V4F :+: ZZ)
     frag a = FragmentOut $ snoc a 1 :. ZT
 
-    diffuse     = TextureSlot "diffuse" $ Texture2D (Float RGB) n0
+    diffuse     = TextureSlot "diffuse" $ Texture2D (Float RGB) n1
     sampler     = Sampler PointFilter Wrap diffuse
     texSize     = textureSize' sampler $ Const 0
-    renderTex   = Texture (Texture2D (Float RGBA) n0) AutoMip (PrjFrameBuffer "" tix0 $ simple objs)
+    renderTex   = Texture (Texture2D (Float RGBA) n1) AutoMip (PrjFrameBuffer "" tix0 $ simple objs)
 
     frag' :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag' a = FragmentOutRastDepth $ snoc (texture' sampler (drop3 a) (Const 0)) 1 :. ZT
@@ -88,7 +88,7 @@ initGL title = do
 main :: IO ()
 main = do
     let --lcnet :: GP (FrameBuffer Z (Color :+: Z) (V4F :+: Z))
-        lcnet :: GP (Image N0 V4F)
+        lcnet :: GP (Image N1 V4F)
         lcnet  = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
         --lcnet' = convertGP lcnet
 {-

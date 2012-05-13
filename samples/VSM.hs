@@ -35,10 +35,10 @@ intF = Const
 ----------
 -- VSM ---
 ----------
-clear :: GP (FrameBuffer N0 (Float,V2F))
-clear = FrameBuffer (V2 640 480) (DepthImage n0 1000:.ColorImage n0 (zero'::V2F):.ZT)
+clear :: GP (FrameBuffer N1 (Float,V2F))
+clear = FrameBuffer (V2 640 480) (DepthImage n1 1000:.ColorImage n1 (zero'::V2F):.ZT)
 
-moments :: GP (FrameBuffer N0 (Float,V2F))
+moments :: GP (FrameBuffer N1 (Float,V2F))
 moments = Accumulate fragCtx PassAll storeDepth rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V2B):.ZT
@@ -61,11 +61,11 @@ moments = Accumulate fragCtx PassAll storeDepth rast clear
         moment1 = depth
         moment2 = depth @* depth @+ floatF 0.25 @* (dx @* dx @+ dy @* dy)
 
-vsm :: GP (FrameBuffer N0 (Float,Float))
+vsm :: GP (FrameBuffer N1 (Float,Float))
 vsm = Accumulate fragCtx PassAll calcLuminance rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: Bool):.ZT
-    clear   = FrameBuffer (V2 640 480) (DepthImage n0 1000:.ColorImage n0 (zero'::Float):.ZT)
+    clear   = FrameBuffer (V2 640 480) (DepthImage n1 1000:.ColorImage n1 (zero'::Float):.ZT)
     rast    = Rasterize triangleCtx NoGeometryShader prims
     prims   = Transform vert input
     input   = Fetch "streamSlot" Triangle (IV3F "position")
@@ -91,4 +91,4 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
         p_max = variance @/ (variance @+ d @* d)
 
     sampler = Sampler LinearFilter Clamp shadowMap
-    shadowMap = Texture (Texture2D (Float RG) n0) AutoMip (PrjFrameBuffer "" tix0 moments)
+    shadowMap = Texture (Texture2D (Float RG) n1) AutoMip (PrjFrameBuffer "" tix0 moments)

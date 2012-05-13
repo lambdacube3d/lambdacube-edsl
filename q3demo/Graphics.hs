@@ -87,7 +87,7 @@ data StageAttrs
 deform :: Deform -> Exp V a -> Exp V a
 deform = undefined
 
-mkShader :: GP (FrameBuffer N0 (Float,V4F)) -> (ByteString,CommonAttrs) -> GP (FrameBuffer N0 (Float,V4F))
+mkShader :: GP (FrameBuffer N1 (Float,V4F)) -> (ByteString,CommonAttrs) -> GP (FrameBuffer N1 (Float,V4F))
 mkShader fb (name,ca) = Accumulate fragCtx PassAll frag rast fb
   where
     offset  = if caPolygonOffset ca then Offset (-1) (-2) else NoOffset
@@ -107,13 +107,13 @@ mkShader fb (name,ca) = Accumulate fragCtx PassAll frag rast fb
     frag :: Exp F V4F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag a = FragmentOutRastDepth $ a :. ZT
 
-q3GFX :: [(ByteString,CommonAttrs)] -> GP (FrameBuffer N0 (Float,V4F))
+q3GFX :: [(ByteString,CommonAttrs)] -> GP (FrameBuffer N1 (Float,V4F))
 q3GFX shl = errorShader $ foldl' mkShader clear ordered
   where
     ordered = sortBy (\(_,a) (_,b) -> caSort a `compare` caSort b) shl
-    clear   = FrameBuffer (V2 640 480) (DepthImage n0 1000:.ColorImage n0 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (V2 640 480) (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
 
-errorShader :: GP (FrameBuffer N0 (Float,V4F)) -> GP (FrameBuffer N0 (Float,V4F))
+errorShader :: GP (FrameBuffer N1 (Float,V4F)) -> GP (FrameBuffer N1 (Float,V4F))
 errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
   where
     offset  = NoOffset--Offset (0) (-10)
@@ -135,7 +135,7 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
       where
         V4 r g b a = unpack' v
 
-errorShaderFill :: GP (FrameBuffer N0 (Float,V4F)) -> GP (FrameBuffer N0 (Float,V4F))
+errorShaderFill :: GP (FrameBuffer N1 (Float,V4F)) -> GP (FrameBuffer N1 (Float,V4F))
 errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
   where
     blend   = NoBlending

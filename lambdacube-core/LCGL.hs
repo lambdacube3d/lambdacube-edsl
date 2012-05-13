@@ -35,7 +35,7 @@ data GPOutput where
                 -> H.GP (Image sh t)
                 -> GPOutput
 
-    ScreenOut   :: H.GP (Image N0 t)
+    ScreenOut   :: H.GP (Image N1 t)
                 -> GPOutput
 
 ---------
