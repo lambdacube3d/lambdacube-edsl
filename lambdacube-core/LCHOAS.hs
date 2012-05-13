@@ -12,7 +12,7 @@ import LCAPIType
 import LCDSLType
 import LCPrimFun
 
--- Common Exp
+-- Common Exp, describes shader functions
 data Exp stage t where
     -- Needed for conversion to de Bruijn form
     Tag     :: GPU t
@@ -35,6 +35,7 @@ data Exp stage t where
             => t
             -> Exp stage (InputTupleRepr t)
 
+    -- conditional expression
     Cond    :: GPU t
             => Exp stage Bool
             -> Exp stage t
@@ -76,6 +77,7 @@ type FlatExp stage a = FlatTuple GPU (Exp stage) a
             }
 -}
 -- TODO: add support for gl_ClipDistance setup
+-- result of a vertex shader function
 data VertexOut t where
     VertexOut   :: Exp V V4F      -- position
                 -> Exp V Float    -- point size
@@ -83,6 +85,7 @@ data VertexOut t where
                 -> VertexOut (FTRepr a)
 
 -- Geometry
+-- describes a geometry shader
 data GeometryShader primIn primOut layerNum a b where
     NoGeometryShader    :: GeometryShader prim prim N0 a a
 
@@ -105,6 +108,7 @@ data GeometryShader primIn primOut layerNum a b where
             int gl_PrimitiveID
             int gl_Layer
 -}
+-- result of a geometry shader function
 data GeometryOut t where
     GeometryOut :: Exp G V4F      -- position
                 -> Exp G Float    -- point size
@@ -119,6 +123,7 @@ data GeometryOut t where
     Fragment shader builtin output:
             float gl_FragDepth  -- Optional
 -}
+-- result of a fragment shader function
 data FragmentOut t where
     FragmentOut             :: FlatExp F a
                             -> FragmentOut (ColorRepr a)
@@ -130,12 +135,14 @@ data FragmentOut t where
     FragmentOutRastDepth    :: FlatExp F a
                             -> FragmentOut (Depth Float :+: ColorRepr a)
 
+-- fragment filter function, we express discard using a filter function
 data FragmentFilter a where
     PassAll :: FragmentFilter a
 
     Filter  :: (Exp F a -> Exp F Bool)
             -> FragmentFilter a
 
+-- hint: GP stands for Graphics Pipeline
 -- GP AST
 data GP t where
     -- Needed for conversion to de Bruijn form
@@ -160,26 +167,26 @@ data GP t where
                     -> GP (FragmentStream layerNum b)
 
     FrameBuffer     :: V2U                                          -- size: width, height
-                    -> FrameBuffer sh t
-                    -> GP (FrameBuffer sh (FTRepr' t))
+                    -> FrameBuffer layerCount t
+                    -> GP (FrameBuffer layerCount (FTRepr' t))
 
     Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
                     => FragmentContext b
                     -> FragmentFilter a
                     -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
-                    -> GP (FragmentStream sh a)
-                    -> GP (FrameBuffer sh (FTRepr' b))
-                    -> GP (FrameBuffer sh (FTRepr' b))
+                    -> GP (FragmentStream layerCount a)
+                    -> GP (FrameBuffer layerCount (FTRepr' b))
+                    -> GP (FrameBuffer layerCount (FTRepr' b))
 
     PrjFrameBuffer  :: ByteString                       -- internal image output (can be allocated on request)
                     -> TupleIdx (EltRepr b) t
-                    -> GP (FrameBuffer sh b)
-                    -> GP (Image sh t)
+                    -> GP (FrameBuffer layerCount b)
+                    -> GP (Image layerCount t)
 
-    PrjImage        :: (LesserEq idx sh)
+    PrjImage        :: (LesserEq idx layerCount)
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> idx
-                    -> GP (Image sh t)
+                    -> GP (Image layerCount t)
                     -> GP (Image N0 t)
 
 deriving instance Typeable1 GP

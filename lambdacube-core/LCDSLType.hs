@@ -7,6 +7,7 @@ import Data.Typeable
 import LCType
 import LCAPIType
 
+-- IsScalar means here that the related type is not a tuple, but a GPU primitive type
 class GPU a => IsScalar a where
     toValue     :: a -> Value
     toType      :: a -> InputType
@@ -89,6 +90,7 @@ instance IsScalar V4B where
     toValue v    = VV4B v
     toType _     = ITV4B
 
+-- GPU type value reification, needed for shader codegen
 data Value
     = VBool     !Bool
     | VV2B      !V2B
@@ -120,6 +122,7 @@ data Value
 singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType a = PairTuple UnitTuple (SingleTuple a)
 
+-- GPU type restriction, the functions are used in shader codegen
 class (Show a, Typeable a, Typeable (EltRepr a), Typeable (EltRepr' a)) => GPU a where
     tupleType   :: a -> TupleType (EltRepr a)
     tupleType'  :: a -> TupleType (EltRepr' a)
@@ -255,7 +258,7 @@ instance (GPU a, GPU b, GPU c, GPU d, GPU e, GPU f, GPU g, GPU h, GPU i) => GPU 
         = PairTuple (tupleType (undefined :: (a, b, c, d, e, f, g, h))) 
                 (tupleType' (undefined :: i))
 
--- stream type restriction
+-- stream type restriction, these types can be used in vertex shader input
 class GPU a => SGPU a
 instance SGPU Int32
 instance SGPU Word32
@@ -288,6 +291,7 @@ instance (SGPU a, SGPU b, SGPU c, SGPU d, SGPU e, SGPU f, SGPU g, SGPU h) => SGP
 instance (SGPU a, SGPU b, SGPU c, SGPU d, SGPU e, SGPU f, SGPU g, SGPU h, SGPU i) => SGPU (a, b, c, d, e, f, g, h, i)
 
 -- uniform type restriction
+-- hint: EltRepr stands for Elementary Type Representation
 type family EltRepr a :: *
 type instance EltRepr (Sampler dim sh t ar) = ((), Sampler dim sh t ar)
 type instance EltRepr () = ()
@@ -364,6 +368,7 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i) = (EltRepr (a, b, c, d, e, f,
 
 -- |Conversion between surface n-tuples and our tuple representation.
 --
+-- our language uses nested tuple representation
 class IsTuple tup where
     type TupleRepr tup
     fromTuple :: tup -> TupleRepr tup
@@ -452,6 +457,7 @@ tix7 = SuccTupIdx tix6
 tix8 :: GPU s => TupleIdx (((((((((t, s), s1), s2), s3), s4), s5), s6), s7), s8) s
 tix8 = SuccTupIdx tix7
 
+-- used in shader codegen
 data TupleType a where
   UnitTuple   ::                               TupleType ()
   SingleTuple :: IsScalar a =>            a -> TupleType a

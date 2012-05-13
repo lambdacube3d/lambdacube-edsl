@@ -40,6 +40,7 @@ type V2B = V2 Bool
 type V3B = V3 Bool
 type V4B = V4 Bool
 
+-- vector types: V2, V3, V4
 class IsVec dim vec component | vec -> dim component
 instance IsVec DIM2 (V2 Float) Float
 instance IsVec DIM3 (V3 Float) Float
@@ -54,6 +55,7 @@ instance IsVec DIM2 (V2 Bool) Bool
 instance IsVec DIM3 (V3 Bool) Bool
 instance IsVec DIM4 (V4 Bool) Bool
 
+-- scalar and vector types: scalar, V2, V3, V4
 class IsVecScalar dim vec component | vec -> dim component
 instance IsVecScalar DIM1 Float Float
 instance IsVecScalar DIM2 (V2 Float) Float
@@ -72,6 +74,7 @@ instance IsVecScalar DIM2 (V2 Bool) Bool
 instance IsVecScalar DIM3 (V3 Bool) Bool
 instance IsVecScalar DIM4 (V4 Bool) Bool
 
+-- matrix types of dimension [2..4] x [2..4]
 class IsMat mat h w | mat -> h w
 instance IsMat M22F V2F V2F
 instance IsMat M23F V2F V3F
@@ -83,6 +86,7 @@ instance IsMat M42F V4F V2F
 instance IsMat M43F V4F V3F
 instance IsMat M44F V4F V4F
 
+-- matrix, vector and scalar types
 class IsMatVecScalar a t | a -> t
 instance IsMatVecScalar Float Float
 instance IsMatVecScalar (V2 Float) Float
@@ -110,6 +114,7 @@ instance IsMatVecScalar M42F Float
 instance IsMatVecScalar M43F Float
 instance IsMatVecScalar M44F Float
 
+-- matrix and vector types
 class IsMatVec a t | a -> t
 instance IsMatVec (V2 Float) Float
 instance IsMatVec (V3 Float) Float
@@ -133,6 +138,7 @@ instance IsMatVec M42F Float
 instance IsMatVec M43F Float
 instance IsMatVec M44F Float
 
+-- matrix or vector component type
 class IsComponent a
 instance IsComponent Float
 instance IsComponent Int32
@@ -142,6 +148,7 @@ instance IsComponent V2F
 instance IsComponent V3F
 instance IsComponent V4F
 
+-- matrix or vector number component type
 class IsNumComponent a
 instance IsNumComponent Float
 instance IsNumComponent Int32
