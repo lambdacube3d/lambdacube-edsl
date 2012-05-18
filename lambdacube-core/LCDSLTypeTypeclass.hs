@@ -1,16 +1,17 @@
-module LCDSLType where
+module LCDSLTypeTypeclass where
 
 import Data.Int
 import Data.Word
 import Data.Typeable
 
 import LCType
-import LCAPITypeTypeclass
+import LCAPIType
 
 -- IsScalar means here that the related type is not a tuple, but a GPU primitive type
 class GPU a => IsScalar a where
     toValue     :: a -> Value
     toType      :: a -> InputType
+{-
 instance (Typeable dim, Typeable sh, Typeable t, Typeable ar) => IsScalar (Sampler dim sh t ar) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = error "toType Sampler is not implemented yet" -- TODO
@@ -89,7 +90,7 @@ instance IsScalar V3B where
 instance IsScalar V4B where
     toValue v    = VV4B v
     toType _     = ITV4B
-
+-}
 -- GPU type value reification, needed for shader codegen
 data Value
     = VBool     !Bool
@@ -118,14 +119,15 @@ data Value
     | VM43F     !M43F
     | VM44F     !M44F
     deriving (Show,Eq,Ord)
-
+{-
 singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType a = PairTuple UnitTuple (SingleTuple a)
-
+-}
 -- GPU type restriction, the functions are used in shader codegen
 class (Show a, Typeable a, Typeable (EltRepr a), Typeable (EltRepr' a)) => GPU a where
-    tupleType   :: a -> TupleType (EltRepr a)
-    tupleType'  :: a -> TupleType (EltRepr' a)
+    tupleType   :: TupleType reprTT => a -> reprTT (EltRepr a)
+    tupleType'  :: TupleType reprTT => a -> reprTT (EltRepr' a)
+{-
 instance (Typeable dim, Typeable sh, Typeable t, Typeable ar) => GPU (Sampler dim sh t ar) where
     tupleType v  = singletonScalarType v
     tupleType' v = SingleTuple v
@@ -257,9 +259,10 @@ instance (GPU a, GPU b, GPU c, GPU d, GPU e, GPU f, GPU g, GPU h, GPU i) => GPU 
     tupleType' (_::(a, b, c, d, e, f, g, h, i)) 
         = PairTuple (tupleType (undefined :: (a, b, c, d, e, f, g, h))) 
                 (tupleType' (undefined :: i))
-
+-}
 -- stream type restriction, these types can be used in vertex shader input
 class GPU a => SGPU a
+{-
 instance SGPU Int32
 instance SGPU Word32
 instance SGPU Float
@@ -289,7 +292,7 @@ instance (SGPU a, SGPU b, SGPU c, SGPU d, SGPU e, SGPU f) => SGPU (a, b, c, d, e
 instance (SGPU a, SGPU b, SGPU c, SGPU d, SGPU e, SGPU f, SGPU g) => SGPU (a, b, c, d, e, f, g)
 instance (SGPU a, SGPU b, SGPU c, SGPU d, SGPU e, SGPU f, SGPU g, SGPU h) => SGPU (a, b, c, d, e, f, g, h)
 instance (SGPU a, SGPU b, SGPU c, SGPU d, SGPU e, SGPU f, SGPU g, SGPU h, SGPU i) => SGPU (a, b, c, d, e, f, g, h, i)
-
+-}
 -- uniform type restriction
 -- hint: EltRepr stands for Elementary Type Representation
 type family EltRepr a :: *
@@ -424,18 +427,18 @@ instance IsTuple (a, b, c, d, e, f, g, h, i) where
 
 -- |We represent tuples as heterogenous lists, typed by a type list.
 --
-data Tuple c t where
-    NilTup  ::                     Tuple c ()
-    SnocTup :: GPU t => Tuple c s -> c t -> Tuple c (s, t)
+class Tuple tuple where
+    nilTup  ::                              tuple c ()
+    snocTup :: GPU t => tuple c s -> c t -> tuple c (s, t)
 
 -- |Type-safe projection indicies for tuples.
 --
 -- NB: We index tuples by starting to count from the *right*!
 --
-data TupleIdx t e where
-    ZeroTupIdx :: GPU s =>        TupleIdx (t, s) s
-    SuccTupIdx :: TupleIdx t e -> TupleIdx (t, s) e
-
+class TupleIdx tupleIdx where
+    zeroTupIdx :: GPU s =>        tupleIdx (t, s) s
+    succTupIdx :: tupleIdx t e -> tupleIdx (t, s) e
+{-
 -- Auxiliary tuple index constants
 --
 tix0 :: GPU s => TupleIdx (t, s) s
@@ -456,12 +459,12 @@ tix7 :: GPU s => TupleIdx ((((((((t, s), s1), s2), s3), s4), s5), s6), s7) s
 tix7 = SuccTupIdx tix6
 tix8 :: GPU s => TupleIdx (((((((((t, s), s1), s2), s3), s4), s5), s6), s7), s8) s
 tix8 = SuccTupIdx tix7
-
+-}
 -- used in shader codegen
-data TupleType a where
-  UnitTuple   ::                               TupleType ()
-  SingleTuple :: IsScalar a =>            a -> TupleType a
-  PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
+class TupleType tupleType where
+  unitTuple   ::                               tupleType ()
+  singleTuple :: IsScalar a =>            a -> tupleType a
+  pairTuple   :: tupleType a -> tupleType b -> tupleType (a, b)
 
 -- Extend Typeable support for 8- and 9-tuple
 -- ------------------------------------------

@@ -1,4 +1,4 @@
-module LCAPIType where
+module LCAPITypeTypeclass where
 
 import Control.Concurrent.STM
 import Data.ByteString.Char8
@@ -333,7 +333,7 @@ instance Show InputType where
 class InputTuple tup where
     type InputTupleRepr tup
     toInputList :: tup -> [(ByteString,InputType)]
-
+{-
 instance InputTuple (Input a) where
     type InputTupleRepr (Input a) = a
     toInputList a = [toInput a]
@@ -369,37 +369,39 @@ instance InputTuple (Input a, Input b, Input c, Input d, Input e, Input f, Input
 instance InputTuple (Input a, Input b, Input c, Input d, Input e, Input f, Input g, Input h, Input i) where
     type InputTupleRepr (Input a, Input b, Input c, Input d, Input e, Input f, Input g, Input h, Input i) = (a, b, c, d, e, f, g, h, i)
     toInputList (a, b, c, d, e, f, g, h, i) = [toInput a, toInput b, toInput c, toInput d, toInput e, toInput f, toInput g, toInput h, toInput i]
-
+-}
 -- we should define all of input types
 -- supported stream input types (the ByteString argument is the input slot name)
-data Input a where
-    IBool   :: ByteString -> Input Bool
-    IV2B    :: ByteString -> Input V2B
-    IV3B    :: ByteString -> Input V3B
-    IV4B    :: ByteString -> Input V4B
-    IWord   :: ByteString -> Input Word32
-    IV2U    :: ByteString -> Input V2U
-    IV3U    :: ByteString -> Input V3U
-    IV4U    :: ByteString -> Input V4U
-    IInt    :: ByteString -> Input Int32
-    IV2I    :: ByteString -> Input V2I
-    IV3I    :: ByteString -> Input V3I
-    IV4I    :: ByteString -> Input V4I
-    IFloat  :: ByteString -> Input Float
-    IV2F    :: ByteString -> Input V2F
-    IV3F    :: ByteString -> Input V3F
-    IV4F    :: ByteString -> Input V4F
-    IM22F   :: ByteString -> Input M22F
-    IM23F   :: ByteString -> Input M23F
-    IM24F   :: ByteString -> Input M24F
-    IM32F   :: ByteString -> Input M32F
-    IM33F   :: ByteString -> Input M33F
-    IM34F   :: ByteString -> Input M34F
-    IM42F   :: ByteString -> Input M42F
-    IM43F   :: ByteString -> Input M43F
-    IM44F   :: ByteString -> Input M44F
+class Input input where
+    iBool   :: ByteString -> input Bool
+    iV2B    :: ByteString -> input V2B
+    iV3B    :: ByteString -> input V3B
+    iV4B    :: ByteString -> input V4B
+    iWord   :: ByteString -> input Word32
+    iV2U    :: ByteString -> input V2U
+    iV3U    :: ByteString -> input V3U
+    iV4U    :: ByteString -> input V4U
+    iInt    :: ByteString -> input Int32
+    iV2I    :: ByteString -> input V2I
+    iV3I    :: ByteString -> input V3I
+    iV4I    :: ByteString -> input V4I
+    iFloat  :: ByteString -> input Float
+    iV2F    :: ByteString -> input V2F
+    iV3F    :: ByteString -> input V3F
+    iV4F    :: ByteString -> input V4F
+    iM22F   :: ByteString -> input M22F
+    iM23F   :: ByteString -> input M23F
+    iM24F   :: ByteString -> input M24F
+    iM32F   :: ByteString -> input M32F
+    iM33F   :: ByteString -> input M33F
+    iM34F   :: ByteString -> input M34F
+    iM42F   :: ByteString -> input M42F
+    iM43F   :: ByteString -> input M43F
+    iM44F   :: ByteString -> input M44F
 
-toInput :: Input a -> (ByteString,InputType)
+toInput :: Input input => input t -> (ByteString,InputType)
+toInput = undefined
+{-
 toInput (IBool  n) = (n, ITBool)
 toInput (IV2B   n) = (n, ITV2B)
 toInput (IV3B   n) = (n, ITV3B)
@@ -425,7 +427,7 @@ toInput (IM34F  n) = (n, ITM34F)
 toInput (IM42F  n) = (n, ITM42F)
 toInput (IM43F  n) = (n, ITM43F)
 toInput (IM44F  n) = (n, ITM44F)
-
+-}
 -- user can specify streams using Stream type
 -- a stream can be constant (ConstXXX) or can came from a buffer
 data Stream b
@@ -514,18 +516,18 @@ data StencilTest
     , stencilMask           :: Word32               -- ^ A bit mask with ones in each position that should be compared and written to the stencil buffer.
     } deriving (Eq,Ord,Show)
 
-data Blending c where
-    NoBlending      :: Blending c
+class Blending blending where
+    noBlending      :: blending c
 
-    BlendLogicOp    :: IsIntegral c
+    blendLogicOp    :: IsIntegral c
                     => LogicOperation
-                    -> Blending c
+                    -> blending c
 
     -- FIXME: restrict BlendingFactor at some BlendEquation
-    Blend           :: (BlendEquation, BlendEquation) 
+    blend           :: (BlendEquation, BlendEquation) 
                     -> ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
                     -> V4F
-                    -> Blending Float
+                    -> blending Float
 
 -- abstract types, used in language AST
 data VertexStream prim t
@@ -543,24 +545,24 @@ infixr 1 :+:
 data tail :+: head = !tail :+: !head deriving (Typeable, Show)
 
 -- used for tuple value description
-infixr 1 :.
-data FlatTuple c a t where
-    ZT      :: FlatTuple c a ZZ
+infixr 1 .:.
+class FlatTuple flatTuple where
+    zt      :: flatTuple c a ZZ
 
-    (:.)    :: c t
+    (.:.)   :: c t
             => a t
-            -> FlatTuple c a t'
-            -> FlatTuple c a (t :+: t')
+            -> flatTuple c a t'
+            -> flatTuple c a (t :+: t')
 
 -- vertex attribute interpolation
-data Interpolated e a where
-    Flat            :: e a -> Interpolated e a
+class Interpolated interpolated where
+    flat            :: e a -> interpolated e a
 
-    Smooth          :: IsFloating a
-                    => e a -> Interpolated e a
+    smooth          :: IsFloating a
+                    => e a -> interpolated e a
 
-    NoPerspective   :: IsFloating a
-                    => e a -> Interpolated e a
+    noPerspective   :: IsFloating a
+                    => e a -> interpolated e a
 
 -- framebuffer data / fragment output semantic
 data Color a    deriving Typeable
@@ -573,63 +575,62 @@ data PrimitiveVertices prim a
 
 -- raster context description
 -- TODO: add context parameters
-data RasterContext t where
-    PointCtx    :: RasterContext Point      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN
+class RasterContext rasterContext where
+    pointCtx    :: rasterContext Point      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN
 
-    LineCtx     :: 
-        { ctxLineWidth          :: Float
-        , ctxProvokingVertex'   :: ProvokingVertex
-        } -> RasterContext Line
+    lineCtx     :: Float
+                -> ProvokingVertex
+                -> rasterContext Line
 
-    TriangleCtx ::
-        { ctxCullMode           :: CullMode
-        , ctxPolygonMode        :: PolygonMode
-        , ctxPolygonOffset      :: PolygonOffset
-        , ctxProvokingVertex    :: ProvokingVertex
-        } -> RasterContext Triangle
+    triangleCtx :: CullMode
+                -> PolygonMode
+                -> PolygonOffset
+                -> ProvokingVertex
+                -> rasterContext Triangle
 
 -- default triangle raster context
-triangleCtx :: RasterContext Triangle
-triangleCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
+defaultTriangleCtx :: RasterContext rasterContext => rasterContext Triangle
+defaultTriangleCtx = triangleCtx CullNone PolygonFill NoOffset LastVertex
 
-type FrameBuffer layerCount t = FlatTuple Typeable (Image layerCount) t
-type FragmentContext t = FlatTuple Typeable FragmentOperation t
+type FrameBuffer layerCount t = (Image reprI, FlatTuple reprFT) => reprFT Typeable (reprI layerCount) t
+type FragmentContext t = (FragmentOperation reprFO, FlatTuple reprFT) => reprFT Typeable reprFO t
 
 -- Fragment Operation
-data FragmentOperation ty where
-    DepthOp         :: DepthFunction
+class FragmentOperation fragmentOperation where
+    depthOp         :: DepthFunction
                     -> Bool     -- depth write
-                    -> FragmentOperation (Depth Float)
+                    -> fragmentOperation (Depth Float)
 
-    StencilOp       :: StencilTests
+    stencilOp       :: StencilTests
                     -> StencilOps
                     -> StencilOps
-                    -> FragmentOperation (Stencil Int32)
+                    -> fragmentOperation (Stencil Int32)
 
-    ColorOp         :: (IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c)
-                    => Blending c   -- blending type
+    colorOp         :: (IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c,
+                        Blending reprB)
+                    => reprB c   -- blending type
                     -> mask         -- write mask
-                    -> FragmentOperation (Color color)
-    deriving Typeable
+                    -> fragmentOperation (Color color)
+--    deriving Typeable
 
 -- specifies an empty image (pixel rectangle)
 -- hint: framebuffer is composed from images
-data Image layerCount t where
-    DepthImage      :: Nat layerCount
+class Image image where
+    depthImage      :: Nat layerCount
                     => layerCount
                     -> Float    -- initial value
-                    -> Image layerCount (Depth Float)
+                    -> image layerCount (Depth Float)
 
-    StencilImage    :: Nat layerCount
+    stencilImage    :: Nat layerCount
                     => layerCount
                     -> Int32    -- initial value
-                    -> Image layerCount (Stencil Int32)
+                    -> image layerCount (Stencil Int32)
 
-    ColorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount)
+    colorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount)
                     => layerCount
                     -> color    -- initial value
-                    -> Image layerCount (Color color)
-    deriving Typeable
+                    -> image layerCount (Color color)
+--    deriving Typeable
 
 -- restriction for framebuffer structure according content semantic
 -- supported configurations: optional stencil + optional depth + [zero or more color]
@@ -715,22 +716,22 @@ type instance TexDataRepr RGB  (v a) = V3 a
 type instance TexDataRepr RGBA (v a) = V4 a
 
 -- describes texel (texture component) type
-data TextureDataType t arity where
-    Float   :: (Eq a, IsColorArity a)
+class TextureDataType textureDataType where
+    float   :: (Eq a, IsColorArity a)
             => a
-            -> TextureDataType (Regular Float) a
+            -> textureDataType (Regular Float) a
 
-    Int     :: (Eq a, IsColorArity a)
+    int     :: (Eq a, IsColorArity a)
             => a
-            -> TextureDataType (Regular Int) a
+            -> textureDataType (Regular Int) a
 
-    Word    :: (Eq a, IsColorArity a)
+    word    :: (Eq a, IsColorArity a)
             => a
-            -> TextureDataType (Regular Word) a
+            -> textureDataType (Regular Word) a
 
-    Shadow  :: TextureDataType (Shadow Float) Red   -- TODO: add params required by shadow textures
+    shadow  :: textureDataType (Shadow Float) Red   -- TODO: add params required by shadow textures
 
-deriving instance Eq (TextureDataType t arity)
+--deriving instance Eq (TextureDataType t arity)
 --deriving instance (Ord t, Ord arity) => Ord (TextureDataType t arity)
 
 data SingleTex deriving Typeable    -- singleton texture
@@ -767,68 +768,74 @@ instance IsColorArity RGBA
 --                      C: add color arity definition to TextureDataType, this will solve the problem (best solution)
 
 -- fully describes a texture type
-data TextureType dim mip arr layerCount t ar where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
-    Texture1D       :: (Eq layerCount, Nat layerCount)
-                    => TextureDataType t ar
+class TextureType textureType where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
+    texture1D       :: (Eq layerCount, Nat layerCount, TextureDataType reprTDT)
+                    => reprTDT t ar
                     -> layerCount
-                    -> TextureType DIM1 Mip (TexArrRepr layerCount) layerCount t ar
+                    -> textureType DIM1 Mip (TexArrRepr layerCount) layerCount t ar
 
-    Texture2D       :: (Eq layerCount, Nat layerCount)
-                    => TextureDataType t ar
+    texture2D       :: (Eq layerCount, Nat layerCount, TextureDataType reprTDT)
+                    => reprTDT t ar
                     -> layerCount
-                    -> TextureType DIM2 Mip (TexArrRepr layerCount) layerCount t ar
+                    -> textureType DIM2 Mip (TexArrRepr layerCount) layerCount t ar
 
-    Texture3D       :: TextureDataType (Regular t) ar
-                    -> TextureType DIM3 Mip SingleTex N1 (Regular t) ar
+    texture3D       :: TextureDataType reprTDT
+                    => reprTDT (Regular t) ar
+                    -> textureType DIM3 Mip SingleTex N1 (Regular t) ar
 
-    TextureCube     :: TextureDataType t ar
-                    -> TextureType DIM2 Mip CubeTex N1 t ar
+    textureCube     :: TextureDataType reprTDT
+                    => reprTDT t ar
+                    -> textureType DIM2 Mip CubeTex N1 t ar
 
-    TextureRect     :: TextureDataType t ar
-                    -> TextureType Rect NoMip SingleTex N1 t ar
+    textureRect     :: TextureDataType reprTDT
+                    => reprTDT t ar
+                    -> textureType Rect NoMip SingleTex N1 t ar
 
-    Texture2DMS     :: (Eq t, Eq layerCount, Nat layerCount)
-                    => TextureDataType (Regular t) ar
+    texture2DMS     :: (Eq t, Eq layerCount, Nat layerCount, TextureDataType reprTDT)
+                    => reprTDT (Regular t) ar
                     -> layerCount
-                    -> TextureType DIM2 NoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
+                    -> textureType DIM2 NoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
 
-    TextureBuffer   :: Eq t
-                    => TextureDataType (Regular t) ar
-                    -> TextureType DIM1 NoMip SingleTex N1 (Buffer t) ar
+    textureBuffer   :: (Eq t, TextureDataType reprTDT)
+                    => reprTDT (Regular t) ar
+                    -> textureType DIM1 NoMip SingleTex N1 (Buffer t) ar
 
 --instance Eq N0 where a == b = True
 
-deriving instance Eq (TextureType dim mip arr layerCount t ar)
-deriving instance Typeable6 TextureType
+--deriving instance Eq (TextureType dim mip arr layerCount t ar)
+--deriving instance Typeable6 TextureType
 
 -- definies a texture
-data Texture (gp :: * -> *) dim arr t ar where
-    TextureSlot     :: (IsValidTextureSlot t,
-                        Typeable dim, Typeable mip, Typeable arr, Typeable layerCount, Typeable t, Typeable ar)
+class Texture texture where
+    textureSlot     :: (IsValidTextureSlot t,
+                        Typeable dim, Typeable mip, Typeable arr, Typeable layerCount, Typeable t, Typeable ar,
+                        TextureType textureType)
                     => ByteString -- texture slot name
-                    -> TextureType dim mip arr layerCount t ar
-                    -> Texture gp dim arr t ar
+                    -> textureType dim mip arr layerCount t ar
+                    -> texture gp dim arr t ar
     -- TODO:
     --  add texture internal format specification
-    Texture         :: (Typeable dim, Typeable mip, Typeable arr, Typeable layerCount, Typeable t, Typeable ar,
-                        Eq (TexRepr dim mip gp layerCount (TexDataRepr ar t)), Eq mip,
-                        Typeable (TexRepr dim mip gp layerCount (TexDataRepr ar t)),
-                        Typeable (MipRepr mip))
-                    => TextureType dim (MipRepr mip) arr layerCount t ar
+    texture         :: (Typeable dim, Typeable mip, Typeable arr, Typeable layerCount, Typeable t, Typeable ar,
+                        Eq (TexRepr dim mip gp img layerCount (TexDataRepr ar t)), Eq mip,
+                        Typeable (TexRepr dim mip gp img layerCount (TexDataRepr ar t)),
+                        Typeable (MipRepr mip),
+                        TextureType textureType, Image image)
+                    => textureType dim (MipRepr mip) arr layerCount t ar
                     -- -> TexSizeRepr dim
                     -> mip
-                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
-                    -> Texture gp dim arr t ar
+                    -> TexRepr dim mip gp image layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
+                    -> texture gp dim arr t ar
 
 teq :: (Eq a, Typeable a, Typeable b) => a -> b -> Bool
 teq a b = case cast a of
     Nothing -> False
     Just c  -> a == c
-
+{-
 instance Eq (Texture gp dim arr t ar) where
     (TextureSlot n1 t1) == (TextureSlot n2 t2) = n1 == n2 && teq t1 t2
     (Texture t1 m1 r1) == (Texture t2 m2 r2) = teq t1 t2 && teq m1 m2 && teq r1 r2
     _ == _ = False
+-}
 {-
     -- TODO:
     --  swizzling (arity conversion)
@@ -851,18 +858,18 @@ type instance TexSizeRepr (Rect) = V2U
 type instance TexSizeRepr (DIM3) = V3U
 
 -- type level hepler function, used for texture specification
-type family TexRepr dim mip (gp :: * -> *) layerCount t :: *
-type instance TexRepr DIM1 NoMip   gp layerCount t = gp (Image layerCount t)
-type instance TexRepr DIM1 AutoMip gp layerCount t = gp (Image layerCount t)
-type instance TexRepr DIM1 Mip     gp layerCount t = [gp (Image layerCount t)]
+type family TexRepr dim mip (gp :: * -> *) (image :: * -> * -> *) layerCount t :: *
+type instance TexRepr DIM1 NoMip   gp image layerCount t = gp (image layerCount t)
+type instance TexRepr DIM1 AutoMip gp image layerCount t = gp (image layerCount t)
+type instance TexRepr DIM1 Mip     gp image layerCount t = [gp (image layerCount t)]
 
-type instance TexRepr DIM2 NoMip   gp layerCount t = gp (Image layerCount t)
-type instance TexRepr DIM2 AutoMip gp layerCount t = gp (Image layerCount t)
-type instance TexRepr DIM2 Mip     gp layerCount t = [gp (Image layerCount t)]
+type instance TexRepr DIM2 NoMip   gp image layerCount t = gp (image layerCount t)
+type instance TexRepr DIM2 AutoMip gp image layerCount t = gp (image layerCount t)
+type instance TexRepr DIM2 Mip     gp image layerCount t = [gp (image layerCount t)]
 
-type instance TexRepr DIM3 NoMip   gp layerCount t = [gp (Image layerCount t)]
-type instance TexRepr DIM3 AutoMip gp layerCount t = [gp (Image layerCount t)]
-type instance TexRepr DIM3 Mip     gp layerCount t = [[gp (Image layerCount t)]] -- 3D layers contain mipmap
+type instance TexRepr DIM3 NoMip   gp image layerCount t = [gp (image layerCount t)]
+type instance TexRepr DIM3 AutoMip gp image layerCount t = [gp (image layerCount t)]
+type instance TexRepr DIM3 Mip     gp image layerCount t = [[gp (image layerCount t)]] -- 3D layers contain mipmap
 
 -- type level hepler function, used for texture specification
 type family MipRepr a

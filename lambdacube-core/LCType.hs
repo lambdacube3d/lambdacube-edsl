@@ -7,9 +7,9 @@ import Foreign.Storable
 import Foreign.Ptr
 
 -- constructors are required for texture specification
-data DIM1 = DIM1 deriving Typeable
-data DIM2 = DIM2 deriving Typeable
-data DIM3 = DIM3 deriving Typeable
+data DIM1 = DIM1 deriving (Eq,Ord,Typeable)
+data DIM2 = DIM2 deriving (Eq,Ord,Typeable)
+data DIM3 = DIM3 deriving (Eq,Ord,Typeable)
 data DIM4 deriving Typeable
 
 data V2 a = V2 !a !a deriving (Eq,Ord,Show,Typeable)

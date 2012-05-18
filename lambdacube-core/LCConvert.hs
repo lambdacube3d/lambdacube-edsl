@@ -204,7 +204,7 @@ convertFun1 cvt glyt f = D.Lam (D.Body openF)
 convertTexture :: Texture (H.GP) dim arr t ar
                -> Texture (D.OpenGP ()) dim arr t ar
 convertTexture (TextureSlot n t) = TextureSlot n t
-convertTexture (Texture t m d) = Texture t m undefined --TODO
+--convertTexture (Texture t m d) = Texture t m undefined --TODO
 
 convertTuple :: Layout env env 
              -> Layout genv genv 
