@@ -12,6 +12,7 @@ import LC_U_PrimFun
 
 data Exp
     = Tag       Int
+    | Lam       (Exp -> Exp)
     | Const     Value
     | PrimVar   ByteString InputType
     | Uni       ByteString InputType
@@ -26,7 +27,7 @@ data VertexOut
 
 data GeometryShader
     = NoGeometryShader
-    | GeometryShader Int PrimitiveType Int (Exp -> Exp) (Exp -> Exp) (Exp -> GeometryOut)
+    | GeometryShader Int PrimitiveType Int Exp Exp (Exp -> GeometryOut)
 
 data GeometryOut
     = GeometryOut Exp Exp Exp Exp Exp [Interpolated Exp]
@@ -41,7 +42,7 @@ data FragmentFilter
     | Filter    (Exp -> Exp)
 
 data GP
-    = GPtag             Int
+    = GPTag             Int
     | Fetch             ByteString PrimitiveType [(ByteString,InputType)]
     | Transform         (Exp -> VertexOut) GP
     | Rasterize         RasterContext GeometryShader GP

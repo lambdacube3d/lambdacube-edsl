@@ -9,11 +9,11 @@ import LCType
 import LC_APIType
 
 -- primitive types
-data PrimitiveType  = Triangles | Lines | Points deriving (Show, Eq, Ord)
+data PrimitiveType  = Triangle | Line | Point deriving (Show, Eq, Ord)
 data Primitive  = TriangleStrip | TriangleList | TriangleFan | LineStrip | LineList | PointList deriving (Eq,Ord,Bounded,Enum,Show)
 
-data Mip = Mip | NoMip | AutoMip deriving (Show,Eq,Ord)
-data ColorArity = Red | RGB | RGBA deriving (Show,Eq,Ord)
+data MipMap = Mip | NoMip | AutoMip deriving (Show,Eq,Ord)
+data ColorArity = Red | RG | RGB | RGBA deriving (Show,Eq,Ord)
 
 data Blending
     = NoBlending
@@ -38,13 +38,13 @@ data RasterContext
 data FragmentOperation
     = DepthOp       DepthFunction Bool
     | StencilOp     StencilTests StencilOps StencilOps
-    | ColorOp       Blending [Bool]
+    | ColorOp       Blending Value
     deriving (Show, Eq, Ord)
 
 data Image
     = DepthImage    Int Float
     | StencilImage  Int Int32
-    | ColorImage    Int V4F
+    | ColorImage    Int Value
     deriving (Show, Eq, Ord)
 
 data TextureDataType
@@ -59,11 +59,12 @@ data TextureType
     | Texture2D     TextureDataType Int
     | Texture3D     TextureDataType
     | TextureCube   TextureDataType
+    | TextureRect   TextureDataType
     | Texture2DMS   TextureDataType Int
     | TextureBuffer TextureDataType
     deriving (Show, Eq, Ord)
 
 data Texture gp
     = TextureSlot   ByteString TextureType
-    | Texture       TextureType Mip [gp]
+    | Texture       TextureType MipMap [gp]
     deriving (Show, Eq, Ord)

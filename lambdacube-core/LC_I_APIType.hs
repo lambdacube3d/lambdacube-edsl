@@ -10,9 +10,25 @@ import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
 
 import LC_APIType
+import LC_T_DSLType
 import LC_T_APIType
-import LC_U_APIType hiding (Blending,RasterContext,FragmentOperation,Image,TextureDataType)
+import LC_U_APIType hiding  ( Blending
+                            , ColorArity
+                            , FragmentOperation
+                            , Image
+                            , MipMap
+                            , Primitive
+                            , RasterContext
+                            , Texture
+                            , TextureDataType
+                            , TextureType)
+
 import qualified LC_U_APIType as U
+
+newtype TupleIdxI a b = TupleIdxI Int
+instance TupleIdx TupleIdxI where
+    zeroTupIdx                  = TupleIdxI 0
+    succTupIdx (TupleIdxI i)    = TupleIdxI (i+1)
 
 newtype InputI t = InputI (ByteString, InputType)
 instance Input InputI where
@@ -65,88 +81,51 @@ instance RasterContext RasterContextI where
 
 newtype FragmentOperationI t = FragmentOperationI U.FragmentOperation
 instance FragmentOperation FragmentOperationI where
-    depthOp a b     = FragmentOperationI (DepthOp a b)
---    stencilOp a b c = FragmentOperationI (StencilOp a b c)
---    colorOp a b     = FragmentOperationI (ColorOp a b)
-
-{-
-data FragmentOperation
-    = DepthOp       DepthFunction Bool
-    | StencilOp     StencilTests StencilOps StencilOps
-    | ColorOp       Blending [Bool]
-    deriving (Show, Eq, Ord)
-
-class FragmentOperation fragmentOperation where
-    depthOp         :: DepthFunction
-                    -> Bool     -- depth write
-                    -> fragmentOperation (Depth Float)
-
-    stencilOp       :: StencilTests
-                    -> StencilOps
-                    -> StencilOps
-                    -> fragmentOperation (Stencil Int32)
-
-    colorOp         :: (IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c,
-                        Blending reprB)
-                    => reprB c   -- blending type
-                    -> mask         -- write mask
-                    -> fragmentOperation (Color color)
--}
+    type FragmentOperation_Blending FragmentOperationI = BlendingI
+    depthOp a b             = FragmentOperationI (DepthOp a b)
+    stencilOp a b c         = FragmentOperationI (StencilOp a b c)
+    colorOp (BlendingI a) b = FragmentOperationI (ColorOp a (toValue b))
 
 newtype ImageI a b = ImageI U.Image
 instance Image ImageI where
     depthImage a b      = ImageI (DepthImage (toInt a) b)
     stencilImage a b    = ImageI (StencilImage (toInt a) b)
---    colorImage a b      = ImageI (ColorImage (toInt a) b)
+    colorImage a b      = ImageI (ColorImage (toInt a) (toValue b))
 
-{-
-data Image
-    = DepthImage    Int Float
-    | StencilImage  Int Int32
-    | ColorImage    Int V4F
-    deriving (Show, Eq, Ord)
-
-class Image image where
-    depthImage      :: Nat layerCount
-                    => layerCount
-                    -> Float    -- initial value
-                    -> image layerCount (Depth Float)
-
-    stencilImage    :: Nat layerCount
-                    => layerCount
-                    -> Int32    -- initial value
-                    -> image layerCount (Stencil Int32)
-
-    colorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount)
-                    => layerCount
-                    -> color    -- initial value
-                    -> image layerCount (Color color)
--}
+newtype ColorArityI a = ColorArityI U.ColorArity
+instance ColorArity ColorArityI where
+    red     = ColorArityI Red
+    rg      = ColorArityI RG
+    rgb     = ColorArityI RGB
+    rgba    = ColorArityI RGBA
 
 newtype TextureDataTypeI a b = TextureDataTypeI U.TextureDataType
 instance TextureDataType TextureDataTypeI where
---    float a = TextureDataTypeI (Float a)
-{-
-data TextureDataType
-    = Float         ColorArity
-    | Int           ColorArity
-    | Word          ColorArity
-    | Shadow
-    deriving (Show, Eq, Ord)
+    type TextureDataType_ColorArity TextureDataTypeI = ColorArityI
+    float (ColorArityI a)   = TextureDataTypeI (Float a)
+    int (ColorArityI a)     = TextureDataTypeI (Int a)
+    word (ColorArityI a)    = TextureDataTypeI (Word a)
+    shadow                  = TextureDataTypeI Shadow
 
-class TextureDataType textureDataType where
-    float   :: (Eq a, ColorArity a)
-            => a
-            -> textureDataType (Regular Float) a
+newtype TextureTypeI a b c d e f = TextureTypeI U.TextureType
+instance TextureType TextureTypeI where
+    type TextureType_TextureDataType TextureTypeI = TextureDataTypeI
+    texture1D (TextureDataTypeI a) b    = TextureTypeI (Texture1D a (toInt b))
+    texture2D (TextureDataTypeI a) b    = TextureTypeI (Texture2D a (toInt b))
+    texture3D (TextureDataTypeI a)      = TextureTypeI (Texture3D a)
+    textureCube (TextureDataTypeI a)    = TextureTypeI (TextureCube a)
+    textureRect (TextureDataTypeI a)    = TextureTypeI (TextureRect a)
+    texture2DMS (TextureDataTypeI a) b  = TextureTypeI (Texture2DMS a (toInt b))
+    textureBuffer (TextureDataTypeI a)  = TextureTypeI (TextureBuffer a)
 
-    int     :: (Eq a, ColorArity a)
-            => a
-            -> textureDataType (Regular Int) a
+newtype MipMapI a = MipMapI U.MipMap
+instance MipMap MipMapI where
+    mip     = MipMapI Mip
+    noMip   = MipMapI NoMip
+    autoMip = MipMapI AutoMip
 
-    word    :: (Eq a, ColorArity a)
-            => a
-            -> textureDataType (Regular Word) a
-
-    shadow  :: textureDataType (Shadow Float) Red   -- TODO: add params required by shadow textures
--}
-
+newtype PrimitiveI a = PrimitiveI U.PrimitiveType
+instance Primitive PrimitiveI where
+    triangle    = PrimitiveI Triangle
+    line        = PrimitiveI Line
+    point       = PrimitiveI Point

@@ -1,5 +1,7 @@
 module LC_T_HOAS where
 
+import GHC.Exts
+
 import Data.ByteString.Char8
 import Data.Typeable
 import Data.Int
@@ -19,7 +21,7 @@ class Exp exp where
     type Exp_Input exp :: * -> *
     type Exp_PrimFun exp :: * -> * -> *
     type Exp_Texture exp :: (* -> *) -> * -> * -> * -> * -> *
-    type Exp_Tuple exp :: (* -> *) -> * -> *
+    type Exp_FlatTuple exp :: (* -> Constraint) -> (* -> *) -> * -> *
     type Exp_TupleIdx exp :: * -> * -> *
 
     -- Needed for conversion to de Bruijn form
@@ -27,6 +29,9 @@ class Exp exp where
             => Int
             -> exp stage t
                  -- environment size at defining occurrence
+
+    lam     :: (exp stage a -> exp stage b)
+            -> exp stage (a -> b)
 
     -- constant value
     cnst    :: IsScalar t
@@ -60,12 +65,12 @@ class Exp exp where
 
     -- tuple support
     tup     :: (GPU t, IsTuple t
-               , Tuple tuple, tuple ~ Exp_Tuple exp)
-            => tuple (exp stage) (TupleRepr t)
+               ,FlatTuple (exp stage) flatTuple, flatTuple ~ Exp_FlatTuple exp)
+            => flatTuple GPU (exp stage) t
             -> exp stage t
 
     prj     :: (GPU e, GPU t, IsTuple t
-               , TupleIdx tupleIdx, tupleIdx ~ Exp_TupleIdx exp)
+               ,TupleIdx tupleIdx, tupleIdx ~ Exp_TupleIdx exp)
             => tupleIdx (TupleRepr t) e
             -> exp stage t
             -> exp stage e
@@ -73,14 +78,11 @@ class Exp exp where
     -- sampler support
     sampler :: (GPU (Sampler dim arr t ar)
                , GP gp, gp ~ Exp_GP exp
-               , Texture texture, texture ~ Exp_Texture exp)
+               , Texture gp texture, texture ~ Exp_Texture exp)
             => Filter
             -> EdgeMode
             -> texture gp dim arr t ar
             -> exp stage (Sampler dim arr t ar)
-
-type InterpolatedFlatExp exp stage a = (Interpolated interpolated, FlatTuple flatTuple) => flatTuple GPU (interpolated (exp stage)) a
-type FlatExp exp stage a = FlatTuple flatTuple => flatTuple GPU (exp stage) a
 
 -- Vertex
 {-
@@ -96,11 +98,14 @@ type FlatExp exp stage a = FlatTuple flatTuple => flatTuple GPU (exp stage) a
 
 class VertexOut vertexOut where
     type VertexOut_Exp vertexOut :: * -> * -> *
+    type VertexOut_FlatTuple vertexOut :: (* -> Constraint) -> (* -> *) -> * -> *
 
-    vertexOut   :: (Exp exp, exp ~ VertexOut_Exp vertexOut)
+    vertexOut   :: (Exp exp, exp ~ VertexOut_Exp vertexOut
+                   ,Interpolated interpolated
+                   ,FlatTuple (interpolated (exp V)) flatTuple, flatTuple ~ VertexOut_FlatTuple vertexOut)
                 => exp V V4F      -- position
                 -> exp V Float    -- point size
-                -> InterpolatedFlatExp exp V a
+                -> flatTuple GPU (interpolated (exp V)) a
                 -> vertexOut (FTRepr a)
 
 -- Geometry
@@ -108,19 +113,21 @@ class VertexOut vertexOut where
 class GeometryShader geometryShader where
     type GeometryShader_Exp geometryShader :: * -> * -> *
     type GeometryShader_GeometryOut geometryShader :: * -> *
+    type GeometryShader_Primitive geometryShader :: * -> *
 
     noGeometryShader    :: geometryShader prim prim N1 a a
 
-    geometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum
+    geometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, Nat layerNum
+                           , Primitive primitive, primitive ~ GeometryShader_Primitive geometryShader
                            , Exp exp, exp ~ GeometryShader_Exp geometryShader
                            , GeometryOut geometryOut, geometryOut ~ GeometryShader_GeometryOut geometryShader
                            )
                         => layerNum                                                 -- geometry shader:
-                        -> primOut                                                  -- output primitive
+                        -> primitive primOut                                        -- output primitive
                         -> Int                                                      -- max amount of generated vertices
-                        -> (exp G (PrimitiveVertices primIn a) -> exp G (i,Int32))  -- how many primitives?
-                        -> (exp G i -> exp G (i,j,Int32))                           -- how many vertices?
-                        -> (exp G j -> geometryOut (j,b))                           -- generate vertices
+                        -> (exp G (PrimitiveVertices primIn a -> (i,Int32)))        -- how many primitives?
+                        -> (exp G (i -> (i,j,Int32)))                               -- how many vertices?
+                        -> (exp G (j -> geometryOut (j,b)))                         -- generate vertices
                         -> geometryShader primIn primOut layerNum a b
 
 {-
@@ -136,14 +143,18 @@ class GeometryShader geometryShader where
 -- result of a geometry shader function
 class GeometryOut geometryOut where
     type GeometryOut_Exp geometryOut :: * -> * -> *
+    type GeometryOut_FlatTuple geometryOut :: (* -> Constraint) -> (* -> *) -> * -> *
+    --type GeometryOut_Interpolated geometryOut :: (* -> *) -> * -> *
 
-    geometryOut :: (Exp exp, exp ~ GeometryOut_Exp geometryOut)
+    geometryOut :: (Exp exp, exp ~ GeometryOut_Exp geometryOut
+                   ,Interpolated interpolated-- , interpolated ~ GeometryOut_Interpolated geometryOut
+                   ,FlatTuple (interpolated (exp V)) flatTuple, flatTuple ~ GeometryOut_FlatTuple geometryOut)
                 => exp G V4F      -- position
                 -> exp G Float    -- point size
                 -> exp G Int32    -- primitive ID
                 -> exp G Int32    -- layer
                 -> exp G j
-                -> InterpolatedFlatExp exp G a
+                -> flatTuple GPU (interpolated (exp G)) a
                 -> geometryOut (j,(FTRepr a))
 
 -- Fragment
@@ -154,18 +165,22 @@ class GeometryOut geometryOut where
 -- result of a fragment shader function
 class FragmentOut fragmentOut where
     type FragmentOut_Exp fragmentOut :: * -> * -> *
+    type FragmentOut_FlatTuple fragmentOut :: (* -> Constraint) -> (* -> *) -> * -> *
 
-    fragmentOut             :: (Exp exp, exp ~ FragmentOut_Exp fragmentOut)
-                            => FlatExp exp F a
+    fragmentOut             :: (Exp exp, exp ~ FragmentOut_Exp fragmentOut
+                               ,FlatTuple (exp F) flatTuple, flatTuple ~ FragmentOut_FlatTuple fragmentOut)
+                            => flatTuple GPU (exp F) a
                             -> fragmentOut (ColorRepr a)
 
-    fragmentOutDepth        :: (Exp exp, exp ~ FragmentOut_Exp fragmentOut)
+    fragmentOutDepth        :: (Exp exp, exp ~ FragmentOut_Exp fragmentOut
+                               ,FlatTuple (exp F) flatTuple, flatTuple ~ FragmentOut_FlatTuple fragmentOut)
                             => exp F Float
-                            -> FlatExp exp F a
+                            -> flatTuple GPU (exp F) a
                             -> fragmentOut (Depth Float :+: ColorRepr a)
 
-    fragmentOutRastDepth    :: (Exp exp, exp ~ FragmentOut_Exp fragmentOut)
-                            => FlatExp exp F a
+    fragmentOutRastDepth    :: (Exp exp, exp ~ FragmentOut_Exp fragmentOut
+                               ,FlatTuple (exp F) flatTuple, flatTuple ~ FragmentOut_FlatTuple fragmentOut)
+                            => flatTuple GPU (exp F) a
                             -> fragmentOut (Depth Float :+: ColorRepr a)
 
 -- fragment filter function, we express discard using a filter function
@@ -193,9 +208,9 @@ class GP gp where
                     => Int
                     -> gp a -- FIXME: restrict valid types to shareable types
 
-    fetch           :: (InputTuple a, SGPU (InputTupleRepr a), IsPrimitive prim)
+    fetch           :: (InputTuple a, SGPU (InputTupleRepr a), Primitive primitive)
                     => ByteString
-                    -> prim
+                    -> primitive prim
                     -> a
                     -> gp (VertexStream prim (InputTupleRepr a))
 

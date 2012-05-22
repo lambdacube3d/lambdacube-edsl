@@ -801,7 +801,7 @@ data TextureType dim mip arr layerCount t ar where -- hint: arr - single or arra
 deriving instance Eq (TextureType dim mip arr layerCount t ar)
 deriving instance Typeable6 TextureType
 
--- definies a texture
+-- defines a texture
 data Texture (gp :: * -> *) dim arr t ar where
     TextureSlot     :: (IsValidTextureSlot t,
                         Typeable dim, Typeable mip, Typeable arr, Typeable layerCount, Typeable t, Typeable ar)

@@ -90,7 +90,7 @@ class OpenExp openExp where
 
     -- sampler support
     sampler :: ( GPU (Sampler dim arr t ar)
-               , Texture texture, texture ~ OpenExp_Texture openExp
+               , Texture (openGP ()) texture, texture ~ OpenExp_Texture openExp
                , OpenGP openGP, openGP ~ OpenExp_OpenGP openExp)
             => Filter
             -> EdgeMode
@@ -160,12 +160,13 @@ class GeometryShader geometryShader where
 
     noGeometryShader    :: geometryShader genv prim prim N1 a a
 
-    geometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum
+    geometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, Nat layerNum
+                           , Primitive primitive
                            , OpenExp openExp, openExp ~ GeometryShader_OpenExp geometryShader
                            , OpenGeometryOut openGeometryOut, openGeometryOut ~ GeometryShader_OpenGeometryOut geometryShader
                            , OpenFun openFun)
                         => layerNum                                                         -- geometry shader:
-                        -> primOut                                                          -- output primitive
+                        -> primitive primOut                                                -- output primitive
                         -> Int                                                              -- max amount of generated vertices
                         -> openFun (openExp G) genv () ((PrimitiveVertices primIn a) -> (i,Int32)) -- how many primitives?
                         -> openFun (openExp G) genv () (i -> (i,j,Int32))                          -- how many vertices?
@@ -210,9 +211,9 @@ class OpenGP openGP where
                     -> openGP genv a
                     -> openGP genv b
 
-    fetch           :: (InputTuple a, SGPU (InputTupleRepr a), IsPrimitive prim)
+    fetch           :: (InputTuple a, SGPU (InputTupleRepr a), Primitive primitive)
                     => ByteString
-                    -> prim
+                    -> primitive prim
                     -> a
                     -> openGP genv (VertexStream prim (InputTupleRepr a))
 
