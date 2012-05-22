@@ -1,11 +1,13 @@
-module LCDSLTypeTypeclass where
+module LC_T_DSLType where
 
 import Data.Int
 import Data.Word
 import Data.Typeable
 
 import LCType
-import LCAPIType
+
+import LC_APIType
+import LC_T_APIType
 
 -- IsScalar means here that the related type is not a tuple, but a GPU primitive type
 class GPU a => IsScalar a where
@@ -21,9 +23,11 @@ instance IsScalar Int32 where
 instance IsScalar Word32 where
     toValue v    = VWord v
     toType _     = ITWord
+-}
 instance IsScalar Float where
     toValue v    = VFloat v
     toType _     = ITFloat
+{-
 instance IsScalar Bool where
     toValue v    = VBool v
     toType _     = ITBool
@@ -91,34 +95,6 @@ instance IsScalar V4B where
     toValue v    = VV4B v
     toType _     = ITV4B
 -}
--- GPU type value reification, needed for shader codegen
-data Value
-    = VBool     !Bool
-    | VV2B      !V2B
-    | VV3B      !V3B
-    | VV4B      !V4B
-    | VWord     !Word32
-    | VV2U      !V2U
-    | VV3U      !V3U
-    | VV4U      !V4U
-    | VInt      !Int32
-    | VV2I      !V2I
-    | VV3I      !V3I
-    | VV4I      !V4I
-    | VFloat    !Float
-    | VV2F      !V2F
-    | VV3F      !V3F
-    | VV4F      !V4F
-    | VM22F     !M22F
-    | VM23F     !M23F
-    | VM24F     !M24F
-    | VM32F     !M32F
-    | VM33F     !M33F
-    | VM34F     !M34F
-    | VM42F     !M42F
-    | VM43F     !M43F
-    | VM44F     !M44F
-    deriving (Show,Eq,Ord)
 {-
 singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType a = PairTuple UnitTuple (SingleTuple a)
@@ -137,7 +113,9 @@ instance GPU () where
 instance GPU Bool where
     tupleType v  = singletonScalarType v
     tupleType' v = SingleTuple v
+-}
 instance GPU Float where
+{-
     tupleType v  = singletonScalarType v
     tupleType' v = SingleTuple v
 instance GPU Int32 where

@@ -249,10 +249,10 @@ data FragmentOperation ty where
                     -> v Bool -- mask
                     -> FragmentOperation (Color (v c))
 -}
-setupFragmentContext :: FragmentContext t -> IO ()
-setupFragmentContext = cvt
+setupAccumulationContext :: AccumulationContext t -> IO ()
+setupAccumulationContext = cvt
   where
-    cvt :: FragmentContext t -> IO ()
+    cvt :: AccumulationContext t -> IO ()
     cvt (StencilOp a b c :. DepthOp f m :. xs) = do
         -- TODO
         cvtC 0 xs
@@ -271,7 +271,7 @@ setupFragmentContext = cvt
         glDisable gl_STENCIL_TEST
         cvtC 0 xs
 
-    cvtC :: Int -> FragmentContext t -> IO ()
+    cvtC :: Int -> AccumulationContext t -> IO ()
     cvtC i (ColorOp b m :. xs) = do
         -- TODO
         case b of
@@ -575,7 +575,7 @@ compileFrameBuffer (Accumulate fCtx ffilter fsh (Rasterize rCtx gs (Transform vs
             objs <- readTVarIO objsTVar
             unless (L.null objs) $ do
                 setupRasterContext rCtx
-                setupFragmentContext fCtx
+                setupAccumulationContext fCtx
                 glUseProgram po
                 sequence_ objs
 

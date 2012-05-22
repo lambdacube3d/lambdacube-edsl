@@ -171,7 +171,7 @@ data GP t where
                     -> GP (FrameBuffer layerCount (FTRepr' t))
 
     Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
-                    => FragmentContext b
+                    => AccumulationContext b
                     -> FragmentFilter a
                     -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
                     -> GP (FragmentStream layerCount a)

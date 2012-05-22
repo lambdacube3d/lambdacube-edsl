@@ -593,7 +593,7 @@ triangleCtx :: RasterContext Triangle
 triangleCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
 
 type FrameBuffer layerCount t = FlatTuple Typeable (Image layerCount) t
-type FragmentContext t = FlatTuple Typeable FragmentOperation t
+type AccumulationContext t = FlatTuple Typeable FragmentOperation t
 
 -- Fragment Operation
 data FragmentOperation ty where

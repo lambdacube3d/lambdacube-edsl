@@ -178,7 +178,7 @@ data OpenGP genv t where
                     -> OpenGP genv (FrameBuffer sh (FTRepr' t))
 
     Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)        -- restriction: depth and stencil optional, arbitrary color component
-                    => FragmentContext b
+                    => AccumulationContext b
                     -> FragmentFilter genv a
                     -> Fun OpenFragmentOut genv (a -> (NoStencilRepr b))    -- fragment shader
                     -> OpenGP genv (FragmentStream sh a)

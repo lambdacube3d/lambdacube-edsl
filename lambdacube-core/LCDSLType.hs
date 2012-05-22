@@ -5,7 +5,7 @@ import Data.Word
 import Data.Typeable
 
 import LCType
-import LCAPITypeTypeclass
+import LCAPIType
 
 -- IsScalar means here that the related type is not a tuple, but a GPU primitive type
 class GPU a => IsScalar a where

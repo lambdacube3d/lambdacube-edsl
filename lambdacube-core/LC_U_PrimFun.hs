@@ -1,4 +1,4 @@
-module LCPrimFunUntyped where
+module LC_U_PrimFun where
 
 data PrimFun
     -- Vec/Mat (de)construction

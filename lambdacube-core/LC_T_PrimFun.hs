@@ -1,4 +1,4 @@
-module LCPrimFunTypeclass where
+module LC_T_PrimFun where
 
 import Data.Int
 import Data.Word
