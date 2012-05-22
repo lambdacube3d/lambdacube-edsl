@@ -65,6 +65,7 @@ instance Blending BlendingI where
     blend e f c     = BlendingI (Blend e f c)
 
 newtype FlatTupleI e (c :: * -> Constraint) (a :: * -> *) t = FlatTupleI [e]
+{-
 instance FlatTuple FragmentOperationI (FlatTupleI U.FragmentOperation) where
     zt      = FlatTupleI []
     (FragmentOperationI a) .:. (FlatTupleI b) = FlatTupleI (a : b)
@@ -72,7 +73,7 @@ instance FlatTuple FragmentOperationI (FlatTupleI U.FragmentOperation) where
 instance FlatTuple (ImageI layerCount) (FlatTupleI U.Image) where
     zt      = FlatTupleI []
     (ImageI a) .:. (FlatTupleI b) = FlatTupleI (a : b)
-
+-}
 newtype RasterContextI t = RasterContextI U.RasterContext
 instance RasterContext RasterContextI where
     pointCtx            = RasterContextI PointCtx

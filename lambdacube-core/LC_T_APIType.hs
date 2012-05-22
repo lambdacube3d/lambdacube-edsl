@@ -118,6 +118,8 @@ class Blending blending where
 data VertexStream prim t
 data PrimitiveStream prim t
 data FragmentStream layerCount t
+data FrameBuffer layerCount t
+--data Image layerCount t
 
 -- flat tuple, another internal tuple representation
 -- means unit
@@ -175,8 +177,8 @@ class RasterContext rasterContext where
 defaultTriangleCtx :: RasterContext rasterContext => rasterContext Triangle
 defaultTriangleCtx = triangleCtx CullNone PolygonFill NoOffset LastVertex
 
-type FrameBuffer layerCount t = (Image reprI, FlatTuple (reprI layerCount) reprFT) => reprFT Typeable (reprI layerCount) t
-type AccumulationContext t = (FragmentOperation reprFO, FlatTuple reprFO reprFT) => reprFT Typeable reprFO t
+--type FrameBuffer layerCount t = (Image reprI, FlatTuple (reprI layerCount) reprFT) => reprFT Typeable (reprI layerCount) t
+--type AccumulationContext t = (FragmentOperation reprFO, FlatTuple reprFO reprFT) => reprFT Typeable reprFO t
 
 -- Fragment Operation
 class FragmentOperation fragmentOperation where
@@ -191,8 +193,8 @@ class FragmentOperation fragmentOperation where
                     -> StencilOps
                     -> fragmentOperation (Stencil Int32)
 
-    colorOp         :: (IsScalar mask, IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c,
-                        Blending blending, blending ~ FragmentOperation_Blending fragmentOperation)
+    colorOp         :: (IsScalar mask, IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c
+                       ,blending ~ FragmentOperation_Blending fragmentOperation)
                     => blending c   -- blending type
                     -> mask         -- write mask
                     -> fragmentOperation (Color color)
@@ -301,15 +303,15 @@ type instance TexDataRepr RGBA (v a) = V4 a
 class TextureDataType textureDataType where
     type TextureDataType_ColorArity textureDataType :: * -> *
 
-    float   :: (ColorArity colorArity, colorArity ~ TextureDataType_ColorArity textureDataType)
+    float   :: (colorArity ~ TextureDataType_ColorArity textureDataType)
             => colorArity a
             -> textureDataType (Regular Float) a
 
-    int     :: (ColorArity colorArity, colorArity ~ TextureDataType_ColorArity textureDataType)
+    int     :: (colorArity ~ TextureDataType_ColorArity textureDataType)
             => colorArity a
             -> textureDataType (Regular Int) a
 
-    word    :: (ColorArity colorArity, colorArity ~ TextureDataType_ColorArity textureDataType)
+    word    :: (colorArity ~ TextureDataType_ColorArity textureDataType)
             => colorArity a
             -> textureDataType (Regular Word) a
 
@@ -337,36 +339,36 @@ class TextureType textureType where -- hint: arr - single or array texture, ar -
     type TextureType_TextureDataType textureType :: * -> * -> *
 
     texture1D       :: (Nat layerCount
-                       ,TextureDataType textureDataType, textureDataType ~ TextureType_TextureDataType textureType)
+                       ,textureDataType ~ TextureType_TextureDataType textureType)
                     => textureDataType t ar
                     -> layerCount
                     -> textureType DIM1 Mip (TexArrRepr layerCount) layerCount t ar
 
     texture2D       :: (Nat layerCount
-                       ,TextureDataType textureDataType, textureDataType ~ TextureType_TextureDataType textureType)
+                       ,textureDataType ~ TextureType_TextureDataType textureType)
                     => textureDataType t ar
                     -> layerCount
                     -> textureType DIM2 Mip (TexArrRepr layerCount) layerCount t ar
 
-    texture3D       :: (TextureDataType textureDataType, textureDataType ~ TextureType_TextureDataType textureType)
+    texture3D       :: (textureDataType ~ TextureType_TextureDataType textureType)
                     => textureDataType (Regular t) ar
                     -> textureType DIM3 Mip SingleTex N1 (Regular t) ar
 
-    textureCube     :: (TextureDataType textureDataType, textureDataType ~ TextureType_TextureDataType textureType)
+    textureCube     :: (textureDataType ~ TextureType_TextureDataType textureType)
                     => textureDataType t ar
                     -> textureType DIM2 Mip CubeTex N1 t ar
 
-    textureRect     :: (TextureDataType textureDataType, textureDataType ~ TextureType_TextureDataType textureType)
+    textureRect     :: (textureDataType ~ TextureType_TextureDataType textureType)
                     => textureDataType t ar
                     -> textureType Rect NoMip SingleTex N1 t ar
 
     texture2DMS     :: (Nat layerCount
-                       ,TextureDataType textureDataType, textureDataType ~ TextureType_TextureDataType textureType)
+                       ,textureDataType ~ TextureType_TextureDataType textureType)
                     => textureDataType (Regular t) ar
                     -> layerCount
                     -> textureType DIM2 NoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
 
-    textureBuffer   :: (TextureDataType textureDataType, textureDataType ~ TextureType_TextureDataType textureType)
+    textureBuffer   :: (textureDataType ~ TextureType_TextureDataType textureType)
                     => textureDataType (Regular t) ar
                     -> textureType DIM1 NoMip SingleTex N1 (Buffer t) ar
 
@@ -377,15 +379,15 @@ class Texture (gp :: * -> *) texture where
     type Texture_MipMap texture :: * -> *
 
     textureSlot     :: (IsValidTextureSlot t
-                       ,TextureType textureType, textureType ~ Texture_TextureType texture)
+                       ,textureType ~ Texture_TextureType texture)
                     => ByteString -- texture slot name
                     -> textureType dim mip arr layerCount t ar
                     -> texture gp dim arr t ar
     -- TODO:
     --  add texture internal format specification
-    texture         :: (TextureType textureType, textureType ~ Texture_TextureType texture
-                       ,Image image, image ~ Texture_Image texture
-                       ,MipMap mipMap, mipMap ~ Texture_MipMap texture)
+    texture         :: (textureType ~ Texture_TextureType texture
+                       ,image ~ Texture_Image texture
+                       ,mipMap ~ Texture_MipMap texture)
                     => textureType dim (MipRepr mip) arr layerCount t ar
                     -- -> TexSizeRepr dim
                     -> mipMap mip
@@ -438,3 +440,6 @@ type instance MipRepr NoMip     = NoMip
 data V
 data G
 data F
+data VertexOut
+data GeometryOut
+data FragmentOut

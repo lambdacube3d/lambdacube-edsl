@@ -1,8 +1,6 @@
 module LC_U_HOAS where
 
 import Data.ByteString.Char8
-import Data.Typeable
-import Data.Int
 
 import LCType
 
@@ -20,33 +18,28 @@ data Exp
     | PrimApp   PrimFun Exp
     | Tup       [Exp]
     | Prj       Int Exp
-    | Sampler   Filter EdgeMode (Texture GP)
-
-data VertexOut
-    = VertexOut Exp Exp [Interpolated Exp]
+    -- special expressions
+    | VertexOut             Exp Exp [Interpolated Exp]
+    | GeometryOut           Exp Exp Exp Exp Exp [Interpolated Exp]
+    | FragmentOut           [Exp]
+    | FragmentOutDepth      Exp [Exp]
+    | FragmentOutRastDepth  [Exp]
+    | Sampler               Filter EdgeMode (Texture GP)
 
 data GeometryShader
     = NoGeometryShader
-    | GeometryShader Int PrimitiveType Int Exp Exp (Exp -> GeometryOut)
-
-data GeometryOut
-    = GeometryOut Exp Exp Exp Exp Exp [Interpolated Exp]
-
-data FragmentOut
-    = FragmentOut           [Exp]
-    | FragmentOutDepth      Exp [Exp]
-    | FragmentOutRastDepth  [Exp]
+    | GeometryShader    Int PrimitiveType Int Exp Exp Exp
 
 data FragmentFilter
     = PassAll
-    | Filter    (Exp -> Exp)
+    | Filter    Exp
 
 data GP
     = GPTag             Int
     | Fetch             ByteString PrimitiveType [(ByteString,InputType)]
-    | Transform         (Exp -> VertexOut) GP
+    | Transform         Exp GP
     | Rasterize         RasterContext GeometryShader GP
     | FrameBuffer       V2U [Image]
-    | Accumulate        [FragmentOperation] FragmentFilter (Exp -> FragmentOut) GP GP
+    | Accumulate        [FragmentOperation] FragmentFilter Exp GP GP
     | PrjFrameBuffer    ByteString Int GP
     | PrjImage          ByteString Int GP

@@ -18,10 +18,12 @@ import LC_I_PrimFun
 
 import LC_T_HOAS
 import LC_U_HOAS hiding (Exp
-                        ,VertexOut
-                        ,GeometryShader
+                        ,FragmentFilter
+                        ,FragmentOut
+                        ,GP
                         ,GeometryOut
-                        ,FragmentOut)
+                        ,GeometryShader
+                        ,VertexOut)
 
 import qualified LC_U_HOAS as U
 import qualified LC_U_APIType as U
@@ -29,10 +31,12 @@ import qualified LC_U_APIType as U
 
 newtype ExpI stage t = ExpI (U.Exp)
 instance Exp ExpI where
-    type Exp_PrimFun ExpI           = PrimFunI
-    type Exp_Input ExpI             = InputI
-    type Exp_FlatTuple ExpI         = FlatTupleI U.Exp
-    type Exp_TupleIdx ExpI          = TupleIdxI
+    type Exp_PrimFun ExpI               = PrimFunI
+    type Exp_Input ExpI                 = InputI
+    type Exp_FlatTuple ExpI             = FlatTupleI U.Exp
+    type Exp_InterpolatedFlatTuple ExpI = FlatTupleI (U.Interpolated U.Exp)
+    type Exp_TupleIdx ExpI              = TupleIdxI
+
     tag                             = ExpI . Tag
     lam a                           = ExpI (Lam (\x -> let ExpI b = a (ExpI x) in b))
     cnst                            = ExpI . Const . toValue
@@ -42,84 +46,13 @@ instance Exp ExpI where
     primApp (PrimFunI f) (ExpI a)   = ExpI (PrimApp f a)
     tup (FlatTupleI a)              = ExpI (Tup a)
     prj (TupleIdxI a) (ExpI b)      = ExpI (Prj a b)
---    sampler a b (TextureI c)        = ExpI (Sampler a b c)
-{-
-data Exp
-    = Tag       Int
-    | Const     Value
-    | PrimVar   ByteString InputType
-    | Uni       ByteString InputType
-    | Cond      Exp Exp Exp
-    | PrimApp   PrimFun Exp
-    | Tup       [Exp]
-    | Prj       Int Exp
-    | Sampler   Filter EdgeMode (Texture GP)
-
-class Exp exp where
-    type Exp_GP exp :: * -> *
-    type Exp_Input exp :: * -> *
-    type Exp_PrimFun exp :: * -> * -> *
-    type Exp_Texture exp :: (* -> *) -> * -> * -> * -> * -> *
-    type Exp_FlatTuple exp :: (* -> Constraint) -> (* -> *) -> * -> *
-    type Exp_TupleIdx exp :: * -> * -> *
-
-    -- Needed for conversion to de Bruijn form
-    tag     :: GPU t
-            => Int
-            -> exp stage t
-                 -- environment size at defining occurrence
-
-    -- constant value
-    cnst    :: IsScalar t
-            => t
-            -> exp stage t
-
-    -- builtin variable
-    primVar :: (GPU t
-               , Input input, input ~ Exp_Input exp)
-            => input t
-            -> exp stage t
-
-    -- uniform value
-    uni     :: (GPU t
-               , Input input, input ~ Exp_Input exp)
-            => input t
-            -> exp stage t
-
-    -- conditional expression
-    cond    :: GPU t
-            => exp stage Bool
-            -> exp stage t
-            -> exp stage t
-            -> exp stage t
-
-    primApp :: (GPU a, GPU r
-               , PrimFun primFun, primFun ~ Exp_PrimFun exp)
-            => primFun stage (a -> r)
-            -> exp stage a
-            -> exp stage r
-
-    -- tuple support
-    tup     :: (GPU t, IsTuple t
-               , Tuple tuple, tuple ~ Exp_Tuple exp)
-            => tuple (exp stage) (TupleRepr t)
-            -> exp stage t
-
-    prj     :: (GPU e, GPU t, IsTuple t
-               , TupleIdx tupleIdx, tupleIdx ~ Exp_TupleIdx exp)
-            => tupleIdx (TupleRepr t) e
-            -> exp stage t
-            -> exp stage e
-
-    -- sampler support
-    sampler :: (GPU (Sampler dim arr t ar)
-               , GP gp, gp ~ Exp_GP exp
-               , Texture gp texture, texture ~ Exp_Texture exp)
-            => Filter
-            -> EdgeMode
-            -> texture gp dim arr t ar
-            -> exp stage (Sampler dim arr t ar)
--}
+--    sampler a b (TextureI c)                    = ExpI (Sampler a b c)
+    vertexOut (ExpI a) (ExpI b) (FlatTupleI c)  = ExpI (U.VertexOut a b c)
+    geometryOut (ExpI a) (ExpI b) (ExpI c)
+               (ExpI d) (ExpI e) (FlatTupleI f) = ExpI (U.GeometryOut a b c d e f)
+    fragmentOut (FlatTupleI a)                  = ExpI (U.FragmentOut a)
+    fragmentOutDepth (ExpI a) (FlatTupleI b)    = ExpI (U.FragmentOutDepth a b)
+    fragmentOutRastDepth (FlatTupleI a)         = ExpI (U.FragmentOutRastDepth a)
 
 {-
 newtype TextureI a b c d e = TextureI U.Texture
@@ -159,53 +92,36 @@ class Texture texture where
                     -> texture gp dim arr t ar
 -}
 
-newtype VertexOutI a = VertexOutI (U.VertexOut)
-instance VertexOut VertexOutI where
-    type VertexOut_Exp VertexOutI               = ExpI
-    type VertexOut_FlatTuple VertexOutI         = FlatTupleI (U.Interpolated U.Exp)
-    vertexOut (ExpI a) (ExpI b) (FlatTupleI c)  = VertexOutI (U.VertexOut a b c)
-
 newtype GeometryShaderI a b c d e = GeometryShaderI U.GeometryShader
 instance GeometryShader GeometryShaderI where
     type GeometryShader_Exp GeometryShaderI         = ExpI
-    type GeometryShader_GeometryOut GeometryShaderI = VertexOutI
     type GeometryShader_Primitive GeometryShaderI   = PrimitiveI
     noGeometryShader                                = GeometryShaderI NoGeometryShader
-    geometryShader a (PrimitiveI b) c (ExpI d) (ExpI e) f         = GeometryShaderI (U.GeometryShader (toInt a) b c d e undefined)
-{-
-data GeometryShader
-    = NoGeometryShader
-    | GeometryShader Int PrimitiveType Int (Exp -> Exp) (Exp -> Exp) (Exp -> GeometryOut)
+    geometryShader a (PrimitiveI b) c
+                  (ExpI d) (ExpI e) (ExpI f)        = GeometryShaderI (U.GeometryShader (toInt a) b c d e f)
 
-class GeometryShader geometryShader where
-    type GeometryShader_Exp geometryShader :: * -> * -> *
-    type GeometryShader_GeometryOut geometryShader :: * -> *
+newtype FragmentFilterI a = FragmentFilterI U.FragmentFilter
+instance FragmentFilter FragmentFilterI where
+    type FragmentFilter_Exp FragmentFilterI = ExpI
+    passAll         = FragmentFilterI PassAll
+    filter (ExpI a) = FragmentFilterI (Filter a)
 
-    noGeometryShader    :: geometryShader prim prim N1 a a
-
-    geometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum
-                           , Exp exp, exp ~ GeometryShader_Exp geometryShader
-                           , GeometryOut geometryOut, geometryOut ~ GeometryShader_GeometryOut geometryShader
-                           )
-                        => layerNum                                                 -- geometry shader:
-                        -> primOut                                                  -- output primitive
-                        -> Int                                                      -- max amount of generated vertices
-                        -> (exp G (PrimitiveVertices primIn a) -> exp G (i,Int32))  -- how many primitives?
-                        -> (exp G i -> exp G (i,j,Int32))                           -- how many vertices?
-                        -> (exp G j -> geometryOut (j,b))                           -- generate vertices
-                        -> geometryShader primIn primOut layerNum a b
--}
-
-newtype GeometryOutI a = GeometryOutI U.GeometryOut
-instance GeometryOut GeometryOutI where
-    type GeometryOut_Exp GeometryOutI       = ExpI
-    type GeometryOut_FlatTuple GeometryOutI = FlatTupleI (U.Interpolated U.Exp)
-    geometryOut (ExpI a) (ExpI b) (ExpI c) (ExpI d) (ExpI e) (FlatTupleI f) = GeometryOutI (U.GeometryOut a b c d e f)
-
-newtype FragmentOutI a = FragmentOutI U.FragmentOut
-instance FragmentOut FragmentOutI where
-    type FragmentOut_Exp FragmentOutI           = ExpI
-    type FragmentOut_FlatTuple FragmentOutI     = FlatTupleI U.Exp
-    fragmentOut (FlatTupleI a)                  = FragmentOutI (U.FragmentOut a)
-    fragmentOutDepth (ExpI a) (FlatTupleI b)    = FragmentOutI (FragmentOutDepth a b)
-    fragmentOutRastDepth (FlatTupleI a)         = FragmentOutI (FragmentOutRastDepth a)
+newtype GPI a = GPI U.GP
+instance GP GPI where
+    type GP_Exp GPI                         = ExpI
+    type GP_GeometryShader GPI              = GeometryShaderI
+    type GP_RasterContext GPI               = RasterContextI
+    type GP_FragmentFilter GPI              = FragmentFilterI
+    type GP_Primitive GPI                   = PrimitiveI
+    type GP_TupleIdx GPI                    = TupleIdxI
+    type GP_FlatTupleImage GPI              = FlatTupleI U.Image
+    type GP_FlatTupleFragmentOperation GPI  = FlatTupleI U.FragmentOperation
+    gpTag a                                                     = GPI (GPTag a)
+    fetch a (PrimitiveI b) c                                    = GPI (Fetch a b (toInputList c))
+    transform (ExpI a) (GPI b)                                  = GPI (Transform a b)
+    rasterize (RasterContextI a) (GeometryShaderI b) (GPI c)    = GPI (Rasterize a b c)
+    frameBuffer a (FlatTupleI b)                                = GPI (FrameBuffer a b)
+    accumulate (FlatTupleI a) (FragmentFilterI b)
+               (ExpI c) (GPI d) (GPI e)                         = GPI (Accumulate a b c d e)
+    prjFrameBuffer a (TupleIdxI b) (GPI c)                      = GPI (PrjFrameBuffer a b c)
+    prjImage a b (GPI c)                                        = GPI (PrjImage a (toInt b) c)

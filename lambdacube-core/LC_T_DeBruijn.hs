@@ -192,10 +192,12 @@ class OpenGP openGP where
     type OpenGP_GeometryShader openGP :: * -> * -> * -> * -> * -> * -> *
     type OpenGP_FragmentFilter openGP :: * -> * -> *
     type OpenGP_OpenFragmentOut openGP :: * -> * -> * -> *
---    type OpenGP_AccumulationContext openGP :: 
     type OpenGP_TupleIdx openGP :: * -> * -> *
     type OpenGP_Image openGP :: * -> * -> *
     type OpenGP_RasterContext openGP :: * -> *
+    type OpenGP_FragmentOperation openGP :: * -> *
+    type OpenGP_FlatTupleFragmentOperation openGP :: (* -> Constraint) -> (* -> *) -> * -> *
+
 
     -- the following required only for sharing
     gpLet           :: openGP genv        bnd               -- bound expression
@@ -236,10 +238,12 @@ class OpenGP openGP where
                     -> openGP genv (FrameBuffer sh (FTRepr' t))
 
     accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b
-                       , FragmentFilter fragmentFilter, fragmentFilter ~ OpenGP_FragmentFilter openGP
+                       ,FragmentFilter fragmentFilter, fragmentFilter ~ OpenGP_FragmentFilter openGP
+                       ,FragmentOperation fragmentOperation, fragmentOperation ~ OpenGP_FragmentOperation gp
+                       ,FlatTuple fragmentOperation flatTuple, flatTuple ~ OpenGP_FlatTupleFragmentOperation gp
                        , OpenFragmentOut openFragmentOut, openFragmentOut ~ OpenGP_OpenFragmentOut openGP
                        , OpenFun openFun)        -- restriction: depth and stencil optional, arbitrary color component
-                    => AccumulationContext b
+                    => flatTuple Typeable fragmentOperation b
                     -> fragmentFilter genv a
                     -> openFun openFragmentOut genv () (a -> (NoStencilRepr b))    -- fragment shader
                     -> openGP genv (FragmentStream sh a)
@@ -259,46 +263,3 @@ class OpenGP openGP where
                     -> idx
                     -> openGP () (image sh t)
                     -> openGP genv (image N1 t)
-
--- utility functions
-{-
-data StreamInput -- slot name, primitive type, stream input name and type
-    = StreamInput ByteString PrimitiveType [(ByteString,InputType)] deriving Show
-
-streamInput :: GP t -> [StreamInput]
-streamInput (Fetch n p a)               = [StreamInput n (toPrimitive p) (toInputList a)]
-streamInput (Transform _ vs)            = streamInput vs
-streamInput (Rasterize _ _ ps)          = streamInput ps
-streamInput (Accumulate _ _ _ fs fb)    = streamInput fs ++ streamInput fb
-streamInput _                           = []
--}
-{-
-uniformInputExp :: OpenExp stage env genv t -> Set (ByteString,InputType)
-uniformInputExp (Uni a)         = Set.fromList $! toInputList a
-uniformInputExp (Tup a)         = collect a
-  where
-    collect :: Tuple (OpenExp stage env genv) t' -> Set (ByteString,InputType)
-    collect NilTup          = Set.empty
-    collect (SnocTup tup e) = uniformInputExp e `Set.union` collect tup
-uniformInputExp (Prj _ a)       = uniformInputExp a
-uniformInputExp (Cond a b c)    = uniformInputExp a `Set.union` uniformInputExp b `Set.union` uniformInputExp c
-uniformInputExp (PrimApp _ a)   = uniformInputExp a
-uniformInputExp _               = Set.empty
-
-uniformInputInterpolatedFlatExp :: OpenInterpolatedFlatExp stage env genv t -> Set (ByteString,InputType)
-uniformInputInterpolatedFlatExp (Flat e :. xs)          = uniformInputExp e `Set.union` uniformInputInterpolatedFlatExp xs
-uniformInputInterpolatedFlatExp (Smooth e :. xs)        = uniformInputExp e `Set.union` uniformInputInterpolatedFlatExp xs
-uniformInputInterpolatedFlatExp (NoPerspective e :. xs) = uniformInputExp e `Set.union` uniformInputInterpolatedFlatExp xs
-uniformInputInterpolatedFlatExp _ = Set.empty
-
-uniformInputFlatExp :: OpenFlatExp stage env genv t -> Set (ByteString,InputType)
-uniformInputFlatExp (e :. xs)   = uniformInputExp e `Set.union` uniformInputFlatExp xs
-uniformInputFlatExp _           = Set.empty
--}
---uniformInputGS = undefined
---uniformInputFun = undefined
-{-
-uniformInputFun :: OpenFun OpenExp env genv a -> Set (ByteString,InputType)
-uniformInputFun (Lam f)   = uniformInputFun f
-uniformInputFun (Body e)  = uniformInputExp e
--}
