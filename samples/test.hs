@@ -121,6 +121,6 @@ main = do
         atomically $ matSetter $ V4 (V4 1 0 0 0) (V4 0 1 0 0) (V4 0 0 1 0) (V4 0 0 0 1)
         render renderer
 
-    finalize renderer
+    dispose renderer
     print "renderer destroyed"
     closeWindow

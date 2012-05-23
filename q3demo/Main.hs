@@ -94,7 +94,7 @@ main = do
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
-    finalize renderer
+    dispose renderer
     print "renderer destroyed"
     closeWindow
 
@@ -116,9 +116,8 @@ scene p0 slotU windowSize mousePosition fblrPress = do
                 pm = perspective 0.01 50 (pi/2) (fromIntegral w / fromIntegral h)
                 sm = fromProjective (scaling $ Vec3 s s s)
                 s  = 0.005
-            atomically $ do
-                --timeSetter time
-                matSetter $! mat4ToM44F $! cm .*. sm .*. pm
+            --timeSetter time
+            matSetter $! mat4ToM44F $! cm .*. sm .*. pm
     r <- effectful3 setupGFX windowSize cam time
     return r
 

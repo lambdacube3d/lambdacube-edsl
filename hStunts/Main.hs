@@ -107,7 +107,7 @@ main = do
         mousePositionSink mousePressSink fblrPressSink
         cameraPressSink debugPressSink)
 
-    finalize renderer
+    dispose renderer
     closeWindow
     terminate
 
@@ -153,12 +153,12 @@ scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mouseP
         wheelsU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis]
         setupGFX (w,h) cm carMat wheelsMats = do
             let pm = perspective 0.1 50000 (pi/2) (fromIntegral w / fromIntegral h)
-            atomically $ do
-                lightPositionSetter $! vec3ToV3F $! lightPosition
-                cameraSetter $! mat4ToM44F $! fromProjective cm
-                projectionSetter $! mat4ToM44F $! pm
-                forM_ carMats $ \s -> s $! mat4ToM44F $! fromProjective carMat .*. fromProjective cm
-                forM_ (zip wheelsU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu .*. fromProjective cm
+
+            lightPositionSetter $! vec3ToV3F $! lightPosition
+            cameraSetter $! mat4ToM44F $! fromProjective cm
+            projectionSetter $! mat4ToM44F $! pm
+            forM_ carMats $ \s -> s $! mat4ToM44F $! fromProjective carMat .*. fromProjective cm
+            forM_ (zip wheelsU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu .*. fromProjective cm
     
     effectful4 setupGFX windowSize camera carPos wheelPos
 

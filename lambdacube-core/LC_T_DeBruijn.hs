@@ -231,7 +231,7 @@ class OpenGP openGP where
 
     transform       :: (GPU a, GPU b
                        ,openFun ~ OpenGP_OpenFun openGP)
-                    => openFun () genv (V a -> V b)                      -- vertex shader
+                    => openFun () genv (V a -> VertexOut b)                      -- vertex shader
                     -> openGP genv (VertexStream prim a)
                     -> openGP genv (PrimitiveStream prim b)
 
@@ -242,8 +242,8 @@ class OpenGP openGP where
                     -> openGP genv (PrimitiveStream primIn a)
                     -> openGP genv (FragmentStream layerNum b)
 
-    frameBuffer     :: (Image image, image ~ OpenGP_Image openGP
-                       ,FlatTuple (image layerCount) flatTuple, flatTuple ~ OpenGP_FlatTupleImage openGP)
+    frameBuffer     :: (image ~ OpenGP_Image openGP
+                       ,flatTuple ~ OpenGP_FlatTupleImage openGP)
                     => V2U                                          -- size: width, height
                     -> flatTuple Typeable (image layerCount) GFX t
                     -> openGP genv (FrameBuffer layerCount (FTRepr' t))
@@ -255,7 +255,7 @@ class OpenGP openGP where
                        ,openFun ~ OpenGP_OpenFun openGP)        -- restriction: depth and stencil optional, arbitrary color component
                     => flatTuple Typeable fragmentOperation GFX b
                     -> fragmentFilter genv a
-                    -> openFun () genv (F a -> F (NoStencilRepr b))    -- fragment shader
+                    -> openFun () genv (F a -> FragmentOut (NoStencilRepr b))    -- fragment shader
                     -> openGP genv (FragmentStream sh a)
                     -> openGP genv (FrameBuffer sh (FTRepr' b))
                     -> openGP genv (FrameBuffer sh (FTRepr' b))

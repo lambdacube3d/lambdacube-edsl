@@ -119,7 +119,7 @@ main = do
         return $ return <$> v
     driveNetwork Nothing sc draw
 
-    finalize renderer
+    dispose renderer
     print "renderer destroyed"
     closeWindow
 

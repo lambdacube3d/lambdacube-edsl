@@ -24,7 +24,7 @@ Library
         binary,
         bytestring,
         containers,
-        stm,
+        --stm,
         vector,
 
         bytestring-trie,

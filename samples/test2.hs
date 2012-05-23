@@ -98,7 +98,7 @@ main = do
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
-    finalize renderer
+    dispose renderer
     print "renderer destroyed"
     closeWindow
 
@@ -118,7 +118,7 @@ scene slotU objU windowSize mousePosition fblrPress = do
         setupGFX (w,h) (cam,dir,up,_) time = do
             let cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.1 50 (pi/2) (fromIntegral w / fromIntegral h)
-            (t,_) <- C.time $ atomically $ do
+            (t,_) <- C.time $ do
                 --timeSetter time
                 matSetter $! mat4ToM44F $! cm .*. pm
             --putStrLn $ C.secs t ++ " - worldViewProj uniform setup via STM"

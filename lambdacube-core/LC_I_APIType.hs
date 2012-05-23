@@ -64,6 +64,18 @@ instance Blending BlendingI where
     blendLogicOp op = BlendingI (BlendLogicOp op)
     blend e f c     = BlendingI (Blend e f c)
 
+newtype InterpolatedI a (b :: * -> *) c = InterpolatedI (U.Interpolated a)
+{-
+class Interpolated interpolated where
+    flat            :: e a -> interpolated e a
+
+    smooth          :: IsFloating a
+                    => e a -> interpolated e a
+
+    noPerspective   :: IsFloating a
+                    => e a -> interpolated e a
+-}
+
 newtype FlatTupleI e (c :: * -> Constraint) (a :: * -> *) (stage :: * -> *) t = FlatTupleI [e]
 {-
 instance FlatTuple FragmentOperationI (FlatTupleI U.FragmentOperation) where

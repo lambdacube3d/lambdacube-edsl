@@ -3,7 +3,8 @@ module LC_Convert where
 import Data.Typeable
 
 import LC_APIType
-import LC_T_APIType hiding (Texture,Interpolated)
+import LC_T_APIType hiding (Texture,Interpolated,FlatTuple)
+import LC_I_APIType (FlatTupleI,InterpolatedI)
 import LC_T_DSLType
 --import LCDSLType
 --import LCDeBruijnUtil
@@ -11,6 +12,7 @@ import LC_I_DeBruijn
 import LC_T_DeBruijn (Idx(..))
 import LC_GADT_HOAS as H
 import LC_T_DeBruijn as D
+import qualified LC_U_DeBruijn as D
 
 -- Layouts
 -- -------
@@ -60,6 +62,7 @@ convertOpenGP = cvt
     cvt glyt (H.PrjFrameBuffer n idx fb)    = D.prjFrameBuffer n idx (convertGP fb)
     cvt glyt (H.PrjImage n idx img)         = D.prjImage n idx (convertGP img)
 
+convertFlatTuple :: forall c a stage t .FlatTuple c a stage t -> 
 -- Fragment
 convertFragmentFilter :: GPU a
                       => Layout genv genv
@@ -81,15 +84,17 @@ convertGeometryShader = cvt
     cvt glyt H.NoGeometryShader                 = D.noGeometryShader
     cvt glyt (H.GeometryShader a b c e1 e2 e3)  = D.geometryShader a b c (convertFun1 glyt e1) (convertFun1 glyt e2) (convertFun1 glyt e3)
 
+--newtype FlatTupleI e (c :: * -> Constraint) (a :: * -> *) (stage :: * -> *) t = FlatTupleI [e]
+--newtype InterpolatedI a (b :: * -> *) (c :: * -> *) = InterpolatedI (U.Interpolated a)
 -- Common
 convertOpenInterpolatedFlatExp :: forall stage t env genv.
                               Layout env  env       -- scalar environment
                            -> Layout genv genv      -- array environment
-                           -> H.InterpolatedFlatExp stage t               -- expression to be converted
-                           -> D.OpenInterpolatedFlatExp stage env genv t
+                           -> H.Interpolated t               -- expression to be converted
+                           -> FlatTupleI (Interpolated D.Exp) GPU (InterpolatedI D.Exp (OpenExpI env genv)) stage t
 convertOpenInterpolatedFlatExp lyt glyt = cvt
   where
-    cvt :: H.InterpolatedFlatExp satge t' -> D.OpenInterpolatedFlatExp satge env genv t'
+    cvt :: H.Interpolated t' -> FlatTupleI (Interpolated D.Exp) GPU (InterpolatedI D.Exp (OpenExpI env genv)) stage t'
     cvt (ZT)    = zt
     cvt (e:.xs) = cvt' e :. cvt xs
 
@@ -98,14 +103,15 @@ convertOpenInterpolatedFlatExp lyt glyt = cvt
     cvt' (Smooth e)         = smooth        (convertOpenExp lyt glyt e)
     cvt' (NoPerspective e)  = noPerspective (convertOpenExp lyt glyt e)
 
+type FlatExp a b = FlatTuple GPU Exp a b
 convertOpenFlatExp :: forall stage t env genv.
                       Layout env  env       -- scalar environment
                    -> Layout genv genv      -- array environment
-                   -> H.FlatExp stage t               -- expression to be converted
-                   -> D.OpenFlatExp stage env genv t
+                   -> FlatExp stage t               -- expression to be converted
+                   -> FlatTupleI D.Exp GPU (OpenExpI env genv) stage t
 convertOpenFlatExp lyt glyt = cvt
   where
-    cvt :: H.FlatExp stage t' -> D.OpenFlatExp stage env genv t'
+    cvt :: FlatExp stage t' -> FlatTupleI D.Exp GPU (OpenExpI env genv) stage t'
     cvt (ZT)    = zt
     cvt (e:.xs) = convertOpenExp lyt glyt e :. cvt xs
 
@@ -138,8 +144,8 @@ convertOpenExp lyt glyt = cvt
     cvt (H.FragmentOutRastDepth fe) = D.fragmentOutRastDepth (convertOpenFlatExp lyt glyt fe)
     cvt (H.Sampler f em t)          = D.sampler f em (convertTexture t)
 
-convertFun1 :: forall a b genv. GPU a
-               => Layout genv genv 
+convertFun1 :: forall a b genv.
+                Layout genv genv 
                -> (H.Exp a -> H.Exp b) 
                -> OpenFunI () genv (a -> b)
 convertFun1 = convertFun1' convertOpenExp

@@ -1,14 +1,14 @@
 module LCGL where
 
 import Control.Applicative
-import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
+import Data.IORef
 import Data.List as L
 import Data.Maybe
+import Data.Set (Set)
 import Data.Trie as T
 import Foreign
-import Data.Set (Set)
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
@@ -55,7 +55,7 @@ slotUniforms    :: Renderer -> Trie (Trie InputType)
 slotStreams     :: Renderer -> Trie (PrimitiveType, Trie InputType)
 uniformSetter   :: Renderer -> Trie InputSetter
 render          :: Renderer -> IO ()
-finalize        :: Renderer -> IO ()
+dispose        :: Renderer -> IO ()
 -}
 -- Object
 addObject       :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> Trie (Stream Buffer) -> [ByteString] -> IO Object
@@ -99,7 +99,7 @@ arrayType buf arrIdx    = arrType $! bufArrays buf V.! arrIdx
             - slotStreams   :: Trie (PrimitiveType, Trie InputType)
             - uniformSetter :: Trie InputSetter
             - render        :: IO ()
-            - finalize      :: IO ()
+            - dispose      :: IO ()
         INTERNAL:
             - object sets               :: Trie (TVar ObjectSet)
             - globalUniformSetup        :: Trie (GLint -> IO ())
@@ -139,10 +139,10 @@ data Renderer -- internal type
     , slotStream            :: Trie (PrimitiveType, Trie InputType)
     , uniformSetter         :: Trie InputSetter         -- global uniform
     , render                :: IO ()
-    , finalize              :: IO ()
+    , dispose              :: IO ()
 
     -- internal
-    , objectSet             :: Trie (TVar ObjectSet)
+    , objectSet             :: Trie (IORef ObjectSet)
     , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm
     , slotUniformLocation   :: Trie (Trie GLint)
     , slotStreamLocation    :: Trie (Trie GLuint)
@@ -420,7 +420,7 @@ compileFrameBuffer (FrameBuffer (V2 w h) fb) rndr = do
     --  depth
     --  stencil
     --  depth-stencil
-    let cvt :: FrameBuffer sh t -> IO (Int, IO (), IO ()) -- color component count, render, finalize
+    let cvt :: FrameBuffer sh t -> IO (Int, IO (), IO ()) -- color component count, render, dispose
         cvt (StencilImage sh1 s :. DepthImage sh2 d :. xs) = do
             -- TODO
             cvtC 0 xs
@@ -436,12 +436,12 @@ compileFrameBuffer (FrameBuffer (V2 w h) fb) rndr = do
                 render      = do
                     glClearDepth $ realToFrac d
                     glClear $ fromIntegral gl_DEPTH_BUFFER_BIT
-                finalize    = with to $ \pto -> glDeleteTextures 1 pto
+                dispose    = with to $ \pto -> glDeleteTextures 1 pto
             (i,r,f) <- cvtC 0 xs
-            return $! (i,render >> r, finalize >> f)
+            return $! (i,render >> r, dispose >> f)
         cvt xs = cvtC 0 xs
 
-        cvtC :: Int -> FrameBuffer sh t -> IO (Int, IO (), IO ()) -- color component count, render, finalize
+        cvtC :: Int -> FrameBuffer sh t -> IO (Int, IO (), IO ()) -- color component count, render, dispose
         cvtC i (ColorImage sh c :. xs) = do
             to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
             glBindTexture gl_TEXTURE_2D to
@@ -453,9 +453,9 @@ compileFrameBuffer (FrameBuffer (V2 w h) fb) rndr = do
                     --with c' $ \pc -> glClearBufferfv gl_COLOR (fromIntegral $ gl_DRAW_BUFFER0 + fromIntegral i) $ castPtr pc
                     glClearColor 1 0 0 1
                     glClear $ fromIntegral gl_COLOR_BUFFER_BIT
-                finalize    = with to $ \pto -> glDeleteTextures 1 pto
+                dispose    = with to $ \pto -> glDeleteTextures 1 pto
             (i',r,f) <- cvtC (i + 1) xs
-            return $! (i', render >> r, finalize >> f)
+            return $! (i', render >> r, dispose >> f)
         cvtC i ZT = return $! (i, return (), return ())
 
     (colorCnt,r,f) <- cvt fb
@@ -466,7 +466,7 @@ compileFrameBuffer (FrameBuffer (V2 w h) fb) rndr = do
             glBindFramebuffer gl_READ_FRAMEBUFFER bo
             r
         delete  = with bo $ \pbo -> glDeleteFramebuffers 1 pbo
-    return $! rndr {render = render rndr >> draw, finalize = finalize rndr >> f >> delete}
+    return $! rndr {render = render rndr >> draw, dispose = dispose rndr >> f >> delete}
 
 -- TODO
 {-
@@ -564,15 +564,15 @@ compileFrameBuffer (Accumulate fCtx ffilter fsh (Rasterize rCtx gs (Transform vs
     --  for new slots create object set tvar
     let newUNames = Set.toList $! (Set.fromList $! T.keys uLoc) Set.\\ (Set.fromList $! T.keys $! uniformSetter rndr)
         objSet    = objectSet rndr
-    (uSetup,uSetter) <- unzip <$> (atomically $! sequence [mkUSetter t | n <- newUNames, let Just t = T.lookup n uType])
+    (uSetup,uSetter) <- unzip <$> (sequence [mkUSetter t | n <- newUNames, let Just t = T.lookup n uType])
     objSet' <- if T.member slotName objSet then return objSet else do
-        v <- newTVarIO []
+        v <- newIORef []
         return $! T.insert slotName v objSet
 
-    let finalizeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
+    let disposeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
         Just objsTVar = T.lookup slotName objSet'
         renderFun = do
-            objs <- readTVarIO objsTVar
+            objs <- readIORef objsTVar
             unless (L.null objs) $ do
                 setupRasterContext rCtx
                 setupAccumulationContext fCtx
@@ -585,7 +585,7 @@ compileFrameBuffer (Accumulate fCtx ffilter fsh (Rasterize rCtx gs (Transform vs
         , slotStream            = T.insert slotName (primType,sType) $! slotStream rndr
         , uniformSetter         = uniformSetter rndr `T.unionL` (T.fromList $! zip newUNames uSetter)
         , render                = render rndr >> renderFun
-        , finalize              = finalize rndr >> finalizeFun
+        , dispose              = dispose rndr >> disposeFun
 
         -- internal
         , objectSet             = objSet'
@@ -615,7 +615,7 @@ compileRenderer [ScreenOut (H.PrjFrameBuffer n idx fb')] = do
         , slotStream            = T.empty
         , uniformSetter         = T.empty
         , render                = return ()
-        , finalize              = return ()
+        , dispose              = return ()
 
         -- internal
         , objectSet             = T.empty
@@ -686,7 +686,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms = do
             return (glBindBuffer gl_ELEMENT_ARRAY_BUFFER bo, glDrawElements primGL (fromIntegral idxCount) glType ptr)
 
     -- create uniform setup action
-    (mkObjUSetup,objUSetters) <- unzip <$> (atomically $! sequence [mkUSetter t | n <- objUniforms, let Just t = T.lookup n uTypes])
+    (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUSetter t | n <- objUniforms, let Just t = T.lookup n uTypes])
     let objUSetterTrie = T.fromList $! zip objUniforms objUSetters
         objUSetup = zipWithM_ (\n mkOUS -> let Just loc = T.lookup n uLocs in mkOUS loc) objUniforms mkObjUSetup
 
@@ -708,7 +708,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms = do
         -- setup stream input (aka object attributes)
         -- execute draw function
         Just objSet = T.lookup slotName (objectSet renderer)
-    atomically $! modifyTVar objSet (renderFun:)
+    modifyIORef objSet (renderFun:)
     return $! Object objUSetterTrie
 
 removeObject gfxNetwork obj = undefined

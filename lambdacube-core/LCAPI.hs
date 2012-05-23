@@ -18,7 +18,7 @@ module LCAPI (
     slotStream,
     uniformSetter,
     render,
-    finalize,
+    dispose,
 
     Object,
     addObject,
@@ -60,7 +60,7 @@ slotUniforms    :: Renderer -> Trie (Trie InputType)
 slotStreams     :: Renderer -> Trie (PrimitiveType, Trie InputType)
 uniformSetter   :: Renderer -> Trie InputSetter
 render          :: Renderer -> IO ()
-finalize        :: Renderer -> IO ()
+dispose        :: Renderer -> IO ()
 
 -- Object
 -- hint: user can define per object uniform and can define a mesh using vertex array or generic vertex attribute

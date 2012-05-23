@@ -115,7 +115,7 @@ main = do
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
-    finalize renderer
+    dispose renderer
     print "renderer destroyed"
     closeWindow
 

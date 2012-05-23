@@ -1,6 +1,5 @@
 module LCAPIType where
 
-import Control.Concurrent.STM
 import Data.ByteString.Char8
 import Data.Int
 import Data.Typeable
@@ -12,7 +11,7 @@ import TypeLevel.Number.Nat.Num
 
 import LCType
 
-type SetterFun a = a -> STM ()
+type SetterFun a = a -> IO ()
 
 -- user will provide scalar input data via this type
 data InputSetter
