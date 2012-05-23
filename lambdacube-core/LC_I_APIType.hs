@@ -32,31 +32,31 @@ instance TupleIdx TupleIdxI where
 
 newtype InputI t = InputI (ByteString, InputType)
 instance Input InputI where
-    iBool   n = InputI (n,ITBool)
-    iV2B    n = InputI (n,ITV2B)
-    iV3B    n = InputI (n,ITV3B)
-    iV4B    n = InputI (n,ITV4B)
-    iWord   n = InputI (n,ITWord)
-    iV2U    n = InputI (n,ITV2U)
-    iV3U    n = InputI (n,ITV3U)
-    iV4U    n = InputI (n,ITV4U)
-    iInt    n = InputI (n,ITInt)
-    iV2I    n = InputI (n,ITV2I)
-    iV3I    n = InputI (n,ITV3I)
-    iV4I    n = InputI (n,ITV4I)
-    iFloat  n = InputI (n,ITFloat)
-    iV2F    n = InputI (n,ITV2F)
-    iV3F    n = InputI (n,ITV3F)
-    iV4F    n = InputI (n,ITV4F)
-    iM22F   n = InputI (n,ITM22F)
-    iM23F   n = InputI (n,ITM23F)
-    iM24F   n = InputI (n,ITM24F)
-    iM32F   n = InputI (n,ITM32F)
-    iM33F   n = InputI (n,ITM33F)
-    iM34F   n = InputI (n,ITM34F)
-    iM42F   n = InputI (n,ITM42F)
-    iM43F   n = InputI (n,ITM43F)
-    iM44F   n = InputI (n,ITM44F)
+    iBool   n = InputI (n,Bool)
+    iV2B    n = InputI (n,V2B)
+    iV3B    n = InputI (n,V3B)
+    iV4B    n = InputI (n,V4B)
+    iWord   n = InputI (n,Word)
+    iV2U    n = InputI (n,V2U)
+    iV3U    n = InputI (n,V3U)
+    iV4U    n = InputI (n,V4U)
+    iInt    n = InputI (n,Int)
+    iV2I    n = InputI (n,V2I)
+    iV3I    n = InputI (n,V3I)
+    iV4I    n = InputI (n,V4I)
+    iFloat  n = InputI (n,Float)
+    iV2F    n = InputI (n,V2F)
+    iV3F    n = InputI (n,V3F)
+    iV4F    n = InputI (n,V4F)
+    iM22F   n = InputI (n,M22F)
+    iM23F   n = InputI (n,M23F)
+    iM24F   n = InputI (n,M24F)
+    iM32F   n = InputI (n,M32F)
+    iM33F   n = InputI (n,M33F)
+    iM34F   n = InputI (n,M34F)
+    iM42F   n = InputI (n,M42F)
+    iM43F   n = InputI (n,M43F)
+    iM44F   n = InputI (n,M44F)
 
 newtype BlendingI t = BlendingI U.Blending
 instance Blending BlendingI where
@@ -64,7 +64,7 @@ instance Blending BlendingI where
     blendLogicOp op = BlendingI (BlendLogicOp op)
     blend e f c     = BlendingI (Blend e f c)
 
-newtype FlatTupleI e (c :: * -> Constraint) (a :: * -> *) t = FlatTupleI [e]
+newtype FlatTupleI e (c :: * -> Constraint) (a :: * -> *) (stage :: * -> *) t = FlatTupleI [e]
 {-
 instance FlatTuple FragmentOperationI (FlatTupleI U.FragmentOperation) where
     zt      = FlatTupleI []
@@ -103,10 +103,10 @@ instance ColorArity ColorArityI where
 newtype TextureDataTypeI a b = TextureDataTypeI U.TextureDataType
 instance TextureDataType TextureDataTypeI where
     type TextureDataType_ColorArity TextureDataTypeI = ColorArityI
-    float (ColorArityI a)   = TextureDataTypeI (Float a)
-    int (ColorArityI a)     = TextureDataTypeI (Int a)
-    word (ColorArityI a)    = TextureDataTypeI (Word a)
-    shadow                  = TextureDataTypeI Shadow
+    float (ColorArityI a)   = TextureDataTypeI (FloatT a)
+    int (ColorArityI a)     = TextureDataTypeI (IntT a)
+    word (ColorArityI a)    = TextureDataTypeI (WordT a)
+    shadow                  = TextureDataTypeI ShadowT
 
 newtype TextureTypeI a b c d e f = TextureTypeI U.TextureType
 instance TextureType TextureTypeI where

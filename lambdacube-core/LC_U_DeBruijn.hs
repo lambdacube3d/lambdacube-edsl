@@ -1,9 +1,9 @@
 module LC_U_DeBruijn where
 
-import Data.ByteString.Char8
-import Data.Set (Set)
-import Data.Typeable
-import qualified Data.Set as Set
+import Data.Generics.Uniplate.Data
+
+import Data.ByteString.Char8 (ByteString)
+import Data.Data
 import Data.Int
 
 import LCType
@@ -12,13 +12,18 @@ import LC_APIType
 import LC_U_APIType
 import LC_U_PrimFun
 
-data Fun
-    = Body  Exp
-    | Lam   Fun
-    deriving (Show, Eq, Ord)
+data Fun a
+    = Body  a
+    | Lam   (Fun a)
+    deriving (Show, Eq, Ord, Data,Typeable)
+
+type ExpFun = Fun Exp
+type GPFun = Fun GP
 
 data Exp
-    = Var       Int
+    = Let       Exp Exp
+    | Var       Int
+    | Apply     ExpFun Exp
     | Const     Value
     | PrimVar   ByteString InputType
     | Uni       ByteString InputType
@@ -26,38 +31,43 @@ data Exp
     | Prj       Int Exp
     | Cond      Exp Exp Exp
     | PrimApp   PrimFun Exp
+    -- special expressions
     | VertexOut             Exp Exp [Interpolated Exp]
     | GeometryOut           Exp Exp Exp Exp Exp [Interpolated Exp]
     | FragmentOut           [Exp]
     | FragmentOutDepth      Exp [Exp]
     | FragmentOutRastDepth  [Exp]
     | Sampler               Filter EdgeMode (Texture GP)
-    deriving (Show, Eq, Ord)
+    deriving (Show, Eq, Ord, Data,Typeable)
 
 data FragmentFilter
     = PassAll
-    | Filter    Fun
-    deriving (Show, Eq, Ord)
+    | Filter    ExpFun
+    deriving (Show, Eq, Ord, Data,Typeable)
 
 data GeometryShader
     = NoGeometryShader 
-    | GeometryShader    Int PrimitiveType Int Fun Fun Fun
-    deriving (Show, Eq, Ord)
-
-data GPfun
-    = GPBody    GP
-    | GPLam     GPfun
-    deriving (Show, Eq, Ord)
+    | GeometryShader    Int PrimitiveType Int ExpFun ExpFun ExpFun
+    deriving (Show, Eq, Ord, Data,Typeable)
 
 data GP
     = GPLet             GP GP
     | GPVar             Int
-    | Apply             GPfun GP
+    | GPApply           GPFun GP
     | Fetch             ByteString PrimitiveType [(ByteString,InputType)]
-    | Transform         Fun GP
+    | Transform         ExpFun GP
     | Rasterize         RasterContext GeometryShader GP
     | FrameBuffer       V2U [Image]
-    | Accumulate        [FragmentOperation] FragmentFilter Fun GP GP
+    | Accumulate        [FragmentOperation] FragmentFilter ExpFun GP GP
     | PrjFrameBuffer    ByteString Int GP
     | PrjImage          ByteString Int GP
-    deriving (Show, Eq, Ord)
+    deriving (Show, Eq, Ord, Data,Typeable)
+
+unis :: GP -> [(ByteString,InputType)]
+unis x = [(n,t) | (Uni n t) <- universeBi x]
+
+passes :: GP -> [Texture GP]
+passes x = [t | t@(Texture _ _ _) <- universeBi x]
+
+countSin :: GP -> Int
+countSin x = length [() | PrimSin <- universeBi x]

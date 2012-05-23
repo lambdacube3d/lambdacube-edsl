@@ -4,7 +4,7 @@ import LC_T_PrimFun
 import LC_U_PrimFun hiding (PrimFun)
 import qualified LC_U_PrimFun as U
 
-newtype PrimFunI stage t = PrimFunI (U.PrimFun)
+newtype PrimFunI (stage :: * -> *) t = PrimFunI (U.PrimFun)
 
 instance PrimFun PrimFunI where
     -- Vec/Mat (de)construction

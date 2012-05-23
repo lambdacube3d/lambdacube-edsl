@@ -132,12 +132,12 @@ data tail :+: head = !tail :+: !head deriving (Typeable, Show)
 -- used for tuple value description
 infixr 1 .:.
 class FlatTuple (a :: * -> *) flatTuple where
-    zt      :: flatTuple c a ZZ
+    zt      :: flatTuple c a stage ZZ
 
     (.:.)   :: c t
-            => a t
-            -> flatTuple c a t'
-            -> flatTuple c a (t :+: t')
+            => a (stage t)
+            -> flatTuple c a stage t'
+            -> flatTuple c a stage (t :+: t')
 
 -- vertex attribute interpolation
 class Interpolated interpolated where
@@ -373,26 +373,27 @@ class TextureType textureType where -- hint: arr - single or array texture, ar -
                     -> textureType DIM1 NoMip SingleTex N1 (Buffer t) ar
 
 -- defines a texture
-class Texture (gp :: * -> *) texture where
+class Texture texture where
     type Texture_TextureType texture :: * -> * -> * -> * -> * -> * -> *
     type Texture_Image texture :: * -> * -> *
     type Texture_MipMap texture :: * -> *
+    type Texture_GP texture :: * -> *
 
     textureSlot     :: (IsValidTextureSlot t
                        ,textureType ~ Texture_TextureType texture)
                     => ByteString -- texture slot name
                     -> textureType dim mip arr layerCount t ar
-                    -> texture gp dim arr t ar
+                    -> texture dim arr t ar
     -- TODO:
     --  add texture internal format specification
-    texture         :: (textureType ~ Texture_TextureType texture
+    texture         :: (gp ~ Texture_GP texture
                        ,image ~ Texture_Image texture
-                       ,mipMap ~ Texture_MipMap texture)
+                       ,mipMap ~ Texture_MipMap texture
+                       ,textureType ~ Texture_TextureType texture)
                     => textureType dim (MipRepr mip) arr layerCount t ar
-                    -- -> TexSizeRepr dim
                     -> mipMap mip
-                    -> TexRepr dim mip gp image layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
-                    -> texture gp dim arr t ar
+                    -> [gp (image layerCount t)] -- backend must check the length of list
+                    -> texture dim arr t ar
 
 {-
     -- TODO:
@@ -409,27 +410,6 @@ instance IsValidTextureSlot (Shadow a)
 instance IsValidTextureSlot (Buffer a)
 
 -- type level hepler function, used for texture specification
-type family TexSizeRepr a
-type instance TexSizeRepr (DIM1) = Word32
-type instance TexSizeRepr (DIM2) = V2U
-type instance TexSizeRepr (Rect) = V2U
-type instance TexSizeRepr (DIM3) = V3U
-
--- type level hepler function, used for texture specification
-type family TexRepr dim mip (gp :: * -> *) (image :: * -> * -> *) layerCount t :: *
-type instance TexRepr DIM1 NoMip   gp image layerCount t = gp (image layerCount t)
-type instance TexRepr DIM1 AutoMip gp image layerCount t = gp (image layerCount t)
-type instance TexRepr DIM1 Mip     gp image layerCount t = [gp (image layerCount t)]
-
-type instance TexRepr DIM2 NoMip   gp image layerCount t = gp (image layerCount t)
-type instance TexRepr DIM2 AutoMip gp image layerCount t = gp (image layerCount t)
-type instance TexRepr DIM2 Mip     gp image layerCount t = [gp (image layerCount t)]
-
-type instance TexRepr DIM3 NoMip   gp image layerCount t = [gp (image layerCount t)]
-type instance TexRepr DIM3 AutoMip gp image layerCount t = [gp (image layerCount t)]
-type instance TexRepr DIM3 Mip     gp image layerCount t = [[gp (image layerCount t)]] -- 3D layers contain mipmap
-
--- type level hepler function, used for texture specification
 type family MipRepr a
 type instance MipRepr Mip       = Mip
 type instance MipRepr AutoMip   = Mip
@@ -437,9 +417,10 @@ type instance MipRepr NoMip     = NoMip
 
 -- shader stage tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen
-data V
-data G
-data F
-data VertexOut
-data GeometryOut
-data FragmentOut
+data GFX a -- outside of shaders, e.g. OpenGL commands
+data V a
+data G a
+data F a
+data VertexOut a
+data GeometryOut a
+data FragmentOut a

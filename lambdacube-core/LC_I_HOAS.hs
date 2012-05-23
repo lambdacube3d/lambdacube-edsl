@@ -29,12 +29,13 @@ import qualified LC_U_HOAS as U
 import qualified LC_U_APIType as U
 
 
-newtype ExpI stage t = ExpI (U.Exp)
+newtype ExpI t = ExpI (U.Exp)
 instance Exp ExpI where
-    type Exp_PrimFun ExpI               = PrimFunI
-    type Exp_Input ExpI                 = InputI
     type Exp_FlatTuple ExpI             = FlatTupleI U.Exp
+    type Exp_Input ExpI                 = InputI
     type Exp_InterpolatedFlatTuple ExpI = FlatTupleI (U.Interpolated U.Exp)
+    type Exp_PrimFun ExpI               = PrimFunI
+    type Exp_Texture ExpI               = TextureI
     type Exp_TupleIdx ExpI              = TupleIdxI
 
     tag                             = ExpI . Tag
@@ -46,7 +47,7 @@ instance Exp ExpI where
     primApp (PrimFunI f) (ExpI a)   = ExpI (PrimApp f a)
     tup (FlatTupleI a)              = ExpI (Tup a)
     prj (TupleIdxI a) (ExpI b)      = ExpI (Prj a b)
---    sampler a b (TextureI c)                    = ExpI (Sampler a b c)
+    sampler a b (TextureI c)                    = ExpI (Sampler a b c)
     vertexOut (ExpI a) (ExpI b) (FlatTupleI c)  = ExpI (U.VertexOut a b c)
     geometryOut (ExpI a) (ExpI b) (ExpI c)
                (ExpI d) (ExpI e) (FlatTupleI f) = ExpI (U.GeometryOut a b c d e f)
@@ -54,43 +55,16 @@ instance Exp ExpI where
     fragmentOutDepth (ExpI a) (FlatTupleI b)    = ExpI (U.FragmentOutDepth a b)
     fragmentOutRastDepth (FlatTupleI a)         = ExpI (U.FragmentOutRastDepth a)
 
-{-
-newtype TextureI a b c d e = TextureI U.Texture
+
+newtype TextureI a b c d = TextureI (U.Texture U.GP)
 instance Texture TextureI where
-    type Texture_TextureType TextureI   = TextureTypeI
+    type Texture_GP TextureI            = GPI
     type Texture_Image TextureI         = ImageI
     type Texture_MipMap TextureI        = MipMapI
-    textureSlot a (TextureTypeI b)      = TextureI (TextureSlot a b)
---    texture (TextureTypeI a)
---            (MipMapI b)                 = TextureI (Texture a b)
--}
-{-
-data Texture gp
-    = TextureSlot   ByteString TextureType
-    | Texture       TextureType MipMap [gp]
-    deriving (Show, Eq, Ord)
-
-class Texture texture where
-    type Texture_TextureType texture :: * -> * -> * -> * -> * -> * -> *
-    type Texture_Image texture :: * -> * -> *
-    type Texture_MipMap texture :: * -> *
-
-    textureSlot     :: (IsValidTextureSlot t
-                       ,TextureType textureType, textureType ~ Texture_TextureType texture)
-                    => ByteString -- texture slot name
-                    -> textureType dim mip arr layerCount t ar
-                    -> texture gp dim arr t ar
-    -- TODO:
-    --  add texture internal format specification
-    texture         :: (TextureType textureType, textureType ~ Texture_TextureType texture
-                       ,Image image, image ~ Texture_Image texture
-                       ,MipMap mipMap, mipMap ~ Texture_MipMap texture)
-                    => textureType dim (MipRepr mip) arr layerCount t ar
-                    -- -> TexSizeRepr dim
-                    -> mipMap mip
-                    -> TexRepr dim mip gp image layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
-                    -> texture gp dim arr t ar
--}
+    type Texture_TextureType TextureI   = TextureTypeI
+    textureSlot a (TextureTypeI b)  = TextureI (U.TextureSlot a b)
+    texture (TextureTypeI a)
+            (MipMapI b) c           = TextureI (U.Texture a b [x | GPI x <- c])
 
 newtype GeometryShaderI a b c d e = GeometryShaderI U.GeometryShader
 instance GeometryShader GeometryShaderI where
@@ -109,13 +83,15 @@ instance FragmentFilter FragmentFilterI where
 newtype GPI a = GPI U.GP
 instance GP GPI where
     type GP_Exp GPI                         = ExpI
-    type GP_GeometryShader GPI              = GeometryShaderI
-    type GP_RasterContext GPI               = RasterContextI
-    type GP_FragmentFilter GPI              = FragmentFilterI
-    type GP_Primitive GPI                   = PrimitiveI
-    type GP_TupleIdx GPI                    = TupleIdxI
-    type GP_FlatTupleImage GPI              = FlatTupleI U.Image
     type GP_FlatTupleFragmentOperation GPI  = FlatTupleI U.FragmentOperation
+    type GP_FlatTupleImage GPI              = FlatTupleI U.Image
+    type GP_FragmentFilter GPI              = FragmentFilterI
+    type GP_FragmentOperation GPI           = FragmentOperationI
+    type GP_GeometryShader GPI              = GeometryShaderI
+    type GP_Image GPI                       = ImageI
+    type GP_Primitive GPI                   = PrimitiveI
+    type GP_RasterContext GPI               = RasterContextI
+    type GP_TupleIdx GPI                    = TupleIdxI
     gpTag a                                                     = GPI (GPTag a)
     fetch a (PrimitiveI b) c                                    = GPI (Fetch a b (toInputList c))
     transform (ExpI a) (GPI b)                                  = GPI (Transform a b)

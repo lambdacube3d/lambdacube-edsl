@@ -3,9 +3,7 @@ module LC_T_DeBruijn where
 import GHC.Exts
 
 import Data.ByteString.Char8
-import Data.Set (Set)
 import Data.Typeable
-import qualified Data.Set as Set
 import Data.Int
 
 import TypeLevel.Number.Nat
@@ -17,248 +15,260 @@ import LC_APIType
 import LC_T_APIType
 import LC_T_DSLType
 import LC_T_PrimFun
-import LC_T_DeBruijnUtil
+
+-- Typed de Bruijn indices
+-- -----------------------
+
+-- De Bruijn variable index projecting a specific type from a type
+-- environment.  Type environments are nested pairs (..((), t1), t2, ..., tn).
+--
+class Idx idx where
+    zeroIdx ::              idx (env, t) t
+    succIdx :: idx env t -> idx (env, s) t
+
+
+-- Environments
+-- ------------
+
+-- Valuation for an environment
+--
+class Val val where
+    empty :: val ()
+    push  :: val env -> t -> val (env, t)
 
 -- Common Exp and Fun
 
 -- |Parametrised open function abstraction
 --
 class OpenFun openFun where
-    body    :: e env genv t
-            -> openFun e env genv t
+    type OpenFun_OpenExp openFun :: * -> * -> * -> *
+    body    :: (openExp ~ OpenFun_OpenExp openFun)
+            => openExp env genv t
+            -> openFun env genv t
 
-    lam     :: openFun e (env, a) genv t
-            -> openFun e env genv (a -> t)
+    lam     :: openFun (env, a) genv t
+            -> openFun env genv (a -> t)
 
 -- Embedded expressions
 -- --------------------
 class OpenExp openExp where
+    type OpenExp_FlatTuple exp :: (* -> Constraint) -> (* -> *) -> (* -> *) -> * -> *
     type OpenExp_Idx openExp :: * -> * -> *
     type OpenExp_Input openExp :: * -> *
-    type OpenExp_Tuple openExp :: (* -> *) -> * -> *
+    type OpenExp_InterpolatedFlatTuple exp :: (* -> Constraint) -> (* -> *) -> (* -> *) -> * -> *
+    type OpenExp_OpenFun openExp :: * -> * -> * -> *
+    type OpenExp_PrimFun openExp :: (* -> *) -> * -> *
+    type OpenExp_Texture openExp :: * -> * -> * -> * -> *
     type OpenExp_TupleIdx openExp :: * -> * -> *
-    type OpenExp_PrimFun openExp :: * -> * -> *
-    type OpenExp_Texture openExp :: (* -> *) -> * -> * -> * -> * -> *
-    type OpenExp_OpenGP openExp :: * -> * -> *
 
-    var     :: (GPU t, Idx idx, idx ~ OpenExp_Idx openExp)
+    let_    :: openExp env genv        bnd               -- bound expression
+            -> openExp (env, bnd) genv body              -- the bound expr's scope
+            -> openExp env genv        body
+
+    var     :: (GPU t
+               ,idx ~ OpenExp_Idx openExp)
             => idx env t
-            -> openExp stage env genv t
+            -> openExp env genv t
+
+    apply   :: (openFun ~ OpenExp_OpenFun openExp)
+            => openFun () genv (a -> b)
+            -> openExp env genv a
+            -> openExp env genv b
 
     -- constant value
     cnst    :: IsScalar t
             => t
-            -> openExp stage env genv t
+            -> openExp env genv (stage t)
 
     -- builtin variable
     primVar :: (GPU t
-               , Input input, input ~ OpenExp_Input openExp)
+               ,input ~ OpenExp_Input openExp)
             => input t
-            -> openExp stage env genv t
+            -> openExp env genv (stage t)
 
     -- uniform value
     uni     :: (GPU t
-               , Input input, input ~ OpenExp_Input openExp)
+               ,input ~ OpenExp_Input openExp)
             => input t
-            -> openExp stage env genv t
+            -> openExp env genv (stage t)
 
     -- tuple support
     tup     :: (GPU t, IsTuple t
-               , Tuple tuple, tuple ~ OpenExp_Tuple openExp)
-            => tuple (openExp stage env genv) (TupleRepr t)
-            -> openExp stage env genv t
+               ,flatTuple ~ OpenExp_FlatTuple openExp)
+            => flatTuple GPU (openExp env genv) stage t
+            -> openExp env genv (stage t)
 
     prj     :: (GPU e, GPU t, IsTuple t
-               , TupleIdx tupleIdx, tupleIdx ~ OpenExp_TupleIdx openExp)
+               ,tupleIdx ~ OpenExp_TupleIdx openExp)
             => tupleIdx (TupleRepr t) e
-            -> openExp stage env genv t
-            -> openExp stage env genv e
+            -> openExp env genv (stage t)
+            -> openExp env genv (stage e)
 
     -- conditional expression
     cond    :: GPU t
-            => openExp stage env genv Bool
-            -> openExp stage env genv t
-            -> openExp stage env genv t
-            -> openExp stage env genv t
+            => openExp env genv (stage Bool)
+            -> openExp env genv (stage t)
+            -> openExp env genv (stage t)
+            -> openExp env genv (stage t)
 
     -- primitive operations
     primApp :: (GPU a, GPU r
-               , PrimFun primFun, primFun ~ OpenExp_PrimFun openExp)
+               ,primFun ~ OpenExp_PrimFun openExp)
             => primFun stage (a -> r)
-            -> openExp stage env genv a
-            -> openExp stage env genv r
+            -> openExp env genv (stage a)
+            -> openExp env genv (stage r)
+
+    -- special expressions
+    vertexOut               :: (Interpolated interpolated
+                               ,flatTuple ~ OpenExp_InterpolatedFlatTuple openExp)
+                            => openExp env genv (V V4F)      -- position
+                            -> openExp env genv (V Float)    -- point size
+                            -> flatTuple GPU (interpolated (openExp env genv)) V a
+                            -> openExp env genv (VertexOut (FTRepr a))
+
+    geometryOut             :: (Interpolated interpolated
+                               ,flatTuple ~ OpenExp_InterpolatedFlatTuple openExp)
+                            => openExp env genv (G V4F)      -- position
+                            -> openExp env genv (G Float)    -- point size
+                            -> openExp env genv (G Int32)    -- primitive ID
+                            -> openExp env genv (G Int32)    -- layer
+                            -> openExp env genv (G j)
+                            -> flatTuple GPU (interpolated (openExp env genv)) G a
+                            -> openExp env genv (GeometryOut (j,(FTRepr a)))
+
+    fragmentOut             :: (flatTuple ~ OpenExp_FlatTuple openExp)
+                            => flatTuple GPU (openExp env genv) F a
+                            -> openExp env genv (FragmentOut (ColorRepr a))
+
+    fragmentOutDepth        :: (flatTuple ~ OpenExp_FlatTuple openExp)
+                            => openExp env genv (F Float)
+                            -> flatTuple GPU (openExp env genv) F a
+                            -> openExp env genv (FragmentOut (Depth Float :+: ColorRepr a))
+
+    fragmentOutRastDepth    :: (flatTuple ~ OpenExp_FlatTuple openExp)
+                            => flatTuple GPU (openExp env genv) F a
+                            -> openExp env genv (FragmentOut (Depth Float :+: ColorRepr a))
 
     -- sampler support
-    sampler :: ( GPU (Sampler dim arr t ar)
-               , Texture (openGP ()) texture, texture ~ OpenExp_Texture openExp
-               , OpenGP openGP, openGP ~ OpenExp_OpenGP openExp)
-            => Filter
-            -> EdgeMode
-            -> texture (openGP ()) dim arr t ar
-            -> openExp stage env genv (Sampler dim arr t ar)
-
--- Fragment
-class OpenFragmentOut openFragmentOut where
-    type OpenFragmentOut_OpenExp openFragmentOut :: * -> * -> * -> * -> *
-    type OpenFragmentOut_FlatTuple openFragmentOut :: (* -> Constraint) -> (* -> *) -> * -> *
-    fragmentOut             :: (OpenExp openExp, openExp ~ OpenFragmentOut_OpenExp openFragmentOut
-                               ,FlatTuple (openExp F env genv) flatTuple, flatTuple ~ OpenFragmentOut_FlatTuple openFragmentOut)
-                            => flatTuple GPU (openExp F env genv) a
-                            -> openFragmentOut env genv (ColorRepr a)
-
-    fragmentOutDepth        :: (OpenExp openExp, openExp ~ OpenFragmentOut_OpenExp openFragmentOut
-                               ,FlatTuple (openExp F env genv) flatTuple, flatTuple ~ OpenFragmentOut_FlatTuple openFragmentOut)
-                            => openExp F env genv Float
-                            -> flatTuple GPU (openExp F env genv) a
-                            -> openFragmentOut env genv (Depth Float :+: ColorRepr a)
-
-    fragmentOutRastDepth    :: (OpenExp openExp, openExp ~ OpenFragmentOut_OpenExp openFragmentOut
-                               ,FlatTuple (openExp F env genv) flatTuple, flatTuple ~ OpenFragmentOut_FlatTuple openFragmentOut)
-                            => flatTuple GPU (openExp F env genv) a
-                            -> openFragmentOut env genv (Depth Float :+: ColorRepr a)
+    sampler                 :: (GPU (Sampler dim arr t ar)
+                               ,texture ~ OpenExp_Texture openExp)
+                            => Filter
+                            -> EdgeMode
+                            -> texture dim arr t ar
+                            -> openExp env genv (stage (Sampler dim arr t ar))
 
 class FragmentFilter fragmentFilter where
-    type FragmentFilter_OpenExp fragmentFilter :: * -> * -> * -> * -> *
+    type FragmentFilter_OpenFun fragmentFilter :: * -> * -> * -> *
 
     passAll :: fragmentFilter genv a
 
-    filter  :: ( OpenExp openExp, openExp ~ OpenFragmentOut_OpenExp openFragmentOut
-               , OpenFun openFun)
-            => openFun (openExp F) genv () (a -> Bool)
+    filter  :: (openFun ~ FragmentFilter_OpenFun fragmentFilter)
+            => openFun () genv (F a -> F Bool)
             -> fragmentFilter genv a
 
--- Vertex
-class OpenVertexOut openVertexOut where
-    type OpenVertexOut_OpenExp openVertexOut :: * -> * -> * -> * -> *
-
-    vertexOut   :: (OpenExp openExp, openExp ~ OpenVertexOut_OpenExp openVertexOut
-                   ,FlatTuple (interpolated (openExp V env genv)) flatTuple
-                   ,Interpolated interpolated)
-                => openExp V env genv V4F      -- position
-                -> openExp V env genv Float    -- point size
-                -> flatTuple GPU (interpolated (openExp V env genv)) a
-                -> openVertexOut env genv (FTRepr a)
-
--- Geometry
-class OpenGeometryOut openGeometryOut where
-    type OpenGeometryOut_OpenExp openGeometryOut :: * -> * -> * -> * -> *
-
-    geometryOut :: (OpenExp openExp, openExp ~ OpenGeometryOut_OpenExp openGeometryOut
-                   ,FlatTuple (interpolated (openExp G env genv)) flatTuple
-                   ,Interpolated interpolated)
-                => openExp G env genv V4F      -- position
-                -> openExp G env genv Float    -- point size
-                -> openExp G env genv Int32    -- primitive ID
-                -> openExp G env genv Int32    -- layer
-                -> openExp G env genv j
-                -> flatTuple GPU (interpolated (openExp G env genv)) a
-                -> openGeometryOut env genv (j,(FTRepr a))
-
 class GeometryShader geometryShader where
-    type GeometryShader_OpenExp geometryShader :: * -> * -> * -> * -> *
-    type GeometryShader_OpenGeometryOut geometryShader :: * -> * -> * -> *
+    type GeometryShader_OpenFun geometryShader :: * -> * -> * -> *
+    type GeometryShader_Primitive geometryShader :: * -> *
 
     noGeometryShader    :: geometryShader genv prim prim N1 a a
 
     geometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, Nat layerNum
-                           , Primitive primitive
-                           , OpenExp openExp, openExp ~ GeometryShader_OpenExp geometryShader
-                           , OpenGeometryOut openGeometryOut, openGeometryOut ~ GeometryShader_OpenGeometryOut geometryShader
-                           , OpenFun openFun)
-                        => layerNum                                                         -- geometry shader:
-                        -> primitive primOut                                                -- output primitive
-                        -> Int                                                              -- max amount of generated vertices
-                        -> openFun (openExp G) genv () ((PrimitiveVertices primIn a) -> (i,Int32)) -- how many primitives?
-                        -> openFun (openExp G) genv () (i -> (i,j,Int32))                          -- how many vertices?
-                        -> openFun openGeometryOut genv () (j -> (j,b))                            -- generate vertices
+                           ,primitive ~ GeometryShader_Primitive geometryShader
+                           ,openFun ~ GeometryShader_OpenFun geometryShader)
+                        => layerNum                                                                 -- geometry shader:
+                        -> primitive primOut                                                        -- output primitive
+                        -> Int                                                                      -- max amount of generated vertices
+                        -> openFun () genv (G (PrimitiveVertices primIn a) -> G (i,Int32))  -- how many primitives?
+                        -> openFun () genv (G i -> G (i,j,Int32))                           -- how many vertices?
+                        -> openFun () genv (G j -> GeometryOut (j,b))               -- generate vertices
                         -> geometryShader genv primIn primOut layerNum a b
 
 -- GP and GPFun
-class OpenGPfun openGPfun where
-    type OpenGPfun_OpenGP openGPfun :: * -> * -> *
+class OpenGPFun openGPFun where
+    type OpenGPFun_OpenGP openGPFun :: * -> * -> *
 
-    gpBody  :: (OpenGP openGP, openGP ~ OpenGPfun_OpenGP openGPfun)
+    gpBody  :: (openGP ~ OpenGPFun_OpenGP openGPFun)
             => openGP genv t
-            -> openGPfun genv t
+            -> openGPFun genv t
 
-    gpLam   :: openGPfun (genv, a) t
-            -> openGPfun genv (s -> t)
-
---type GPfun = OpenGPfun openGPfun => openGPfun ()
+    gpLam   :: openGPFun (genv, a) t
+            -> openGPFun genv (s -> t)
 
 class OpenGP openGP where
-    type OpenGP_Idx openGP :: * -> * -> *
-    type OpenGP_OpenVertexOut openGP :: * -> * -> * -> *
-    type OpenGP_GeometryShader openGP :: * -> * -> * -> * -> * -> * -> *
+    type OpenGP_FlatTupleFragmentOperation openGP :: (* -> Constraint) -> (* -> *) -> (* -> *) -> * -> *
+    type OpenGP_FlatTupleImage openGP :: (* -> Constraint) -> (* -> *) -> (* -> *) -> * -> *
     type OpenGP_FragmentFilter openGP :: * -> * -> *
-    type OpenGP_OpenFragmentOut openGP :: * -> * -> * -> *
-    type OpenGP_TupleIdx openGP :: * -> * -> *
+    type OpenGP_FragmentOperation openGP :: * -> *
+    type OpenGP_GeometryShader openGP :: * -> * -> * -> * -> * -> * -> *
+    type OpenGP_Idx openGP :: * -> * -> *
     type OpenGP_Image openGP :: * -> * -> *
     type OpenGP_RasterContext openGP :: * -> *
-    type OpenGP_FragmentOperation openGP :: * -> *
-    type OpenGP_FlatTupleFragmentOperation openGP :: (* -> Constraint) -> (* -> *) -> * -> *
-
+    type OpenGP_TupleIdx openGP :: * -> * -> *
+    type OpenGP_OpenGPFun openGP :: * -> * -> *
+    type OpenGP_OpenFun openGP :: * -> * -> * -> *
+    type OpenGP_Primitive openGP :: * -> *
 
     -- the following required only for sharing
     gpLet           :: openGP genv        bnd               -- bound expression
                     -> openGP (genv, bnd) body              -- the bound expr's scope
                     -> openGP genv        body
 
-    gpVar           :: (Idx idx, idx ~ OpenGP_Idx openGP)
+    gpVar           :: (idx ~ OpenGP_Idx openGP)
                     => idx genv t
                     -> openGP genv t
 
-    apply           :: (OpenGPfun openGPfun)
+    gpApply         :: (openGPfun ~ OpenGP_OpenGPFun openGP)
                     => openGPfun () (a -> b)
                     -> openGP genv a
                     -> openGP genv b
 
-    fetch           :: (InputTuple a, SGPU (InputTupleRepr a), Primitive primitive)
+    fetch           :: (InputTuple a, SGPU (InputTupleRepr a)
+                       ,primitive ~ OpenGP_Primitive openGP)
                     => ByteString
                     -> primitive prim
                     -> a
                     -> openGP genv (VertexStream prim (InputTupleRepr a))
 
     transform       :: (GPU a, GPU b
-                       , OpenVertexOut openVertexOut, openVertexOut ~ OpenGP_OpenVertexOut openGP
-                       , OpenFun openFun)
-                    => openFun openVertexOut genv () (a -> b)                      -- vertex shader
+                       ,openFun ~ OpenGP_OpenFun openGP)
+                    => openFun () genv (V a -> V b)                      -- vertex shader
                     -> openGP genv (VertexStream prim a)
                     -> openGP genv (PrimitiveStream prim b)
 
-    rasterize       :: (GeometryShader geometryShader, geometryShader ~ OpenGP_GeometryShader openGP
-                       , RasterContext rasterContext, rasterContext ~ OpenGP_RasterContext openGP)
+    rasterize       :: (geometryShader ~ OpenGP_GeometryShader openGP
+                       ,rasterContext ~ OpenGP_RasterContext openGP)
                     => rasterContext primOut
                     -> geometryShader genv primIn primOut layerNum a b
                     -> openGP genv (PrimitiveStream primIn a)
                     -> openGP genv (FragmentStream layerNum b)
 
-    frameBuffer     :: V2U
-                    -> FrameBuffer sh t
-                    -> openGP genv (FrameBuffer sh (FTRepr' t))
+    frameBuffer     :: (Image image, image ~ OpenGP_Image openGP
+                       ,FlatTuple (image layerCount) flatTuple, flatTuple ~ OpenGP_FlatTupleImage openGP)
+                    => V2U                                          -- size: width, height
+                    -> flatTuple Typeable (image layerCount) GFX t
+                    -> openGP genv (FrameBuffer layerCount (FTRepr' t))
 
     accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b
-                       ,FragmentFilter fragmentFilter, fragmentFilter ~ OpenGP_FragmentFilter openGP
-                       ,FragmentOperation fragmentOperation, fragmentOperation ~ OpenGP_FragmentOperation gp
-                       ,FlatTuple fragmentOperation flatTuple, flatTuple ~ OpenGP_FlatTupleFragmentOperation gp
-                       , OpenFragmentOut openFragmentOut, openFragmentOut ~ OpenGP_OpenFragmentOut openGP
-                       , OpenFun openFun)        -- restriction: depth and stencil optional, arbitrary color component
-                    => flatTuple Typeable fragmentOperation b
+                       ,fragmentFilter ~ OpenGP_FragmentFilter openGP
+                       ,fragmentOperation ~ OpenGP_FragmentOperation openGP
+                       ,flatTuple ~ OpenGP_FlatTupleFragmentOperation openGP
+                       ,openFun ~ OpenGP_OpenFun openGP)        -- restriction: depth and stencil optional, arbitrary color component
+                    => flatTuple Typeable fragmentOperation GFX b
                     -> fragmentFilter genv a
-                    -> openFun openFragmentOut genv () (a -> (NoStencilRepr b))    -- fragment shader
+                    -> openFun () genv (F a -> F (NoStencilRepr b))    -- fragment shader
                     -> openGP genv (FragmentStream sh a)
                     -> openGP genv (FrameBuffer sh (FTRepr' b))
                     -> openGP genv (FrameBuffer sh (FTRepr' b))
 
-    prjFrameBuffer  :: ( TupleIdx tupleIdx, tupleIdx ~ OpenGP_TupleIdx openGP
-                       , Image image, image ~ OpenGP_Image image)
+    prjFrameBuffer  :: (tupleIdx ~ OpenGP_TupleIdx openGP
+                       ,image ~ OpenGP_Image image)
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> tupleIdx (EltRepr b) t
                     -> openGP () (FrameBuffer sh b)
                     -> openGP genv (image sh t)
 
-    prjImage        :: ( LesserEq idx sh
-                       , Image image, image ~ OpenGP_Image image)
+    prjImage        :: (Nat idx, LesserEq idx sh
+                       ,image ~ OpenGP_Image image)
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> idx
                     -> openGP () (image sh t)

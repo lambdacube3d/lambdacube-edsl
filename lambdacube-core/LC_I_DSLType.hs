@@ -156,7 +156,7 @@ instance IsScalar Word32 where
 -}
 instance IsScalar Float where
     toValue v    = VFloat v
-    toType _     = ITFloat
+    toType _     = Float
 {-
 instance IsScalar Bool where
     toValue v    = VBool v

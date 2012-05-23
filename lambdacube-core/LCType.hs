@@ -1,7 +1,7 @@
 module LCType where
 
 import Data.Int
-import Data.Typeable
+import Data.Data
 import Data.Word
 import Foreign.Storable
 import Foreign.Ptr
@@ -12,9 +12,9 @@ data DIM2 = DIM2 deriving (Eq,Ord,Typeable)
 data DIM3 = DIM3 deriving (Eq,Ord,Typeable)
 data DIM4 deriving Typeable
 
-data V2 a = V2 !a !a deriving (Eq,Ord,Show,Typeable)
-data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Typeable)
-data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Typeable)
+data V2 a = V2 !a !a deriving (Eq,Ord,Show,Data,Typeable)
+data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Data,Typeable)
+data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Data,Typeable)
 
 -- matrices are stored in column major order
 type M22F = V2 V2F

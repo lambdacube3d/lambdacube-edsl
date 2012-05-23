@@ -6,7 +6,7 @@ import Data.Word
 import LCType
 import LCSampler
 
-class PrimFun primFun where
+class PrimFun (primFun :: (* -> *) -> * -> *) where
 
     -- Vec/Mat (de)construction
     primTupToV2             :: IsComponent a                            => primFun stage ((a,a)     -> V2 a)

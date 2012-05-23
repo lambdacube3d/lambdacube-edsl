@@ -2,6 +2,7 @@ module LC_APIType where
 
 import Control.Concurrent.STM
 import Data.ByteString.Char8
+import Data.Data
 import Data.Int
 import Data.Word
 import Foreign.Ptr
@@ -35,7 +36,7 @@ data Value
     | VM42F     !M42F
     | VM43F     !M43F
     | VM44F     !M44F
-    deriving (Show,Eq,Ord)
+    deriving (Show,Eq,Ord, Data,Typeable)
 
 type SetterFun a = a -> STM ()
 
@@ -169,190 +170,122 @@ data StreamType
     | TM42F
     | TM43F
     | TM44F
-    deriving (Show,Eq,Ord)
+    deriving (Show,Eq,Ord, Data,Typeable)
 
 -- describes a stream type (in GPU side)
 data InputType
-    = ITBool
-    | ITV2B
-    | ITV3B
-    | ITV4B
-    | ITWord
-    | ITV2U
-    | ITV3U
-    | ITV4U
-    | ITInt
-    | ITV2I
-    | ITV3I
-    | ITV4I
-    | ITFloat
-    | ITV2F
-    | ITV3F
-    | ITV4F
-    | ITM22F
-    | ITM23F
-    | ITM24F
-    | ITM32F
-    | ITM33F
-    | ITM34F
-    | ITM42F
-    | ITM43F
-    | ITM44F
+    = Bool
+    | V2B
+    | V3B
+    | V4B
+    | Word
+    | V2U
+    | V3U
+    | V4U
+    | Int
+    | V2I
+    | V3I
+    | V4I
+    | Float
+    | V2F
+    | V3F
+    | V4F
+    | M22F
+    | M23F
+    | M24F
+    | M32F
+    | M33F
+    | M34F
+    | M42F
+    | M43F
+    | M44F
     -- shadow textures
-    | ITSTexture1D
-    | ITSTexture2D
-    | ITSTextureCube
-    | ITSTexture1DArray
-    | ITSTexture2DArray
-    | ITSTexture2DRect
+    | STexture1D
+    | STexture2D
+    | STextureCube
+    | STexture1DArray
+    | STexture2DArray
+    | STexture2DRect
     -- float textures
-    | ITFTexture1D
-    | ITFTexture2D
-    | ITFTexture3D
-    | ITFTextureCube
-    | ITFTexture1DArray
-    | ITFTexture2DArray
-    | ITFTexture2DMS
-    | ITFTexture2DMSArray
-    | ITFTextureBuffer
-    | ITFTexture2DRect
+    | FTexture1D
+    | FTexture2D
+    | FTexture3D
+    | FTextureCube
+    | FTexture1DArray
+    | FTexture2DArray
+    | FTexture2DMS
+    | FTexture2DMSArray
+    | FTextureBuffer
+    | FTexture2DRect
     -- int textures
-    | ITITexture1D
-    | ITITexture2D
-    | ITITexture3D
-    | ITITextureCube
-    | ITITexture1DArray
-    | ITITexture2DArray
-    | ITITexture2DMS
-    | ITITexture2DMSArray
-    | ITITextureBuffer
-    | ITITexture2DRect
+    | ITexture1D
+    | ITexture2D
+    | ITexture3D
+    | ITextureCube
+    | ITexture1DArray
+    | ITexture2DArray
+    | ITexture2DMS
+    | ITexture2DMSArray
+    | ITextureBuffer
+    | ITexture2DRect
     -- uint textures
-    | ITUTexture1D
-    | ITUTexture2D
-    | ITUTexture3D
-    | ITUTextureCube
-    | ITUTexture1DArray
-    | ITUTexture2DArray
-    | ITUTexture2DMS
-    | ITUTexture2DMSArray
-    | ITUTextureBuffer
-    | ITUTexture2DRect
-    deriving (Eq,Ord)
+    | UTexture2D
+    | UTexture3D
+    | UTextureCube
+    | UTexture1DArray
+    | UTexture2DArray
+    | UTexture2DMS
+    | UTexture2DMSArray
+    | UTextureBuffer
+    | UTexture2DRect
+    deriving (Show,Eq,Ord, Data,Typeable)
 
 toStreamType :: InputType -> Maybe StreamType
-toStreamType ITWord     = Just TWord
-toStreamType ITV2U      = Just TV2U
-toStreamType ITV3U      = Just TV3U
-toStreamType ITV4U      = Just TV4U
-toStreamType ITInt      = Just TInt
-toStreamType ITV2I      = Just TV2I
-toStreamType ITV3I      = Just TV3I
-toStreamType ITV4I      = Just TV4I
-toStreamType ITFloat    = Just TFloat
-toStreamType ITV2F      = Just TV2F
-toStreamType ITV3F      = Just TV3F
-toStreamType ITV4F      = Just TV4F
-toStreamType ITM22F     = Just TM22F
-toStreamType ITM23F     = Just TM23F
-toStreamType ITM24F     = Just TM24F
-toStreamType ITM32F     = Just TM32F
-toStreamType ITM33F     = Just TM33F
-toStreamType ITM34F     = Just TM34F
-toStreamType ITM42F     = Just TM42F
-toStreamType ITM43F     = Just TM43F
-toStreamType ITM44F     = Just TM44F
+toStreamType Word     = Just TWord
+toStreamType V2U      = Just TV2U
+toStreamType V3U      = Just TV3U
+toStreamType V4U      = Just TV4U
+toStreamType Int      = Just TInt
+toStreamType V2I      = Just TV2I
+toStreamType V3I      = Just TV3I
+toStreamType V4I      = Just TV4I
+toStreamType Float    = Just TFloat
+toStreamType V2F      = Just TV2F
+toStreamType V3F      = Just TV3F
+toStreamType V4F      = Just TV4F
+toStreamType M22F     = Just TM22F
+toStreamType M23F     = Just TM23F
+toStreamType M24F     = Just TM24F
+toStreamType M32F     = Just TM32F
+toStreamType M33F     = Just TM33F
+toStreamType M34F     = Just TM34F
+toStreamType M42F     = Just TM42F
+toStreamType M43F     = Just TM43F
+toStreamType M44F     = Just TM44F
 toStreamType _          = Nothing
 
 fromStreamType :: StreamType -> InputType
-fromStreamType TWord    = ITWord
-fromStreamType TV2U     = ITV2U
-fromStreamType TV3U     = ITV3U
-fromStreamType TV4U     = ITV4U
-fromStreamType TInt     = ITInt
-fromStreamType TV2I     = ITV2I
-fromStreamType TV3I     = ITV3I
-fromStreamType TV4I     = ITV4I
-fromStreamType TFloat   = ITFloat
-fromStreamType TV2F     = ITV2F
-fromStreamType TV3F     = ITV3F
-fromStreamType TV4F     = ITV4F
-fromStreamType TM22F    = ITM22F
-fromStreamType TM23F    = ITM23F
-fromStreamType TM24F    = ITM24F
-fromStreamType TM32F    = ITM32F
-fromStreamType TM33F    = ITM33F
-fromStreamType TM34F    = ITM34F
-fromStreamType TM42F    = ITM42F
-fromStreamType TM43F    = ITM43F
-fromStreamType TM44F    = ITM44F
-
-instance Show InputType where
-    show ITBool  = "Bool"
-    show ITV2B   = "V2B"
-    show ITV3B   = "V3B"
-    show ITV4B   = "V4B"
-    show ITWord  = "Word"
-    show ITV2U   = "V2U"
-    show ITV3U   = "V3U"
-    show ITV4U   = "V4U"
-    show ITInt   = "Int"
-    show ITV2I   = "V2I"
-    show ITV3I   = "V3I"
-    show ITV4I   = "V4I"
-    show ITFloat = "Float"
-    show ITV2F   = "V2F"
-    show ITV3F   = "V3F"
-    show ITV4F   = "V4F"
-    show ITM22F  = "M22F"
-    show ITM23F  = "M23F"
-    show ITM24F  = "M24F"
-    show ITM32F  = "M32F"
-    show ITM33F  = "M33F"
-    show ITM34F  = "M34F"
-    show ITM42F  = "M42F"
-    show ITM43F  = "M43F"
-    show ITM44F  = "M44F"
-    -- shadow textures
-    show ITSTexture1D           = "STexture1D"
-    show ITSTexture2D           = "STexture2D"
-    show ITSTextureCube         = "STextureCube"
-    show ITSTexture1DArray      = "STexture1DArray"
-    show ITSTexture2DArray      = "STexture2DArray"
-    show ITSTexture2DRect       = "STexture2DRect"
-    -- float textures
-    show ITFTexture1D           = "FTexture1D"
-    show ITFTexture2D           = "FTexture2D"
-    show ITFTexture3D           = "FTexture3D"
-    show ITFTextureCube         = "FTextureCube"
-    show ITFTexture1DArray      = "FTexture1DArray"
-    show ITFTexture2DArray      = "FTexture2DArray"
-    show ITFTexture2DMS         = "FTexture2DMS"
-    show ITFTexture2DMSArray    = "FTexture2DMSArray"
-    show ITFTextureBuffer       = "FTextureBuffer"
-    show ITFTexture2DRect       = "FTexture2DRect"
-    -- int textures
-    show ITITexture1D           = "ITexture1D"
-    show ITITexture2D           = "ITexture2D"
-    show ITITexture3D           = "ITexture3D"
-    show ITITextureCube         = "ITextureCube"
-    show ITITexture1DArray      = "ITexture1DArray"
-    show ITITexture2DArray      = "ITexture2DArray"
-    show ITITexture2DMS         = "ITexture2DMS"
-    show ITITexture2DMSArray    = "ITexture2DMSArray"
-    show ITITextureBuffer       = "ITextureBuffer"
-    show ITITexture2DRect       = "ITexture2DRect"
-    -- uint textures
-    show ITUTexture1D           = "UTexture1D"
-    show ITUTexture2D           = "UTexture2D"
-    show ITUTexture3D           = "UTexture3D"
-    show ITUTextureCube         = "UTextureCube"
-    show ITUTexture1DArray      = "UTexture1DArray"
-    show ITUTexture2DArray      = "UTexture2DArray"
-    show ITUTexture2DMS         = "UTexture2DMS"
-    show ITUTexture2DMSArray    = "UTexture2DMSArray"
-    show ITUTextureBuffer       = "UTextureBuffer"
-    show ITUTexture2DRect       = "UTexture2DRect"
+fromStreamType TWord    = Word
+fromStreamType TV2U     = V2U
+fromStreamType TV3U     = V3U
+fromStreamType TV4U     = V4U
+fromStreamType TInt     = Int
+fromStreamType TV2I     = V2I
+fromStreamType TV3I     = V3I
+fromStreamType TV4I     = V4I
+fromStreamType TFloat   = Float
+fromStreamType TV2F     = V2F
+fromStreamType TV3F     = V3F
+fromStreamType TV4F     = V4F
+fromStreamType TM22F    = M22F
+fromStreamType TM23F    = M23F
+fromStreamType TM24F    = M24F
+fromStreamType TM32F    = M32F
+fromStreamType TM33F    = M33F
+fromStreamType TM34F    = M34F
+fromStreamType TM42F    = M42F
+fromStreamType TM43F    = M43F
+fromStreamType TM44F    = M44F
 
 -- user can specify streams using Stream type
 -- a stream can be constant (ConstXXX) or can came from a buffer
@@ -395,33 +328,33 @@ data IndexStream b
     , indexLength   :: Int
     }
 
-data PointSize          = PointSize Float | PointSizeRast deriving (Eq,Ord,Show)
-data PolygonOffset      = NoOffset | Offset Float Float  deriving (Eq,Ord,Show)
-data FrontFace          = CCW | CW deriving (Eq,Ord,Show)
-data PolygonMode        = PolygonPoint PointSize | PolygonLine Float | PolygonFill deriving (Eq,Ord,Show)
-data ProvokingVertex    = FirstVertex | LastVertex deriving (Eq,Ord,Bounded,Enum,Show)
-data CullMode           = CullNone | CullFront FrontFace | CullBack FrontFace deriving (Eq,Ord,Show)
+data PointSize          = PointSize Float | PointSizeRast deriving (Eq,Ord,Show, Data,Typeable)
+data PolygonOffset      = NoOffset | Offset Float Float  deriving (Eq,Ord,Show, Data,Typeable)
+data FrontFace          = CCW | CW deriving (Eq,Ord,Show, Data,Typeable)
+data PolygonMode        = PolygonPoint PointSize | PolygonLine Float | PolygonFill deriving (Eq,Ord,Show, Data,Typeable)
+data ProvokingVertex    = FirstVertex | LastVertex deriving (Eq,Ord,Bounded,Enum,Show, Data,Typeable)
+data CullMode           = CullNone | CullFront FrontFace | CullBack FrontFace deriving (Eq,Ord,Show, Data,Typeable)
 type DepthFunction      = ComparisonFunction
-data ComparisonFunction = Never | Less | Equal | Lequal | Greater | Notequal | Gequal | Always deriving ( Eq, Ord, Show )
-data StencilOperation   = OpZero | OpKeep | OpReplace | OpIncr | OpIncrWrap | OpDecr | OpDecrWrap | OpInvert deriving ( Eq, Ord, Show )
-data BlendEquation      = FuncAdd | FuncSubtract | FuncReverseSubtract | Min | Max deriving ( Eq, Ord, Show )
-data BlendingFactor     = Zero | One | SrcColor | OneMinusSrcColor | DstColor | OneMinusDstColor | SrcAlpha | OneMinusSrcAlpha | DstAlpha | OneMinusDstAlpha | ConstantColor | OneMinusConstantColor | ConstantAlpha | OneMinusConstantAlpha | SrcAlphaSaturate deriving ( Eq, Ord, Show )
-data LogicOperation     = Clear | And | AndReverse | Copy | AndInverted | Noop | Xor | Or | Nor | Equiv | Invert | OrReverse | CopyInverted | OrInverted | Nand | Set deriving ( Eq, Ord, Show )
+data ComparisonFunction = Never | Less | Equal | Lequal | Greater | Notequal | Gequal | Always deriving ( Eq, Ord, Show, Data,Typeable )
+data StencilOperation   = OpZero | OpKeep | OpReplace | OpIncr | OpIncrWrap | OpDecr | OpDecrWrap | OpInvert deriving ( Eq, Ord, Show, Data,Typeable )
+data BlendEquation      = FuncAdd | FuncSubtract | FuncReverseSubtract | Min | Max deriving ( Eq, Ord, Show, Data,Typeable )
+data BlendingFactor     = Zero | One | SrcColor | OneMinusSrcColor | DstColor | OneMinusDstColor | SrcAlpha | OneMinusSrcAlpha | DstAlpha | OneMinusDstAlpha | ConstantColor | OneMinusConstantColor | ConstantAlpha | OneMinusConstantAlpha | SrcAlphaSaturate deriving ( Eq, Ord, Show, Data,Typeable )
+data LogicOperation     = Clear | And | AndReverse | Copy | AndInverted | Noop | Xor | Or | Nor | Equiv | Invert | OrReverse | CopyInverted | OrInverted | Nand | Set deriving ( Eq, Ord, Show, Data,Typeable )
 
 data StencilOps
     = StencilOps
     { frontStencilOp    :: StencilOperation -- ^ Used for front faced triangles and other primitives.
     , backStencilOp     :: StencilOperation -- ^ Used for back faced triangles.
-    } deriving (Eq,Ord,Show)
+    } deriving (Eq,Ord,Show, Data,Typeable)
 
-data StencilTests = StencilTests StencilTest StencilTest  deriving (Eq,Ord,Show)
+data StencilTests = StencilTests StencilTest StencilTest  deriving (Eq,Ord,Show, Data,Typeable)
 data StencilTest
     = StencilTest
     { stencilComparision    :: ComparisonFunction   -- ^ The function used to compare the @stencilReference@ and the stencil buffers value with.
     , stencilReference      :: Int32                -- ^ The value to compare with the stencil buffer's value.
     , stencilMask           :: Word32               -- ^ A bit mask with ones in each position that should be compared and written to the stencil buffer.
-    } deriving (Eq,Ord,Show)
+    } deriving (Eq,Ord,Show, Data,Typeable)
 
 -- sampler and texture specification
-data Filter = PointFilter | LinearFilter    deriving (Show,Eq,Ord)
-data EdgeMode = Wrap | Mirror | Clamp       deriving (Show,Eq,Ord)
+data Filter = PointFilter | LinearFilter    deriving (Show,Eq,Ord, Data,Typeable)
+data EdgeMode = Wrap | Mirror | Clamp       deriving (Show,Eq,Ord, Data,Typeable)
