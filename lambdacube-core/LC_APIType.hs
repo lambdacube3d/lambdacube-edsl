@@ -172,6 +172,11 @@ data StreamType
     | TM44F
     deriving (Show,Eq,Ord, Data,Typeable)
 
+data Type
+    = Single InputType
+    | Tuple [Type]
+    deriving (Show,Eq,Ord, Data,Typeable)
+
 -- describes a stream type (in GPU side)
 data InputType
     = Bool
@@ -229,6 +234,7 @@ data InputType
     | ITextureBuffer
     | ITexture2DRect
     -- uint textures
+    | UTexture1D
     | UTexture2D
     | UTexture3D
     | UTextureCube

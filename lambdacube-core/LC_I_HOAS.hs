@@ -59,7 +59,6 @@ instance Exp ExpI where
 newtype TextureI a b c d = TextureI (U.Texture U.GP)
 instance Texture TextureI where
     type Texture_GP TextureI            = GPI
-    type Texture_Image TextureI         = ImageI
     type Texture_MipMap TextureI        = MipMapI
     type Texture_TextureType TextureI   = TextureTypeI
     textureSlot a (TextureTypeI b)  = TextureI (U.TextureSlot a b)

@@ -106,16 +106,3 @@ instance OpenGP OpenGPI where
                (OpenFunI c) (OpenGPI d) (OpenGPI e) = OpenGPI (Accumulate a b c d e)
     prjFrameBuffer a (TupleIdxI b) (OpenGPI c)      = OpenGPI (PrjFrameBuffer a b c)
     prjImage a b (OpenGPI c)                        = OpenGPI (PrjImage a (toInt b) c)
-{-
-class OpenGP openGP where
-    type OpenGP_FlatTupleFragmentOperation openGP :: (* -> Constraint) -> (* -> *) -> (* -> *) -> * -> *
-    type OpenGP_FlatTupleImage openGP :: (* -> Constraint) -> (* -> *) -> (* -> *) -> * -> *
-    type OpenGP_FragmentFilter openGP :: * -> * -> *
-    type OpenGP_FragmentOperation openGP :: * -> *
-    type OpenGP_GeometryShader openGP :: * -> * -> * -> * -> * -> * -> *
-    type OpenGP_Image openGP :: * -> * -> *
-    type OpenGP_OpenFragmentOut openGP :: * -> * -> * -> *
-    type OpenGP_OpenVertexOut openGP :: * -> * -> * -> *
-    type OpenGP_RasterContext openGP :: * -> *
-    type OpenGP_TupleIdx openGP :: * -> * -> *
--}

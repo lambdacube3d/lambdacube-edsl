@@ -226,11 +226,11 @@ class GP gp where
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> tupleIdx (EltRepr b) t
                     -> gp (FrameBuffer layerCount b)
-                    -> gp (image layerCount t)
+                    -> gp (FrameImage layerCount t)
 
     prjImage        :: (Nat idx, LesserEq idx layerCount
                        ,image ~ GP_Image gp)
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> idx
-                    -> gp (image layerCount t)
-                    -> gp (image N1 t)
+                    -> gp (FrameImage layerCount t)
+                    -> gp (FrameImage N1 t)

@@ -20,6 +20,7 @@ instance GPU Bool where
     tupleType' v = SingleTuple v
 -}
 instance GPU Float where
+--    toTuple _ = Single
 {-
     tupleType v  = singletonScalarType v
     tupleType' v = SingleTuple v
@@ -155,8 +156,8 @@ instance IsScalar Word32 where
     toType _     = ITWord
 -}
 instance IsScalar Float where
-    toValue v    = VFloat v
-    toType _     = Float
+    toValue v       = VFloat v
+    toSingleType _  = Float
 {-
 instance IsScalar Bool where
     toValue v    = VBool v

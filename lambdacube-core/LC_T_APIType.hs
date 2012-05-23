@@ -119,7 +119,7 @@ data VertexStream prim t
 data PrimitiveStream prim t
 data FragmentStream layerCount t
 data FrameBuffer layerCount t
---data Image layerCount t
+data FrameImage layerCount t
 
 -- flat tuple, another internal tuple representation
 -- means unit
@@ -176,9 +176,6 @@ class RasterContext rasterContext where
 -- default triangle raster context
 defaultTriangleCtx :: RasterContext rasterContext => rasterContext Triangle
 defaultTriangleCtx = triangleCtx CullNone PolygonFill NoOffset LastVertex
-
---type FrameBuffer layerCount t = (Image reprI, FlatTuple (reprI layerCount) reprFT) => reprFT Typeable (reprI layerCount) t
---type AccumulationContext t = (FragmentOperation reprFO, FlatTuple reprFO reprFT) => reprFT Typeable reprFO t
 
 -- Fragment Operation
 class FragmentOperation fragmentOperation where
@@ -375,7 +372,6 @@ class TextureType textureType where -- hint: arr - single or array texture, ar -
 -- defines a texture
 class Texture texture where
     type Texture_TextureType texture :: * -> * -> * -> * -> * -> * -> *
-    type Texture_Image texture :: * -> * -> *
     type Texture_MipMap texture :: * -> *
     type Texture_GP texture :: * -> *
 
@@ -387,12 +383,11 @@ class Texture texture where
     -- TODO:
     --  add texture internal format specification
     texture         :: (gp ~ Texture_GP texture
-                       ,image ~ Texture_Image texture
                        ,mipMap ~ Texture_MipMap texture
                        ,textureType ~ Texture_TextureType texture)
                     => textureType dim (MipRepr mip) arr layerCount t ar
                     -> mipMap mip
-                    -> [gp (image layerCount t)] -- backend must check the length of list
+                    -> [gp (FrameImage layerCount t)] -- backend must check the length of list
                     -> texture dim arr t ar
 
 {-

@@ -12,16 +12,17 @@ data Sampler dim layerCount t ar
 
 -- IsScalar means here that the related type is not a tuple, but a GPU primitive type
 class GPU a => IsScalar a where
-    toValue     :: a -> Value
-    toType      :: a -> InputType
+    toValue         :: a -> Value
+    toSingleType    :: a -> InputType
 {-
 singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType a = PairTuple UnitTuple (SingleTuple a)
 -}
 -- GPU type restriction, the functions are used in shader codegen
 class (Show a, Typeable a, Typeable (EltRepr a), Typeable (EltRepr' a)) => GPU a where
-    tupleType   :: TupleType reprTT => a -> reprTT (EltRepr a)
-    tupleType'  :: TupleType reprTT => a -> reprTT (EltRepr' a)
+    --toType :: a -> Type
+--    tupleType   :: TupleType reprTT => a -> reprTT (EltRepr a)
+--    tupleType'  :: TupleType reprTT => a -> reprTT (EltRepr' a)
 
 -- stream type restriction, these types can be used in vertex shader input
 class GPU a => SGPU a
