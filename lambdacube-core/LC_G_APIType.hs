@@ -1,13 +1,14 @@
-module LC_APIType where
+module LC_G_APIType where
 
-import Control.Concurrent.STM
 import Data.ByteString.Char8
 import Data.Data
 import Data.Int
 import Data.Word
 import Foreign.Ptr
 
-import LCType
+import LC_G_Type
+
+data Primitive  = TriangleStrip | TriangleList | TriangleFan | LineStrip | LineList | PointList deriving (Eq,Ord,Bounded,Enum,Show, Data,Typeable)
 
 -- GPU type value reification, needed for shader codegen
 data Value
@@ -38,7 +39,7 @@ data Value
     | VM44F     !M44F
     deriving (Show,Eq,Ord, Data,Typeable)
 
-type SetterFun a = a -> STM ()
+type SetterFun a = a -> IO ()
 
 -- user will provide scalar input data via this type
 data InputSetter
@@ -172,9 +173,9 @@ data StreamType
     | TM44F
     deriving (Show,Eq,Ord, Data,Typeable)
 
-data Type
+data Ty
     = Single InputType
-    | Tuple [Type]
+    | Tuple [Ty]
     deriving (Show,Eq,Ord, Data,Typeable)
 
 -- describes a stream type (in GPU side)

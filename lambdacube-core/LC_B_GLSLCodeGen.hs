@@ -1,9 +1,11 @@
-module LC_GLSL_CodeGen (
+module LC_B_GLSLCodeGen (
     codeGenVertexShader,
     codeGenGeometryShader,
     codeGenFragmentShader,
-    codeGenTupleType
+    codeGenType
 ) where
+
+import Debug.Trace
 
 import Control.Exception
 import Data.Word
@@ -14,17 +16,18 @@ import Text.PrettyPrint.HughesPJClass
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import LCType
-import LC_APIType hiding (LogicOperation(..), ComparisonFunction(..))
---import LC_DSLType
+import Data.Generics.Uniplate.Data
+
+import LC_G_Type
+import LC_G_APIType hiding (LogicOperation(..), ComparisonFunction(..))
+import LC_U_APIType
 import LC_U_PrimFun
 import LC_U_DeBruijn
-import LC_I_DeBruijn
 
-import GLSLSyntax hiding (Const,InterpolationQualifier(..),TypeSpecifierNonArray(..))
-import GLSLSyntax (TypeSpecifierNonArray)
-import qualified GLSLSyntax as GLSL
-import GLSLPretty
+import LC_B_GLSLSyntax hiding (Const,InterpolationQualifier(..),TypeSpecifierNonArray(..))
+import LC_B_GLSLSyntax (TypeSpecifierNonArray)
+import qualified LC_B_GLSLSyntax as GLSL
+import LC_B_GLSLPretty
 
 codeGenPrim :: PrimFun -> [InputType] -> [Expr] -> [Expr]
 
@@ -357,65 +360,60 @@ codeGenConst (VM42F  v) = [matX2C "mat4x2" (v4C "vec4" floatC) v]
 codeGenConst (VM43F  v) = [matX3C "mat4x3" (v4C "vec4" floatC) v]
 codeGenConst (VM44F  v) = [matX4C "mat4"   (v4C "vec4" floatC) v]
 
-{-
 -- require: input names
-codeGenExp :: forall stage env genv t. [ByteString] -> OpenExpI stage env genv t -> [Expr]
-codeGenExp inNames (PrimApp (f :: PrimFun stage (a -> r)) arg)  = codeGenPrim f (codeGenTupleType $ tupleType (undefined :: a)) (codeGenExp inNames arg)
-codeGenExp inNames (Const c)                                    = concatMap codeGenConst $! codeGenTupleValue $! tupleType c
-codeGenExp inNames (PrimVar v)                                  = [Variable $! unpack $! fst $! toInput v]
-codeGenExp inNames (Tup t)                                      = codeGenTup inNames t
-codeGenExp inNames (Uni u)                                      = [Variable $! unpack n | (n,_) <- toInputList u]
-codeGenExp inNames p@(Prj idx e)
-  = reverse
-  . take (length $ codeGenTupleType (expType p))
-  . drop (prjToInt idx (expType e))
-  . reverse
-  $ codeGenExp inNames e
-codeGenExp inNames (Var i)
-    | idx == 0 && length inNames == arity                       = [Variable (unpack n) | n <- inNames]
+codeGenExp :: [ByteString] -> Exp -> [Expr]
+codeGenExp inNames (PrimApp ty f arg)   = codeGenPrim f (codeGenType $ expType arg) (codeGenExp inNames arg)
+codeGenExp inNames (Const ty c)         = codeGenConst c
+codeGenExp inNames (PrimVar ty n)       = [Variable $! unpack n]
+codeGenExp inNames (Tup ty t)           = concatMap (codeGenExp inNames) t
+codeGenExp inNames (Uni ty n)           = [Variable $! unpack n]
+codeGenExp inNames p@(Prj ty idx e)     = trace (unlines["gen: ",show p,show src]) src
+  where
+    src = reverse
+        . take (length $ codeGenType ty)
+        . drop idx
+        . reverse
+        $ codeGenExp inNames e
+codeGenExp inNames (Var ty i)
+    | i == 0 && length inNames == arity       = [Variable (unpack n) | n <- inNames]
     | otherwise = throw $ userError $ unlines $
         [ "codeGenExp failed: "
-        , "  Var " ++ show idx
+        , "  Var " ++ show i ++ " :: " ++ show ty
         , "  input names:  " ++ show inNames
         , "  arity:        " ++ show arity
         ]
   where
-    arity = length $! codeGenTupleType (tupleType (undefined::t))
-    idx   = idxToInt i
+    arity = length $! codeGenType ty
 
-codeGenExp inNames (Cond p t e)                                 = zipWith branch (codeGenExp inNames t) (codeGenExp inNames e)
+codeGenExp inNames (Cond ty p t e)      = zipWith branch (codeGenExp inNames t) (codeGenExp inNames e)
   where
     [predicate] = codeGenExp inNames p
     branch a b  = Selection predicate a b
--}
-{-
-codeGenTup :: [ByteString] -> Tuple (OpenExp stage env genv) t -> [Expr]
-codeGenTup _ NilTup          = []
-codeGenTup inNames (t `SnocTup` e) = codeGenTup inNames t ++ codeGenExp inNames e
--}
+
+codeGenExp inNames (Sampler ty f e t)   = [Variable $ show ty]
+
 {-
   required info: output variable names
   if we disable inline functions, it simplifies variable name gen
 -}
-codeGenVertexShader = undefined
-{-
+
 codeGenVertexShader :: [(ByteString,InputType)]
-                    -> OpenFun OpenVertexOut env genv t
+                    -> ExpFun
                     -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
 codeGenVertexShader inVars = cvt
   where
-    genExp :: OpenExp V env genv t -> [Expr]
+    genExp :: Exp -> [Expr]
     genExp = codeGenExp (map fst inVars)
 
-    genIExp :: OpenInterpolatedFlatExp V env genv t -> [(GLSL.InterpolationQualifier,[Expr],[InputType])]
-    genIExp ((Flat e :: Interpolated (OpenExp V env genv) t) :. xs)           = (GLSL.Flat,genExp e,codeGenTupleType (tupleType (undefined :: t))) : genIExp xs
-    genIExp ((Smooth e :: Interpolated (OpenExp V env genv) t):. xs)          = (GLSL.Smooth,genExp e,codeGenTupleType (tupleType (undefined :: t))) : genIExp xs
-    genIExp ((NoPerspective e :: Interpolated (OpenExp V env genv) t):. xs)   = (GLSL.NoPerspective,genExp e,codeGenTupleType (tupleType (undefined :: t))) : genIExp xs
-    genIExp ZT = []
+    genIExp :: [Interpolated Exp] -> [(GLSL.InterpolationQualifier,[Expr],[InputType])]
+    genIExp ((Flat e) : xs)             = (GLSL.Flat,genExp e,codeGenType $ expType e) : genIExp xs
+    genIExp ((Smooth e) : xs)           = (GLSL.Smooth,genExp e,codeGenType $ expType e) : genIExp xs
+    genIExp ((NoPerspective e) : xs)    = (GLSL.NoPerspective,genExp e,codeGenType $ expType e) : genIExp xs
+    genIExp [] = []
 
-    cvt :: OpenFun OpenVertexOut env genv t -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
+    cvt :: ExpFun -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
     cvt (Lam lam) = cvt lam
-    cvt (Body (VertexOut pos size outs)) = (SB.unlines $!
+    cvt (Body body@(VertexOut pos size outs)) = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [attribute (unpack n)    (toGLSLType t) | (n,t) <- inVars]
@@ -426,44 +424,43 @@ codeGenVertexShader inVars = cvt
       where
         ppE e a = pack $! show $! pPrint $! Compound [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         pp a    = pack $! show $! pPrint $! TranslationUnit a
-        uniVars = Set.toList $! uniformInputExp pos `Set.union` uniformInputExp size `Set.union` uniformInputInterpolatedFlatExp outs
+        uniVars = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- universeBi body]
         [posE]  = genExp pos
         [sizeE] = genExp size
         (oQ,oE,oT)  = unzip3 $! genIExp outs
         oNames      = [pack $ "v" ++ show i | i <- [0..]]
--}
+
 -- TODO
 codeGenGeometryShader inVars _ = ("", inVars)
-codeGenFragmentShader = undefined
-{-
+
 codeGenFragmentShader :: [(ByteString,GLSL.InterpolationQualifier,InputType)]
-                      -> FragmentFilter genv a
-                      -> OpenFun OpenFragmentOut env genv b
+                      -> FragmentFilter
+                      -> ExpFun
                       -> (ByteString, [(ByteString,InputType)])
 codeGenFragmentShader inVars ffilter = cvt
   where
-    cvtF :: OpenFun (OpenExp F) env genv a -> Expr
+    cvtF :: ExpFun -> Expr
     cvtF (Lam lam) = cvtF lam
     cvtF (Body body) = let [e] = genExp body in e
 
-    cvt :: OpenFun OpenFragmentOut env genv a -> (ByteString, [(ByteString,InputType)])
+    cvt :: ExpFun -> (ByteString, [(ByteString,InputType)])
     cvt (Lam lam) = cvt lam
     cvt (Body body) = case body of
-        FragmentOut e           -> src e []
-        FragmentOutDepth de e   -> src e [("gl_FragDepth",de)]
-        FragmentOutRastDepth e  -> src e []
+        FragmentOut e             -> src e []
+        FragmentOutDepth de e     -> src e [("gl_FragDepth",de)]
+        FragmentOutRastDepth e    -> src e []
 
-    genExp :: OpenExp F env genv t -> [Expr]
+    genExp :: Exp -> [Expr]
     genExp = codeGenExp [n | (n,_,_) <- inVars]
 
-    genFExp :: OpenFlatExp F env genv t' -> [([Expr],[InputType])]
-    genFExp ((e :: OpenExp F env genv t) :. xs) = (genExp e,codeGenTupleType (tupleType (undefined :: t))) : genFExp xs
-    genFExp ZT = []
+    genFExp :: [Exp] -> [([Expr],[InputType])]
+    genFExp (e : xs) = (genExp e,codeGenType $ expType e) : genFExp xs
+    genFExp [] = []
 
     oNames :: [ByteString]
     oNames = [pack $ "f" ++ show i | i <- [0..]]
 
-    src :: OpenFlatExp F env genv a -> [(ByteString,OpenExp F env genv t)] -> (ByteString, [(ByteString,InputType)])
+    src :: [Exp] -> [(ByteString,Exp)] -> (ByteString, [(ByteString,InputType)])
     src outs outs' = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
@@ -478,53 +475,27 @@ codeGenFragmentShader inVars ffilter = cvt
         assigns a e = [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         ppBody l    = pack $! show $! pPrint $! Compound l
         pp a        = pack $! show $! pPrint $! TranslationUnit a
-        uniVars     = Set.toList $! uniformInputFlatExp outs `Set.union` Set.unions [uniformInputExp e | (_,e) <- outs']
+        uniVars     = Set.toList $ (Set.fromList [(n,t) | Uni (Single t) n <- universeBi outs]) `Set.union` (Set.fromList [(n,t) | Uni (Single t) n <- universeBi outs'])
         (oE',oN')   = unzip $! [(genExp e,n) | (n,e) <- outs']
         (oE,oT)     = unzip $! genFExp outs
         body        = assigns (oN' ++ oNames) (concat oE' ++ concat oE)
 
--- Convert a tuple index into the corresponding integer. Since the internal
--- representation is flat, be sure to walk over all sub components when indexing
--- past nested tuples.
---
-prjToInt :: TupleIdx t e -> TupleType a -> Int
-prjToInt ZeroTupIdx     _                 = 0
-prjToInt (SuccTupIdx i) (b `PairTuple` a) = length (codeGenTupleType a) + prjToInt i b
-prjToInt _ _ = error "prjToInt" "inconsistent valuation"
--}
-codeGenTupleType = undefined
-{-
-codeGenTupleType :: TupleType a -> [InputType]
-codeGenTupleType UnitTuple         = []
-codeGenTupleType (SingleTuple  ty) = [toType ty]
-codeGenTupleType (PairTuple t1 t0) = codeGenTupleType t1 ++ codeGenTupleType t0
+codeGenType :: Ty -> [InputType]
+codeGenType (Single ty) = [ty]
+codeGenType (Tuple l)   = concatMap codeGenType l
 
-codeGenTupleValue :: TupleType a -> [Value]
-codeGenTupleValue UnitTuple         = []
-codeGenTupleValue (SingleTuple  ty) = [toValue ty]
-codeGenTupleValue (PairTuple t1 t0) = codeGenTupleValue t1 ++ codeGenTupleValue t0
-
--- |Reify the result types of of a scalar expression using the expression AST before tying the
--- knot.
---
-expType :: OpenExp stage genv env t -> TupleType (EltRepr t)
+expType :: Exp -> Ty
 expType e =
   case e of
-    (Var _       :: OpenExp stage genv env t)      -> tupleType (undefined::t)
-    (Const _     :: OpenExp stage genv env t)      -> tupleType (undefined::t)
-    (PrimVar _   :: OpenExp stage genv env t)      -> tupleType (undefined::t)
-    (Uni _       :: OpenExp stage genv env t)      -> tupleType (undefined::t)
-    (Tup _       :: OpenExp stage genv env t)      -> tupleType (undefined::t)
-    (Prj idx _   :: OpenExp stage genv env t)      -> tupleIdxType idx
-    (Cond _ t _  :: OpenExp stage genv env t)      -> expType t
-    (PrimApp _ _ :: OpenExp stage genv env t)      -> tupleType (undefined::t)
+    (Var ty _)          -> ty
+    (Const ty _)        -> ty
+    (PrimVar ty _)      -> ty
+    (Uni ty _)          -> ty
+    (Tup ty _)          -> ty
+    (Prj ty _ _)        -> ty
+    (Cond ty _ _ _)     -> ty
+    (PrimApp ty _ _)    -> ty
 
--- |Reify the result type of a tuple projection.
---
-tupleIdxType :: forall t e. TupleIdx t e -> TupleType (EltRepr e)
-tupleIdxType ZeroTupIdx       = tupleType (undefined::e)
-tupleIdxType (SuccTupIdx idx) = tupleIdxType idx
--}
 -- Utility functions
 toGLSLType :: InputType -> TypeSpecifierNonArray
 toGLSLType Bool   = GLSL.Bool

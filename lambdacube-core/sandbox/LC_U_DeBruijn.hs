@@ -6,9 +6,9 @@ import Data.ByteString.Char8 (ByteString)
 import Data.Data
 import Data.Int
 
-import LC_G_Type
+import LCType
 
-import LC_G_APIType
+import LC_APIType
 import LC_U_APIType
 import LC_U_PrimFun
 
@@ -33,11 +33,11 @@ data Exp
     | PrimApp   Ty PrimFun Exp
     | Sampler               Ty Filter EdgeMode (Texture GP)
     -- special tuple expressions
-    | VertexOut             Exp Exp [Interpolated Exp]
-    | GeometryOut           Exp Exp Exp Exp Exp [Interpolated Exp]
-    | FragmentOut           [Exp]
-    | FragmentOutDepth      Exp [Exp]
-    | FragmentOutRastDepth  [Exp]
+    | VertexOut             Ty Exp Exp [Interpolated Exp]
+    | GeometryOut           Ty Exp Exp Exp Exp Exp [Interpolated Exp]
+    | FragmentOut           Ty [Exp]
+    | FragmentOutDepth      Ty Exp [Exp]
+    | FragmentOutRastDepth  Ty [Exp]
     deriving (Show, Eq, Ord, Data,Typeable)
 
 data FragmentFilter
@@ -63,7 +63,11 @@ data GP
     | PrjImage          ByteString Int GP
     deriving (Show, Eq, Ord, Data,Typeable)
 
-data GPOutput
-    = ImageOut  ByteString GP
-    | ScreenOut GP
-    deriving (Show, Eq, Ord, Data,Typeable)
+unis :: GP -> [(ByteString,Ty)]
+unis x = [(n,t) | (Uni t n) <- universeBi x]
+
+passes :: GP -> [Texture GP]
+passes x = [t | t@(Texture _ _ _) <- universeBi x]
+
+countSin :: GP -> Int
+countSin x = length [() | PrimSin <- universeBi x]

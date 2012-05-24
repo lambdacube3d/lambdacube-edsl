@@ -5,12 +5,13 @@ import Data.ByteString.Char8
 import Data.Int
 import Data.Word
 
-import LC_G_Type
+import LCType
 
-import LC_G_APIType
+import LC_APIType
 
 -- primitive types
 data PrimitiveType  = Triangle | Line | Point deriving (Show, Eq, Ord, Data,Typeable)
+data Primitive  = TriangleStrip | TriangleList | TriangleFan | LineStrip | LineList | PointList deriving (Eq,Ord,Bounded,Enum,Show, Data,Typeable)
 
 data MipMap = Mip | NoMip | AutoMip deriving (Show,Eq,Ord, Data,Typeable)
 data ColorArity = Red | RG | RGB | RGBA deriving (Show,Eq,Ord, Data,Typeable)

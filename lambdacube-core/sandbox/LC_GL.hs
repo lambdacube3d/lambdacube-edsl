@@ -1,14 +1,14 @@
 module LC_GL where
 
 import Control.Applicative
-import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
+import Data.IORef
 import Data.List as L
 import Data.Maybe
+import Data.Set (Set)
 import Data.Trie as T
 import Foreign
-import Data.Set (Set)
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
@@ -21,21 +21,20 @@ import TypeLevel.Number.Nat.Num
 
 import LCType
 import LC_APIType
-import LC_T_APIType (FrameImage)
 import LC_U_APIType
---import LCConvert
 import LC_U_DeBruijn
-import qualified LC_I_HOAS as H
-import qualified LC_U_HOAS as U
+import qualified LCAPIType as H
+import qualified LCHOAS as H
+
 import LC_GL_Util
 import LC_GLSL_CodeGen
 
 data GPOutput where
     ImageOut    :: ByteString
-                -> H.GPI (FrameImage sh t)
+                -> H.GP (H.Image sh t)
                 -> GPOutput
 
-    ScreenOut   :: H.GPI (FrameImage N1 t)
+    ScreenOut   :: H.GP (H.Image N1 t)
                 -> GPOutput
 
 ---------
@@ -142,7 +141,7 @@ data Renderer -- internal type
     , dispose              :: IO ()
 
     -- internal
-    , objectSet             :: Trie (TVar ObjectSet)
+    , objectSet             :: Trie (IORef ObjectSet)
     , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm
     , slotUniformLocation   :: Trie (Trie GLint)
     , slotStreamLocation    :: Trie (Trie GLuint)
@@ -564,15 +563,15 @@ compileFrameBuffer (Accumulate fCtx ffilter fsh (Rasterize rCtx gs (Transform vs
     --  for new slots create object set tvar
     let newUNames = Set.toList $! (Set.fromList $! T.keys uLoc) Set.\\ (Set.fromList $! T.keys $! uniformSetter rndr)
         objSet    = objectSet rndr
-    (uSetup,uSetter) <- unzip <$> (atomically $! sequence [mkUSetter t | n <- newUNames, let Just t = T.lookup n uType])
+    (uSetup,uSetter) <- unzip <$> (sequence [mkUSetter t | n <- newUNames, let Just t = T.lookup n uType])
     objSet' <- if T.member slotName objSet then return objSet else do
-        v <- newTVarIO []
+        v <- newIORef []
         return $! T.insert slotName v objSet
 
     let disposeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
         Just objsTVar = T.lookup slotName objSet'
         renderFun = do
-            objs <- readTVarIO objsTVar
+            objs <- readIORef objsTVar
             unless (L.null objs) $ do
                 setupRasterContext rCtx
                 setupAccumulationContext fCtx
@@ -596,7 +595,7 @@ compileFrameBuffer (Accumulate fCtx ffilter fsh (Rasterize rCtx gs (Transform vs
 
 convertGP = undefined
 -- FIXME: implement properly
-compileRenderer [ScreenOut (H.GPI (U.PrjFrameBuffer n idx fb'))] = do
+compileRenderer [ScreenOut (H.PrjFrameBuffer n idx fb')] = do
     let fb = convertGP fb'
         --si = streamInput fb
         --ui = uniformInput fb
@@ -687,7 +686,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms = do
             return (glBindBuffer gl_ELEMENT_ARRAY_BUFFER bo, glDrawElements primGL (fromIntegral idxCount) glType ptr)
 
     -- create uniform setup action
-    (mkObjUSetup,objUSetters) <- unzip <$> (atomically $! sequence [mkUSetter t | n <- objUniforms, let Just t = T.lookup n uTypes])
+    (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUSetter t | n <- objUniforms, let Just t = T.lookup n uTypes])
     let objUSetterTrie = T.fromList $! zip objUniforms objUSetters
         objUSetup = zipWithM_ (\n mkOUS -> let Just loc = T.lookup n uLocs in mkOUS loc) objUniforms mkObjUSetup
 
@@ -709,7 +708,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms = do
         -- setup stream input (aka object attributes)
         -- execute draw function
         Just objSet = T.lookup slotName (objectSet renderer)
-    atomically $! modifyTVar objSet (renderFun:)
+    modifyIORef objSet (renderFun:)
     return $! Object objUSetterTrie
 
 removeObject gfxNetwork obj = undefined

@@ -1,363 +1,134 @@
-module LC_T_DSLType where
+module LC_GADT_DSLType where
 
 import Data.Int
 import Data.Word
 import Data.Typeable
 
-import LC_G_Type
-import LC_G_APIType (InputType)
-import LC_G_APIType hiding (InputType(..))
-import qualified LC_G_APIType as U
+import LCType
+import LC_GADT_APIType
 
-import TypeLevel.Number.Nat
-import TypeLevel.Number.Nat.Num
-
-data Rect deriving Typeable
-
-data Red    = Red  deriving (Eq,Ord,Typeable)
-data RG     = RG   deriving (Eq,Ord,Typeable)
-data RGB    = RGB  deriving (Eq,Ord,Typeable)
-data RGBA   = RGBA deriving (Eq,Ord,Typeable)
-
-data Regular a      deriving Typeable
-data Shadow a       deriving Typeable
-data MultiSample a  deriving Typeable
-data Buffer a       deriving Typeable
-
-data SingleTex deriving Typeable    -- singleton texture
-data ArrayTex  deriving Typeable    -- array texture
-data CubeTex   deriving Typeable    -- cube texture = array with size 6
-
-data Sampler dim layerCount t ar deriving Typeable
-    
 -- IsScalar means here that the related type is not a tuple, but a GPU primitive type
 class GPU a => IsScalar a where
     toValue     :: a -> Value
     toType      :: a -> InputType
-{-
-instance Nat sh => IsScalar (Sampler dim sh t ar) where
+instance (Typeable dim, Typeable sh, Typeable t, Typeable ar) => IsScalar (Sampler dim sh t ar) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = error "toType Sampler is not implemented yet" -- TODO
--}
--- Float
-instance Typeable a => IsScalar (Sampler DIM1 SingleTex (Regular Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTexture1D
-instance Typeable a => IsScalar (Sampler DIM2 SingleTex (Regular Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTexture2D
-instance Typeable a => IsScalar (Sampler DIM3 SingleTex (Regular Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTexture3D
-instance Typeable a => IsScalar (Sampler DIM2 CubeTex (Regular Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTextureCube
-instance Typeable a => IsScalar (Sampler DIM1 ArrayTex (Regular Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTexture1DArray
-instance Typeable a => IsScalar (Sampler DIM2 ArrayTex (Regular Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTexture2DArray
-instance Typeable a => IsScalar (Sampler DIM2 SingleTex (MultiSample Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTexture2DMS
-instance Typeable a => IsScalar (Sampler DIM2 ArrayTex (MultiSample Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTexture2DMSArray
-instance Typeable a => IsScalar (Sampler DIM1 SingleTex (Buffer Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTextureBuffer
-instance Typeable a => IsScalar (Sampler Rect SingleTex (Regular Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.FTexture2DRect
-
--- Int
-instance Typeable a => IsScalar (Sampler DIM1 SingleTex (Regular Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITexture1D
-instance Typeable a => IsScalar (Sampler DIM2 SingleTex (Regular Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITexture2D
-instance Typeable a => IsScalar (Sampler DIM3 SingleTex (Regular Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITexture3D
-instance Typeable a => IsScalar (Sampler DIM2 CubeTex (Regular Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITextureCube
-instance Typeable a => IsScalar (Sampler DIM1 ArrayTex (Regular Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITexture1DArray
-instance Typeable a => IsScalar (Sampler DIM2 ArrayTex (Regular Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITexture2DArray
-instance Typeable a => IsScalar (Sampler DIM2 SingleTex (MultiSample Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITexture2DMS
-instance Typeable a => IsScalar (Sampler DIM2 ArrayTex (MultiSample Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITexture2DMSArray
-instance Typeable a => IsScalar (Sampler DIM1 SingleTex (Buffer Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITextureBuffer
-instance Typeable a => IsScalar (Sampler Rect SingleTex (Regular Int) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.ITexture2DRect
-
--- Word
-instance Typeable a => IsScalar (Sampler DIM1 SingleTex (Regular Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTexture1D
-instance Typeable a => IsScalar (Sampler DIM2 SingleTex (Regular Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTexture2D
-instance Typeable a => IsScalar (Sampler DIM3 SingleTex (Regular Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTexture3D
-instance Typeable a => IsScalar (Sampler DIM2 CubeTex (Regular Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTextureCube
-instance Typeable a => IsScalar (Sampler DIM1 ArrayTex (Regular Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTexture1DArray
-instance Typeable a => IsScalar (Sampler DIM2 ArrayTex (Regular Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTexture2DArray
-instance Typeable a => IsScalar (Sampler DIM2 SingleTex (MultiSample Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTexture2DMS
-instance Typeable a => IsScalar (Sampler DIM2 ArrayTex (MultiSample Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTexture2DMSArray
-instance Typeable a => IsScalar (Sampler DIM1 SingleTex (Buffer Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTextureBuffer
-instance Typeable a => IsScalar (Sampler Rect SingleTex (Regular Word) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.UTexture2DRect
-
--- Shadow
-instance Typeable a => IsScalar (Sampler DIM1 SingleTex (Shadow Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.STexture1D
-instance Typeable a => IsScalar (Sampler DIM2 SingleTex (Shadow Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.STexture2D
-instance Typeable a => IsScalar (Sampler DIM2 CubeTex (Shadow Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.STextureCube
-instance Typeable a => IsScalar (Sampler DIM1 ArrayTex (Shadow Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.STexture1DArray
-instance Typeable a => IsScalar (Sampler DIM2 ArrayTex (Shadow Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.STexture2DArray
-instance Typeable a => IsScalar (Sampler Rect SingleTex (Shadow Float) a) where
-    toValue v    = error "toValue Sampler is not implemented yet" -- TODO
-    toType _     = U.STexture2DRect
-
 instance IsScalar Int32 where
     toValue v    = VInt v
-    toType _     = U.Int
+    toType _     = ITInt
 instance IsScalar Word32 where
     toValue v    = VWord v
-    toType _     = U.Word
+    toType _     = ITWord
 instance IsScalar Float where
     toValue v    = VFloat v
-    toType _     = U.Float
+    toType _     = ITFloat
 instance IsScalar Bool where
     toValue v    = VBool v
-    toType _     = U.Bool
+    toType _     = ITBool
 instance IsScalar M22F where
     toValue v    = VM22F v
-    toType _     = U.M22F
+    toType _     = ITM22F
 instance IsScalar M23F where
     toValue v    = VM23F v
-    toType _     = U.M23F
+    toType _     = ITM23F
 instance IsScalar M24F where
     toValue v    = VM24F v
-    toType _     = U.M24F
+    toType _     = ITM24F
 instance IsScalar M32F where
     toValue v    = VM32F v
-    toType _     = U.M32F
+    toType _     = ITM32F
 instance IsScalar M33F where
     toValue v    = VM33F v
-    toType _     = U.M33F
+    toType _     = ITM33F
 instance IsScalar M34F where
     toValue v    = VM34F v
-    toType _     = U.M34F
+    toType _     = ITM34F
 instance IsScalar M42F where
     toValue v    = VM42F v
-    toType _     = U.M42F
+    toType _     = ITM42F
 instance IsScalar M43F where
     toValue v    = VM43F v
-    toType _     = U.M43F
+    toType _     = ITM43F
 instance IsScalar M44F where
     toValue v    = VM44F v
-    toType _     = U.M44F
+    toType _     = ITM44F
 instance IsScalar V2F where
     toValue v    = VV2F v
-    toType _     = U.V2F
+    toType _     = ITV2F
 instance IsScalar V3F where
     toValue v    = VV3F v
-    toType _     = U.V3F
+    toType _     = ITV3F
 instance IsScalar V4F where
     toValue v    = VV4F v
-    toType _     = U.V4F
+    toType _     = ITV4F
 instance IsScalar V2I where
     toValue v    = VV2I v
-    toType _     = U.V2I
+    toType _     = ITV2I
 instance IsScalar V3I where
     toValue v    = VV3I v
-    toType _     = U.V3I
+    toType _     = ITV3I
 instance IsScalar V4I where
     toValue v    = VV4I v
-    toType _     = U.V4I
+    toType _     = ITV4I
 instance IsScalar V2U where
     toValue v    = VV2U v
-    toType _     = U.V2U
+    toType _     = ITV2U
 instance IsScalar V3U where
     toValue v    = VV3U v
-    toType _     = U.V3U
+    toType _     = ITV3U
 instance IsScalar V4U where
     toValue v    = VV4U v
-    toType _     = U.V4U
+    toType _     = ITV4U
 instance IsScalar V2B where
     toValue v    = VV2B v
-    toType _     = U.V2B
+    toType _     = ITV2B
 instance IsScalar V3B where
     toValue v    = VV3B v
-    toType _     = U.V3B
+    toType _     = ITV3B
 instance IsScalar V4B where
     toValue v    = VV4B v
-    toType _     = U.V4B
+    toType _     = ITV4B
+
+-- GPU type value reification, needed for shader codegen
+data Value
+    = VBool     !Bool
+    | VV2B      !V2B
+    | VV3B      !V3B
+    | VV4B      !V4B
+    | VWord     !Word32
+    | VV2U      !V2U
+    | VV3U      !V3U
+    | VV4U      !V4U
+    | VInt      !Int32
+    | VV2I      !V2I
+    | VV3I      !V3I
+    | VV4I      !V4I
+    | VFloat    !Float
+    | VV2F      !V2F
+    | VV3F      !V3F
+    | VV4F      !V4F
+    | VM22F     !M22F
+    | VM23F     !M23F
+    | VM24F     !M24F
+    | VM32F     !M32F
+    | VM33F     !M33F
+    | VM34F     !M34F
+    | VM42F     !M42F
+    | VM43F     !M43F
+    | VM44F     !M44F
+    deriving (Show,Eq,Ord)
 
 singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType a = PairTuple UnitTuple (SingleTuple a)
-
-instance Show (Sampler dim layerCount t ar) where
-    show _ = "Sampler dim layerCount t ar"
 
 -- GPU type restriction, the functions are used in shader codegen
 class (Show a, Typeable a, Typeable (EltRepr a), Typeable (EltRepr' a)) => GPU a where
     tupleType   :: a -> TupleType (EltRepr a)
     tupleType'  :: a -> TupleType (EltRepr' a)
-
--- Float
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Regular Float) a) where
+instance (Typeable dim, Typeable sh, Typeable t, Typeable ar) => GPU (Sampler dim sh t ar) where
     tupleType v  = singletonScalarType v
     tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 SingleTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM3 SingleTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 CubeTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM1 ArrayTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 ArrayTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 SingleTex (MultiSample Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 ArrayTex (MultiSample Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Buffer Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler Rect SingleTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-
--- Int
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 SingleTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM3 SingleTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 CubeTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM1 ArrayTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 ArrayTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 SingleTex (MultiSample Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 ArrayTex (MultiSample Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Buffer Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler Rect SingleTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-
--- Word
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 SingleTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM3 SingleTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 CubeTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM1 ArrayTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 ArrayTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 SingleTex (MultiSample Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 ArrayTex (MultiSample Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Buffer Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler Rect SingleTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-
--- Shadow
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 SingleTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 CubeTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM1 ArrayTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler DIM2 ArrayTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-instance Typeable a => GPU (Sampler Rect SingleTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
-
 instance GPU () where
     tupleType _  = UnitTuple
     tupleType' _ = UnitTuple

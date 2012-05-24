@@ -24,35 +24,33 @@ Library
         binary,
         bytestring,
         containers,
+        --stm,
         vector,
 
-        uniplate,
         bytestring-trie,
         prettyclass,
         type-level-numbers,
         OpenGLRaw
 
   Exposed-modules:
-        LC_API
-        LC_B_GL
-        LC_B_GLSLCodeGen
-        LC_B_GLSLPretty
-        LC_B_GLSLSyntax
-        LC_B_GLUtil
-        LC_C_Convert
-        LC_C_PrimFun
-        LC_G_APIType
-        LC_G_Type
-        LC_Mesh
-        LC_T_APIType
-        LC_T_DSLType
-        LC_T_HOAS
-        LC_T_Language
-        LC_T_PrimFun
-        LC_T_Sampler
-        LC_U_APIType
-        LC_U_DeBruijn
-        LC_U_PrimFun
+        GLSLPretty
+        GLSLSyntax
+        LCAPI
+        LCAPIType
+        LCConvert
+        LCDSLType
+        LCDeBruijn
+        LCDeBruijnUtil
+        LCGL
+        LCGLSLCodeGen
+        LCGLUtil
+        LCHOAS
+        LCLanguage
+        LCMesh
+        LCPrimFun
+        LCSampler
+        LCType
+
                   
   GHC-options:
 --        -Werror

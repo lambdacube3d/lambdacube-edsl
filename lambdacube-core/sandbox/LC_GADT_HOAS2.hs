@@ -1,4 +1,4 @@
-module LC_T_HOAS where
+module LC_GADT_HOAS2 where
 
 import Data.ByteString.Char8
 import Data.Typeable
@@ -7,11 +7,10 @@ import Data.Int
 import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
 
-import LC_G_Type
-import LC_G_APIType (Filter(..),EdgeMode(..))
-import LC_T_APIType
-import LC_T_DSLType
-import LC_T_PrimFun
+import LCType
+import LC_GADT_APIType
+import LC_GADT_DSLType
+import LC_GADT_PrimFun
 
 -- Common Exp, describes shader functions
 data Exp stage t where
@@ -22,7 +21,7 @@ data Exp stage t where
                  -- environment size at defining occurrence
 
     -- constant value
-    Const   :: (GPU t,IsScalar t)
+    Const   :: GPU t
             => t
             -> Exp stage t
 
@@ -32,9 +31,9 @@ data Exp stage t where
             -> Exp stage t
 
     -- uniform value
-    Uni     :: GPU t
-            => Input t
-            -> Exp stage t
+    Uni     :: (InputTuple t, GPU (InputTupleRepr t))
+            => t
+            -> Exp stage (InputTupleRepr t)
 
     -- conditional expression
     Cond    :: GPU t
@@ -180,22 +179,14 @@ data GP t where
                     -> GP (FrameBuffer layerCount (FTRepr' b))
 
     PrjFrameBuffer  :: ByteString                       -- internal image output (can be allocated on request)
-                    -> TupleIdx (TupleRepr b) t
+                    -> TupleIdx (EltRepr b) t
                     -> GP (FrameBuffer layerCount b)
                     -> GP (Image layerCount t)
 
-    PrjImage        :: (Nat idx, LesserEq idx layerCount)
+    PrjImage        :: (LesserEq idx layerCount)
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> idx
                     -> GP (Image layerCount t)
                     -> GP (Image N1 t)
 
 deriving instance Typeable1 GP
-
-data GPOutput where
-    ImageOut    :: ByteString
-                -> GP (Image layerCount t)
-                -> GPOutput
-
-    ScreenOut   :: GP (Image N1 t)
-                -> GPOutput

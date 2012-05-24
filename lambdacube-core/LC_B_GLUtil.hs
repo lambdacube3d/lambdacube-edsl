@@ -1,4 +1,4 @@
-module LC_GL_Util (
+module LC_B_GLUtil (
     queryUniforms,
     queryStreams,
     mkUSetter,
@@ -19,11 +19,11 @@ module LC_GL_Util (
     checkGL
 ) where
 
-import Control.Exception
 import Control.Applicative
-import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
+import Data.IORef
 import Data.List as L
 import Data.Trie as T
 import Foreign
@@ -31,8 +31,8 @@ import Graphics.Rendering.OpenGL.Raw.Core32
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Vector as V
 
-import LCType
-import LC_APIType
+import LC_G_Type
+import LC_G_APIType
 
 type StreamSetter = Stream Buffer -> IO ()
 
@@ -65,32 +65,32 @@ queryUniforms po = do
         uLocation = [i | (_,i,_,_) <- ul]
     return $! (T.fromList $! zip uNames uLocation, T.fromList $! zip uNames uTypes)
 
-mkUSetter :: InputType -> STM (GLint -> IO (), InputSetter)
-mkUSetter Bool    = do {t <- newTVar False;                        return $! (\i -> readTVarIO t >>= setUBool i,  SBool $!  writeTVar t)}
-mkUSetter V2B     = do {t <- newTVar (V2 False False);             return $! (\i -> readTVarIO t >>= setUV2B i,   SV2B $!   writeTVar t)}
-mkUSetter V3B     = do {t <- newTVar (V3 False False False);       return $! (\i -> readTVarIO t >>= setUV3B i,   SV3B $!   writeTVar t)}
-mkUSetter V4B     = do {t <- newTVar (V4 False False False False); return $! (\i -> readTVarIO t >>= setUV4B i,   SV4B $!   writeTVar t)}
-mkUSetter Word    = do {t <- newTVar 0;                            return $! (\i -> readTVarIO t >>= setUWord i,  SWord $!  writeTVar t)}
-mkUSetter V2U     = do {t <- newTVar (V2 0 0);                     return $! (\i -> readTVarIO t >>= setUV2U i,   SV2U $!   writeTVar t)}
-mkUSetter V3U     = do {t <- newTVar (V3 0 0 0);                   return $! (\i -> readTVarIO t >>= setUV3U i,   SV3U $!   writeTVar t)}
-mkUSetter V4U     = do {t <- newTVar (V4 0 0 0 0);                 return $! (\i -> readTVarIO t >>= setUV4U i,   SV4U $!   writeTVar t)}
-mkUSetter Int     = do {t <- newTVar 0;                            return $! (\i -> readTVarIO t >>= setUInt i,   SInt $!   writeTVar t)}
-mkUSetter V2I     = do {t <- newTVar (V2 0 0);                     return $! (\i -> readTVarIO t >>= setUV2I i,   SV2I $!   writeTVar t)}
-mkUSetter V3I     = do {t <- newTVar (V3 0 0 0);                   return $! (\i -> readTVarIO t >>= setUV3I i,   SV3I $!   writeTVar t)}
-mkUSetter V4I     = do {t <- newTVar (V4 0 0 0 0);                 return $! (\i -> readTVarIO t >>= setUV4I i,   SV4I $!   writeTVar t)}
-mkUSetter Float   = do {t <- newTVar 0;                            return $! (\i -> readTVarIO t >>= setUFloat i, SFloat $! writeTVar t)}
-mkUSetter V2F     = do {t <- newTVar (V2 0 0);                     return $! (\i -> readTVarIO t >>= setUV2F i,   SV2F $!   writeTVar t)}
-mkUSetter V3F     = do {t <- newTVar (V3 0 0 0);                   return $! (\i -> readTVarIO t >>= setUV3F i,   SV3F $!   writeTVar t)}
-mkUSetter V4F     = do {t <- newTVar (V4 0 0 0 0);                 return $! (\i -> readTVarIO t >>= setUV4F i,   SV4F $!   writeTVar t)}
-mkUSetter M22F    = do {t <- newTVar (V2 z2 z2);                   return $! (\i -> readTVarIO t >>= setUM22F i,  SM22F $!  writeTVar t)}
-mkUSetter M23F    = do {t <- newTVar (V3 z2 z2 z2);                return $! (\i -> readTVarIO t >>= setUM23F i,  SM23F $!  writeTVar t)}
-mkUSetter M24F    = do {t <- newTVar (V4 z2 z2 z2 z2);             return $! (\i -> readTVarIO t >>= setUM24F i,  SM24F $!  writeTVar t)}
-mkUSetter M32F    = do {t <- newTVar (V2 z3 z3);                   return $! (\i -> readTVarIO t >>= setUM32F i,  SM32F $!  writeTVar t)}
-mkUSetter M33F    = do {t <- newTVar (V3 z3 z3 z3);                return $! (\i -> readTVarIO t >>= setUM33F i,  SM33F $!  writeTVar t)}
-mkUSetter M34F    = do {t <- newTVar (V4 z3 z3 z3 z3);             return $! (\i -> readTVarIO t >>= setUM34F i,  SM34F $!  writeTVar t)}
-mkUSetter M42F    = do {t <- newTVar (V2 z4 z4);                   return $! (\i -> readTVarIO t >>= setUM42F i,  SM42F $!  writeTVar t)}
-mkUSetter M43F    = do {t <- newTVar (V3 z4 z4 z4);                return $! (\i -> readTVarIO t >>= setUM43F i,  SM43F $!  writeTVar t)}
-mkUSetter M44F    = do {t <- newTVar (V4 z4 z4 z4 z4);             return $! (\i -> readTVarIO t >>= setUM44F i,  SM44F $!  writeTVar t)}
+mkUSetter :: InputType -> IO (GLint -> IO (), InputSetter)
+mkUSetter Bool    = do {t <- newIORef False;                        return $! (\i -> readIORef t >>= setUBool i,  SBool $!  writeIORef t)}
+mkUSetter V2B     = do {t <- newIORef (V2 False False);             return $! (\i -> readIORef t >>= setUV2B i,   SV2B $!   writeIORef t)}
+mkUSetter V3B     = do {t <- newIORef (V3 False False False);       return $! (\i -> readIORef t >>= setUV3B i,   SV3B $!   writeIORef t)}
+mkUSetter V4B     = do {t <- newIORef (V4 False False False False); return $! (\i -> readIORef t >>= setUV4B i,   SV4B $!   writeIORef t)}
+mkUSetter Word    = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUWord i,  SWord $!  writeIORef t)}
+mkUSetter V2U     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2U i,   SV2U $!   writeIORef t)}
+mkUSetter V3U     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3U i,   SV3U $!   writeIORef t)}
+mkUSetter V4U     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4U i,   SV4U $!   writeIORef t)}
+mkUSetter Int     = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUInt i,   SInt $!   writeIORef t)}
+mkUSetter V2I     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2I i,   SV2I $!   writeIORef t)}
+mkUSetter V3I     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3I i,   SV3I $!   writeIORef t)}
+mkUSetter V4I     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4I i,   SV4I $!   writeIORef t)}
+mkUSetter Float   = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUFloat i, SFloat $! writeIORef t)}
+mkUSetter V2F     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2F i,   SV2F $!   writeIORef t)}
+mkUSetter V3F     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3F i,   SV3F $!   writeIORef t)}
+mkUSetter V4F     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4F i,   SV4F $!   writeIORef t)}
+mkUSetter M22F    = do {t <- newIORef (V2 z2 z2);                   return $! (\i -> readIORef t >>= setUM22F i,  SM22F $!  writeIORef t)}
+mkUSetter M23F    = do {t <- newIORef (V3 z2 z2 z2);                return $! (\i -> readIORef t >>= setUM23F i,  SM23F $!  writeIORef t)}
+mkUSetter M24F    = do {t <- newIORef (V4 z2 z2 z2 z2);             return $! (\i -> readIORef t >>= setUM24F i,  SM24F $!  writeIORef t)}
+mkUSetter M32F    = do {t <- newIORef (V2 z3 z3);                   return $! (\i -> readIORef t >>= setUM32F i,  SM32F $!  writeIORef t)}
+mkUSetter M33F    = do {t <- newIORef (V3 z3 z3 z3);                return $! (\i -> readIORef t >>= setUM33F i,  SM33F $!  writeIORef t)}
+mkUSetter M34F    = do {t <- newIORef (V4 z3 z3 z3 z3);             return $! (\i -> readIORef t >>= setUM34F i,  SM34F $!  writeIORef t)}
+mkUSetter M42F    = do {t <- newIORef (V2 z4 z4);                   return $! (\i -> readIORef t >>= setUM42F i,  SM42F $!  writeIORef t)}
+mkUSetter M43F    = do {t <- newIORef (V3 z4 z4 z4);                return $! (\i -> readIORef t >>= setUM43F i,  SM43F $!  writeIORef t)}
+mkUSetter M44F    = do {t <- newIORef (V4 z4 z4 z4 z4);             return $! (\i -> readIORef t >>= setUM44F i,  SM44F $!  writeIORef t)}
 
 b2w :: Bool -> GLuint
 b2w True = 1
