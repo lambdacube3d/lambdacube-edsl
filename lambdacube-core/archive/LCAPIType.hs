@@ -816,9 +816,10 @@ data Texture (gp :: * -> *) dim arr t ar where
                     => TextureType dim (MipRepr mip) arr layerCount t ar
                     -- -> TexSizeRepr dim
                     -> mip
-                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
+--                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
+                    -> [gp (Image layerCount t)]
                     -> Texture gp dim arr t ar
-
+{-
 teq :: (Eq a, Typeable a, Typeable b) => a -> b -> Bool
 teq a b = case cast a of
     Nothing -> False
@@ -828,6 +829,7 @@ instance Eq (Texture gp dim arr t ar) where
     (TextureSlot n1 t1) == (TextureSlot n2 t2) = n1 == n2 && teq t1 t2
     (Texture t1 m1 r1) == (Texture t2 m2 r2) = teq t1 t2 && teq m1 m2 && teq r1 r2
     _ == _ = False
+-}
 {-
     -- TODO:
     --  swizzling (arity conversion)

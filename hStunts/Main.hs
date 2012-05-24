@@ -14,9 +14,9 @@ import qualified Data.Trie as T
 import Control.Concurrent.STM
 import Data.Vect.Float
 
-import LCAPI
-import LCGL
-import LCMesh
+import LC_API
+--import LCGL
+import LC_Mesh
 
 import Physics.Bullet.Raw
 import Physics.Bullet.Raw.Class

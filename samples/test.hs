@@ -7,7 +7,6 @@ import Data.Vect.Float
 import Data.Word
 import Foreign
 import qualified Data.Vector.Storable as V
-import Control.Concurrent.STM
 
 import TypeLevel.Number.Nat.Num
 
@@ -118,7 +117,7 @@ main = do
 
     -- render loop
     replicateM 100 $ do
-        atomically $ matSetter $ V4 (V4 1 0 0 0) (V4 0 1 0 0) (V4 0 0 1 0) (V4 0 0 0 1)
+        matSetter $ V4 (V4 1 0 0 0) (V4 0 1 0 0) (V4 0 0 1 0) (V4 0 0 0 1)
         render renderer
 
     dispose renderer

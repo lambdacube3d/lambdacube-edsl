@@ -4,8 +4,8 @@ module Graphics where
 import Data.ByteString.Char8 (ByteString)
 import Data.List
 
-import LCAPI
-import LCLanguage
+import LC_API
+--import LCLanguage
 
 import Material
 

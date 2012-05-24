@@ -10,8 +10,8 @@ module MeshUtil (transformMesh,transformMesh') where
 import qualified Data.Vector.Storable as SV
 
 import qualified Data.Trie as T
-import LCAPI
-import LCMesh
+import LC_API
+import LC_Mesh
 
 import Data.ByteString.Char8 (ByteString)
 import Data.Vect.Float

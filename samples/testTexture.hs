@@ -2,7 +2,6 @@
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
-import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
 import Data.IORef
@@ -14,12 +13,12 @@ import qualified Data.Trie as T
 
 import TypeLevel.Number.Nat.Num
 
-import LCAPI
-import LCLanguage
-import LCGL
+import LC_API
+--import LCLanguage
+--import LCGL
 
 import Graphics.Rendering.OpenGL.Raw.Core32
-import LCMesh
+import LC_Mesh
 
 import qualified Criterion.Measurement as C
 
@@ -135,7 +134,7 @@ scene slotU objU windowSize mousePosition fblrPress = do
         setupGFX (w,h) (cam,dir,up,_) time = do
             let cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.1 50 (pi/2) (fromIntegral w / fromIntegral h)
-            (t,_) <- C.time $ atomically $ do
+            (t,_) <- C.time $ do
                 --timeSetter time
                 matSetter $! mat4ToM44F $! cm .*. pm
             --putStrLn $ C.secs t ++ " - worldViewProj uniform setup via STM"

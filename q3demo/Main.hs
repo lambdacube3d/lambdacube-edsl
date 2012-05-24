@@ -23,9 +23,9 @@ import qualified Data.Vector as V
 import TypeLevel.Number.Nat.Num
 import Graphics.Rendering.OpenGL.Raw.Core32
 
-import LCAPI
-import LCGL
-import LCLanguage
+import LC_API
+--import LCGL
+--import LCLanguage
 
 import BSP
 import Graphics

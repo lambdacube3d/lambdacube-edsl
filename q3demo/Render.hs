@@ -12,7 +12,7 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
 
 import BSP
-import LCAPI
+import LC_API
 import MD3 (MD3Model)
 import Q3Patch
 

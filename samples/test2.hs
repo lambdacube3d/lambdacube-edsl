@@ -14,12 +14,12 @@ import qualified Data.Trie as T
 
 import TypeLevel.Number.Nat.Num
 
-import LCAPI
-import LCLanguage
-import LCGL
+import LC_API
+--import LCLanguage
+--import LCGL
 
 import Graphics.Rendering.OpenGL.Raw.Core32
-import LCMesh
+import LC_Mesh
 
 import qualified Criterion.Measurement as C
 

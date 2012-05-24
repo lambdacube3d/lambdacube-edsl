@@ -3,8 +3,8 @@ module VSM where
 
 import Data.ByteString.Char8 (ByteString)
 
-import LCAPI
-import LCLanguage
+import LC_API
+--import LCLanguage
 
 -- specialized snoc
 v3v4 :: Exp s V3F -> Exp s V4F
@@ -91,4 +91,16 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
         p_max = variance @/ (variance @+ d @* d)
 
     sampler = Sampler LinearFilter Clamp shadowMap
-    shadowMap = Texture (Texture2D (Float RG) n1) AutoMip (PrjFrameBuffer "" tix0 moments)
+    shadowMap = Texture (Texture2D (Float RG) n1) AutoMip [PrjFrameBuffer "" tix0 moments]
+
+tx :: GP (Image N1 (V2 Float))
+tx = PrjFrameBuffer "" tix0 moments
+
+tex :: GP (Image N1 Float)
+tex = undefined
+
+sm :: Texture GP DIM2 SingleTex (Regular Float) RG
+sm = Texture (Texture2D (Float RG) n1) AutoMip [tx]
+
+smp :: Exp stage (Sampler DIM2 SingleTex (Regular Float) RG)
+smp = Sampler LinearFilter Clamp sm

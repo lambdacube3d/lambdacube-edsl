@@ -6,8 +6,8 @@ import qualified Data.ByteString.Char8 as SB
 import Data.Int
 import Data.Vect.Float hiding (reflect')
 
-import LCAPI
-import LCLanguage
+import LC_API
+--import LCLanguage
 
 -- specialized snoc
 padV3 :: Exp s V3F -> Float -> Exp s V4F
@@ -67,7 +67,7 @@ stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
-    clear   = FrameBuffer (V2 640 480) (DepthImage n1 100000:.ColorImage n1 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (V2 640 480) (DepthImage n1 100000:.ColorImage n1 (V4 0.36 0.99 0.99 1 :: V4F):.ZT)
     rast    = Rasterize rastCtx NoGeometryShader $ Transform vert $ Fetch "streamSlot" Triangle input
     input   = (IV3F "position", IV3F "normal", IV4F "colour", IInt "pattern", IFloat "zBias", IFloat "shininess")
     worldView = Uni (IM44F "worldView")

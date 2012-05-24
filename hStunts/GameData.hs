@@ -22,8 +22,8 @@ import qualified Data.Trie as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
 
-import LCAPI hiding (Line)
-import LCMesh hiding (loadMesh)
+import LC_API hiding (Line)
+import LC_Mesh hiding (loadMesh)
 import Stunts.Color
 import Stunts.Loader
 import Stunts.Track

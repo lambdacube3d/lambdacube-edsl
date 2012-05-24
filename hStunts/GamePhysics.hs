@@ -6,7 +6,7 @@ import Physics.Bullet.Raw.Class
 import Physics.Bullet.Raw.Types
 import Physics.Bullet.Raw.Utils
 
-import LCMesh
+import LC_Mesh
 import BulletUtil
 
 {-
