@@ -111,7 +111,7 @@ q3GFX :: [(ByteString,CommonAttrs)] -> GP (FrameBuffer N1 (Float,V4F))
 q3GFX shl = errorShader $ foldl' mkShader clear ordered
   where
     ordered = sortBy (\(_,a) (_,b) -> caSort a `compare` caSort b) shl
-    clear   = FrameBuffer (V2 640 480) (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (V2 1280 800) (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
 
 errorShader :: GP (FrameBuffer N1 (Float,V4F)) -> GP (FrameBuffer N1 (Float,V4F))
 errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb

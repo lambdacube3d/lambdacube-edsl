@@ -16,8 +16,6 @@ import Text.PrettyPrint.HughesPJClass
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Data.Generics.Uniplate.Data
-
 import LC_G_Type
 import LC_G_APIType hiding (LogicOperation(..), ComparisonFunction(..))
 import LC_U_APIType
@@ -28,6 +26,7 @@ import LC_B_GLSLSyntax hiding (Const,InterpolationQualifier(..),TypeSpecifierNon
 import LC_B_GLSLSyntax (TypeSpecifierNonArray)
 import qualified LC_B_GLSLSyntax as GLSL
 import LC_B_GLSLPretty
+import LC_B_Traversals
 
 codeGenPrim :: PrimFun -> [InputType] -> [Expr] -> [Expr]
 
@@ -367,7 +366,7 @@ codeGenExp inNames (Const ty c)         = codeGenConst c
 codeGenExp inNames (PrimVar ty n)       = [Variable $! unpack n]
 codeGenExp inNames (Tup ty t)           = concatMap (codeGenExp inNames) t
 codeGenExp inNames (Uni ty n)           = [Variable $! unpack n]
-codeGenExp inNames p@(Prj ty idx e)     = trace (unlines["gen: ",show p,show src]) src
+codeGenExp inNames p@(Prj ty idx e)     = {-trace (unlines["gen: ",show p,show $! pPrint src])-} src
   where
     src = reverse
         . take (length $ codeGenType ty)
@@ -424,7 +423,7 @@ codeGenVertexShader inVars = cvt
       where
         ppE e a = pack $! show $! pPrint $! Compound [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         pp a    = pack $! show $! pPrint $! TranslationUnit a
-        uniVars = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- universeBi body]
+        uniVars = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- expUniverse' body]
         [posE]  = genExp pos
         [sizeE] = genExp size
         (oQ,oE,oT)  = unzip3 $! genIExp outs
@@ -475,7 +474,7 @@ codeGenFragmentShader inVars ffilter = cvt
         assigns a e = [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         ppBody l    = pack $! show $! pPrint $! Compound l
         pp a        = pack $! show $! pPrint $! TranslationUnit a
-        uniVars     = Set.toList $ (Set.fromList [(n,t) | Uni (Single t) n <- universeBi outs]) `Set.union` (Set.fromList [(n,t) | Uni (Single t) n <- universeBi outs'])
+        uniVars     = Set.toList $ (Set.fromList [(n,t) | Uni (Single t) n <- expUniverse outs]) `Set.union` (Set.fromList [(n,t) | Uni (Single t) n <- expUniverse (map snd outs')])
         (oE',oN')   = unzip $! [(genExp e,n) | (n,e) <- outs']
         (oE,oT)     = unzip $! genFExp outs
         body        = assigns (oN' ++ oNames) (concat oE' ++ concat oE)

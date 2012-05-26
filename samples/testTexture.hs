@@ -41,12 +41,15 @@ simple = Accumulate fragCtx PassAll frag rast clear
         (p,n) = untup2 pn
 
     frag :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag a = FragmentOutRastDepth $ snoc c 1 :. ZT
+    frag a = FragmentOutRastDepth $ snoc c 1 @* s :. ZT
       where
         c = texture' sampler (drop3 a) (Const 0)
+        s = texture' samplerSh (drop3 a) (Const 0)
 
     sampler = Sampler LinearFilter Clamp diffuse
+    samplerSh = Sampler LinearFilter Clamp shadowTx
     diffuse = TextureSlot "diffuse" $ Texture2D (Float RGB) n1
+    shadowTx  = Texture (Texture2D (Float Red) n1) AutoMip [PrjFrameBuffer "" tix0 vsm]
 
 main :: IO ()
 main = do

@@ -109,8 +109,8 @@ data TupleType a where
 -}
 genTy :: GPU a => a -> Ty
 genTy a = case cvt $ T.tupleType a of
-    [e] -> traceStack (show e) e
-    e   -> traceStack (show (Tuple e)) $ Tuple $ e
+    [e] -> {-trace (show e)-} e
+    e   -> {-trace (show (Tuple e)) $-} Tuple $ e
   where
     cvt :: TupleType a -> [Ty]
     cvt UnitTuple         = []--[Tuple []]
@@ -302,7 +302,7 @@ convertTuple lyt  glyt (es `SnocTup` e) = convertTuple lyt glyt es ++ [convertOp
 convertTexture :: T.Texture (H.GP) dim arr t ar
                -> Texture GP
 convertTexture (T.TextureSlot n t) = TextureSlot n (convertTextureType t)
-convertTexture (T.Texture t m d) = Texture (convertTextureType t) (T.toMipMap m) (map convertGP d)
+convertTexture (T.Texture t s m d) = Texture (convertTextureType t) (T.toValue s) (T.toMipMap m) (map convertGP d)
 
 convertTextureDataType :: T.TextureDataType t ar -> TextureDataType
 convertTextureDataType (T.Float a)  = FloatT (T.toColorArity a)

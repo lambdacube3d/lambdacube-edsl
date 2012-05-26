@@ -1,5 +1,7 @@
 module LC_B_GL where
 
+import Debug.Trace
+
 import Control.Applicative
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
@@ -7,10 +9,12 @@ import Data.IORef
 import Data.List as L
 import Data.Maybe
 import Data.Set (Set)
+import Data.Map (Map)
 import Data.Trie as T
 import Foreign
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import qualified Data.Traversable as T
 import qualified Data.Vector as V
 
@@ -23,6 +27,8 @@ import LC_U_DeBruijn
 
 import LC_B_GLUtil
 import LC_B_GLSLCodeGen
+import LC_B_Traversals
+import LC_B_GLCompile
 
 ---------
 -- API --
@@ -41,7 +47,7 @@ slotUniforms    :: Renderer -> Trie (Trie InputType)
 slotStreams     :: Renderer -> Trie (PrimitiveType, Trie InputType)
 uniformSetter   :: Renderer -> Trie InputSetter
 render          :: Renderer -> IO ()
-dispose        :: Renderer -> IO ()
+dispose         :: Renderer -> IO ()
 -}
 -- Object
 addObject       :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> Trie (Stream Buffer) -> [ByteString] -> IO Object
@@ -51,6 +57,33 @@ removeObject    :: Renderer -> Object -> IO ()
 --------------------
 -- Implementation --
 --------------------
+
+data Renderer -- internal type
+    = Renderer
+    -- public
+    { slotUniform           :: Trie (Trie InputType)
+    , slotStream            :: Trie (PrimitiveType, Trie InputType)
+    , uniformSetter         :: Trie InputSetter         -- global uniform
+    , render                :: IO ()
+    , dispose               :: IO ()
+
+    -- internal
+    , objectSet             :: Trie (IORef ObjectSet)
+    , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm
+    , slotUniformLocation   :: Trie (Trie GLint)
+    , slotStreamLocation    :: Trie (Trie GLuint)
+{-
+    , glFrameBuffer         :: Map GP GLuint    -- frame buffer GLObj for each pass (indexed with FrameBuffer :: GP)
+
+    -- FIXME: for now we don't separate render textures from sampler, because OpenGLRaw does not have support for this
+    --        so we use custom textures for every samplers, and we setup the texture's sampler attributes
+    , glSampler             :: Map Exp (GLuint,ByteString,Int)  -- (in the future: sampler, but for now: texture) object GLObj, 
+                                                                -- glsl name, and used Texture Unit (indexed with Sampler :: Exp)
+
+    -- this is render texture for each (GP Image), at the moment we use to store GPOutput's content
+    , glImageTexture        :: Map GP GLuint    -- render texture GLObj for each gfx network output (indexed with PrjFrameBuffer or PrjImage :: GP)
+-}
+    }
 
 -- BUFFER
 compileBuffer arrs = do
@@ -85,7 +118,7 @@ arrayType buf arrIdx    = arrType $! bufArrays buf V.! arrIdx
             - slotStreams   :: Trie (PrimitiveType, Trie InputType)
             - uniformSetter :: Trie InputSetter
             - render        :: IO ()
-            - dispose      :: IO ()
+            - dispose       :: IO ()
         INTERNAL:
             - object sets               :: Trie (TVar ObjectSet)
             - globalUniformSetup        :: Trie (GLint -> IO ())
@@ -116,514 +149,270 @@ arrayType buf arrIdx    = arrType $! bufArrays buf V.! arrIdx
                 - use same mapping for every program (more efficient, but requires more gl features)
                 - use custom mapping per program with custom attribute/uniform setter (less efficient, but more compatible/less restricitive)
 -}
-type ObjectSet = [IO ()]
 
-data Renderer -- internal type
+orderedFrameBuffersFromGP :: GP -> [GP]
+orderedFrameBuffersFromGP orig = order deps
+  where 
+    deps :: Map GP (Set GP)
+    deps = add Map.empty $ findFrameBuffer orig
+
+    add :: Map GP (Set GP) -> GP -> Map GP (Set GP)
+    add m fb = Map.unionsWith Set.union $ m' : map (add m') fbl
+      where
+        m'  = Map.alter fun fb m
+        fbl = concat [map findFrameBuffer l | Sampler _ _ _ (Texture _ _ _ l) <- concatMap expUniverse (gpUniverse fb)]
+        fbs = Set.fromList fbl
+        fun Nothing     = Just fbs
+        fun (Just a)    = Just (a `Set.union` fbs)
+
+    order :: Map GP (Set GP) -> [GP]
+    order d
+        | Map.null d = []
+        | otherwise  = leaves ++ order (Map.map (Set.\\ (Set.fromList leaves)) hasDeps)
+      where
+        leaves = Map.keys noDeps
+        (noDeps,hasDeps) = Map.partition Set.null d
+{-
     = Renderer
     -- public
     { slotUniform           :: Trie (Trie InputType)
     , slotStream            :: Trie (PrimitiveType, Trie InputType)
     , uniformSetter         :: Trie InputSetter         -- global uniform
     , render                :: IO ()
-    , dispose              :: IO ()
+    , dispose               :: IO ()
 
     -- internal
     , objectSet             :: Trie (IORef ObjectSet)
     , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm
     , slotUniformLocation   :: Trie (Trie GLint)
     , slotStreamLocation    :: Trie (Trie GLuint)
+
+    , glFrameBuffer         :: Map GP GLuint    -- frame buffer GLObj for each pass (indexed with FrameBuffer :: GP)
+
+    -- FIXME: for now we don't separate render textures from sampler, because OpenGLRaw does not have support for this
+    --        so we use custom textures for every samplers, and we setup the texture's sampler attributes
+    , glSampler             :: Map Exp (GLuint,ByteString,Int)  -- (in the future: sampler, but for now: texture) object GLObj, 
+                                                                -- glsl name, and used Texture Unit (indexed with Sampler :: Exp)
+
+    -- this is render texture for each (GP Image), at the moment we use to store GPOutput's content
+    , glImageTexture        :: Map GP GLuint    -- render texture GLObj for each gfx network output (indexed with PrjFrameBuffer or PrjImage :: GP)
     }
-
-data ShaderSource
-    = VertexShaderSrc   !ByteString
-    | GeometryShaderSrc !ByteString
-    | FragmentShaderSrc !ByteString
-
-{-
-data RasterContext t where
-    PointCtx    :: RasterContext Point      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN, ProvokingVertex??
-    LineCtx     :: RasterContext Line       -- TODO: LineWidth, ProvokingVertex
-    TriangleCtx ::
-        { ctxCullMode           :: CullMode
-        , ctxPolygonMode        :: PolygonMode
-        , ctxPolygonOffset      :: PolygonOffset
-        , ctxProvokingVertex    :: ProvokingVertex
-        } -> RasterContext Triangle
-
-data FrontFace          = CCW | CW deriving (Eq,Ord,Show)
-data CullMode           = CullNone | CullFront FrontFace | CullBack FrontFace deriving (Eq,Ord,Show)
-data PolygonMode        = PolygonPoint | PolygonLine | PolygonFill deriving (Eq,Ord,Bounded,Enum,Show)
-data ProvokingVertex    = FirstVertex | LastVertex deriving (Eq,Ord,Bounded,Enum,Show)
 -}
-setupRasterContext :: RasterContext -> IO ()
-setupRasterContext = cvt
-  where
-    cff :: FrontFace -> GLenum
-    cff CCW = gl_CCW
-    cff CW  = gl_CW
+-- FIXME: implement properly
+compileRenderer [ScreenOut (PrjFrameBuffer n idx gp)] = do
+    let nubS :: Ord a => [a] -> [a]
+        nubS = Set.toList . Set.fromList
 
-    setProvokingVertex :: ProvokingVertex -> IO ()
-    setProvokingVertex pv = glProvokingVertex $ case pv of
-        FirstVertex -> gl_FIRST_VERTEX_CONVENTION
-        LastVertex  -> gl_LAST_VERTEX_CONVENTION
+        findFetch :: GP -> Maybe GP
+        findFetch f = listToMaybe [a | a@Fetch {} <- drawOperations f]
 
-    setPointSize :: PointSize -> IO ()
-    setPointSize ps = case ps of
-        PointSizeRast   -> glEnable gl_PROGRAM_POINT_SIZE
-        PointSize s     -> do
-            glDisable gl_PROGRAM_POINT_SIZE
-            glPointSize $ realToFrac s
+        unis :: GP -> [(ByteString,InputType)]
+        unis fb = nubS [(name,t) | Uni ty name <- expUniverse fb, let [t] = codeGenType ty]
 
-    cvt :: RasterContext -> IO ()
-    cvt (PointCtx) = return ()
-    cvt (LineCtx lw pv) = do
-        glLineWidth (realToFrac lw)
-        setProvokingVertex pv
+        ordFBs = orderedFrameBuffersFromGP gp
+        allGPs = nubS $ concatMap gpUniverse' ordFBs
 
-    cvt (TriangleCtx cm pm po pv) = do
-        -- cull mode
-        case cm of
-            CullNone    -> glDisable gl_CULL_FACE
-            CullFront f -> do
-                glEnable    gl_CULL_FACE
-                glCullFace  gl_FRONT
-                glFrontFace $ cff f
-            CullBack f -> do
-                glEnable    gl_CULL_FACE
-                glCullFace  gl_BACK
-                glFrontFace $ cff f
+        -- collect slot info: name, primitive type, stream input, uniform input
+        (slotStreamList, slotUniformList) = unzip 
+              [ ((name,(primType,T.fromList inputs)),(name, T.fromList $ unis fb)) 
+              | fb <- concatMap renderChain ordFBs
+              , Fetch name primType inputs <- maybeToList $ findFetch fb]
+        (uniformNames,uniformTypes) = unzip $ nubS $ concatMap (T.toList . snd) slotUniformList
+        slotNames = map fst slotStreamList
 
-        -- polygon mode
-        case pm of
-            PolygonPoint ps -> do
-                setPointSize ps
-                glPolygonMode gl_FRONT_AND_BACK gl_POINT
-            PolygonLine lw  -> do
-                glLineWidth (realToFrac lw)
-                glPolygonMode gl_FRONT_AND_BACK gl_LINE
-            PolygonFill  -> glPolygonMode gl_FRONT_AND_BACK gl_FILL
+    (uSetup,uSetter) <- unzip <$> mapM mkUSetter uniformTypes
+    let uniformSetterTrie   = T.fromList $! zip uniformNames uSetter
+        mkUniformSetupTrie  = T.fromList $! zip uniformNames uSetup
 
-        -- polygon offset
-        glDisable gl_POLYGON_OFFSET_POINT
-        glDisable gl_POLYGON_OFFSET_LINE
-        glDisable gl_POLYGON_OFFSET_FILL
-        case po of
-            NoOffset -> return ()
-            Offset f u -> do
-                glPolygonOffset (realToFrac f) (realToFrac u)
-                glEnable $ case pm of
-                    PolygonPoint _  -> gl_POLYGON_OFFSET_POINT
-                    PolygonLine  _  -> gl_POLYGON_OFFSET_LINE
-                    PolygonFill     -> gl_POLYGON_OFFSET_FILL
+    -- create object sets
+    objectSetTrie <- T.fromList <$> (forM slotNames $ \n -> (n,) <$> newIORef [])
 
-        -- provoking vertex
-        setProvokingVertex pv
+    {-
+      TODO:
+        done - collect passes and sort them into proper render order according dependencies
+        done - factor out uniform setter map creation from framebuffer compile function
+                it should only create shader objects
+        done - compile each FrameBuffer (pass)
+        create render textures
+        setup each pass's FBO output, attach RenderTarget textures to source FBO
+        render operations (one pass, with multiple render calls/slots):
+            - bind FBO
+            - before each slot's render operation we should setup texture unit mapping
+            - call slot's render action
+    -}
 
-{-
-data FragmentOperation ty where
-    DepthOp         :: DepthFunction
-                    -> Bool
-                    -> FragmentOperation (Depth Float)
+    {-
+data TextureDataType - gl internal representation
+    = FloatT        ColorArity
+    | IntT          ColorArity
+    | WordT         ColorArity
+    | ShadowT
+    deriving (Show, Eq, Ord)
 
-    StencilOp       :: StencilTests
-                    -> StencilOps
-                    -> StencilOps
-                    -> FragmentOperation (Stencil Int32)
-
-    ColorOp         :: (IsVec s (v Bool) Bool, IsNum c)
-                    => Blending c
-                    -> v Bool -- mask
-                    -> FragmentOperation (Color (v c))
--}
-setupAccumulationContext :: [FragmentOperation] -> IO ()
-setupAccumulationContext = cvt
-  where
-    cvt :: [FragmentOperation] -> IO ()
-    cvt (StencilOp a b c : DepthOp f m : xs) = do
-        -- TODO
-        cvtC 0 xs
-    cvt (StencilOp a b c : xs) = do
-        -- TODO
-        cvtC 0 xs
-    cvt (DepthOp df dm : xs) = do
-        -- TODO
-        glDisable gl_STENCIL_TEST
-        glEnable  gl_DEPTH_TEST
-        glDepthMask (cvtBool dm)
-        glDepthFunc $! comparisonFunctionToGLType df
-        cvtC 0 xs
-    cvt xs = do 
-        glDisable gl_DEPTH_TEST
-        glDisable gl_STENCIL_TEST
-        cvtC 0 xs
-
-    cvtC :: Int -> [FragmentOperation] -> IO ()
-    cvtC i (ColorOp b m : xs) = do
-        -- TODO
-        case b of
-            NoBlending -> do
-                -- FIXME: requires GL 3.1
-                --glDisablei gl_BLEND $ fromIntegral gl_DRAW_BUFFER0 + fromIntegral i
-                glDisable gl_BLEND -- workaround
-                glDisable gl_COLOR_LOGIC_OP
-            BlendLogicOp op -> do
-                glDisable   gl_BLEND
-                glEnable    gl_COLOR_LOGIC_OP
-                glLogicOp $ logicOperationToGLType op
-            Blend (cEq,aEq) ((scF,dcF),(saF,daF)) (V4 r g b a) -> do
-                glDisable gl_COLOR_LOGIC_OP
-                -- FIXME: requires GL 3.1
-                --glEnablei gl_BLEND $ fromIntegral gl_DRAW_BUFFER0 + fromIntegral i
-                glEnable gl_BLEND -- workaround
-                glBlendEquationSeparate (blendEquationToGLType cEq) (blendEquationToGLType aEq)
-                glBlendFuncSeparate (blendingFactorToGLType scF) (blendingFactorToGLType dcF)
-                                    (blendingFactorToGLType saF) (blendingFactorToGLType daF)
-                glBlendColor (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-        let cvt True    = 1
-            cvt False   = 0
-            (mr,mg,mb,ma) = case m of
-                VBool r             -> (cvt r, 0, 0, 0)
-                VV2B (V2 r g)       -> (cvt r, cvt g, 0, 0)
-                VV3B (V3 r g b)     -> (cvt r, cvt g, cvt b, 0)
-                VV4B (V4 r g b a)   -> (cvt r, cvt g, cvt b, cvt a)
-                _           -> (0,1,1,1)
-        glColorMask mr mg mb ma
-        cvtC (i + 1) xs
-    cvtC _ [] = return ()
-
-    cvtBool :: Bool -> GLboolean
-    cvtBool True  = 1
-    cvtBool False = 0
-
-{-
-  compile steps:
-    - collect all render buffers and render textures and allocate the GL resources
-    - create setup actions all FBO-s (including clear targets action)
-        - compile Image setup function for each
-        - compile FragmentOperation function for each
-    - compile shader programs
-
-  render stages:
-    - draw pass:
-        - bind FBO
-        - clear FBO targets
-        - bind program
-        - execute draw actions
-    - execute next draw pass
-    - blit ScreenOut to Back buffer if necessary
-
-  hints:
-    - we will have one GLProgram and one FBO per Accumulate
--}
--- TODO:
---  according context create FBO attachments
---      we always use Textures (without mipmap, as a single image) as FBO attachments
---      RenderBuffer can be use if it not fed to a sampler and it has olny one layer
---  question:
---      what is needed to create a Texture:
---          size            - will be stored in FrameBuffer :: GP (FrameBuffer sh t)
---          internal format - for each component (float,int or word)
-{-
-    glGenTextures(1, &color_tex);
-    glBindTexture(GL_TEXTURE_2D, color_tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, 256, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
-
-    void glFramebufferTexture(GLenum target, GLenum attachment, GLuint texture, GLint level);
-    void glDrawBuffers( GLsizei n, const GLenum *bufs );
--}
-{-
-    scissor:
-        enable/disable: SCISSOR_TEST
-        void Scissor( int left, int bottom, sizei width, sizei height );
-
-    multisample:
-        enable/disable: SAMPLE_ALPHA_TO_COVERAGE, SAMPLE_ALPHA_TO_ONE, SAMPLE_COVERAGE, SAMPLE_MASK
-        void SampleCoverage( clampf value, boolean invert );
-        void SampleMaski( uint maskNumber, bitfield mask );
-
-    stencil:
-        enable/disable: STENCIL_TEST
-        void StencilFunc( enum func, int ref, uint mask );
-        void StencilFuncSeparate( enum face, enum func, int ref, uint mask );
-        void StencilOp( enum sfail, enum dpfail, enum dppass );
-        void StencilOpSeparate( enum face, enum sfail, enum dpfail, enum dppass );
-
-    depth:
-        enable/disable: DEPTH_TEST
-        void DepthFunc( enum func );
-
-    blending:
-        enable/disable:
-          target: BLEND
-          index:  DRAW_BUFFERi
-            void Enablei( enum target, uint index );
-            void Disablei( enum target, uint index );
-          FRAMEBUFFER_SRGB
-      Blend Equation:
-        void BlendEquation( enum mode );
-        void BlendEquationSeparate( enum modeRGB, enum modeAlpha );
-        void BlendFuncSeparate( enum srcRGB, enum dstRGB, enum srcAlpha, enum dstAlpha );
-        void BlendFunc( enum src, enum dst );
-        void BlendColor( clampf red, clampf green, clampf blue, clampf alpha );
-
-    dither:
-        enable/disable: DITHER
-
-    logic operation:
-        enable/disable: COLOR_LOGIC_OP
-        void LogicOp( enum op );
-
-    Selecting a Buffer for Writing:
-        void DrawBuffer( enum buf );
-        void DrawBuffers( sizei n, const enum *bufs );
-
-    Fine Control of Buffer Updates:
-        void ColorMask( boolean r, boolean g, boolean b, boolean a );
-        void ColorMaski( uint buf, boolean r, boolean g, boolean b, boolean a );
-        void DepthMask( boolean mask );
-        void StencilMask( uint mask );
-        void StencilMaskSeparate( enum face, uint mask );
-
-    Clearing the Buffers:
-        void Clear( bitfield buf );
-        void ClearColor( clampf r, clampf g, clampf b, clampf a );
-        void ClearDepth( clampd d );
-        void ClearStencil( int s );
-        void ClearBuffer{if ui}v( enum buffer, int drawbuffer, const T*value);
-        void ClearBufferfi( enum buffer, int drawbuffer, float depth, int stencil );
-
-    Reading and Copying Pixels:
-        void ReadPixels( int x, int y, sizei width, sizei height, enum format, enum type, void *data );
-        void ReadBuffer( enum src );
-        void ClampColor( enum target, enum clamp );
-        
-        void BlitFramebuffer( int srcX0, int srcY0, int srcX1, int srcY1, int dstX0, int dstY0, int dstX1, int dstY1, bitfield mask, enum filter );
--}
-{-
-  NOTE:
-    We have to validate context, because we can support only the same Blend and LogicOperation for all render targets,
-        however blending or LogicOp can be disabled separatly to each render target.
--}
-
-compileFrameBuffer :: GP -> Renderer -> IO Renderer
-compileFrameBuffer (FrameBuffer (V2 w h) fb) rndr = do
-    -- create FBO
-    bo <- alloca $! \pbo -> glGenFramebuffers 1 pbo >> peek pbo
-    glBindFramebuffer gl_DRAW_FRAMEBUFFER bo
-
-    -- we have to handle depth and stencil specially, available configurations:
-    --  depth
-    --  stencil
-    --  depth-stencil
-    let cvt :: [Image] -> IO (Int, IO (), IO ()) -- color component count, render, dispose
-        cvt (StencilImage sh1 s : DepthImage sh2 d : xs) = do
-            -- TODO
-            cvtC 0 xs
-        cvt (StencilImage sh s : xs) = do
-            -- TODO
-            cvtC 0 xs
-        cvt (DepthImage sh d : xs) = do
-            to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
-            glBindTexture gl_TEXTURE_2D to
-            glTexImage2D gl_TEXTURE_2D 0 (fromIntegral gl_DEPTH_COMPONENT32) (fromIntegral w) (fromIntegral h) 0 gl_DEPTH_COMPONENT gl_UNSIGNED_INT nullPtr
-            glFramebufferTexture2D gl_DRAW_FRAMEBUFFER gl_DEPTH_ATTACHMENT gl_TEXTURE_2D to 0
-            let renderGL3   = with d $ \pd -> glClearBufferfv gl_DEPTH 0 $ castPtr pd
-                render      = do
-                    glClearDepth $ realToFrac d
-                    glClear $ fromIntegral gl_DEPTH_BUFFER_BIT
-                dispose    = with to $ \pto -> glDeleteTextures 1 pto
-            (i,r,f) <- cvtC 0 xs
-            return $! (i,render >> r, dispose >> f)
-        cvt xs = cvtC 0 xs
-
-        cvtC :: Int -> [Image] -> IO (Int, IO (), IO ()) -- color component count, render, dispose
-        cvtC i (ColorImage sh c : xs) = do
+data TextureType - gl texture target
+    = Texture1D     TextureDataType Int
+    | Texture2D     TextureDataType Int
+    | Texture3D     TextureDataType
+    | TextureCube   TextureDataType
+    | TextureRect   TextureDataType
+    | Texture2DMS   TextureDataType Int
+    | TextureBuffer TextureDataType
+    deriving (Show, Eq, Ord)
+    -}
+    -- TODO: create render textures
+    -- TODO: create TextureUnit mapping (FBO <---> sampler's render texture)
+    --          to do this we have to collect all samplers what uses this pass (FrameBuffer)
+    let samplers = nubS [s | s@(Sampler _ _ _ _) <- expUniverse allGPs]
+        samplersWithTexture = nubS [s | s@(Sampler _ _ _ (Texture _ _ _ _)) <- samplers]
+        samplersWithTextureSlot = nubS [s | s@(Sampler _ _ _ (TextureSlot _ _)) <- samplers]
+        -- collect all render textures refers to a FrameBuffer
+        isReferred :: GP -> Exp -> Bool
+        isReferred f (Sampler _ _ _ (Texture _ _ _ [f'])) = findFrameBuffer f' == f
+        isReferred _ _ = False
+        dependentSamplers f = filter (isReferred f) samplersWithTexture
+    {-
+    -- Map (GP :: FrameBuffer) GL_FBO
+    fboMap <- fmap Map.fromList $ forM ordFBs $ \fb -> do
+        fbo <- alloca $! \pbo -> glGenFramebuffers 1 pbo >> peek pbo
+        return (fb,(fbo,dependentSamplers fb))
+    -}
+        -- texture attributes: GL texture target (1D,2D,etc), arity, float/word/int, size, mipmap
+        -- sampler attributes: filter, edge mode
+            {-
             to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
             glBindTexture gl_TEXTURE_2D to
             glTexImage2D gl_TEXTURE_2D 0 (fromIntegral gl_RGBA8) (fromIntegral w) (fromIntegral h) 0 gl_BGRA gl_UNSIGNED_BYTE nullPtr
             glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D to 0
-            let render      = do
-                    -- for GL3:
-                    --with c' $ \pc -> glClearBufferfv gl_COLOR (fromIntegral $ gl_DRAW_BUFFER0 + fromIntegral i) $ castPtr pc
-                    let (r,g,b,a) = case c of
-                            VFloat r            -> (realToFrac r, 0, 0, 1)
-                            VV2F (V2 r g)       -> (realToFrac r, realToFrac g, 0, 1)
-                            VV3F (V3 r g b)     -> (realToFrac r, realToFrac g, realToFrac b, 1)
-                            VV4F (V4 r g b a)   -> (realToFrac r, realToFrac g, realToFrac b, realToFrac a)
-                            _                   -> (1,0,0,1)
-                    glClearColor r g b a
-                    glClear $ fromIntegral gl_COLOR_BUFFER_BIT
-                dispose    = with to $ \pto -> glDeleteTextures 1 pto
-            (i',r,f) <- cvtC (i + 1) xs
-            return $! (i', render >> r, dispose >> f)
-        cvtC i [] = return $! (i, return (), return ())
+            -}
+    -- TODO: also build sampler name map: Map (Exp :: Sampler) (ByteString, GLTexObj)
+    renderTextures <- fmap Map.fromList $ forM (zip [0..] samplersWithTexture) $
+      \(sIdx,smp@(Sampler ty txFilter txEdgeMode (Texture txType txSize txMipMap txGPList))) -> do
+        to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
+        {-
+            void glTexImage1D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, void *data );
+            void glTexImage2D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, void *data );
+            void glTexImage3D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, void *data );
+            void glTexImage2DMultisample( GLenum target, GLsizei samples, GLint internalformat, GLsizei width, GLsizei height, GLboolean ﬁxedsamplelocations );
+            void glTexImage3DMultisample( GLenum target, GLsizei samples, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean ﬁxedsamplelocations );
+        -}
+        -- FIXME: for now we support only single 2D texture
+        case txType of
+            {-
+            Texture1D dTy n     -> return ()
+            Texture2D dTy n     -> return ()
+            Texture3D dTy       -> return ()
+            TextureCube dTy     -> return ()
+            TextureRect dTy     -> return ()
+            Texture2DMS dTy n   -> return ()
+            TextureBuffer dTy   -> return ()
+            -}
+            -- temporary texture support: 2D NoMip Float/Int/Word Red/RG/RGBA
+            Texture2D dTy 1     -> if txMipMap /= NoMip then error "FIXME: Only NoMip textures are supported yet!" else 
+                                   if length txGPList /= 1 then error "Invalid texture source specification!" else do
+                let internalFormat  = fromIntegral $ textureDataTypeToGLType dTy
+                    dataFormat      = fromIntegral $ textureDataTypeToGLArityType dTy
+                    VV2I (V2 w h)   = txSize
+                    --[PrjFrameBuffer name idx gpFB] = txGPList
+                    --Just (fbo,)
+                glBindTexture gl_TEXTURE_2D to
+                glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
+                return ()
+            _ -> error $ "FIXME: This texture format is not yet supported: " ++ show txType
+        return (smp,("renderTex_" ++ show sIdx,to))
 
-    (colorCnt,r,f) <- cvt fb
-    withArray [gl_COLOR_ATTACHMENT0 + fromIntegral i | i <- [0..colorCnt-1]] $
-        glDrawBuffers (fromIntegral colorCnt)
-    let draw    = do
-            glBindFramebuffer gl_DRAW_FRAMEBUFFER bo
-            glBindFramebuffer gl_READ_FRAMEBUFFER bo
-            r
-        delete  = with bo $ \pbo -> glDeleteFramebuffers 1 pbo
-    return $! rndr {render = render rndr >> draw, dispose = dispose rndr >> f >> delete}
+    -- render and dispose action for each pass
+    -- [[(RenderAction, DisposeAction, UniformLocation, StreamLocation)]], [[] :: drawcall] :: pass
+    -- TODO create: render, dispose, slotUniformLocation, slotStreamLocation
+    passes <- forM ordFBs $ \fb -> do
+        -- setup output
+        --  setup each pass's FBO output, attach RenderTarget textures to source FBO
+        glFBO <- alloca $! \pbo -> glGenFramebuffers 1 pbo >> peek pbo
+        glBindFramebuffer gl_DRAW_FRAMEBUFFER glFBO
+        let delete      = with glFBO $ \pbo -> glDeleteFramebuffers 1 pbo
+            depSamplers = dependentSamplers fb
+        fboMapping <- forM (zip [0..] depSamplers) $ \(i,smp) -> do
+            let Sampler _ _ _ (Texture _ _ _ [PrjFrameBuffer _ prjIdx _]) = smp
+                Just (_,txObj)  = Map.lookup smp renderTextures
+            glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D txObj 0
+            return $ gl_COLOR_ATTACHMENT0 + fromIntegral (length depSamplers - prjIdx - 1) -- FIXME: calculate FBO attachment index properly, index reffered from right
 
--- TODO
+        withArray fboMapping $ glDrawBuffers (fromIntegral $ length fboMapping)
+
+        -- TODO: setup texture input
+        forM (renderChain fb) $ \f -> case f of
+            FrameBuffer {}  -> return (compileClearFrameBuffer f, return (), T.empty, T.empty)
+            Accumulate {}   -> do
+                --FIXME: add support for stream slot sharing across multiple draw actions
+                --          for that we should build a map: Trie (Map (GP :: Accumulate) ObjectSet)
+                let Just (Fetch name primType inputs) = findFetch f
+                    Just objSet = T.lookup name objectSetTrie
+
+                -- TODO: before each slot's render operation we should setup texture unit mapping
+                (rA,dA,uT,sT) <- compileRenderFrameBuffer objSet f
+                return (rA,dA,T.singleton name uT,T.singleton name sT)
+            _ -> error "GP node type error: should be FrameBuffer"
+
+    --putStrLn $ "samplers: " ++ show (length samplers) ++ "  render textures: " ++ show (length textures)
+    putStrLn $ "number of passes: " ++ show (length ordFBs) ++ "   is output the last? " ++ show (findFrameBuffer gp == last ordFBs)
+    -- TODO: validate
+    --          all slot name should be unique
+    --          all uniform with same name have the same type
+    --          all stream input with same name have the same type
+
+    -- depends on compilation: render, dispose, slotUniformLocation, slotStreamLocation
+    let (drawAct,disposeAct,uniLocs,streamLocs) = unzip4 $ concat passes
+        [(V2 w h)] = [v | FrameBuffer v _ <- gpUniverse' gp]
+        width   = fromIntegral w
+        height  = fromIntegral h
+        blit = do   -- FIXME: implement properly
+            {-
+            glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
+            glReadBuffer gl_COLOR_ATTACHMENT0
+            glDrawBuffer gl_BACK
+            glBlitFramebuffer 0 0 width height 0 0 width height (fromIntegral gl_COLOR_BUFFER_BIT) gl_NEAREST
+            -}
+            glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
+            glDrawBuffer gl_BACK_LEFT
+            sequence_ drawAct
+
+    return $! Renderer
+        -- public
+        { slotUniform           = T.fromList slotUniformList
+        , slotStream            = T.fromList slotStreamList
+        , uniformSetter         = uniformSetterTrie
+        , render                = blit -- FIXME: fill after compialtion 
+        , dispose               = return () -- FIXME: fill after compialtion
+
+        -- internal
+        , objectSet             = objectSetTrie
+        , mkUniformSetup        = mkUniformSetupTrie
+        , slotUniformLocation   = foldl' T.unionL T.empty uniLocs
+        , slotStreamLocation    = foldl' T.unionL T.empty streamLocs
+
+--        , glFrameBuffer         = fboMap
+--        , glSampler             = Map.empty
+--        , glImageTexture        = Map.empty
+        }
 {-
-  hint:
-    sampler names are generated, only texture slots are named by user
-    one texture can be attached to more samplers
-    user feed textures not samplers to gfx network
-
-  texturing support:
-    collect all sampler and texture definitions
-    create sampler <-> texture name map
-    sort previous passes
-    create sampler setup action
-    add texture slots to uniform input trie
-
-  resources to create
-    samplers
-        sampler setup action
-    textures
-        hint: only if it is an output of a previous pass
--}
-{-
-    void GenSamplers( sizei count, uint *samplers );
-    void BindSampler( uint unit, uint sampler );
-    void DeleteSamplers( sizei count, const uint *samplers );
-    void SamplerParameter{if}v( uint sampler, enum pname, T param );
-    void SamplerParameterI{u ui}v( uint sampler, enum pname, T *params );
-        pname:
-            TEXTURE_WRAP_S
-            TEXTURE_WRAP_T
-            TEXTURE_WRAP_R
-            TEXTURE_MIN_FILTER
-            TEXTURE_MAG_FILTER
-            TEXTURE_BORDER_COLOR
-            TEXTURE_MIN_LOD
-            TEXTURE_MAX_LOD
-            TEXTURE_LOD_BIAS
-            TEXTURE_COMPARE_MODE
-            TEXTURE_COMPARE_FUNC
-    void DeleteSamplers( sizei count, const uint *samplers );
-
-    void ActiveTexture( enum texture );
-        TEXTUREi = TEXTURE0 + i
-    void BindTexture( enum target, uint texture );
-        target:
-            TEXTURE_1D
-            TEXTURE_2D
-            TEXTURE_3D
-            TEXTURE_1D_ARRAY
-            TEXTURE_2D_ARRAY
-            TEXTURE_RECTANGLE
-            TEXTURE_BUFFER
-            TEXTURE_CUBE_MAP
-            TEXTURE_2D_MULTISAMPLE
-            TEXTURE_2D_MULTISAMPLE_ARRAY
--}
-
--- FIXME: simple solution, does not support sharing
-compileFrameBuffer (Accumulate fCtx ffilter fsh (Rasterize rCtx gs (Transform vsh (Fetch slotName primType slotInput))) fb) rndr' = do
-    rndr <- compileFrameBuffer fb rndr'
-    po <- glCreateProgram
-    let (shl,fragOuts) = case gs of
-            NoGeometryShader    -> ([VertexShaderSrc srcV, FragmentShaderSrc srcF], (map fst outF))
-            _                   -> ([VertexShaderSrc srcV, GeometryShaderSrc srcG, FragmentShaderSrc srcF], (map fst outF))
-        (srcV,outV) = codeGenVertexShader slotInput vsh
-        (srcG,outG) = codeGenGeometryShader outV gs
-        (srcF,outF) = codeGenFragmentShader outG ffilter fsh
-        createAndAttach [] _ = return $! Nothing
-        createAndAttach sl t = do
-            mapM_ SB.putStrLn sl
-            o <- glCreateShader t
-            compileShader o sl
-            glAttachShader po o
-            return $! Just o
-    vsh <- createAndAttach [s | VertexShaderSrc s <- shl] gl_VERTEX_SHADER
-    gsh <- createAndAttach [s | GeometryShaderSrc s <- shl] gl_GEOMETRY_SHADER
-    fsh <- createAndAttach [s | FragmentShaderSrc s <- shl] gl_FRAGMENT_SHADER
-
-    -- connect Fragment output to FBO
-    forM_ (zip fragOuts [0..]) $ \(n,i) -> SB.useAsCString n $ \pn -> do
-        glBindFragDataLocation po (fromIntegral $ gl_DRAW_BUFFER0 + i) $ castPtr pn
-    glLinkProgram po
-    printProgramLog po
-
-    -- check link status
-    status <- glGetProgramiv1 gl_LINK_STATUS po
-    when (status /= fromIntegral gl_TRUE) $ fail "link program failed!"
-
-    -- query active uniforms, attributes and samplers
-    (uLoc,uType) <- queryUniforms po
-    (sLoc,sType) <- queryStreams po
-
-    --  for new uniforms, create setter and setup function
-    --  for new slots create object set tvar
-    let newUNames = Set.toList $! (Set.fromList $! T.keys uLoc) Set.\\ (Set.fromList $! T.keys $! uniformSetter rndr)
-        objSet    = objectSet rndr
-    (uSetup,uSetter) <- unzip <$> (sequence [mkUSetter t | n <- newUNames, let Just t = T.lookup n uType])
-    objSet' <- if T.member slotName objSet then return objSet else do
-        v <- newIORef []
-        return $! T.insert slotName v objSet
-
-    let disposeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
-        Just objsTVar = T.lookup slotName objSet'
-        renderFun = do
-            objs <- readIORef objsTVar
-            unless (L.null objs) $ do
-                setupRasterContext rCtx
-                setupAccumulationContext fCtx
-                glUseProgram po
-                sequence_ objs
-
     return $! Renderer
         -- public
         { slotUniform           = T.insert slotName uType $! slotUniform rndr
         , slotStream            = T.insert slotName (primType,sType) $! slotStream rndr
         , uniformSetter         = uniformSetter rndr `T.unionL` (T.fromList $! zip newUNames uSetter)
         , render                = render rndr >> renderFun
-        , dispose              = dispose rndr >> disposeFun
+        , dispose               = dispose rndr >> disposeFun
 
         -- internal
         , objectSet             = objSet'
         , mkUniformSetup        = mkUniformSetup rndr `T.unionL` (T.fromList $! zip newUNames uSetup)
         , slotUniformLocation   = T.insert slotName uLoc $! slotUniformLocation rndr
         , slotStreamLocation    = T.insert slotName sLoc $! slotStreamLocation rndr
+
+        , glFrameBuffer         = glFrameBuffer rndr
+        , glSampler             = glSampler rndr
+        , glImageTexture        = glImageTexture rndr
         }
-
--- FIXME: implement properly
-compileRenderer [ScreenOut (PrjFrameBuffer n idx fb)] = do
-    let --fb = convertGP fb'
-        --si = streamInput fb
-        --ui = uniformInput fb
-
-        blit = do   -- FIXME: implement properly
-            glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
-            glReadBuffer gl_COLOR_ATTACHMENT0
-            glDrawBuffer gl_BACK
-            glBlitFramebuffer 0 0 640 480 0 0 640 480 (fromIntegral gl_COLOR_BUFFER_BIT) gl_NEAREST
-    -- TODO: validate
-    --          all slot name should be unique
-    --          all uniform with same name have the same type
-    --          all stream input with same name have the same type
-    rndr <- compileFrameBuffer fb $! Renderer
-        -- public
-        { slotUniform           = T.empty
-        , slotStream            = T.empty
-        , uniformSetter         = T.empty
-        , render                = return ()
-        , dispose              = return ()
-
-        -- internal
-        , objectSet             = T.empty
-        , mkUniformSetup        = T.empty
-        , slotUniformLocation   = T.empty
-        , slotStreamLocation    = T.empty
-        }
-
-    return $! rndr {render = render rndr >> blit}
+-}
 
 -- OBJECT
 data Object -- internal type
@@ -695,7 +484,9 @@ addObject renderer slotName prim objIndices objAttributes objUniforms = do
 
         -- stream setup action
         Just sLocs = T.lookup slotName (slotStreamLocation renderer)
-        sSetup = sequence_ [mkSSetter t loc s | (n,s) <- T.toList objAttributes, let Just t = T.lookup n sType, let Just loc = T.lookup n sLocs]
+        -- FIXME: 
+        --sSetup = sequence_ [mkSSetter t loc s | (n,s) <- T.toList objAttributes, let Just t = T.lookup n sType, let Just loc = T.lookup n sLocs]
+        sSetup = sequence_ [mkSSetter t loc s | (n,s) <- T.toList objAttributes, t <- maybeToList $ T.lookup n sType, loc <- maybeToList $ T.lookup n sLocs]
 
     -- create Vertex Array Object
     vao <- alloca $! \pvao -> glGenVertexArrays 1 pvao >> peek pvao

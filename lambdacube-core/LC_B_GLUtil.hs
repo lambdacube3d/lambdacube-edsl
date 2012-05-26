@@ -16,7 +16,9 @@ module LC_B_GLUtil (
     logicOperationToGLType,
     blendEquationToGLType,
     blendingFactorToGLType,
-    checkGL
+    checkGL,
+    textureDataTypeToGLType,
+    textureDataTypeToGLArityType
 ) where
 
 import Control.Applicative
@@ -33,6 +35,7 @@ import qualified Data.Vector as V
 
 import LC_G_Type
 import LC_G_APIType
+import LC_U_APIType
 
 type StreamSetter = Stream Buffer -> IO ()
 
@@ -492,3 +495,73 @@ blendingFactorToGLType OneMinusConstantColor = gl_ONE_MINUS_CONSTANT_COLOR
 blendingFactorToGLType ConstantAlpha         = gl_CONSTANT_ALPHA
 blendingFactorToGLType OneMinusConstantAlpha = gl_ONE_MINUS_CONSTANT_ALPHA
 blendingFactorToGLType SrcAlphaSaturate      = gl_SRC_ALPHA_SATURATE
+
+{-
+data ColorArity = Red | RG | RGB | RGBA deriving (Show,Eq,Ord)
+data TextureDataType
+    = FloatT        ColorArity
+    | IntT          ColorArity
+    | WordT         ColorArity
+    | ShadowT
+    deriving (Show, Eq, Ord)
+-}
+textureDataTypeToGLType :: TextureDataType -> GLenum
+textureDataTypeToGLType (FloatT Red)    = gl_R32F
+textureDataTypeToGLType (IntT   Red)    = gl_R32I
+textureDataTypeToGLType (WordT  Red)    = gl_R32UI
+textureDataTypeToGLType (FloatT RG)     = gl_RG32F
+textureDataTypeToGLType (IntT   RG)     = gl_RG32I
+textureDataTypeToGLType (WordT  RG)     = gl_RG32UI
+textureDataTypeToGLType (FloatT RGBA)   = gl_RGBA32F
+textureDataTypeToGLType (IntT   RGBA)   = gl_RGBA32I
+textureDataTypeToGLType (WordT  RGBA)   = gl_RGBA32UI
+textureDataTypeToGLType a = error $ "FIXME: This texture format is not yet supported" ++ show a
+
+textureDataTypeToGLArityType :: TextureDataType -> GLenum
+textureDataTypeToGLArityType (FloatT Red)    = gl_RED
+textureDataTypeToGLArityType (IntT   Red)    = gl_RED
+textureDataTypeToGLArityType (WordT  Red)    = gl_RED
+textureDataTypeToGLArityType (FloatT RG)     = gl_RG
+textureDataTypeToGLArityType (IntT   RG)     = gl_RG
+textureDataTypeToGLArityType (WordT  RG)     = gl_RG
+textureDataTypeToGLArityType (FloatT RGBA)   = gl_RGBA
+textureDataTypeToGLArityType (IntT   RGBA)   = gl_RGBA
+textureDataTypeToGLArityType (WordT  RGBA)   = gl_RGBA
+textureDataTypeToGLArityType a = error $ "FIXME: This texture format is not yet supported" ++ show a
+{-
+Texture and renderbuffer color formats (R):
+    R11F_G11F_B10F
+    R16
+    R16F
+    R16I
+    R16UI
+    R32F
+    R32I
+    R32UI
+    R8
+    R8I
+    R8UI
+    RG16
+    RG16F
+    RG16I
+    RG16UI
+    RG32F
+    RG32I
+    RG32UI
+    RG8
+    RG8I
+    RG8UI
+    RGB10_A2
+    RGB10_A2UI
+    RGBA16
+    RGBA16F
+    RGBA16I
+    RGBA16UI
+    RGBA32F
+    RGBA32I
+    RGBA32UI
+    RGBA8
+    RGBA8I
+    RGBA8UI
+    SRGB8_ALPHA8
+-}

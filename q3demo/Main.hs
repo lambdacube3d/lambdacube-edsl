@@ -165,9 +165,9 @@ initCommon title = do
         , displayOptions_numBlueBits        = 8
         , displayOptions_numAlphaBits       = 8
         , displayOptions_numDepthBits       = 24
---        , displayOptions_width              = 1280
---        , displayOptions_height             = 720
         , displayOptions_windowIsResizable  = True
+--        , displayOptions_width              = 1280
+--        , displayOptions_height             = 800
 --        , displayOptions_displayMode    = Fullscreen
         }
     setWindowTitle title

@@ -1,7 +1,5 @@
 module LC_U_DeBruijn where
 
-import Data.Generics.Uniplate.Data
-
 import Data.ByteString.Char8 (ByteString)
 import Data.Data
 import Data.Int

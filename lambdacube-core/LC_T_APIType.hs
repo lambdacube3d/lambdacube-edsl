@@ -293,18 +293,18 @@ type instance NoStencilRepr (Depth a :+: b) = Depth a :+: (NoStencilRepr b)
 
 -- sampler and texture specification
 
-data Mip     = Mip      deriving (Eq,Ord)
-data NoMip   = NoMip    deriving (Eq,Ord)
-data AutoMip = AutoMip  deriving (Eq,Ord)
+data Mip        = Mip       Int Int -- Base level, Max level
+data NoMip      = NoMip
+data AutoMip    = AutoMip   Int Int
 
 class IsMip a where
     toMipMap :: a -> U.MipMap
 instance IsMip Mip where
-    toMipMap _ = U.Mip
+    toMipMap (Mip a b) = U.Mip a b
 instance IsMip NoMip where
     toMipMap _ = U.NoMip
 instance IsMip AutoMip where
-    toMipMap _ = U.AutoMip
+    toMipMap (AutoMip a b) = U.AutoMip a b
 
 -- helper type level function, used in language AST
 type family TexDataRepr arity t
@@ -394,9 +394,9 @@ data Texture (gp :: * -> *) dim arr t ar where
                     -> Texture gp dim arr t ar
     -- TODO:
     --  add texture internal format specification
-    Texture         :: IsMip mip
+    Texture         :: (IsMip mip, IsScalar (TexSizeRepr dim))
                     => TextureType dim (MipRepr mip) arr layerCount t ar
-                    -- -> TexSizeRepr dim
+                    -> TexSizeRepr dim
                     -> mip
 --                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
                     -> [gp (Image layerCount (TexDataRepr ar t))]

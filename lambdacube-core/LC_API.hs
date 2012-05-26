@@ -35,6 +35,7 @@ module LC_API (
 import Data.Int
 import Data.Word
 import LC_B_GL hiding (compileRenderer)
+import LC_B_GLCompile
 import qualified LC_B_GL as GL
 import LC_B_GLUtil (Buffer)
 import LC_G_APIType hiding (InputType(..))
