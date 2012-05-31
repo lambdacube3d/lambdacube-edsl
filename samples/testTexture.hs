@@ -10,6 +10,7 @@ import Data.Vect.Float.Instances ()
 import FRP.Elerea.Param
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
+import qualified Data.Vector.Storable as V
 
 import TypeLevel.Number.Nat.Num
 
@@ -28,7 +29,7 @@ simple :: GP (FrameBuffer N1 (Float,V4F))
 simple = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (V2 640 480) (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 0 0 1 1):.ZT)
     rast    = Rasterize triangleCtx NoGeometryShader prims
     prims   = Transform vert input
     input   = Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
@@ -41,24 +42,67 @@ simple = Accumulate fragCtx PassAll frag rast clear
         (p,n) = untup2 pn
 
     frag :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag a = FragmentOutRastDepth $ snoc c 1 @* s :. ZT
+    frag a = FragmentOutRastDepth $ snoc c 1 @+ s :. ZT
       where
-        c = texture' sampler (drop3 a) (Const 0)
+        c = Const one'--texture' sampler (drop3 a) (Const 0)
+        s :: Exp F V4F
+        --s = Const 0
         s = texture' samplerSh (drop3 a) (Const 0)
 
     sampler = Sampler LinearFilter Clamp diffuse
     samplerSh = Sampler LinearFilter Clamp shadowTx
     diffuse = TextureSlot "diffuse" $ Texture2D (Float RGB) n1
-    shadowTx  = Texture (Texture2D (Float Red) n1) AutoMip [PrjFrameBuffer "" tix0 vsm]
+    shadowTx  = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowTx" tix0 vsm]
+
+quad :: Mesh
+quad = Mesh
+    { mAttributes   = T.singleton "position" $ A_V2F $ V.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
+    , mPrimitive    = P_Triangles
+    , mGPUData      = Nothing
+    }
+  where
+    a = -1
+    b = 1
+
+post :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
+post img = Accumulate fragCtx PassAll frag rast clear
+  where
+    fragCtx = DepthOp Always True:.ColorOp NoBlending (one' :: V4B):.ZT
+    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
+    rast    = Rasterize triangleCtx NoGeometryShader prims
+    prims   = Transform vert input
+    input   = Fetch "postSlot" Triangle (IV2F "position")
+
+    vert :: Exp V V2F -> VertexOut V2F
+    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+      where
+        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
+        V2 u v  = unpack' uv
+
+    frag :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    frag uv' = FragmentOutRastDepth $ (s{- @+ c-}) :. ZT
+      where
+        s :: Exp F V4F
+        s = texture' smp uv (Const 0)
+        --s = texture' smp (Const $ V2 0.8 0.8) (Const 0)
+        c = pack' $ V4 (floatF 0) u v (floatF 1)
+        V2 u v = unpack' uv
+        uv = uv' @* floatF 0.5 @+ floatF 0.5
+
+    smp = Sampler LinearFilter Clamp tex
+    tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
+
 
 main :: IO ()
 main = do
     let lcnet :: GP (Image N1 V4F)
-        lcnet = PrjFrameBuffer "outFB" tix0 simple
+        --lcnet = PrjFrameBuffer "outFB" tix0 $ moments
+        lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm
+        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 $ FrameBuffer (V2 0 0) (DepthImage n1 0:.ColorImage n1 (V4 0 0 1 1 :: V4F):.ZT)
 
     windowSize <- initCommon "LC DSL Texture Demo"
 
-    (t,renderer) <- C.time $ compileRenderer [ScreenOut lcnet]
+    (t,renderer) <- C.time $ compileRenderer $ ScreenOut lcnet
     putStrLn $ C.secs t ++ " - compile renderer"
     print $ slotUniform renderer
     print $ slotStream renderer
@@ -67,14 +111,26 @@ main = do
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
 
+    compiledQuad <- compileMesh quad
+    addMesh renderer "postSlot" compiledQuad []
+
     (t,mesh) <- C.time $ loadMesh "Monkey.lcmesh"
     putStrLn $ C.secs t ++ " - loadMesh Monkey.lcmesh"
     (t,mesh2) <- C.time $ loadMesh "Scene.lcmesh"
     putStrLn $ C.secs t ++ " - loadMesh Scene.lcmesh"
+{-
     (t,obj) <- C.time $ addMesh renderer "streamSlot" mesh []
     putStrLn $ C.secs t ++ " - addMesh Monkey.lcmesh"
     (t,obj2) <- C.time $ addMesh renderer "streamSlot" mesh2 []
     putStrLn $ C.secs t ++ " - addMesh Scene.lcmesh"
+-}
+    (t,obj) <- C.time $ addMesh renderer "streamSlot2" mesh []
+    putStrLn $ C.secs t ++ " - addMesh Monkey.lcmesh"
+    (t,obj2) <- C.time $ addMesh renderer "streamSlot2" mesh2 []
+    putStrLn $ C.secs t ++ " - addMesh Scene.lcmesh"
+
+    addMesh renderer "streamSlot3" mesh []
+    addMesh renderer "streamSlot3" mesh2 []
 
     -- TODO:
     -- texture specification:
@@ -133,6 +189,7 @@ scene slotU objU windowSize mousePosition fblrPress = do
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
     cam <- userCamera (Vec3 (-4) 0 0) mouseMove fblrPress
     let Just (SM44F matSetter) = T.lookup "worldViewProj" slotU
+        Just (SM44F lightSetter) = T.lookup "lightViewProj" slotU
         Just (SFloat timeSetter) = T.lookup "time" slotU
         setupGFX (w,h) (cam,dir,up,_) time = do
             let cm = fromProjective (lookat cam (cam + dir) up)
@@ -140,6 +197,7 @@ scene slotU objU windowSize mousePosition fblrPress = do
             (t,_) <- C.time $ do
                 --timeSetter time
                 matSetter $! mat4ToM44F $! cm .*. pm
+                lightSetter $! mat4ToM44F $! cm .*. pm
             --putStrLn $ C.secs t ++ " - worldViewProj uniform setup via STM"
             return ()
     r <- effectful3 setupGFX windowSize cam time

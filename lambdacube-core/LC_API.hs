@@ -52,5 +52,5 @@ import qualified LC_T_HOAS as H
 
 import LC_C_Convert
 
-compileRenderer :: [GPOutput] -> IO Renderer
-compileRenderer l = GL.compileRenderer $ map convertGPOutput l
+compileRenderer :: GPOutput -> IO Renderer
+compileRenderer l = GL.compileRenderer $ convertGPOutput l

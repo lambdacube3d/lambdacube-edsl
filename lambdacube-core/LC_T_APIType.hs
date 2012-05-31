@@ -293,18 +293,19 @@ type instance NoStencilRepr (Depth a :+: b) = Depth a :+: (NoStencilRepr b)
 
 -- sampler and texture specification
 
-data Mip        = Mip       Int Int -- Base level, Max level
-data NoMip      = NoMip
-data AutoMip    = AutoMip   Int Int
+data Mip
+data NoMip
 
-class IsMip a where
-    toMipMap :: a -> U.MipMap
-instance IsMip Mip where
-    toMipMap (Mip a b) = U.Mip a b
-instance IsMip NoMip where
-    toMipMap _ = U.NoMip
-instance IsMip AutoMip where
-    toMipMap (AutoMip a b) = U.AutoMip a b
+data MipMap t where
+    NoMip   :: MipMap NoMip
+
+    Mip     :: Int  -- base level
+            -> Int  -- max level
+            -> MipMap Mip
+
+    AutoMip :: Int  -- base level
+            -> Int  -- max level
+            -> MipMap Mip
 
 -- helper type level function, used in language AST
 type family TexDataRepr arity t
@@ -394,10 +395,10 @@ data Texture (gp :: * -> *) dim arr t ar where
                     -> Texture gp dim arr t ar
     -- TODO:
     --  add texture internal format specification
-    Texture         :: (IsMip mip, IsScalar (TexSizeRepr dim))
-                    => TextureType dim (MipRepr mip) arr layerCount t ar
+    Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip)
+                    => TextureType dim canMip arr layerCount t ar
                     -> TexSizeRepr dim
-                    -> mip
+                    -> MipMap mip
 --                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
                     -> [gp (Image layerCount (TexDataRepr ar t))]
                     -> Texture gp dim arr t ar
@@ -408,6 +409,12 @@ data Texture (gp :: * -> *) dim arr t ar where
     ConvertTexture  :: Texture gp dim arr t ar
                     -> Texture gp dim arr t' ar'
 -}
+
+-- MipMap validation
+class IsMipValid canMip mip
+instance IsMipValid Mip Mip
+instance IsMipValid Mip NoMip
+instance IsMipValid NoMip NoMip
 
 -- restriction for texture types what can be specified as texture slots, e.g. multisample textures cannot be created im this way
 class IsValidTextureSlot a
@@ -421,7 +428,7 @@ type instance TexSizeRepr (DIM1) = Word32
 type instance TexSizeRepr (DIM2) = V2U
 type instance TexSizeRepr (Rect) = V2U
 type instance TexSizeRepr (DIM3) = V3U
-
+{-
 -- type level hepler function, used for texture specification
 type family TexRepr dim mip (gp :: * -> *) layerCount t :: *
 type instance TexRepr DIM1 NoMip   gp layerCount t = gp (Image layerCount t)
@@ -435,12 +442,7 @@ type instance TexRepr DIM2 Mip     gp layerCount t = [gp (Image layerCount t)]
 type instance TexRepr DIM3 NoMip   gp layerCount t = [gp (Image layerCount t)]
 type instance TexRepr DIM3 AutoMip gp layerCount t = [gp (Image layerCount t)]
 type instance TexRepr DIM3 Mip     gp layerCount t = [[gp (Image layerCount t)]] -- 3D layers contain mipmap
-
--- type level hepler function, used for texture specification
-type family MipRepr a
-type instance MipRepr Mip       = Mip
-type instance MipRepr AutoMip   = Mip
-type instance MipRepr NoMip     = NoMip
+-}
 
 -- shader stage tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen

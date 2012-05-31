@@ -167,8 +167,7 @@ data GP t where
                     -> GP (PrimitiveStream primIn a)
                     -> GP (FragmentStream layerNum b)
 
-    FrameBuffer     :: V2U                                          -- size: width, height
-                    -> FrameBuffer layerCount t
+    FrameBuffer     :: FrameBuffer layerCount t
                     -> GP (FrameBuffer layerCount (FTRepr' t))
 
     Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component

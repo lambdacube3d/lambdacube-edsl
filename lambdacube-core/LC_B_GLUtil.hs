@@ -18,7 +18,10 @@ module LC_B_GLUtil (
     blendingFactorToGLType,
     checkGL,
     textureDataTypeToGLType,
-    textureDataTypeToGLArityType
+    textureDataTypeToGLArityType,
+    glGetIntegerv1,
+    setSampler,
+    checkFBO
 ) where
 
 import Control.Applicative
@@ -54,6 +57,9 @@ data ArrayDesc
     , arrSize   :: Int  -- size in bytes
     }
     deriving (Show,Eq)
+
+setSampler :: GLint -> Int32 -> IO ()
+setSampler i v = glUniform1i i $ fromIntegral v
 
 z2 = V2 0 0 :: V2F
 z3 = V3 0 0 0 :: V3F
@@ -565,3 +571,20 @@ Texture and renderbuffer color formats (R):
     RGBA8UI
     SRGB8_ALPHA8
 -}
+
+glGetIntegerv1 :: GLenum -> IO GLint
+glGetIntegerv1 e = alloca $ \pi -> glGetIntegerv e pi >> peek pi
+
+checkFBO :: IO ByteString
+checkFBO = do
+    let f e | e == gl_FRAMEBUFFER_UNDEFINED                 = "FRAMEBUFFER_UNDEFINED"
+            | e == gl_FRAMEBUFFER_INCOMPLETE_ATTACHMENT     = "FRAMEBUFFER_INCOMPLETE_ATTACHMENT"
+            | e == gl_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER    = "FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER"
+            | e == gl_FRAMEBUFFER_INCOMPLETE_READ_BUFFER    = "FRAMEBUFFER_INCOMPLETE_READ_BUFFER"
+            | e == gl_FRAMEBUFFER_UNSUPPORTED               = "FRAMEBUFFER_UNSUPPORTED"
+            | e == gl_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE    = "FRAMEBUFFER_INCOMPLETE_MULTISAMPLE"
+            | e == gl_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS  = "FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS"
+            | e == gl_FRAMEBUFFER_COMPLETE                  = "FRAMEBUFFER_COMPLETE"
+            | otherwise                                     = "Unknown error"
+    e <- glCheckFramebufferStatus gl_DRAW_FRAMEBUFFER
+    return $ f e

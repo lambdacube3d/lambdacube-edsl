@@ -145,11 +145,11 @@ setupAccumulationContext = cvt
         let cvt True    = 1
             cvt False   = 0
             (mr,mg,mb,ma) = case m of
-                VBool r             -> (cvt r, 0, 0, 0)
-                VV2B (V2 r g)       -> (cvt r, cvt g, 0, 0)
-                VV3B (V3 r g b)     -> (cvt r, cvt g, cvt b, 0)
+                VBool r             -> (cvt r, 1, 1, 1)
+                VV2B (V2 r g)       -> (cvt r, cvt g, 1, 1)
+                VV3B (V3 r g b)     -> (cvt r, cvt g, cvt b, 1)
                 VV4B (V4 r g b a)   -> (cvt r, cvt g, cvt b, cvt a)
-                _           -> (0,1,1,1)
+                _           -> (1,1,1,1)
         glColorMask mr mg mb ma
         cvtC (i + 1) xs
     cvtC _ [] = return ()
@@ -269,78 +269,40 @@ setupAccumulationContext = cvt
 -}
 
 compileClearFrameBuffer :: GP -> IO ()
-compileClearFrameBuffer (FrameBuffer (V2 w h) fb) = do
-{-
-    -- query FBO
-    let bo = case Map.lookup gp (glFrameBuffer rndr) of
-            Just a  -> a 
-            Nothing -> error "Missing FBO object!"
-
-    glBindFramebuffer gl_DRAW_FRAMEBUFFER bo
--}
+compileClearFrameBuffer (FrameBuffer fb) = cvt fb
+  where
     -- we have to handle depth and stencil specially, available configurations:
     --  depth
     --  stencil
     --  depth-stencil
-    let cvt :: [Image] -> IO (Int, IO (), IO ()) -- color component count, render, dispose
-        cvt (StencilImage sh1 s : DepthImage sh2 d : xs) = do
-            -- TODO
-            cvtC 0 xs
-        cvt (StencilImage sh s : xs) = do
-            -- TODO
-            cvtC 0 xs
-        cvt (DepthImage sh d : xs) = do
-            {-
-            to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
-            glBindTexture gl_TEXTURE_2D to
-            glTexImage2D gl_TEXTURE_2D 0 (fromIntegral gl_DEPTH_COMPONENT32) (fromIntegral w) (fromIntegral h) 0 gl_DEPTH_COMPONENT gl_UNSIGNED_INT nullPtr
-            glFramebufferTexture2D gl_DRAW_FRAMEBUFFER gl_DEPTH_ATTACHMENT gl_TEXTURE_2D to 0
-            -}
-            let renderGL3   = with d $ \pd -> glClearBufferfv gl_DEPTH 0 $ castPtr pd
-                render      = do
-                    glClearDepth $ realToFrac d
-                    glClear $ fromIntegral gl_DEPTH_BUFFER_BIT
-                --dispose     = with to $ \pto -> glDeleteTextures 1 pto
-            (i,rA,fA) <- cvtC 0 xs
-            return $! (i,render >> rA, {-dispose >> -}fA)
-        cvt xs = cvtC 0 xs
+    cvt :: [Image] -> IO ()
+    cvt (StencilImage sh1 s : DepthImage sh2 d : xs) = do
+        -- TODO
+        cvtC 0 xs
+    cvt (StencilImage sh s : xs) = do
+        -- TODO
+        cvtC 0 xs
+    cvt (DepthImage sh d : xs) = do
+        let --renderGL3   = with d $ \pd -> glClearBufferfv gl_DEPTH 0 $ castPtr pd
+        glClearDepth $ realToFrac d
+        glClear $ fromIntegral gl_DEPTH_BUFFER_BIT
+        print "     * glClear gl_DEPTH_BUFFER_BIT"
+        cvtC 0 xs
+    cvt xs = cvtC 0 xs
 
-        cvtC :: Int -> [Image] -> IO (Int, IO (), IO ()) -- color component count, render, dispose
-        cvtC i (ColorImage sh c : xs) = do
-            {-
-            to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
-            glBindTexture gl_TEXTURE_2D to
-            glTexImage2D gl_TEXTURE_2D 0 (fromIntegral gl_RGBA8) (fromIntegral w) (fromIntegral h) 0 gl_BGRA gl_UNSIGNED_BYTE nullPtr
-            glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D to 0
-            -}
-            let render      = do
-                    -- for GL3:
-                    --with c' $ \pc -> glClearBufferfv gl_COLOR (fromIntegral $ gl_DRAW_BUFFER0 + fromIntegral i) $ castPtr pc
-                    let (r,g,b,a) = case c of
-                            VFloat r            -> (realToFrac r, 0, 0, 1)
-                            VV2F (V2 r g)       -> (realToFrac r, realToFrac g, 0, 1)
-                            VV3F (V3 r g b)     -> (realToFrac r, realToFrac g, realToFrac b, 1)
-                            VV4F (V4 r g b a)   -> (realToFrac r, realToFrac g, realToFrac b, realToFrac a)
-                            _                   -> (1,0,0,1)
-                    glClearColor r g b a
-                    glClear $ fromIntegral gl_COLOR_BUFFER_BIT
-                --dispose     = with to $ \pto -> glDeleteTextures 1 pto
-            (i',rA,fA) <- cvtC (i + 1) xs
-            return $! (i', render >> rA, {-dispose >> -}fA)
-        cvtC i [] = return $! (i, return (), return ())
-
-    (colorCnt,renderAction,disposeAction) <- cvt fb
-    {-
-    withArray [gl_COLOR_ATTACHMENT0 + fromIntegral i | i <- [0..colorCnt-1]] $
-        glDrawBuffers (fromIntegral colorCnt)
-    -}
-    let draw    = do
-            {-
-            glBindFramebuffer gl_DRAW_FRAMEBUFFER bo
-            glBindFramebuffer gl_READ_FRAMEBUFFER bo
-            -}
-            renderAction
-    draw
+    cvtC :: Int -> [Image] -> IO ()
+    cvtC i (ColorImage sh c : xs) = do
+        -- for GL3:
+        --with c' $ \pc -> glClearBufferfv gl_COLOR (fromIntegral $ gl_DRAW_BUFFER0 + fromIntegral i) $ castPtr pc
+        let (r,g,b,a) = case c of
+                VFloat r            -> (realToFrac r, 0, 0, 1)
+                VV2F (V2 r g)       -> (realToFrac r, realToFrac g, 0, 1)
+                VV3F (V3 r g b)     -> (realToFrac r, realToFrac g, realToFrac b, 1)
+                VV4F (V4 r g b a)   -> (realToFrac r, realToFrac g, realToFrac b, realToFrac a)
+                _                   -> (0,0,0,1)
+        glClearColor r g b a
+        glClear $ fromIntegral gl_COLOR_BUFFER_BIT
+    cvtC i [] = return ()
 
 -- TODO
 {-
@@ -401,16 +363,17 @@ compileClearFrameBuffer (FrameBuffer (V2 w h) fb) = do
 
 -- FIXME: simple solution, does not support sharing
 -- result: (RenderAction, DisposeAction, UniformLocation, StreamLocation)
-compileRenderFrameBuffer :: IORef ObjectSet -> GP -> IO (IO (), IO (), Trie GLint, Trie GLuint)
-compileRenderFrameBuffer objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx gs (Transform vsh (Fetch slotName _ slotInput))) fb) = do
+compileRenderFrameBuffer :: [(Exp,String)] -> IORef ObjectSet -> GP -> IO (IO (), IO (), Trie GLint, Trie GLuint)
+compileRenderFrameBuffer samplerNames objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx gs (Transform vsh (Fetch slotName _ slotInput))) fb) = do
     --rndr <- compileFrameBuffer fb rndr'
     po <- glCreateProgram
     let (shl,fragOuts) = case gs of
             NoGeometryShader    -> ([VertexShaderSrc srcV, FragmentShaderSrc srcF], (map fst outF))
             _                   -> ([VertexShaderSrc srcV, GeometryShaderSrc srcG, FragmentShaderSrc srcF], (map fst outF))
-        (srcV,outV) = codeGenVertexShader slotInput vsh
-        (srcG,outG) = codeGenGeometryShader outV gs
-        (srcF,outF) = codeGenFragmentShader outG ffilter fsh
+        samplerNameMap = Map.fromList samplerNames
+        (srcV,outV) = codeGenVertexShader samplerNameMap slotInput vsh
+        (srcG,outG) = codeGenGeometryShader samplerNameMap outV gs
+        (srcF,outF) = codeGenFragmentShader samplerNameMap outG ffilter fsh
         createAndAttach [] _ = return $! Nothing
         createAndAttach sl t = do
             mapM_ SB.putStrLn sl
@@ -422,9 +385,13 @@ compileRenderFrameBuffer objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx 
     gsh <- createAndAttach [s | GeometryShaderSrc s <- shl] gl_GEOMETRY_SHADER
     fsh <- createAndAttach [s | FragmentShaderSrc s <- shl] gl_FRAGMENT_SHADER
 
+    let printGLStatus = checkGL >>= print
+    putStr "    + compile shader source: " >> printGLStatus
     -- connect Fragment output to FBO
     forM_ (zip fragOuts [0..]) $ \(n,i) -> SB.useAsCString n $ \pn -> do
-        glBindFragDataLocation po (fromIntegral $ gl_DRAW_BUFFER0 + i) $ castPtr pn
+        print (n,i)
+        glBindFragDataLocation po i $ castPtr pn
+    putStr "    + setup shader output mapping: " >> printGLStatus
     glLinkProgram po
     printProgramLog po
 
@@ -436,8 +403,15 @@ compileRenderFrameBuffer objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx 
     (uLoc,uType) <- queryUniforms po
     (sLoc,sType) <- queryStreams po
 
+    -- set sampler mapping
+    glUseProgram po
+    forM_ (zip [0..] (map (SB.pack . snd) samplerNames)) $ \(tuIdx,n) -> case T.lookup n uLoc of
+        Nothing -> fail $ "missing sampler from shader: " ++ show n
+        Just i  -> (setSampler i tuIdx) >> putStr ("    + setup texture unit mapping (smp " ++ show i ++ " <-> TexUnit " ++ show tuIdx ++": ") >> printGLStatus
+
     -- HINT: we get the uniform location now, so we have to provide this info to the renderer
-    let disposeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
+    let uLoc' = foldl' (\t (_,n) -> T.delete (SB.pack n) t) uLoc samplerNames
+        disposeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
         renderFun = do
             objs <- readIORef objsIORef
             unless (L.null objs) $ do
@@ -445,4 +419,4 @@ compileRenderFrameBuffer objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx 
                 setupAccumulationContext aCtx
                 glUseProgram po
                 sequence_ objs
-    return $! (renderFun, disposeFun, uLoc, sLoc)
+    return $! (renderFun, disposeFun, uLoc', sLoc)

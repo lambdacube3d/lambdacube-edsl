@@ -7,6 +7,7 @@ import Control.Arrow
 import Control.Monad
 import Data.Binary.Get as B
 import Data.Bits
+import Data.Char
 import Data.Int
 import Data.List
 import Data.Ord
@@ -21,6 +22,9 @@ import qualified Data.IntMap as IM
 import qualified Data.Trie as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
+
+import System.Directory
+import System.FilePath
 
 import LC_API hiding (Line)
 import LC_Mesh hiding (loadMesh)
@@ -202,12 +206,16 @@ readStuntsData carNum trkFile = do
         , carSimModel   = carSim
         }
 
+takeExtensionCI = map toLower . takeExtension
+isPrefixOfCI a b = isPrefixOf a $ map toLower b
+
 -- generic resource handling
 archive :: T.Trie SB.ByteString
 archive = unsafePerformIO $! do
-    a <- readArchive "newstunts.zip"
-    b <- readArchive "STUNTS11.ZIP"
-    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) $ a ++ b
+    a <- concat <$> (mapM readArchive =<< filter (\n -> ".zip" == takeExtensionCI n) <$> getDirectoryContents ".")
+    --a <- readArchive "newstunts.zip"
+    --b <- readArchive "STUNTS11.ZIP"
+    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) a -- $ a ++ b
     print $ T.keys ar
     return ar
 

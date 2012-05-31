@@ -67,7 +67,7 @@ stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
-    clear   = FrameBuffer (V2 0 0) (DepthImage n1 100000:.ColorImage n1 (V4 0.36 0.99 0.99 1 :: V4F):.ZT)
+    clear   = FrameBuffer (DepthImage n1 100000:.ColorImage n1 (V4 0.36 0.99 0.99 1 :: V4F):.ZT)
     rast    = Rasterize rastCtx NoGeometryShader $ Transform vert $ Fetch "streamSlot" Triangle input
     input   = (IV3F "position", IV3F "normal", IV4F "colour", IInt "pattern", IFloat "zBias", IFloat "shininess")
     worldView = Uni (IM44F "worldView")

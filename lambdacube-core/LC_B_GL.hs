@@ -41,7 +41,7 @@ arraySize       :: Buffer -> Int -> Int
 arrayType       :: Buffer -> Int -> ArrayType
 
 -- Renderer
-compileRenderer :: [GPOutput] -> IO Renderer
+compileRenderer :: GPOutput -> IO Renderer
 {-
 slotUniforms    :: Renderer -> Trie (Trie InputType)
 slotStreams     :: Renderer -> Trie (PrimitiveType, Trie InputType)
@@ -199,7 +199,7 @@ orderedFrameBuffersFromGP orig = order deps
     }
 -}
 -- FIXME: implement properly
-compileRenderer [ScreenOut (PrjFrameBuffer n idx gp)] = do
+compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
     let nubS :: Ord a => [a] -> [a]
         nubS = Set.toList . Set.fromList
 
@@ -216,9 +216,12 @@ compileRenderer [ScreenOut (PrjFrameBuffer n idx gp)] = do
         (slotStreamList, slotUniformList) = unzip 
               [ ((name,(primType,T.fromList inputs)),(name, T.fromList $ unis fb)) 
               | fb <- concatMap renderChain ordFBs
-              , Fetch name primType inputs <- maybeToList $ findFetch fb]
+              , Fetch name primType inputs <- maybeToList $ findFetch fb
+              ]
         (uniformNames,uniformTypes) = unzip $ nubS $ concatMap (T.toList . snd) slotUniformList
         slotNames = map fst slotStreamList
+        printGLStatus = checkGL >>= print
+        printFBOStatus = checkFBO >>= print
 
     (uSetup,uSetter) <- unzip <$> mapM mkUSetter uniformTypes
     let uniformSetterTrie   = T.fromList $! zip uniformNames uSetter
@@ -233,8 +236,8 @@ compileRenderer [ScreenOut (PrjFrameBuffer n idx gp)] = do
         done - factor out uniform setter map creation from framebuffer compile function
                 it should only create shader objects
         done - compile each FrameBuffer (pass)
-        create render textures
-        setup each pass's FBO output, attach RenderTarget textures to source FBO
+        done - create render textures
+        done - setup each pass's FBO output, attach RenderTarget textures to source FBO
         render operations (one pass, with multiple render calls/slots):
             - bind FBO
             - before each slot's render operation we should setup texture unit mapping
@@ -263,8 +266,8 @@ data TextureType - gl texture target
     -- TODO: create TextureUnit mapping (FBO <---> sampler's render texture)
     --          to do this we have to collect all samplers what uses this pass (FrameBuffer)
     let samplers = nubS [s | s@(Sampler _ _ _ _) <- expUniverse allGPs]
-        samplersWithTexture = nubS [s | s@(Sampler _ _ _ (Texture _ _ _ _)) <- samplers]
-        samplersWithTextureSlot = nubS [s | s@(Sampler _ _ _ (TextureSlot _ _)) <- samplers]
+        samplersWithTexture = nubS [s | s@(Sampler _ _ _ (Texture {})) <- samplers]
+        samplersWithTextureSlot = nubS [s | s@(Sampler _ _ _ (TextureSlot {})) <- samplers]
         -- collect all render textures refers to a FrameBuffer
         isReferred :: GP -> Exp -> Bool
         isReferred f (Sampler _ _ _ (Texture _ _ _ [f'])) = findFrameBuffer f' == f
@@ -285,7 +288,10 @@ data TextureType - gl texture target
             glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D to 0
             -}
     -- TODO: also build sampler name map: Map (Exp :: Sampler) (ByteString, GLTexObj)
-    renderTextures <- fmap Map.fromList $ forM (zip [0..] samplersWithTexture) $
+    
+    
+    -- question: how should we handle the Stencil and Depth textures at multipass rendering
+    (renderTexNameList,renderTexGLObjList) <- fmap unzip $ forM (zip [0..] samplersWithTexture) $
       \(sIdx,smp@(Sampler ty txFilter txEdgeMode (Texture txType txSize txMipMap txGPList))) -> do
         to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
         {-
@@ -311,45 +317,107 @@ data TextureType - gl texture target
                                    if length txGPList /= 1 then error "Invalid texture source specification!" else do
                 let internalFormat  = fromIntegral $ textureDataTypeToGLType dTy
                     dataFormat      = fromIntegral $ textureDataTypeToGLArityType dTy
-                    VV2I (V2 w h)   = txSize
-                    --[PrjFrameBuffer name idx gpFB] = txGPList
-                    --Just (fbo,)
+                    VV2U (V2 w h)   = txSize
                 glBindTexture gl_TEXTURE_2D to
+                -- temp
+                glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral gl_REPEAT
+                glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral gl_REPEAT
+                glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
+                glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR
+                --glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
+                --glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL 0
+                -- temp end
                 glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
                 return ()
             _ -> error $ "FIXME: This texture format is not yet supported: " ++ show txType
-        return (smp,("renderTex_" ++ show sIdx,to))
-
+        putStr (" -- Render Texture " ++ show sIdx ++ ": ") >> printGLStatus
+        return ((smp,"renderTex_" ++ show sIdx),(smp,to))
+    let renderTexName   = Map.fromList renderTexNameList
+        renderTexGLObj  = Map.fromList renderTexGLObjList
     -- render and dispose action for each pass
     -- [[(RenderAction, DisposeAction, UniformLocation, StreamLocation)]], [[] :: drawcall] :: pass
     -- TODO create: render, dispose, slotUniformLocation, slotStreamLocation
-    passes <- forM ordFBs $ \fb -> do
+    maxTextureUnits <- glGetIntegerv1 gl_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+    passes <- forM (zip ordFBs (replicate (length ordFBs-1) False ++ [True])) $ \(fb,isLast) -> do
         -- setup output
-        --  setup each pass's FBO output, attach RenderTarget textures to source FBO
-        glFBO <- alloca $! \pbo -> glGenFramebuffers 1 pbo >> peek pbo
-        glBindFramebuffer gl_DRAW_FRAMEBUFFER glFBO
-        let delete      = with glFBO $ \pbo -> glDeleteFramebuffers 1 pbo
-            depSamplers = dependentSamplers fb
-        fboMapping <- forM (zip [0..] depSamplers) $ \(i,smp) -> do
-            let Sampler _ _ _ (Texture _ _ _ [PrjFrameBuffer _ prjIdx _]) = smp
-                Just (_,txObj)  = Map.lookup smp renderTextures
-            glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D txObj 0
-            return $ gl_COLOR_ATTACHMENT0 + fromIntegral (length depSamplers - prjIdx - 1) -- FIXME: calculate FBO attachment index properly, index reffered from right
+        let depSamplers = dependentSamplers fb
+            
+        (passSetup,passDispose) <- case isLast of
+            True    -> do --return (glBindFramebuffer gl_DRAW_FRAMEBUFFER 0 >> glDrawBuffer gl_BACK_LEFT, return ())
+                let setup = do
+                        glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
+                        glDrawBuffer gl_BACK_LEFT
+                        putStr " -- default FB bind: " >> printGLStatus
+                return (setup,return ())
+            False   -> do
+                --  setup each pass's FBO output, attach RenderTarget textures to source FBO
+                putStrLn " -- FBO init: "
+                -- FIXME: impelement properly
+                let depthW = 512
+                    depthH = 512
+                depthTex <- alloca $! \pto -> glGenRenderbuffers 1 pto >> peek pto
+                putStr "    - alloc depth texture: " >> printGLStatus
+                glBindRenderbuffer gl_RENDERBUFFER depthTex
+                putStr "    - bind depth texture: " >> printGLStatus
+                -- temp
+                -- temp end
+                glRenderbufferStorage gl_RENDERBUFFER gl_DEPTH_COMPONENT32 depthW depthH 
+                putStr "    - define depth texture: " >> printGLStatus
 
-        withArray fboMapping $ glDrawBuffers (fromIntegral $ length fboMapping)
+                glFBO <- alloca $! \pbo -> glGenFramebuffers 1 pbo >> peek pbo
+                putStr "    - alloc: " >> printGLStatus
+                glBindFramebuffer gl_DRAW_FRAMEBUFFER glFBO
+                putStr "    - bind: " >> printGLStatus
+                glFramebufferRenderbuffer gl_DRAW_FRAMEBUFFER gl_DEPTH_ATTACHMENT gl_RENDERBUFFER depthTex
+                
+                putStr "    - attach depth texture: " >> printGLStatus
+                fboMapping <- forM (zip [0..] depSamplers) $ \(i,smp) -> do
+                    let Sampler _ _ _ (Texture _ _ _ [PrjFrameBuffer _ prjIdx _]) = smp
+                        Just txObj  = Map.lookup smp renderTexGLObj
+                    glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D txObj 0
+                    putStr ("    - attach to color slot" ++ show (i,txObj) ++ ": ") >> printGLStatus
+                    return $ gl_COLOR_ATTACHMENT0 + fromIntegral (length depSamplers - prjIdx - 1) -- FIXME: calculate FBO attachment index properly, index reffered from right
+                withArray fboMapping $ glDrawBuffers (fromIntegral $ length fboMapping)
+                putStrLn $ "    - FBO mapping: " ++ show [i - gl_COLOR_ATTACHMENT0 | i <- fboMapping]
+                putStr "    - mappig setup: " >> printGLStatus
 
-        -- TODO: setup texture input
-        forM (renderChain fb) $ \f -> case f of
+                putStr "    - check FBO completeness: " >> printFBOStatus
+
+                let delete  = do
+                        with glFBO $ \pbo -> glDeleteFramebuffers 1 pbo
+                        with depthTex $ \pto -> glDeleteTextures 1 pto
+                    bind    = glBindFramebuffer gl_DRAW_FRAMEBUFFER glFBO >> putStr " -- FBO bind: " >> printGLStatus >> putStr " -- FBO status: " >> printFBOStatus
+                return (bind,delete)
+
+        fmap ((passSetup,passDispose,T.empty,T.empty):) $ forM (renderChain fb) $ \f -> case f of
             FrameBuffer {}  -> return (compileClearFrameBuffer f, return (), T.empty, T.empty)
             Accumulate {}   -> do
                 --FIXME: add support for stream slot sharing across multiple draw actions
                 --          for that we should build a map: Trie (Map (GP :: Accumulate) ObjectSet)
                 let Just (Fetch name primType inputs) = findFetch f
                     Just objSet = T.lookup name objectSetTrie
+                    usedRenderSamplers = nubS [s | s@(Sampler _ _ _ (Texture {})) <- expUniverse f]
+                    usedSlotSamplers = nubS [s | s@(Sampler _ _ _ (TextureSlot {})) <- expUniverse f]
+                    usedRenderTexName = [(s,n) | s <- usedRenderSamplers, let Just n = Map.lookup s renderTexName]
 
-                -- TODO: before each slot's render operation we should setup texture unit mapping
-                (rA,dA,uT,sT) <- compileRenderFrameBuffer objSet f
-                return (rA,dA,T.singleton name uT,T.singleton name sT)
+                (rA,dA,uT,sT) <- compileRenderFrameBuffer usedRenderTexName objSet f
+                -- TODO: setup texture input, before each slot's render operation we should setup texture unit mapping
+                --          - we have to create the TextureUnit layout
+                --          - create TextureUnit setter action
+                --              - the shader should be setup at the creation
+                --              - we have to setup texture binding before each render action call
+                let renderTexObjs = [txObj | s <- usedRenderSamplers, let Just txObj = Map.lookup s renderTexGLObj]
+                    textureSetup = do
+                        forM_ (zip (renderTexObjs ++ repeat 0) [0..fromIntegral maxTextureUnits-1]) $ \(texObj,texUnitIdx) -> do
+                            glActiveTexture $ gl_TEXTURE0 + texUnitIdx
+                            glBindTexture gl_TEXTURE_2D texObj
+                            putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
+                    disableTextures = do
+                        forM_ [0..fromIntegral maxTextureUnits-1] $ \texUnitIdx -> do
+                            glActiveTexture $ gl_TEXTURE0 + texUnitIdx
+                            glBindTexture gl_TEXTURE_2D 0
+                            putStr (" -- disable Texture bind (TexUnit " ++ show texUnitIdx ++ "): ") >> printGLStatus
+                return (textureSetup >> rA >> disableTextures,dA,T.singleton name uT,T.singleton name sT)
             _ -> error "GP node type error: should be FrameBuffer"
 
     --putStrLn $ "samplers: " ++ show (length samplers) ++ "  render textures: " ++ show (length textures)
@@ -361,37 +429,20 @@ data TextureType - gl texture target
 
     -- depends on compilation: render, dispose, slotUniformLocation, slotStreamLocation
     let (drawAct,disposeAct,uniLocs,streamLocs) = unzip4 $ concat passes
-        [(V2 w h)] = [v | FrameBuffer v _ <- gpUniverse' gp]
-        width   = fromIntegral w
-        height  = fromIntegral h
-        blit = do   -- FIXME: implement properly
-            {-
-            glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
-            glReadBuffer gl_COLOR_ATTACHMENT0
-            glDrawBuffer gl_BACK
-            glBlitFramebuffer 0 0 width height 0 0 width height (fromIntegral gl_COLOR_BUFFER_BIT) gl_NEAREST
-            -}
-            glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
-            glDrawBuffer gl_BACK_LEFT
-            sequence_ drawAct
 
     return $! Renderer
         -- public
         { slotUniform           = T.fromList slotUniformList
         , slotStream            = T.fromList slotStreamList
         , uniformSetter         = uniformSetterTrie
-        , render                = blit -- FIXME: fill after compialtion 
-        , dispose               = return () -- FIXME: fill after compialtion
+        , render                = print " * Frame Started" >> sequence_ drawAct >> print "Frame Ended"
+        , dispose               = sequence_ disposeAct
 
         -- internal
         , objectSet             = objectSetTrie
         , mkUniformSetup        = mkUniformSetupTrie
         , slotUniformLocation   = foldl' T.unionL T.empty uniLocs
         , slotStreamLocation    = foldl' T.unionL T.empty streamLocs
-
---        , glFrameBuffer         = fboMap
---        , glSampler             = Map.empty
---        , glImageTexture        = Map.empty
         }
 {-
     return $! Renderer
@@ -407,10 +458,6 @@ data TextureType - gl texture target
         , mkUniformSetup        = mkUniformSetup rndr `T.unionL` (T.fromList $! zip newUNames uSetup)
         , slotUniformLocation   = T.insert slotName uLoc $! slotUniformLocation rndr
         , slotStreamLocation    = T.insert slotName sLoc $! slotStreamLocation rndr
-
-        , glFrameBuffer         = glFrameBuffer rndr
-        , glSampler             = glSampler rndr
-        , glImageTexture        = glImageTexture rndr
         }
 -}
 

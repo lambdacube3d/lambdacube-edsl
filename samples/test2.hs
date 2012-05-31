@@ -40,12 +40,14 @@ drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 drop3 :: Exp s V3F -> Exp s V2F
 drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
 
---simple :: GP (VertexStream Triangle (V3F,V3F)) -> GP (FrameBuffer N1 V4F)
+simple' = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (one'::V4F):.ZT)
+
+--simple :: GP (VertexStream Triangle (V3F,V3F)) -> GP (FrameBuffer N1 (Float,V4F))
 simple objs = Accumulate fragCtx (Filter filter) frag rast clear
   where
     rastCtx = TriangleCtx (CullFront CW) PolygonFill NoOffset LastVertex
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (V2 640 480) (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
     rast    = Rasterize rastCtx NoGeometryShader prims
     prims   = Transform vert objs
     worldViewProj = Uni (IM44F "worldViewProj")
@@ -66,10 +68,13 @@ main :: IO ()
 main = do
     let lcnet :: GP (Image N1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
+        lcnet' :: GP (Image N1 V4F)
+        lcnet' = PrjFrameBuffer "outFB" tix0 $ simple'
 
     windowSize <- initCommon "LC DSL Demo 2"
 
-    (t,renderer) <- C.time $ compileRenderer [ScreenOut lcnet]
+    (t,renderer) <- C.time $ compileRenderer $ ScreenOut lcnet
+    (t,renderer') <- C.time $ compileRenderer $ ScreenOut lcnet'
     putStrLn $ C.secs t ++ " - compile renderer"
     print $ slotUniform renderer
     print $ slotStream renderer

@@ -9,6 +9,8 @@ import LC_API
 
 import Material
 
+cull = CullNone
+
 -- specialized snoc
 v3v4 :: Exp s V3F -> Exp s V4F
 v3v4 v = let V3 x y z = unpack' v in pack' $ V4 x y z (Const 1)
@@ -92,7 +94,7 @@ mkShader fb (name,ca) = Accumulate fragCtx PassAll frag rast fb
   where
     offset  = if caPolygonOffset ca then Offset (-1) (-2) else NoOffset
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
-    rastCtx = TriangleCtx CullNone PolygonFill offset LastVertex
+    rastCtx = TriangleCtx cull PolygonFill offset LastVertex
     rast    = Rasterize rastCtx NoGeometryShader prims
     prims   = Transform vert input
     input   = Fetch name Triangle (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")
@@ -111,14 +113,14 @@ q3GFX :: [(ByteString,CommonAttrs)] -> GP (FrameBuffer N1 (Float,V4F))
 q3GFX shl = errorShader $ foldl' mkShader clear ordered
   where
     ordered = sortBy (\(_,a) (_,b) -> caSort a `compare` caSort b) shl
-    clear   = FrameBuffer (V2 1280 800) (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
 
 errorShader :: GP (FrameBuffer N1 (Float,V4F)) -> GP (FrameBuffer N1 (Float,V4F))
 errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
   where
     offset  = NoOffset--Offset (0) (-10)
     fragCtx = DepthOp Lequal True:.ColorOp NoBlending (one' :: V4B):.ZT
-    rastCtx = TriangleCtx CullNone (PolygonLine 2) offset LastVertex
+    rastCtx = TriangleCtx cull (PolygonLine 2) offset LastVertex
     rast    = Rasterize rastCtx NoGeometryShader prims
     prims   = Transform vert input
     input   = Fetch "missing shader" Triangle (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")
@@ -140,7 +142,7 @@ errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
   where
     blend   = NoBlending
     fragCtx = DepthOp Less True:.ColorOp blend (one' :: V4B):.ZT
-    rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
+    rastCtx = TriangleCtx cull PolygonFill NoOffset LastVertex
     rast    = Rasterize rastCtx NoGeometryShader prims
     prims   = Transform vert input
     input   = Fetch "missing shader" Triangle (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")

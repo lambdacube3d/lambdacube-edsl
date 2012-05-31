@@ -15,6 +15,8 @@ import qualified Data.ByteString.Char8 as SB
 import Text.PrettyPrint.HughesPJClass
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import LC_G_Type
 import LC_G_APIType hiding (LogicOperation(..), ComparisonFunction(..))
@@ -250,8 +252,13 @@ codeGenPrim PrimNoise4              ty [a]          = [functionCall "noise4"    
 -- Texture Lookup Functions
 codeGenPrim PrimTextureSize             ty [a]          = [functionCall "textureSize"           [a]]
 codeGenPrim PrimTextureSize             ty [a,b]        = [functionCall "textureSize"           [a,b]]
+{-
 codeGenPrim PrimTexture                 ty [a,b]        = [functionCall "texture"               [a,b]]
 codeGenPrim PrimTexture                 ty [a,b,c]      = [functionCall "texture"               [a,b,c]]
+-}
+codeGenPrim PrimTexture                 ty [a,b]        = [functionCall "texture2D"               [a,b]]
+codeGenPrim PrimTexture                 ty [a,b,c]      = [functionCall "texture2D"               [a,b,c]]
+
 codeGenPrim PrimTextureProj             ty [a,b]        = [functionCall "textureProj"           [a,b]]
 codeGenPrim PrimTextureProj             ty [a,b,c]      = [functionCall "textureProj"           [a,b,c]]
 codeGenPrim PrimTextureLod              ty [a,b,c]      = [functionCall "textureLod"            [a,b,c]]
@@ -360,20 +367,20 @@ codeGenConst (VM43F  v) = [matX3C "mat4x3" (v4C "vec4" floatC) v]
 codeGenConst (VM44F  v) = [matX4C "mat4"   (v4C "vec4" floatC) v]
 
 -- require: input names
-codeGenExp :: [ByteString] -> Exp -> [Expr]
-codeGenExp inNames (PrimApp ty f arg)   = codeGenPrim f (codeGenType $ expType arg) (codeGenExp inNames arg)
-codeGenExp inNames (Const ty c)         = codeGenConst c
-codeGenExp inNames (PrimVar ty n)       = [Variable $! unpack n]
-codeGenExp inNames (Tup ty t)           = concatMap (codeGenExp inNames) t
-codeGenExp inNames (Uni ty n)           = [Variable $! unpack n]
-codeGenExp inNames p@(Prj ty idx e)     = {-trace (unlines["gen: ",show p,show $! pPrint src])-} src
+codeGenExp :: Map Exp String -> [ByteString] -> Exp -> [Expr]
+codeGenExp smpName inNames (PrimApp ty f arg)   = codeGenPrim f (codeGenType $ expType arg) (codeGenExp smpName inNames arg)
+codeGenExp smpName inNames (Const ty c)         = codeGenConst c
+codeGenExp smpName inNames (PrimVar ty n)       = [Variable $! unpack n]
+codeGenExp smpName inNames (Tup ty t)           = concatMap (codeGenExp smpName inNames) t
+codeGenExp smpName inNames (Uni ty n)           = [Variable $! unpack n]
+codeGenExp smpName inNames p@(Prj ty idx e)     = {-trace (unlines["gen: ",show p,show $! pPrint src])-} src
   where
     src = reverse
         . take (length $ codeGenType ty)
         . drop idx
         . reverse
-        $ codeGenExp inNames e
-codeGenExp inNames (Var ty i)
+        $ codeGenExp smpName inNames e
+codeGenExp smpName inNames (Var ty i)
     | i == 0 && length inNames == arity       = [Variable (unpack n) | n <- inNames]
     | otherwise = throw $ userError $ unlines $
         [ "codeGenExp failed: "
@@ -384,25 +391,28 @@ codeGenExp inNames (Var ty i)
   where
     arity = length $! codeGenType ty
 
-codeGenExp inNames (Cond ty p t e)      = zipWith branch (codeGenExp inNames t) (codeGenExp inNames e)
+codeGenExp smpName inNames (Cond ty p t e)      = zipWith branch (codeGenExp smpName inNames t) (codeGenExp smpName inNames e)
   where
-    [predicate] = codeGenExp inNames p
+    [predicate] = codeGenExp smpName inNames p
     branch a b  = Selection predicate a b
 
-codeGenExp inNames (Sampler ty f e t)   = [Variable $ show ty]
+codeGenExp smpName inNames s@(Sampler ty f e t)   = case Map.lookup s smpName of
+    Just name   -> [Variable name]
+    Nothing     -> error "Unknown sampler value!"
 
 {-
   required info: output variable names
   if we disable inline functions, it simplifies variable name gen
 -}
 
-codeGenVertexShader :: [(ByteString,InputType)]
+codeGenVertexShader :: Map Exp String
+                    -> [(ByteString,InputType)]
                     -> ExpFun
                     -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
-codeGenVertexShader inVars = cvt
+codeGenVertexShader smpName inVars = cvt
   where
     genExp :: Exp -> [Expr]
-    genExp = codeGenExp (map fst inVars)
+    genExp = codeGenExp smpName (map fst inVars)
 
     genIExp :: [Interpolated Exp] -> [(GLSL.InterpolationQualifier,[Expr],[InputType])]
     genIExp ((Flat e) : xs)             = (GLSL.Flat,genExp e,codeGenType $ expType e) : genIExp xs
@@ -415,6 +425,7 @@ codeGenVertexShader inVars = cvt
     cvt (Body body@(VertexOut pos size outs)) = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
+        , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
         , pp [attribute (unpack n)    (toGLSLType t) | (n,t) <- inVars]
         , pp [varyingIQ (unpack n) iq (toGLSLType t) | n <- oNames | iq <- oQ | [t] <- oT]
         , "void main ()"
@@ -424,19 +435,21 @@ codeGenVertexShader inVars = cvt
         ppE e a = pack $! show $! pPrint $! Compound [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         pp a    = pack $! show $! pPrint $! TranslationUnit a
         uniVars = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- expUniverse' body]
+        smpVars = Set.toList $ Set.fromList [(n,t) | s@(Sampler (Single t) _ _ (Texture {})) <- expUniverse' body, let Just n = Map.lookup s smpName]
         [posE]  = genExp pos
         [sizeE] = genExp size
         (oQ,oE,oT)  = unzip3 $! genIExp outs
         oNames      = [pack $ "v" ++ show i | i <- [0..]]
 
 -- TODO
-codeGenGeometryShader inVars _ = ("", inVars)
+codeGenGeometryShader samplerNameMap inVars _ = ("", inVars)
 
-codeGenFragmentShader :: [(ByteString,GLSL.InterpolationQualifier,InputType)]
+codeGenFragmentShader :: Map Exp String
+                      -> [(ByteString,GLSL.InterpolationQualifier,InputType)]
                       -> FragmentFilter
                       -> ExpFun
                       -> (ByteString, [(ByteString,InputType)])
-codeGenFragmentShader inVars ffilter = cvt
+codeGenFragmentShader smpName inVars ffilter = cvt
   where
     cvtF :: ExpFun -> Expr
     cvtF (Lam lam) = cvtF lam
@@ -450,7 +463,7 @@ codeGenFragmentShader inVars ffilter = cvt
         FragmentOutRastDepth e    -> src e []
 
     genExp :: Exp -> [Expr]
-    genExp = codeGenExp [n | (n,_,_) <- inVars]
+    genExp = codeGenExp smpName [n | (n,_,_) <- inVars]
 
     genFExp :: [Exp] -> [([Expr],[InputType])]
     genFExp (e : xs) = (genExp e,codeGenType $ expType e) : genFExp xs
@@ -463,6 +476,7 @@ codeGenFragmentShader inVars ffilter = cvt
     src outs outs' = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
+        , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
         , pp [varyingIQ (unpack n) iq (toGLSLType t) | (n,iq,t) <- inVars]
         , pp [outVar    (unpack n)    (toGLSLType t) | n <- oNames | [t] <- oT]
         , "void main ()"
@@ -474,7 +488,9 @@ codeGenFragmentShader inVars ffilter = cvt
         assigns a e = [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         ppBody l    = pack $! show $! pPrint $! Compound l
         pp a        = pack $! show $! pPrint $! TranslationUnit a
-        uniVars     = Set.toList $ (Set.fromList [(n,t) | Uni (Single t) n <- expUniverse outs]) `Set.union` (Set.fromList [(n,t) | Uni (Single t) n <- expUniverse (map snd outs')])
+        allExps     = concat [expUniverse outs, expUniverse (map snd outs')]
+        uniVars     = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- allExps]
+        smpVars     = Set.toList $ Set.fromList [(n,t) | s@(Sampler (Single t) _ _ (Texture {})) <- allExps, let Just n = Map.lookup s smpName]
         (oE',oN')   = unzip $! [(genExp e,n) | (n,e) <- outs']
         (oE,oT)     = unzip $! genFExp outs
         body        = assigns (oN' ++ oNames) (concat oE' ++ concat oE)
@@ -497,31 +513,72 @@ expType e =
 
 -- Utility functions
 toGLSLType :: InputType -> TypeSpecifierNonArray
-toGLSLType Bool   = GLSL.Bool
-toGLSLType V2B    = GLSL.BVec2
-toGLSLType V3B    = GLSL.BVec3
-toGLSLType V4B    = GLSL.BVec4
-toGLSLType Word   = GLSL.UInt
-toGLSLType V2U    = GLSL.UVec2
-toGLSLType V3U    = GLSL.UVec3
-toGLSLType V4U    = GLSL.UVec4
-toGLSLType Int    = GLSL.Int
-toGLSLType V2I    = GLSL.IVec2
-toGLSLType V3I    = GLSL.IVec3
-toGLSLType V4I    = GLSL.IVec4
-toGLSLType Float  = GLSL.Float
-toGLSLType V2F    = GLSL.Vec2
-toGLSLType V3F    = GLSL.Vec3
-toGLSLType V4F    = GLSL.Vec4
-toGLSLType M22F   = GLSL.Mat2
-toGLSLType M23F   = GLSL.Mat2x3
-toGLSLType M24F   = GLSL.Mat2x4
-toGLSLType M32F   = GLSL.Mat3x2
-toGLSLType M33F   = GLSL.Mat3
-toGLSLType M34F   = GLSL.Mat3x4
-toGLSLType M42F   = GLSL.Mat4x2
-toGLSLType M43F   = GLSL.Mat4x3
-toGLSLType M44F   = GLSL.Mat4
+toGLSLType t = case t of
+    Bool    -> GLSL.Bool
+    V2B     -> GLSL.BVec2
+    V3B     -> GLSL.BVec3
+    V4B     -> GLSL.BVec4
+    Word    -> GLSL.UInt
+    V2U     -> GLSL.UVec2
+    V3U     -> GLSL.UVec3
+    V4U     -> GLSL.UVec4
+    Int     -> GLSL.Int
+    V2I     -> GLSL.IVec2
+    V3I     -> GLSL.IVec3
+    V4I     -> GLSL.IVec4
+    Float   -> GLSL.Float
+    V2F     -> GLSL.Vec2
+    V3F     -> GLSL.Vec3
+    V4F     -> GLSL.Vec4
+    M22F    -> GLSL.Mat2
+    M23F    -> GLSL.Mat2x3
+    M24F    -> GLSL.Mat2x4
+    M32F    -> GLSL.Mat3x2
+    M33F    -> GLSL.Mat3
+    M34F    -> GLSL.Mat3x4
+    M42F    -> GLSL.Mat4x2
+    M43F    -> GLSL.Mat4x3
+    M44F    -> GLSL.Mat4
+    -- shadow textures
+    STexture1D          -> GLSL.Sampler1DShadow
+    STexture2D          -> GLSL.Sampler2DShadow
+    STextureCube        -> GLSL.SamplerCubeShadow
+    STexture1DArray     -> GLSL.Sampler1DArrayShadow
+    STexture2DArray     -> GLSL.Sampler2DArrayShadow
+    STexture2DRect      -> GLSL.Sampler2DRectShadow
+    -- float textures
+    FTexture1D          -> GLSL.Sampler1D
+    FTexture2D          -> GLSL.Sampler2D
+    FTexture3D          -> GLSL.Sampler3D
+    FTextureCube        -> GLSL.SamplerCube
+    FTexture1DArray     -> GLSL.Sampler1DArray
+    FTexture2DArray     -> GLSL.Sampler2DArray
+    FTexture2DMS        -> GLSL.Sampler2DMS
+    FTexture2DMSArray   -> GLSL.Sampler2DMSArray
+    FTextureBuffer      -> GLSL.SamplerBuffer
+    FTexture2DRect      -> GLSL.Sampler2DRect
+    -- int textures
+    ITexture1D          -> GLSL.ISampler1D
+    ITexture2D          -> GLSL.ISampler2D
+    ITexture3D          -> GLSL.ISampler3D
+    ITextureCube        -> GLSL.ISamplerCube
+    ITexture1DArray     -> GLSL.ISampler1DArray
+    ITexture2DArray     -> GLSL.ISampler2DArray
+    ITexture2DMS        -> GLSL.ISampler2DMS
+    ITexture2DMSArray   -> GLSL.ISampler2DMSArray
+    ITextureBuffer      -> GLSL.ISamplerBuffer
+    ITexture2DRect      -> GLSL.ISampler2DRect
+    -- uint textures
+    UTexture1D          -> GLSL.USampler1D
+    UTexture2D          -> GLSL.USampler2D
+    UTexture3D          -> GLSL.USampler3D
+    UTextureCube        -> GLSL.USamplerCube
+    UTexture1DArray     -> GLSL.USampler1DArray
+    UTexture2DArray     -> GLSL.USampler2DArray
+    UTexture2DMS        -> GLSL.USampler2DMS
+    UTexture2DMSArray   -> GLSL.USampler2DMSArray
+    UTextureBuffer      -> GLSL.USamplerBuffer
+    UTexture2DRect      -> GLSL.USampler2DRect
 
 varInit :: String -> TypeSpecifierNonArray -> Maybe TypeQualifier -> Maybe Expr -> Declaration
 varInit name ty tq val = InitDeclaration (TypeDeclarator varType) [InitDecl name Nothing val]

@@ -134,7 +134,7 @@ convertOpenGP = cvt
     cvt glyt (H.Fetch n p i)                = Fetch n (T.toPrimitive p) (T.toInputList i)
     cvt glyt (H.Transform vs ps)            = Transform (convertFun1Vert glyt vs) (cvt glyt ps)
     cvt glyt (H.Rasterize ctx sh ps)        = Rasterize (convertRasterContext ctx) (convertGeometryShader glyt sh) (cvt glyt ps)
-    cvt glyt (H.FrameBuffer s fb)           = FrameBuffer s (convertFrameBuffer fb)
+    cvt glyt (H.FrameBuffer fb)             = FrameBuffer (convertFrameBuffer fb)
     cvt glyt (H.Accumulate ctx f sh fs fb)  = Accumulate (convertAccumulationContext ctx) (convertFragmentFilter glyt f) (convertFun1Frag glyt sh) (cvt glyt fs) (cvt glyt fb)
     cvt glyt (H.PrjFrameBuffer n idx fb)    = PrjFrameBuffer n (prjToInt idx) (convertGP fb)
     cvt glyt (H.PrjImage n idx img)         = PrjImage n (toInt idx) (convertGP img)
@@ -302,7 +302,7 @@ convertTuple lyt  glyt (es `SnocTup` e) = convertTuple lyt glyt es ++ [convertOp
 convertTexture :: T.Texture (H.GP) dim arr t ar
                -> Texture GP
 convertTexture (T.TextureSlot n t) = TextureSlot n (convertTextureType t)
-convertTexture (T.Texture t s m d) = Texture (convertTextureType t) (T.toValue s) (T.toMipMap m) (map convertGP d)
+convertTexture (T.Texture t s m d) = Texture (convertTextureType t) (T.toValue s) (convertMipMap m) (map convertGP d)
 
 convertTextureDataType :: T.TextureDataType t ar -> TextureDataType
 convertTextureDataType (T.Float a)  = FloatT (T.toColorArity a)
@@ -318,6 +318,11 @@ convertTextureType (T.TextureCube a)    = TextureCube (convertTextureDataType a)
 convertTextureType (T.TextureRect a)    = TextureRect (convertTextureDataType a)
 convertTextureType (T.Texture2DMS a b)  = Texture2DMS (convertTextureDataType a) (toInt b)
 convertTextureType (T.TextureBuffer a)  = TextureBuffer (convertTextureDataType a)
+
+convertMipMap :: T.MipMap t -> MipMap
+convertMipMap (T.NoMip)         = NoMip
+convertMipMap (T.Mip a b)       = Mip a b
+convertMipMap (T.AutoMip a b)   = AutoMip a b
 
 convertRasterContext :: T.RasterContext p -> RasterContext
 convertRasterContext T.PointCtx                 = PointCtx

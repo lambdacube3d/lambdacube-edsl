@@ -35,7 +35,7 @@ simple :: GP (VertexStream Triangle (V3F,V3F)) -> GP (FrameBuffer N1 V4F)
 simple objs = Accumulate fragCtx PassAll frag rast clear
   where
     worldViewProj = Uni (IM44F "worldViewProj")
-    clear   = FrameBuffer (V2 256 256) (ColorImage n1 (zero'::V4F):.ZT)
+    clear   = FrameBuffer (ColorImage n1 (zero'::V4F):.ZT)
     fragCtx = ColorOp NoBlending (one' :: V4B):.ZT
     rast    = Rasterize triangleCtx NoGeometryShader prims
     prims   = Transform vert objs

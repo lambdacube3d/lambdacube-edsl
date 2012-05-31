@@ -54,7 +54,7 @@ data GP
     | Fetch             ByteString PrimitiveType [(ByteString,InputType)]
     | Transform         ExpFun GP
     | Rasterize         RasterContext GeometryShader GP
-    | FrameBuffer       V2U [Image]
+    | FrameBuffer       [Image]
     | Accumulate        [FragmentOperation] FragmentFilter ExpFun GP GP
     | PrjFrameBuffer    ByteString Int GP
     | PrjImage          ByteString Int GP

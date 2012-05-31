@@ -68,7 +68,7 @@ main = do
 
     windowSize <- initCommon "LC DSL Quake 3 Demo"
 
-    renderer <- compileRenderer [ScreenOut lcnet]
+    renderer <- compileRenderer $ ScreenOut lcnet
     print "renderer created"
 
     putStrLn $ "loading: " ++ show bspName

@@ -66,7 +66,7 @@ main = do
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
 
     let gfxNet = PrjFrameBuffer "outFB" tix0 stuntsGFX
-    renderer <- compileRenderer [ScreenOut gfxNet]
+    renderer <- compileRenderer $ ScreenOut gfxNet
     let draw _ = render renderer >> swapBuffers
 
     forM_ (terrainMesh ++ trackMesh) $ \m -> do
