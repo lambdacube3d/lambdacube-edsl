@@ -32,6 +32,53 @@ floatF = Const
 intF :: Int32 -> Exp F Int32
 intF = Const
 
+-- blur
+
+blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> GP (FrameBuffer N1 (Float,V4F))
+blur' frag = Accumulate fragCtx PassAll frag rast clear
+  where
+    fragCtx = DepthOp Always True:.ColorOp NoBlending (one' :: V4B):.ZT
+    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
+    rast    = Rasterize triangleCtx NoGeometryShader prims
+    prims   = Transform vert input
+    input   = Fetch "postSlot" Triangle (IV2F "position")
+
+    vert :: Exp V V2F -> VertexOut V2F
+    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+      where
+        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
+        V2 u v  = unpack' uv
+
+blurVH :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
+blurVH img = blur' fragH
+  where
+    a = 0.002
+    m = Const (V2 (-a) 0) :: Exp F V2F
+    p = Const (V2 (a) 0) :: Exp F V2F
+    fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    fragH uv' = FragmentOutRastDepth $ (s @+ sm @+ sp) :. ZT
+      where
+        s :: Exp F V4F
+        s = texture' smp uv (Const 0)
+        sm = texture' smp (uv @+ m) (Const 0)
+        sp = texture' smp (uv @+ p) (Const 0)
+        V2 u v = unpack' uv
+        uv = uv' @* floatF 0.5 @+ floatF 0.5
+        smp = Sampler LinearFilter Clamp tex
+        tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "" tix0 (blur' fragV)]
+
+    fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    fragV uv' = FragmentOutRastDepth $ ((s @+ sm @+ sp) @/ floatF 3) :. ZT
+      where
+        s :: Exp F V4F
+        s = texture' smp uv (Const 0)
+        sm = texture' smp (uv @+ m) (Const 0)  :: Exp F V4F
+        sp = texture' smp (uv @+ p) (Const 0)  :: Exp F V4F
+        V2 u v = unpack' uv
+        uv = uv' @* floatF 0.5 @+ floatF 0.5
+        smp = Sampler LinearFilter Clamp tex
+        tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
+
 ----------
 -- VSM ---
 ----------
@@ -78,7 +125,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
         v4l = lightViewProj @*. snoc p 1
 
     calcLuminance :: Exp F (V4F,V4F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    calcLuminance lp = FragmentOutRastDepth $ (amb @+ (floatF 2 @* p_max)):. ZT
+    calcLuminance lp = FragmentOutRastDepth $ (amb @+ p_max):. ZT
       where
         amb :: Exp F V4F
         amb = Const $ V4 0.1 0.1 0.3 1
@@ -95,6 +142,9 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
     --Texture gp dim arr t ar
     shadowMap :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     shadowMap = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
+
+    shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
 {-
 tx :: GP (Image N1 (V2 Float))
 tx = PrjFrameBuffer "" tix0 moments

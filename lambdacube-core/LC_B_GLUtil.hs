@@ -1,7 +1,7 @@
 module LC_B_GLUtil (
     queryUniforms,
     queryStreams,
-    mkUSetter,
+    mkUniformSetter,
     mkSSetter,
     compileShader,
     printProgramLog,
@@ -21,7 +21,8 @@ module LC_B_GLUtil (
     textureDataTypeToGLArityType,
     glGetIntegerv1,
     setSampler,
-    checkFBO
+    checkFBO,
+    createGLTextureObject
 ) where
 
 import Control.Applicative
@@ -39,6 +40,7 @@ import qualified Data.Vector as V
 import LC_G_Type
 import LC_G_APIType
 import LC_U_APIType
+import LC_U_DeBruijn
 
 type StreamSetter = Stream Buffer -> IO ()
 
@@ -74,32 +76,32 @@ queryUniforms po = do
         uLocation = [i | (_,i,_,_) <- ul]
     return $! (T.fromList $! zip uNames uLocation, T.fromList $! zip uNames uTypes)
 
-mkUSetter :: InputType -> IO (GLint -> IO (), InputSetter)
-mkUSetter Bool    = do {t <- newIORef False;                        return $! (\i -> readIORef t >>= setUBool i,  SBool $!  writeIORef t)}
-mkUSetter V2B     = do {t <- newIORef (V2 False False);             return $! (\i -> readIORef t >>= setUV2B i,   SV2B $!   writeIORef t)}
-mkUSetter V3B     = do {t <- newIORef (V3 False False False);       return $! (\i -> readIORef t >>= setUV3B i,   SV3B $!   writeIORef t)}
-mkUSetter V4B     = do {t <- newIORef (V4 False False False False); return $! (\i -> readIORef t >>= setUV4B i,   SV4B $!   writeIORef t)}
-mkUSetter Word    = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUWord i,  SWord $!  writeIORef t)}
-mkUSetter V2U     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2U i,   SV2U $!   writeIORef t)}
-mkUSetter V3U     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3U i,   SV3U $!   writeIORef t)}
-mkUSetter V4U     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4U i,   SV4U $!   writeIORef t)}
-mkUSetter Int     = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUInt i,   SInt $!   writeIORef t)}
-mkUSetter V2I     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2I i,   SV2I $!   writeIORef t)}
-mkUSetter V3I     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3I i,   SV3I $!   writeIORef t)}
-mkUSetter V4I     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4I i,   SV4I $!   writeIORef t)}
-mkUSetter Float   = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUFloat i, SFloat $! writeIORef t)}
-mkUSetter V2F     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2F i,   SV2F $!   writeIORef t)}
-mkUSetter V3F     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3F i,   SV3F $!   writeIORef t)}
-mkUSetter V4F     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4F i,   SV4F $!   writeIORef t)}
-mkUSetter M22F    = do {t <- newIORef (V2 z2 z2);                   return $! (\i -> readIORef t >>= setUM22F i,  SM22F $!  writeIORef t)}
-mkUSetter M23F    = do {t <- newIORef (V3 z2 z2 z2);                return $! (\i -> readIORef t >>= setUM23F i,  SM23F $!  writeIORef t)}
-mkUSetter M24F    = do {t <- newIORef (V4 z2 z2 z2 z2);             return $! (\i -> readIORef t >>= setUM24F i,  SM24F $!  writeIORef t)}
-mkUSetter M32F    = do {t <- newIORef (V2 z3 z3);                   return $! (\i -> readIORef t >>= setUM32F i,  SM32F $!  writeIORef t)}
-mkUSetter M33F    = do {t <- newIORef (V3 z3 z3 z3);                return $! (\i -> readIORef t >>= setUM33F i,  SM33F $!  writeIORef t)}
-mkUSetter M34F    = do {t <- newIORef (V4 z3 z3 z3 z3);             return $! (\i -> readIORef t >>= setUM34F i,  SM34F $!  writeIORef t)}
-mkUSetter M42F    = do {t <- newIORef (V2 z4 z4);                   return $! (\i -> readIORef t >>= setUM42F i,  SM42F $!  writeIORef t)}
-mkUSetter M43F    = do {t <- newIORef (V3 z4 z4 z4);                return $! (\i -> readIORef t >>= setUM43F i,  SM43F $!  writeIORef t)}
-mkUSetter M44F    = do {t <- newIORef (V4 z4 z4 z4 z4);             return $! (\i -> readIORef t >>= setUM44F i,  SM44F $!  writeIORef t)}
+mkUniformSetter :: InputType -> IO (GLint -> IO (), InputSetter)
+mkUniformSetter Bool    = do {t <- newIORef False;                        return $! (\i -> readIORef t >>= setUBool i,  SBool $!  writeIORef t)}
+mkUniformSetter V2B     = do {t <- newIORef (V2 False False);             return $! (\i -> readIORef t >>= setUV2B i,   SV2B $!   writeIORef t)}
+mkUniformSetter V3B     = do {t <- newIORef (V3 False False False);       return $! (\i -> readIORef t >>= setUV3B i,   SV3B $!   writeIORef t)}
+mkUniformSetter V4B     = do {t <- newIORef (V4 False False False False); return $! (\i -> readIORef t >>= setUV4B i,   SV4B $!   writeIORef t)}
+mkUniformSetter Word    = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUWord i,  SWord $!  writeIORef t)}
+mkUniformSetter V2U     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2U i,   SV2U $!   writeIORef t)}
+mkUniformSetter V3U     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3U i,   SV3U $!   writeIORef t)}
+mkUniformSetter V4U     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4U i,   SV4U $!   writeIORef t)}
+mkUniformSetter Int     = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUInt i,   SInt $!   writeIORef t)}
+mkUniformSetter V2I     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2I i,   SV2I $!   writeIORef t)}
+mkUniformSetter V3I     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3I i,   SV3I $!   writeIORef t)}
+mkUniformSetter V4I     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4I i,   SV4I $!   writeIORef t)}
+mkUniformSetter Float   = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUFloat i, SFloat $! writeIORef t)}
+mkUniformSetter V2F     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2F i,   SV2F $!   writeIORef t)}
+mkUniformSetter V3F     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3F i,   SV3F $!   writeIORef t)}
+mkUniformSetter V4F     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4F i,   SV4F $!   writeIORef t)}
+mkUniformSetter M22F    = do {t <- newIORef (V2 z2 z2);                   return $! (\i -> readIORef t >>= setUM22F i,  SM22F $!  writeIORef t)}
+mkUniformSetter M23F    = do {t <- newIORef (V3 z2 z2 z2);                return $! (\i -> readIORef t >>= setUM23F i,  SM23F $!  writeIORef t)}
+mkUniformSetter M24F    = do {t <- newIORef (V4 z2 z2 z2 z2);             return $! (\i -> readIORef t >>= setUM24F i,  SM24F $!  writeIORef t)}
+mkUniformSetter M32F    = do {t <- newIORef (V2 z3 z3);                   return $! (\i -> readIORef t >>= setUM32F i,  SM32F $!  writeIORef t)}
+mkUniformSetter M33F    = do {t <- newIORef (V3 z3 z3 z3);                return $! (\i -> readIORef t >>= setUM33F i,  SM33F $!  writeIORef t)}
+mkUniformSetter M34F    = do {t <- newIORef (V4 z3 z3 z3 z3);             return $! (\i -> readIORef t >>= setUM34F i,  SM34F $!  writeIORef t)}
+mkUniformSetter M42F    = do {t <- newIORef (V2 z4 z4);                   return $! (\i -> readIORef t >>= setUM42F i,  SM42F $!  writeIORef t)}
+mkUniformSetter M43F    = do {t <- newIORef (V3 z4 z4 z4);                return $! (\i -> readIORef t >>= setUM43F i,  SM43F $!  writeIORef t)}
+mkUniformSetter M44F    = do {t <- newIORef (V4 z4 z4 z4 z4);             return $! (\i -> readIORef t >>= setUM44F i,  SM44F $!  writeIORef t)}
 
 b2w :: Bool -> GLuint
 b2w True = 1
@@ -588,3 +590,62 @@ checkFBO = do
             | otherwise                                     = "Unknown error"
     e <- glCheckFramebufferStatus gl_DRAW_FRAMEBUFFER
     return $ f e
+
+{-
+data TextureDataType - gl internal representation
+    = FloatT        ColorArity
+    | IntT          ColorArity
+    | WordT         ColorArity
+    | ShadowT
+    deriving (Show, Eq, Ord)
+
+data TextureType - gl texture target
+    = Texture1D     TextureDataType Int
+    | Texture2D     TextureDataType Int
+    | Texture3D     TextureDataType
+    | TextureCube   TextureDataType
+    | TextureRect   TextureDataType
+    | Texture2DMS   TextureDataType Int
+    | TextureBuffer TextureDataType
+    deriving (Show, Eq, Ord)
+-}
+createGLTextureObject :: Exp -> IO GLuint
+createGLTextureObject (Sampler ty txFilter txEdgeMode (Texture txType txSize txMipMap txGPList)) = do
+    to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
+    {-
+        void glTexImage1D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, void *data );
+        void glTexImage2D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, void *data );
+        void glTexImage3D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, void *data );
+        void glTexImage2DMultisample( GLenum target, GLsizei samples, GLint internalformat, GLsizei width, GLsizei height, GLboolean ﬁxedsamplelocations );
+        void glTexImage3DMultisample( GLenum target, GLsizei samples, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean ﬁxedsamplelocations );
+    -}
+    -- FIXME: for now we support only single 2D texture
+    case txType of
+        {-
+        Texture1D dTy n     -> return ()
+        Texture2D dTy n     -> return ()
+        Texture3D dTy       -> return ()
+        TextureCube dTy     -> return ()
+        TextureRect dTy     -> return ()
+        Texture2DMS dTy n   -> return ()
+        TextureBuffer dTy   -> return ()
+        -}
+        -- temporary texture support: 2D NoMip Float/Int/Word Red/RG/RGBA
+        Texture2D dTy 1     -> if txMipMap /= NoMip then error "FIXME: Only NoMip textures are supported yet!" else 
+                               if length txGPList /= 1 then error "Invalid texture source specification!" else do
+            let internalFormat  = fromIntegral $ textureDataTypeToGLType dTy
+                dataFormat      = fromIntegral $ textureDataTypeToGLArityType dTy
+                VV2U (V2 w h)   = txSize
+            glBindTexture gl_TEXTURE_2D to
+            -- temp
+            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral gl_REPEAT
+            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral gl_REPEAT
+            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
+            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR
+            --glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
+            --glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL 0
+            -- temp end
+            glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
+            return ()
+        _ -> error $ "FIXME: This texture format is not yet supported: " ++ show txType
+    return to

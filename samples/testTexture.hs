@@ -25,35 +25,6 @@ import qualified Criterion.Measurement as C
 
 import VSM
 
-simple :: GP (FrameBuffer N1 (Float,V4F))
-simple = Accumulate fragCtx PassAll frag rast clear
-  where
-    fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 0 0 1 1):.ZT)
-    rast    = Rasterize triangleCtx NoGeometryShader prims
-    prims   = Transform vert input
-    input   = Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
-    worldViewProj = Uni (IM44F "worldViewProj")
-
-    vert :: Exp V (V3F,V3F) -> VertexOut V3F
-    vert pn = VertexOut v4 (Const 1) (Flat (drop4 v4):.ZT)
-      where
-        v4    = worldViewProj @*. snoc p 1
-        (p,n) = untup2 pn
-
-    frag :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag a = FragmentOutRastDepth $ snoc c 1 @+ s :. ZT
-      where
-        c = Const one'--texture' sampler (drop3 a) (Const 0)
-        s :: Exp F V4F
-        --s = Const 0
-        s = texture' samplerSh (drop3 a) (Const 0)
-
-    sampler = Sampler LinearFilter Clamp diffuse
-    samplerSh = Sampler LinearFilter Clamp shadowTx
-    diffuse = TextureSlot "diffuse" $ Texture2D (Float RGB) n1
-    shadowTx  = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowTx" tix0 vsm]
-
 quad :: Mesh
 quad = Mesh
     { mAttributes   = T.singleton "position" $ A_V2F $ V.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
@@ -72,6 +43,8 @@ post img = Accumulate fragCtx PassAll frag rast clear
     rast    = Rasterize triangleCtx NoGeometryShader prims
     prims   = Transform vert input
     input   = Fetch "postSlot" Triangle (IV2F "position")
+    --input = FetchData Triangle (AV2F pos)
+    --pos   = V.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
 
     vert :: Exp V V2F -> VertexOut V2F
     vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
@@ -92,12 +65,12 @@ post img = Accumulate fragCtx PassAll frag rast clear
     smp = Sampler LinearFilter Clamp tex
     tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
 
-
 main :: IO ()
 main = do
     let lcnet :: GP (Image N1 V4F)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ moments
         lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm
+        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 (blurVH $ PrjFrameBuffer "" tix0 vsm)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 $ FrameBuffer (V2 0 0) (DepthImage n1 0:.ColorImage n1 (V4 0 0 1 1 :: V4F):.ZT)
 
     windowSize <- initCommon "LC DSL Texture Demo"
@@ -192,12 +165,19 @@ scene slotU objU windowSize mousePosition fblrPress = do
         Just (SM44F lightSetter) = T.lookup "lightViewProj" slotU
         Just (SFloat timeSetter) = T.lookup "time" slotU
         setupGFX (w,h) (cam,dir,up,_) time = do
-            let cm = fromProjective (lookat cam (cam + dir) up)
+            let light' = Vec3 0 0 3
+                ldir = Vec3 0 0 (-1)
+                lup = Vec3 0 1 0
+                light = light' + (Vec3 d 0 0)
+                d = 5 * sin (0.3 * time)
+                lm = fromProjective (lookat light (light + ldir) lup)
+                cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.1 50 (pi/2) (fromIntegral w / fromIntegral h)
+                lpm = perspective 0.1 500 (pi/1.2) (fromIntegral w / fromIntegral h)
             (t,_) <- C.time $ do
                 --timeSetter time
                 matSetter $! mat4ToM44F $! cm .*. pm
-                lightSetter $! mat4ToM44F $! cm .*. pm
+                lightSetter $! mat4ToM44F $! lm .*. lpm
             --putStrLn $ C.secs t ++ " - worldViewProj uniform setup via STM"
             return ()
     r <- effectful3 setupGFX windowSize cam time
@@ -249,8 +229,8 @@ initCommon title = do
         , displayOptions_numBlueBits        = 8
         , displayOptions_numAlphaBits       = 8
         , displayOptions_numDepthBits       = 24
---        , displayOptions_width              = 1280
---        , displayOptions_height             = 720
+        , displayOptions_width              = 512
+        , displayOptions_height             = 512
         , displayOptions_windowIsResizable  = True
 --        , displayOptions_displayMode    = Fullscreen
         }

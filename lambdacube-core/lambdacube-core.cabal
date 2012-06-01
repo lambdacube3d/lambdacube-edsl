@@ -35,9 +35,11 @@ Library
         LC_API
         LC_B_GL
         LC_B_GLCompile
+        LC_B_GLData
         LC_B_GLSLCodeGen
         LC_B_GLSLPretty
         LC_B_GLSLSyntax
+        LC_B_GLType
         LC_B_GLUtil
         LC_B_Traversals
         LC_C_Convert

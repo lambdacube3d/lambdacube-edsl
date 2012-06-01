@@ -23,11 +23,10 @@ import LC_G_APIType
 import LC_U_APIType
 import LC_U_DeBruijn
 
+import LC_B_GLType
 import LC_B_GLUtil
 import LC_B_GLSLCodeGen
 import LC_B_Traversals
-
-type ObjectSet = [IO ()]
 
 data ShaderSource
     = VertexShaderSrc   !ByteString
@@ -413,10 +412,10 @@ compileRenderFrameBuffer samplerNames objsIORef (Accumulate aCtx ffilter fsh (Ra
     let uLoc' = foldl' (\t (_,n) -> T.delete (SB.pack n) t) uLoc samplerNames
         disposeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
         renderFun = do
-            objs <- readIORef objsIORef
-            unless (L.null objs) $ do
+            ObjectSet drawObjs objsMap <- readIORef objsIORef
+            unless (Map.null objsMap) $ do
                 setupRasterContext rCtx
                 setupAccumulationContext aCtx
                 glUseProgram po
-                sequence_ objs
+                drawObjs
     return $! (renderFun, disposeFun, uLoc', sLoc)
