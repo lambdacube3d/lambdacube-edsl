@@ -80,7 +80,6 @@ addObject renderer slotName prim objIndices objAttributes objUniforms = do
         ]
     when (L.null streamCounts) $ fail "addObject: missing stream attribute, a least one stream attribute is required!"
     when (L.or [c /= count | c <- streamCounts]) $ fail "addObject: streams should have the same length!"
-    --unless (and [T.member n uLocs | n <- objUniforms]) $ fail "addObject: unknown slot uniform!"
 
     -- validate index type if presented and create draw action
     (iSetup,draw) <- case objIndices of
@@ -93,49 +92,8 @@ addObject renderer slotName prim objIndices objAttributes objUniforms = do
             -- validate index type
             when (notElem arrType [ArrWord8, ArrWord16, ArrWord32]) $ fail "addObject: index type should be unsigned integer type"
             return (glBindBuffer gl_ELEMENT_ARRAY_BUFFER bo, glDrawElements primGL (fromIntegral idxCount) glType ptr)
-{-
-        Just objSet = T.lookup slotName (objectSet renderer)
-    --FIXME: modifyIORef objSet (renderFun:)
--}
-{-
-data RenderDescriptor
-    = RenderDescriptor
-    { uniformLocation   :: Trie GLint   -- Uniform name -> GLint
-    , streamLocation    :: Trie GLuint  -- Attribute name -> GLuint
-    , renderAction      :: IO ()
-    , disposeAction     :: IO ()
-    , drawObjectsIORef  :: IORef ObjectSet  -- updated internally, according objectSet
-                                            -- hint: Map is required to support slot sharing across different Accumulation nodes,
-                                            --       because each node requires it's own render action list: [IO ()]
-    }
 
-data SlotDescriptor
-    = SlotDescriptor
-    { attachedGP        :: Set GP
-    , objectSet         :: IORef (Set Object)       -- objects, added to this slot (set by user)
-    }
-
-data ObjectSet
-    = ObjectSet
-    { drawObject    :: IO ()
-    , drawObjectMap :: Map Object (IO ())
-    }
-
-    = Renderer
-    -- public
-    { slotUniform           :: Trie (Trie InputType)
-    , slotStream            :: Trie (PrimitiveType, Trie InputType)
-    , uniformSetter         :: Trie InputSetter         -- global uniform
-    , render                :: IO ()
-    , dispose               :: IO ()
-
-    -- internal
-    , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm
-    , slotDescriptor        :: Trie SlotDescriptor
-    , renderDescriptor      :: Map GP RenderDescriptor
-    }
--}
-    --mkUniformSetter :: InputType -> IO (GLint -> IO (), InputSetter)
+    -- implementation
     let renderDescriptorMap = renderDescriptor renderer
         uniformType     = T.fromList $ concat [T.toList t | (_,t) <- T.toList $ slotUniform renderer]
         mkUSetup        = mkUniformSetup renderer
@@ -185,7 +143,6 @@ data ObjectSet
         Just (SlotDescriptor gps objSetRef) = T.lookup slotName (slotDescriptor renderer)
         gpList = Set.toList gps
     {-
-      TODO:
         - create the object draw action for every Accumulate node
         - update ObjectSet's draw action lists
     -}
@@ -210,12 +167,6 @@ data ObjectSet
 
     return obj
 
-{-
-    = SlotDescriptor
-    { attachedGP        :: Set GP
-    , objectSet         :: IORef (Set Object)       -- objects, added to this slot (set by user)
-    }
--}
 removeObject :: Renderer -> Object -> IO ()
 removeObject rend obj = do
     let Just (SlotDescriptor gps objSetRef) = T.lookup (objectSlotName obj) (slotDescriptor rend)
