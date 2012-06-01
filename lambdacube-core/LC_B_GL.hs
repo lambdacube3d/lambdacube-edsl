@@ -111,7 +111,7 @@ mkRenderDescriptor renderTexName renderTexGLObj f = case f of
             textureSetup        = forM_ (zip (renderTexObjs ++ repeat 0) [0..fromIntegral maxTextureUnits-1]) $ \(texObj,texUnitIdx) -> do
                 glActiveTexture $ gl_TEXTURE0 + texUnitIdx
                 glBindTexture gl_TEXTURE_2D texObj
-                putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
+                --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
 
         drawRef <- newIORef $ ObjectSet (return ()) Map.empty
         (rA,dA,uT,sT) <- compileRenderFrameBuffer usedRenderTexName drawRef f
@@ -130,7 +130,7 @@ mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
         let setup = do
                 glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
                 glDrawBuffer gl_BACK_LEFT
-                putStr " -- default FB bind: " >> printGLStatus
+                --putStr " -- default FB bind: " >> printGLStatus
         return (setup,return ())
     False   -> do
         --  setup each pass's FBO output, attach RenderTarget textures to source FBO
@@ -169,8 +169,8 @@ mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
 
         let renderAct = do
                 glBindFramebuffer gl_DRAW_FRAMEBUFFER glFBO
-                putStr " -- FBO bind: " >> printGLStatus
-                putStr " -- FBO status: " >> printFBOStatus
+                --putStr " -- FBO bind: " >> printGLStatus
+                --putStr " -- FBO status: " >> printFBOStatus
             disposeAct = do
                 with glFBO $ \pbo -> glDeleteFramebuffers 1 pbo
                 with depthTex $ \pto -> glDeleteTextures 1 pto
@@ -192,13 +192,15 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
 
         -- collect slot info: name, primitive type, stream input, uniform input
         (slotStreamList, slotUniformList, slotGPList) = unzip3
-              [ ((name, (primType,T.fromList inputs))
-                ,(name, T.fromList $ unis fb)
+              [ (T.singleton name (primType,T.fromList inputs)
+                ,T.singleton name (T.fromList $ unis fb)
                 ,T.singleton name (Set.singleton fb))
               | fb <- concatMap renderChain ordFBs
               , Fetch name primType inputs <- maybeToList $ findFetch fb
               ]
-        (uniformNames,uniformTypes) = unzip $ nubS $ concatMap (T.toList . snd) slotUniformList
+        slotStreamTrie  = foldl' (T.mergeBy (\(a1,a2) (b1,b2) -> Just (a1, T.unionL a2 b2))) T.empty slotStreamList
+        slotUniformTrie = foldl' (T.mergeBy (\a b -> Just (T.unionL a b))) T.empty slotUniformList
+        (uniformNames,uniformTypes) = unzip $ nubS $ concatMap (T.toList . snd) $ T.toList slotUniformTrie
 
     (uSetup,uSetter) <- unzip <$> mapM mkUniformSetter uniformTypes
     let uniformSetterTrie   = T.fromList $! zip uniformNames uSetter
@@ -232,10 +234,13 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
 
     return $! Renderer
         -- public
-        { slotUniform           = T.fromList slotUniformList
-        , slotStream            = T.fromList slotStreamList
+        { slotUniform           = slotUniformTrie
+        , slotStream            = slotStreamTrie
         , uniformSetter         = uniformSetterTrie
-        , render                = print " * Frame Started" >> sequence_ passRender >> print " * Frame Ended"
+        , render                = do
+                                    --print " * Frame Started"
+                                    sequence_ passRender
+                                    --print " * Frame Ended"
         , dispose               = renderTexDispose >> sequence_ passDispose
 
         -- internal

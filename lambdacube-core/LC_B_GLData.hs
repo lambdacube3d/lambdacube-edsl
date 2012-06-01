@@ -136,26 +136,20 @@ data ObjectSet
     }
 -}
     --mkUniformSetter :: InputType -> IO (GLint -> IO (), InputSetter)
-    let uniformType     = T.fromList $ concat [T.toList t | (_,t) <- T.toList $ slotUniform renderer]
-        --objUniformType  = T.filterMap ()
-        renderDescriptorMap = renderDescriptor renderer
+    let renderDescriptorMap = renderDescriptor renderer
+        uniformType     = T.fromList $ concat [T.toList t | (_,t) <- T.toList $ slotUniform renderer]
+        mkUSetup        = mkUniformSetup renderer
+        globalUNames    = Set.toList $! (Set.fromList $! T.keys uniformType) Set.\\ (Set.fromList objUniforms)
+        
+    (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUniformSetter t | n <- objUniforms, t <- maybeToList $ T.lookup n uniformType])
+    let objUSetterTrie = T.fromList $! zip objUniforms objUSetters
+    
         mkDrawAction :: GP -> IO (GLuint,IO ())
         mkDrawAction gp = do
             {-
             -- create uniform setup action
-            let Just uLocs = T.lookup slotName (slotUniformLocation renderer)
-                Just uTypes = T.lookup slotName (slotUniform renderer)
-            (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUniformSetter t | n <- objUniforms, let Just t = T.lookup n uTypes])
-            let objUSetterTrie = T.fromList $! zip objUniforms objUSetters
-                objUSetup = zipWithM_ (\n mkOUS -> let Just loc = T.lookup n uLocs in mkOUS loc) objUniforms mkObjUSetup
-
-                globalUNames = Set.toList $! (Set.fromList $! T.keys uLocs) Set.\\ (Set.fromList objUniforms)
-                mkUSetup = mkUniformSetup renderer
-                globalUSetup = sequence_ [mkUS loc | n <- globalUNames, let Just mkUS = T.lookup n mkUSetup, loc <- maybeToList $ T.lookup n uLocs]
-
-                -- stream setup action
-                Just sLocs = T.lookup slotName (slotStreamLocation renderer)
-                sSetup = sequence_ [mkSSetter t loc s | (n,s) <- T.toList objAttributes, t <- maybeToList $ T.lookup n sType, loc <- maybeToList $ T.lookup n sLocs]
+            let Just uTypes = T.lookup slotName (slotUniform renderer)
+            let 
             -}
             let Just rd = Map.lookup gp renderDescriptorMap
                 sLocs   = streamLocation rd
@@ -167,20 +161,21 @@ data ObjectSet
                                             ,   loc <- maybeToList $ T.lookup n sLocs
                                             ]
                 -- global uniform setup
-                mkUSetup        = mkUniformSetup renderer
-                globalUNames    = Set.toList $! (Set.fromList $! T.keys uniformType) Set.\\ (Set.fromList objUniforms)
                 globalUSetup    = sequence_ [ mkUS loc 
                                             | n <- globalUNames
                                             , let Just mkUS = T.lookup n mkUSetup
                                             , loc <- maybeToList $ T.lookup n uLocs
                                             ]
-                objUSetup       = return () --TODO
+                -- object uniform setup
+                objUSetup       = zipWithM_ (\n mkOUS -> let Just loc = T.lookup n uLocs in mkOUS loc) objUniforms mkObjUSetup
+            --print sLocs
             -- create Vertex Array Object
             vao <- alloca $! \pvao -> glGenVertexArrays 1 pvao >> peek pvao
             glBindVertexArray vao
             sSetup -- setup vertex attributes
             iSetup -- setup index buffer
             let renderFun = do
+                    --print "draw object"
                     globalUSetup            -- setup uniforms
                     objUSetup
                     glBindVertexArray vao   -- setup stream input (aka object attributes)
@@ -194,18 +189,20 @@ data ObjectSet
         - create the object draw action for every Accumulate node
         - update ObjectSet's draw action lists
     -}
+    --print sType
     (vaoList,drawList) <- unzip <$> mapM mkDrawAction gpList
     let obj = Object
             { objectSlotName        = slotName
-            , objectUniformSetter   = T.empty -- TODO
+            , objectUniformSetter   = objUSetterTrie
             , vertexArrayObject     = vaoList
             }
 
     -- add object to slot's object set
-    modifyIORef objSetRef $ \s -> Set.delete obj s
+    modifyIORef objSetRef $ \s -> Set.insert obj s
 
     -- add draw object action to list
     forM_ (zip gpList drawList) $ \(gp,draw) -> do
+        --print ("add", vaoList)
         let Just rd = Map.lookup gp renderDescriptorMap
         modifyIORef (drawObjectsIORef rd) $ \(ObjectSet _ drawMap) ->
             let drawMap' = Map.insert obj draw drawMap

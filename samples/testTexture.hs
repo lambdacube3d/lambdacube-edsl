@@ -70,7 +70,7 @@ main = do
     let lcnet :: GP (Image N1 V4F)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ moments
         lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm
-        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 (blurVH $ PrjFrameBuffer "" tix0 vsm)
+        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 (blurVH $ PrjFrameBuffer "" tix0 moments)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 $ FrameBuffer (V2 0 0) (DepthImage n1 0:.ColorImage n1 (V4 0 0 1 1 :: V4F):.ZT)
 
     windowSize <- initCommon "LC DSL Texture Demo"
@@ -91,19 +91,14 @@ main = do
     putStrLn $ C.secs t ++ " - loadMesh Monkey.lcmesh"
     (t,mesh2) <- C.time $ loadMesh "Scene.lcmesh"
     putStrLn $ C.secs t ++ " - loadMesh Scene.lcmesh"
-{-
+
     (t,obj) <- C.time $ addMesh renderer "streamSlot" mesh []
     putStrLn $ C.secs t ++ " - addMesh Monkey.lcmesh"
     (t,obj2) <- C.time $ addMesh renderer "streamSlot" mesh2 []
     putStrLn $ C.secs t ++ " - addMesh Scene.lcmesh"
--}
-    (t,obj) <- C.time $ addMesh renderer "streamSlot2" mesh []
-    putStrLn $ C.secs t ++ " - addMesh Monkey.lcmesh"
-    (t,obj2) <- C.time $ addMesh renderer "streamSlot2" mesh2 []
-    putStrLn $ C.secs t ++ " - addMesh Scene.lcmesh"
 
-    addMesh renderer "streamSlot3" mesh []
-    addMesh renderer "streamSlot3" mesh2 []
+--    addMesh renderer "streamSlot1" mesh []
+--    addMesh renderer "streamSlot1" mesh2 []
 
     -- TODO:
     -- texture specification:

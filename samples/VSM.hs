@@ -89,7 +89,7 @@ moments = Accumulate fragCtx PassAll storeDepth rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 0 0 1 1):.ZT)
     rast    = Rasterize triangleCtx NoGeometryShader prims
     prims   = Transform vert input
-    input   = Fetch "streamSlot2" Triangle (IV3F "position")
+    input   = Fetch "streamSlot" Triangle (IV3F "position")
     lightViewProj = Uni (IM44F "lightViewProj")
 
     vert :: Exp V V3F -> VertexOut Float
@@ -114,7 +114,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx NoGeometryShader prims
     prims   = Transform vert input
-    input   = Fetch "streamSlot3" Triangle (IV3F "position")
+    input   = Fetch "streamSlot" Triangle (IV3F "position")
     worldViewProj = Uni (IM44F "worldViewProj")
     lightViewProj = Uni (IM44F "lightViewProj")
 

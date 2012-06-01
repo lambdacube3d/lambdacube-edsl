@@ -285,7 +285,7 @@ compileClearFrameBuffer (FrameBuffer fb) = cvt fb
         let --renderGL3   = with d $ \pd -> glClearBufferfv gl_DEPTH 0 $ castPtr pd
         glClearDepth $ realToFrac d
         glClear $ fromIntegral gl_DEPTH_BUFFER_BIT
-        print "     * glClear gl_DEPTH_BUFFER_BIT"
+        --print "     * glClear gl_DEPTH_BUFFER_BIT"
         cvtC 0 xs
     cvt xs = cvtC 0 xs
 
