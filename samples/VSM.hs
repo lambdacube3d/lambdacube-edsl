@@ -39,7 +39,7 @@ blur' frag = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = DepthOp Always True:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
-    rast    = Rasterize triangleCtx NoGeometryShader prims
+    rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
     input   = Fetch "postSlot" Triangle (IV2F "position")
 
@@ -49,37 +49,43 @@ blur' frag = Accumulate fragCtx PassAll frag rast clear
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
 
+gaussFilter :: [(Float,Float)]
+gaussFilter = 
+    [ (-3.0,   0.015625)
+    , (-2.0,   0.09375)
+    , (-1.0,   0.234375)
+    , (0.0,    0.3125)
+    , (1.0,    0.234375)
+    , (2.0,    0.09375)
+    , (3.0,    0.015625)
+    ]
+
 blurVH :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
 blurVH img = blur' fragH
   where
-    a = 1/512
-    mV = Const (V2 0 (-a)) :: Exp F V2F
-    pV = Const (V2 0 (a)) :: Exp F V2F
-    mH = Const (V2 (-a) 0) :: Exp F V2F
-    pH = Const (V2 (a) 0) :: Exp F V2F
+    sizeT = 512
+    sizeI = floor sizeT
+    uvH v = Const (V2 (v/sizeT) 0) :: Exp F V2F
+    uvV v = Const (V2 0 (v/sizeT)) :: Exp F V2F
     fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    fragH uv' = FragmentOutRastDepth $ (s @+ sm @+ sp) :. ZT
+    fragH uv' = FragmentOutRastDepth $ (sampleH gaussFilter) :. ZT
       where
-        s :: Exp F V4F
-        s = texture' smp uv (Const 0)
-        sm = texture' smp (uv @+ mH) (Const 0)
-        sp = texture' smp (uv @+ pH) (Const 0)
+        sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) (Const 0) @* floatF c
+        sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) (Const 0) @* floatF c) @+ sampleH xs
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
-        tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "" tix0 (blur' fragV)]
+        tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [PrjFrameBuffer "" tix0 (blur' fragV)]
 
     fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    fragV uv' = FragmentOutRastDepth $ ((s @+ sm @+ sp) @/ floatF 3) :. ZT
+    fragV uv' = FragmentOutRastDepth $ (sampleV gaussFilter) :. ZT
       where
-        s :: Exp F V4F
-        s = texture' smp uv (Const 0)
-        sm = texture' smp (uv @+ mV) (Const 0)  :: Exp F V4F
-        sp = texture' smp (uv @+ pV) (Const 0)  :: Exp F V4F
+        sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) (Const 0) @* floatF c
+        sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) (Const 0) @* floatF c) @+ sampleV xs
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
-        tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
+        tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]
 
 ----------
 -- VSM ---
@@ -89,7 +95,7 @@ moments = Accumulate fragCtx PassAll storeDepth rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 0 0 1 1):.ZT)
-    rast    = Rasterize triangleCtx NoGeometryShader prims
+    rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
     input   = Fetch "streamSlot" Triangle (IV3F "position")
     lightViewProj = Uni (IM44F "lightViewProj")
@@ -114,7 +120,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
-    rast    = Rasterize triangleCtx NoGeometryShader prims
+    rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
     input   = Fetch "streamSlot" Triangle (IV3F "position")
     worldViewProj = Uni (IM44F "worldViewProj")
@@ -140,7 +146,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
         d = tz @- m1
         p_max = variance @/ (variance @+ d @* d)
 
-    sampler = Sampler LinearFilter Clamp shadowMap
+    sampler = Sampler LinearFilter Clamp shadowMapBlur
     --Texture gp dim arr t ar
     shadowMap :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     shadowMap = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]

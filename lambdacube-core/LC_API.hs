@@ -10,7 +10,35 @@ module LC_API (
     module TypeLevel.Number.Nat.Num,
     Int32,
     Word32,
-    UniformSetter(..),
+    uniformBool,
+    uniformV2B,
+    uniformV3B,
+    uniformV4B,
+
+    uniformWord,
+    uniformV2U,
+    uniformV3U,
+    uniformV4U,
+
+    uniformInt,
+    uniformV2I,
+    uniformV3I,
+    uniformV4I,
+
+    uniformFloat,
+    uniformV2F,
+    uniformV3F,
+    uniformV4F,
+
+    uniformM22F,
+    uniformM23F,
+    uniformM24F,
+    uniformM32F,
+    uniformM33F,
+    uniformM34F,
+    uniformM42F,
+    uniformM43F,
+    uniformM44F,
 
     -- backend
     Buffer,
@@ -65,133 +93,135 @@ import Data.Trie as T
 compileRenderer :: GPOutput -> IO Renderer
 compileRenderer l = GL.compileRenderer $ convertGPOutput l
 
-nullSetter :: ByteString -> a -> IO ()
-nullSetter n _ = Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n
+nullSetter :: ByteString -> String -> a -> IO ()
+nullSetter n t _ = Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t
 
-class UniformSetter t where
-    uniform   :: Trie InputSetter -> Input t -> SetterFun t
+uniformBool  :: ByteString -> Trie InputSetter -> SetterFun Bool
+uniformV2B   :: ByteString -> Trie InputSetter -> SetterFun V2B
+uniformV3B   :: ByteString -> Trie InputSetter -> SetterFun V3B
+uniformV4B   :: ByteString -> Trie InputSetter -> SetterFun V4B
 
-instance UniformSetter Bool where
-    uniform is (IBool n) = case T.lookup n is of
-        Just (SBool fun)    -> fun
-        _   -> nullSetter n
+uniformWord  :: ByteString -> Trie InputSetter -> SetterFun Word32
+uniformV2U   :: ByteString -> Trie InputSetter -> SetterFun V2U
+uniformV3U   :: ByteString -> Trie InputSetter -> SetterFun V3U
+uniformV4U   :: ByteString -> Trie InputSetter -> SetterFun V4U
 
-instance UniformSetter V2B where
-    uniform is (IV2B n) = case T.lookup n is of
-        Just (SV2B fun)    -> fun
-        _   -> nullSetter n
+uniformInt   :: ByteString -> Trie InputSetter -> SetterFun Int32
+uniformV2I   :: ByteString -> Trie InputSetter -> SetterFun V2I
+uniformV3I   :: ByteString -> Trie InputSetter -> SetterFun V3I
+uniformV4I   :: ByteString -> Trie InputSetter -> SetterFun V4I
 
-instance UniformSetter V3B where
-    uniform is (IV3B n) = case T.lookup n is of
-        Just (SV3B fun)    -> fun
-        _   -> nullSetter n
+uniformFloat :: ByteString -> Trie InputSetter -> SetterFun Float
+uniformV2F   :: ByteString -> Trie InputSetter -> SetterFun V2F
+uniformV3F   :: ByteString -> Trie InputSetter -> SetterFun V3F
+uniformV4F   :: ByteString -> Trie InputSetter -> SetterFun V4F
 
-instance UniformSetter V4B where
-    uniform is (IV4B n) = case T.lookup n is of
-        Just (SV4B fun)    -> fun
-        _   -> nullSetter n
+uniformM22F   :: ByteString -> Trie InputSetter -> SetterFun M22F
+uniformM23F   :: ByteString -> Trie InputSetter -> SetterFun M23F
+uniformM24F   :: ByteString -> Trie InputSetter -> SetterFun M24F
+uniformM32F   :: ByteString -> Trie InputSetter -> SetterFun M32F
+uniformM33F   :: ByteString -> Trie InputSetter -> SetterFun M33F
+uniformM34F   :: ByteString -> Trie InputSetter -> SetterFun M34F
+uniformM42F   :: ByteString -> Trie InputSetter -> SetterFun M42F
+uniformM43F   :: ByteString -> Trie InputSetter -> SetterFun M43F
+uniformM44F   :: ByteString -> Trie InputSetter -> SetterFun M44F
 
-instance UniformSetter Word32 where
-    uniform is (IWord n) = case T.lookup n is of
-        Just (SWord fun)    -> fun
-        _   -> nullSetter n
+uniformBool n is = case T.lookup n is of
+    Just (SBool fun)    -> fun
+    _   -> nullSetter n "Bool"
 
-instance UniformSetter V2U where
-    uniform is (IV2U n) = case T.lookup n is of
-        Just (SV2U fun)    -> fun
-        _   -> nullSetter n
+uniformV2B n is = case T.lookup n is of
+    Just (SV2B fun)    -> fun
+    _   -> nullSetter n "V2B"
 
-instance UniformSetter V3U where
-    uniform is (IV3U n) = case T.lookup n is of
-        Just (SV3U fun)    -> fun
-        _   -> nullSetter n
+uniformV3B n is = case T.lookup n is of
+    Just (SV3B fun)    -> fun
+    _   -> nullSetter n "V3B"
 
-instance UniformSetter V4U where
-    uniform is (IV4U n) = case T.lookup n is of
-        Just (SV4U fun)    -> fun
-        _   -> nullSetter n
+uniformV4B n is = case T.lookup n is of
+    Just (SV4B fun)    -> fun
+    _   -> nullSetter n "V4B"
 
-instance UniformSetter Int32 where
-    uniform is (IInt n) = case T.lookup n is of
-        Just (SInt fun)    -> fun
-        _   -> nullSetter n
+uniformWord n is = case T.lookup n is of
+    Just (SWord fun)    -> fun
+    _   -> nullSetter n "Word"
 
-instance UniformSetter V2I where
-    uniform is (IV2I n) = case T.lookup n is of
-        Just (SV2I fun)    -> fun
-        _   -> nullSetter n
+uniformV2U n is = case T.lookup n is of
+    Just (SV2U fun)    -> fun
+    _   -> nullSetter n "V2U"
 
-instance UniformSetter V3I where
-    uniform is (IV3I n) = case T.lookup n is of
-        Just (SV3I fun)    -> fun
-        _   -> nullSetter n
+uniformV3U n is = case T.lookup n is of
+    Just (SV3U fun)    -> fun
+    _   -> nullSetter n "V3U"
 
-instance UniformSetter V4I where
-    uniform is (IV4I n) = case T.lookup n is of
-        Just (SV4I fun)    -> fun
-        _   -> nullSetter n
+uniformV4U n is = case T.lookup n is of
+    Just (SV4U fun)    -> fun
+    _   -> nullSetter n "V4U"
 
-instance UniformSetter Float where
-    uniform is (IFloat n) = case T.lookup n is of
-        Just (SFloat fun)    -> fun
-        _   -> nullSetter n
+uniformInt n is = case T.lookup n is of
+    Just (SInt fun)    -> fun
+    _   -> nullSetter n "Int"
 
-instance UniformSetter V2F where
-    uniform is (IV2F n) = case T.lookup n is of
-        Just (SV2F fun)    -> fun
-        _   -> nullSetter n
+uniformV2I n is = case T.lookup n is of
+    Just (SV2I fun)    -> fun
+    _   -> nullSetter n "V2I"
 
-instance UniformSetter V3F where
-    uniform is (IV3F n) = case T.lookup n is of
-        Just (SV3F fun)    -> fun
-        _   -> nullSetter n
+uniformV3I n is = case T.lookup n is of
+    Just (SV3I fun)    -> fun
+    _   -> nullSetter n "V3I"
 
-instance UniformSetter V4F where
-    uniform is (IV4F n) = case T.lookup n is of
-        Just (SV4F fun)    -> fun
-        _   -> nullSetter n
+uniformV4I n is = case T.lookup n is of
+    Just (SV4I fun)    -> fun
+    _   -> nullSetter n "V4I"
 
-instance UniformSetter M22F where
-    uniform is (IM22F n) = case T.lookup n is of
-        Just (SM22F fun)    -> fun
-        _   -> nullSetter n
+uniformFloat n is = case T.lookup n is of
+    Just (SFloat fun)    -> fun
+    _   -> nullSetter n "Float"
 
-instance UniformSetter M23F where
-    uniform is (IM23F n) = case T.lookup n is of
-        Just (SM23F fun)    -> fun
-        _   -> nullSetter n
+uniformV2F n is = case T.lookup n is of
+    Just (SV2F fun)    -> fun
+    _   -> nullSetter n "V2F"
 
-instance UniformSetter M24F where
-    uniform is (IM24F n) = case T.lookup n is of
-        Just (SM24F fun)    -> fun
-        _   -> nullSetter n
+uniformV3F n is = case T.lookup n is of
+    Just (SV3F fun)    -> fun
+    _   -> nullSetter n "V3F"
 
-instance UniformSetter M32F where
-    uniform is (IM32F n) = case T.lookup n is of
-        Just (SM32F fun)    -> fun
-        _   -> nullSetter n
+uniformV4F n is = case T.lookup n is of
+    Just (SV4F fun)    -> fun
+    _   -> nullSetter n "V4F"
 
-instance UniformSetter M33F where
-    uniform is (IM33F n) = case T.lookup n is of
-        Just (SM33F fun)    -> fun
-        _   -> nullSetter n
+uniformM22F n is = case T.lookup n is of
+    Just (SM22F fun)    -> fun
+    _   -> nullSetter n "M22F"
 
-instance UniformSetter M34F where
-    uniform is (IM34F n) = case T.lookup n is of
-        Just (SM34F fun)    -> fun
-        _   -> nullSetter n
+uniformM23F n is = case T.lookup n is of
+    Just (SM23F fun)    -> fun
+    _   -> nullSetter n "M23F"
 
-instance UniformSetter M42F where
-    uniform is (IM42F n) = case T.lookup n is of
-        Just (SM42F fun)    -> fun
-        _   -> nullSetter n
+uniformM24F n is = case T.lookup n is of
+    Just (SM24F fun)    -> fun
+    _   -> nullSetter n "M24F"
 
-instance UniformSetter M43F where
-    uniform is (IM43F n) = case T.lookup n is of
-        Just (SM43F fun)    -> fun
-        _   -> nullSetter n
+uniformM32F n is = case T.lookup n is of
+    Just (SM32F fun)    -> fun
+    _   -> nullSetter n "M32F"
 
-instance UniformSetter M44F where
-    uniform is (IM44F n) = case T.lookup n is of
-        Just (SM44F fun)    -> fun
-        _   -> nullSetter n
+uniformM33F n is = case T.lookup n is of
+    Just (SM33F fun)    -> fun
+    _   -> nullSetter n "M33F"
+
+uniformM34F n is = case T.lookup n is of
+    Just (SM34F fun)    -> fun
+    _   -> nullSetter n "M34F"
+
+uniformM42F n is = case T.lookup n is of
+    Just (SM42F fun)    -> fun
+    _   -> nullSetter n "M42F"
+
+uniformM43F n is = case T.lookup n is of
+    Just (SM43F fun)    -> fun
+    _   -> nullSetter n "M43F"
+
+uniformM44F n is = case T.lookup n is of
+    Just (SM44F fun)    -> fun
+    _   -> nullSetter n "M44F"

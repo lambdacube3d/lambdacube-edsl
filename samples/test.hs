@@ -37,7 +37,7 @@ simple objs = Accumulate fragCtx PassAll frag rast clear
     worldViewProj = Uni (IM44F "worldViewProj")
     clear   = FrameBuffer (ColorImage n1 (zero'::V4F):.ZT)
     fragCtx = ColorOp NoBlending (one' :: V4B):.ZT
-    rast    = Rasterize triangleCtx NoGeometryShader prims
+    rast    = Rasterize triangleCtx prims
     prims   = Transform vert objs
 
     vert :: Exp V (V3F,V3F) -> VertexOut V3F

@@ -43,8 +43,7 @@ data FragmentFilter
     deriving (Show, Eq, Ord)
 
 data GeometryShader
-    = NoGeometryShader 
-    | GeometryShader    Int PrimitiveType Int ExpFun ExpFun ExpFun
+    = GeometryShader    Int PrimitiveType Int ExpFun ExpFun ExpFun
     deriving (Show, Eq, Ord)
 
 data GP
@@ -53,7 +52,8 @@ data GP
     | GPApply           GPFun GP
     | Fetch             ByteString PrimitiveType [(ByteString,InputType)]
     | Transform         ExpFun GP
-    | Rasterize         RasterContext GeometryShader GP
+    | Reassemble        GeometryShader GP
+    | Rasterize         RasterContext GP
     | FrameBuffer       [Image]
     | Accumulate        [FragmentOperation] FragmentFilter ExpFun GP GP
     | PrjFrameBuffer    ByteString Int GP

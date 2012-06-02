@@ -143,7 +143,7 @@ data Blending c where
 
 -- abstract types, used in language AST
 data VertexStream prim t
-data PrimitiveStream prim t
+data PrimitiveStream prim layerCount stage t
 data FragmentStream layerCount t
 
 

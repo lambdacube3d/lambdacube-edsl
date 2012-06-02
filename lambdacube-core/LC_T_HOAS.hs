@@ -88,8 +88,6 @@ data VertexOut t where
 -- Geometry
 -- describes a geometry shader
 data GeometryShader primIn primOut layerNum a b where
-    NoGeometryShader    :: GeometryShader prim prim N1 a a
-
     GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum)
                         => layerNum                                                 -- geometry shader:
                         -> primOut                                                  -- output primitive
@@ -159,13 +157,16 @@ data GP t where
 
     Transform       :: (GPU a, GPU b)
                     => (Exp V a -> VertexOut b)                       -- vertex shader
-                    -> GP (VertexStream prim a)
-                    -> GP (PrimitiveStream prim b)
+                    -> GP (VertexStream primIn a)
+                    -> GP (PrimitiveStream primOut N1 V b)
 
-    Rasterize       :: RasterContext primOut
-                    -> GeometryShader primIn primOut layerNum a b
-                    -> GP (PrimitiveStream primIn a)
-                    -> GP (FragmentStream layerNum b)
+    Reassemble      :: GeometryShader primIn primOut layerCount a b
+                    -> GP (PrimitiveStream primIn N1 V a)
+                    -> GP (PrimitiveStream primOut layerCount G b)
+
+    Rasterize       :: RasterContext prim
+                    -> GP (PrimitiveStream prim layerCount stage a)
+                    -> GP (FragmentStream layerCount b)
 
     FrameBuffer     :: FrameBuffer layerCount t
                     -> GP (FrameBuffer layerCount (FTRepr' t))

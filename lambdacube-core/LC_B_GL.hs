@@ -178,8 +178,8 @@ mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
 
 {-
   Note: Input mapping problem
-    more programs uses the same slot    -> minimize vertex attribute mapping collisions (best case: use the same mapping)
-    more programs uses the same uniform -> minimize uniform mapping collisions (best case: use the same mapping)
+    more programs use the same slot    -> minimize vertex attribute mapping collisions (best case: use the same mapping)
+    more programs use the same uniform -> minimize uniform mapping collisions (best case: use the same mapping)
 -}
 -- FIXME: implement properly
 compileRenderer :: GPOutput -> IO Renderer

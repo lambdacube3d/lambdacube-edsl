@@ -110,11 +110,6 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
     
         mkDrawAction :: GP -> IO (GLuint,IO ())
         mkDrawAction gp = do
-            {-
-            -- create uniform setup action
-            let Just uTypes = T.lookup slotName (slotUniform renderer)
-            let 
-            -}
             let Just rd = Map.lookup gp renderDescriptorMap
                 sLocs   = streamLocation rd
                 uLocs   = uniformLocation rd

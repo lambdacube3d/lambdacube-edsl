@@ -133,7 +133,8 @@ convertOpenGP = cvt
     cvt glyt (H.GPtag i)                    = GPVar (prjIdx i glyt)
     cvt glyt (H.Fetch n p i)                = Fetch n (T.toPrimitive p) (T.toInputList i)
     cvt glyt (H.Transform vs ps)            = Transform (convertFun1Vert glyt vs) (cvt glyt ps)
-    cvt glyt (H.Rasterize ctx sh ps)        = Rasterize (convertRasterContext ctx) (convertGeometryShader glyt sh) (cvt glyt ps)
+    cvt glyt (H.Reassemble sh ps)           = Reassemble (convertGeometryShader glyt sh) (cvt glyt ps)
+    cvt glyt (H.Rasterize ctx ps)           = Rasterize (convertRasterContext ctx) (cvt glyt ps)
     cvt glyt (H.FrameBuffer fb)             = FrameBuffer (convertFrameBuffer fb)
     cvt glyt (H.Accumulate ctx f sh fs fb)  = Accumulate (convertAccumulationContext ctx) (convertFragmentFilter glyt f) (convertFun1Frag glyt sh) (cvt glyt fs) (cvt glyt fb)
     cvt glyt (H.PrjFrameBuffer n idx fb)    = PrjFrameBuffer n (prjToInt idx) (convertGP fb)
@@ -195,7 +196,6 @@ convertGeometryShader :: Layout
 convertGeometryShader = cvt
   where
     cvt ::  Layout -> H.GeometryShader primIn primOut layerNum a b -> GeometryShader
-    cvt glyt H.NoGeometryShader                 = NoGeometryShader
     cvt glyt (H.GeometryShader a b c e1 e2 e3)  = GeometryShader (toInt a) (T.toPrimitive b) c (convertFun1Exp glyt e1) (convertFun1Exp glyt e2) (convertFun1Geom glyt e3)
 
 -- Common

@@ -48,7 +48,7 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
     rastCtx = TriangleCtx (CullFront CW) PolygonFill NoOffset LastVertex
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
-    rast    = Rasterize rastCtx NoGeometryShader prims
+    rast    = Rasterize rastCtx prims
     prims   = Transform vert objs
     worldViewProj = Uni (IM44F "worldViewProj")
 

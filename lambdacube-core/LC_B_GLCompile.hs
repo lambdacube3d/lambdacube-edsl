@@ -363,15 +363,15 @@ compileClearFrameBuffer (FrameBuffer fb) = cvt fb
 -- FIXME: simple solution, does not support sharing
 -- result: (RenderAction, DisposeAction, UniformLocation, StreamLocation)
 compileRenderFrameBuffer :: [(Exp,String)] -> IORef ObjectSet -> GP -> IO (IO (), IO (), Trie GLint, Trie GLuint)
-compileRenderFrameBuffer samplerNames objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx gs (Transform vsh (Fetch slotName _ slotInput))) fb) = do
+compileRenderFrameBuffer samplerNames objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx (Transform vsh (Fetch slotName _ slotInput))) fb) = do
     --rndr <- compileFrameBuffer fb rndr'
     po <- glCreateProgram
-    let (shl,fragOuts) = case gs of
-            NoGeometryShader    -> ([VertexShaderSrc srcV, FragmentShaderSrc srcF], (map fst outF))
-            _                   -> ([VertexShaderSrc srcV, GeometryShaderSrc srcG, FragmentShaderSrc srcF], (map fst outF))
+    let (shl,fragOuts) = {-case gs of
+            NoGeometryShader    -> -}([VertexShaderSrc srcV, FragmentShaderSrc srcF], (map fst outF)) {-
+            _                   -> ([VertexShaderSrc srcV, GeometryShaderSrc srcG, FragmentShaderSrc srcF], (map fst outF)) -}
         samplerNameMap = Map.fromList samplerNames
         (srcV,outV) = codeGenVertexShader samplerNameMap slotInput vsh
-        (srcG,outG) = codeGenGeometryShader samplerNameMap outV gs
+        (srcG,outG) = ("",outV)--codeGenGeometryShader samplerNameMap outV gs
         (srcF,outF) = codeGenFragmentShader samplerNameMap outG ffilter fsh
         createAndAttach [] _ = return $! Nothing
         createAndAttach sl t = do

@@ -45,7 +45,8 @@ instance HasExp (Interpolated Exp) where
 instance HasExp GP where
     expUniverse gp = case gp of
         Transform a b           -> expUniverse a ++ expUniverse b
-        Rasterize _ a b         -> expUniverse a ++ expUniverse b
+        Reassemble a b          -> expUniverse a ++ expUniverse b
+        Rasterize _ a           -> expUniverse a
         Accumulate _ a b c _    -> expUniverse a ++ expUniverse b ++ expUniverse c
         PrjFrameBuffer _ _ a    -> expUniverse a
         PrjImage _ _ a          -> expUniverse a
@@ -54,7 +55,8 @@ instance HasExp GP where
 gpUniverse :: GP -> [GP]
 gpUniverse gp = gp : case gp of
     Transform _ a           -> gpUniverse a
-    Rasterize _ _ a         -> gpUniverse a
+    Reassemble _ a          -> gpUniverse a
+    Rasterize _ a           -> gpUniverse a
     Accumulate _ _ _ a b    -> gpUniverse a ++ gpUniverse b
     PrjFrameBuffer _ _ a    -> gpUniverse a
     PrjImage _ _ a          -> gpUniverse a

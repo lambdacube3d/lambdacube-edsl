@@ -40,7 +40,7 @@ post img = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = DepthOp Always True:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
-    rast    = Rasterize triangleCtx NoGeometryShader prims
+    rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
     input   = Fetch "postSlot" Triangle (IV2F "position")
     --input = FetchData Triangle (AV2F pos)
@@ -69,8 +69,8 @@ main :: IO ()
 main = do
     let lcnet :: GP (Image N1 V4F)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ moments
-        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm
-        lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 (blurVH $ PrjFrameBuffer "" tix0 vsm)
+        lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm
+        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 (blurVH $ PrjFrameBuffer "" tix0 vsm)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 $ FrameBuffer (V2 0 0) (DepthImage n1 0:.ColorImage n1 (V4 0 0 1 1 :: V4F):.ZT)
 
     windowSize <- initCommon "LC DSL Texture Demo"
@@ -156,10 +156,10 @@ scene slotU objU windowSize mousePosition fblrPress = do
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
     cam <- userCamera (Vec3 (-4) 0 0) mouseMove fblrPress
-    let matSetter       = uniform slotU (IM44F "worldViewProj")
-        lightSetter     = uniform slotU (IM44F "lightViewProj")
-        lightSetter2    = uniform slotU (IM44F "lightViewProj2")
-        timeSetter      = uniform slotU (IFloat "time")
+    let matSetter       = uniformM44F "worldViewProj" slotU
+        lightSetter     = uniformM44F "lightViewProj" slotU
+        lightSetter2    = uniformM44F "lightViewProj2" slotU
+        timeSetter      = uniformFloat "time" slotU
         setupGFX (w,h) (cam,dir,up,_) time = do
             let light' = Vec3 0 0 3
                 ldir = Vec3 0 0 (-1)
