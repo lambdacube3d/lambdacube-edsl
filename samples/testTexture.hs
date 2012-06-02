@@ -69,8 +69,8 @@ main :: IO ()
 main = do
     let lcnet :: GP (Image N1 V4F)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ moments
-        lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm
-        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 (blurVH $ PrjFrameBuffer "" tix0 moments)
+        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm
+        lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 (blurVH $ PrjFrameBuffer "" tix0 vsm)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 $ FrameBuffer (V2 0 0) (DepthImage n1 0:.ColorImage n1 (V4 0 0 1 1 :: V4F):.ZT)
 
     windowSize <- initCommon "LC DSL Texture Demo"
@@ -156,9 +156,10 @@ scene slotU objU windowSize mousePosition fblrPress = do
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
     cam <- userCamera (Vec3 (-4) 0 0) mouseMove fblrPress
-    let Just (SM44F matSetter) = T.lookup "worldViewProj" slotU
-        Just (SM44F lightSetter) = T.lookup "lightViewProj" slotU
-        Just (SFloat timeSetter) = T.lookup "time" slotU
+    let matSetter       = uniform slotU (IM44F "worldViewProj")
+        lightSetter     = uniform slotU (IM44F "lightViewProj")
+        lightSetter2    = uniform slotU (IM44F "lightViewProj2")
+        timeSetter      = uniform slotU (IFloat "time")
         setupGFX (w,h) (cam,dir,up,_) time = do
             let light' = Vec3 0 0 3
                 ldir = Vec3 0 0 (-1)
@@ -168,11 +169,12 @@ scene slotU objU windowSize mousePosition fblrPress = do
                 lm = fromProjective (lookat light (light + ldir) lup)
                 cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.1 50 (pi/2) (fromIntegral w / fromIntegral h)
-                lpm = perspective 0.1 500 (pi/1.2) (fromIntegral w / fromIntegral h)
+                lpm = perspective 0.1 100 (pi/1.3) 1--(fromIntegral w / fromIntegral h)
             (t,_) <- C.time $ do
                 --timeSetter time
                 matSetter $! mat4ToM44F $! cm .*. pm
                 lightSetter $! mat4ToM44F $! lm .*. lpm
+                --lightSetter2 $! mat4ToM44F $! lm .*. pm
             --putStrLn $ C.secs t ++ " - worldViewProj uniform setup via STM"
             return ()
     r <- effectful3 setupGFX windowSize cam time

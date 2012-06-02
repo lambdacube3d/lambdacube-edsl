@@ -52,16 +52,18 @@ blur' frag = Accumulate fragCtx PassAll frag rast clear
 blurVH :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
 blurVH img = blur' fragH
   where
-    a = 0.002
-    m = Const (V2 (-a) 0) :: Exp F V2F
-    p = Const (V2 (a) 0) :: Exp F V2F
+    a = 1/512
+    mV = Const (V2 0 (-a)) :: Exp F V2F
+    pV = Const (V2 0 (a)) :: Exp F V2F
+    mH = Const (V2 (-a) 0) :: Exp F V2F
+    pH = Const (V2 (a) 0) :: Exp F V2F
     fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     fragH uv' = FragmentOutRastDepth $ (s @+ sm @+ sp) :. ZT
       where
         s :: Exp F V4F
         s = texture' smp uv (Const 0)
-        sm = texture' smp (uv @+ m) (Const 0)
-        sp = texture' smp (uv @+ p) (Const 0)
+        sm = texture' smp (uv @+ mH) (Const 0)
+        sp = texture' smp (uv @+ pH) (Const 0)
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -72,8 +74,8 @@ blurVH img = blur' fragH
       where
         s :: Exp F V4F
         s = texture' smp uv (Const 0)
-        sm = texture' smp (uv @+ m) (Const 0)  :: Exp F V4F
-        sp = texture' smp (uv @+ p) (Const 0)  :: Exp F V4F
+        sm = texture' smp (uv @+ mV) (Const 0)  :: Exp F V4F
+        sp = texture' smp (uv @+ pV) (Const 0)  :: Exp F V4F
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -129,7 +131,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
       where
         amb :: Exp F V4F
         amb = Const $ V4 0.1 0.1 0.3 1
-        (l,p) = untup2 lp
+        (l,_) = untup2 lp
         V4 tx ty tz tw = unpack' l
         u = tx @/ tw @* floatF 0.5 @+ floatF 0.5
         v = ty @/ tw @* floatF 0.5 @+ floatF 0.5

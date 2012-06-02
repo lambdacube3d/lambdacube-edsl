@@ -46,9 +46,17 @@ arrayType buf arrIdx = arrType $! bufArrays buf V.! arrIdx
 -- question: should we render the full stream?
 --  answer: YES
 -- Object
+nullObject :: Object
+nullObject = Object "" T.empty []
+
 -- WARNING: sub network slot sharing is not supported at the moment!
 addObject :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> Trie (Stream Buffer) -> [ByteString] -> IO Object
-addObject renderer slotName prim objIndices objAttributes objUniforms = do
+addObject renderer slotName prim objIndices objAttributes objUniforms =
+  if (not $ T.member slotName $! slotUniform renderer) then do
+    putStrLn $ "WARNING: unknown slot name: " ++ show slotName
+    return nullObject
+  else do
+    -- validate
     let Just (slotType,sType) = T.lookup slotName $ slotStream renderer
         objSType = fmap streamToInputType objAttributes
         primType = case prim of
@@ -68,8 +76,6 @@ addObject renderer slotName prim objIndices objAttributes objUniforms = do
         streamCounts = [c | Stream _ _ _ _ c <- T.elems objAttributes]
         count = head streamCounts
 
-    -- validate
-    unless (T.member slotName $! slotUniform renderer) $ fail $ "addObject: slot name mismatch: " ++ show slotName
     when (slotType /= primType) $ fail $ "addObject: primitive type mismatch: " ++ show (slotType,primType)
     when (objSType /= sType) $ fail $ unlines
         [ "addObject: attribute mismatch"

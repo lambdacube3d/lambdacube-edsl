@@ -414,7 +414,7 @@ checkGL = do
             | e == gl_INVALID_OPERATION             = "INVALID_OPERATION"
             | e == gl_INVALID_FRAMEBUFFER_OPERATION = "INVALID_FRAMEBUFFER_OPERATION"
             | e == gl_OUT_OF_MEMORY                 = "OUT_OF_MEMORY"
-            | e == gl_NO_ERROR                      = "NO_ERROR"
+            | e == gl_NO_ERROR                      = "OK"
             | otherwise                             = "Unknown error"
     e <- glGetError
     return $ f e
