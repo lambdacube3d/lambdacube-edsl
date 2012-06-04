@@ -37,7 +37,7 @@ intF = Const
 blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> GP (FrameBuffer N1 (Float,V4F))
 blur' frag = Accumulate fragCtx PassAll frag rast clear
   where
-    fragCtx = DepthOp Always True:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
@@ -49,8 +49,8 @@ blur' frag = Accumulate fragCtx PassAll frag rast clear
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
 
-gaussFilter :: [(Float,Float)]
-gaussFilter = 
+gaussFilter7 :: [(Float,Float)]
+gaussFilter7 = 
     [ (-3.0,   0.015625)
     , (-2.0,   0.09375)
     , (-1.0,   0.234375)
@@ -58,6 +58,19 @@ gaussFilter =
     , (1.0,    0.234375)
     , (2.0,    0.09375)
     , (3.0,    0.015625)
+    ]
+
+gaussFilter9 :: [(Float,Float)]
+gaussFilter9 = 
+    [ (-4.0,   0.05)
+    , (-3.0,   0.09)
+    , (-2.0,   0.12)
+    , (-1.0,   0.15)
+    , (0.0,    0.16)
+    , (1.0,    0.15)
+    , (2.0,    0.12)
+    , (3.0,    0.09)
+    , (4.0,    0.05)
     ]
 
 blurVH :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
@@ -68,7 +81,7 @@ blurVH img = blur' fragH
     uvH v = Const (V2 (v/sizeT) 0) :: Exp F V2F
     uvV v = Const (V2 0 (v/sizeT)) :: Exp F V2F
     fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    fragH uv' = FragmentOutRastDepth $ (sampleH gaussFilter) :. ZT
+    fragH uv' = FragmentOutRastDepth $ (sampleH gaussFilter9) :. ZT
       where
         sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) (Const 0) @* floatF c
         sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) (Const 0) @* floatF c) @+ sampleH xs
@@ -78,7 +91,7 @@ blurVH img = blur' fragH
         tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [PrjFrameBuffer "" tix0 (blur' fragV)]
 
     fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    fragV uv' = FragmentOutRastDepth $ (sampleV gaussFilter) :. ZT
+    fragV uv' = FragmentOutRastDepth $ (sampleV gaussFilter9) :. ZT
       where
         sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) (Const 0) @* floatF c
         sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) (Const 0) @* floatF c) @+ sampleV xs
@@ -125,22 +138,23 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
     input   = Fetch "streamSlot" Triangle (IV3F "position")
     worldViewProj = Uni (IM44F "worldViewProj")
     lightViewProj = Uni (IM44F "lightViewProj")
+    scaleU  = Uni (IFloat "scaleU")
+    scaleV  = Uni (IFloat "scaleV")
 
-    vert :: Exp V V3F -> VertexOut(V4F,V4F)
-    vert p = VertexOut v4 (floatV 1) (Smooth v4l:.Smooth v4:.ZT)
+    vert :: Exp V V3F -> VertexOut V4F
+    vert p = VertexOut v4 (floatV 1) (Smooth v4l:.ZT)
       where
         v4 = worldViewProj @*. snoc p 1
         v4l = lightViewProj @*. snoc p 1
 
-    calcLuminance :: Exp F (V4F,V4F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    calcLuminance lp = FragmentOutRastDepth $ (amb @+ p_max):. ZT
+    calcLuminance :: Exp F V4F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    calcLuminance l = FragmentOutRastDepth $ (amb @+ p_max):. ZT
       where
         amb :: Exp F V4F
         amb = Const $ V4 0.1 0.1 0.3 1
-        (l,_) = untup2 lp
         V4 tx ty tz tw = unpack' l
-        u = tx @/ tw @* floatF 0.5 @+ floatF 0.5
-        v = ty @/ tw @* floatF 0.5 @+ floatF 0.5
+        u = (tx @/ tw @* floatF 0.5 @+ floatF 0.5) @* (scaleU :: Exp F Float)
+        v = (ty @/ tw @* floatF 0.5 @+ floatF 0.5) @* (scaleV :: Exp F Float)
         V4 m1 m2 _ _ = unpack' $ texture' sampler (pack' $ V2 u v) (floatF 0)
         variance = max' (floatF 0.002) (m2 @- m1 @* m1)
         d = tz @- m1

@@ -102,6 +102,13 @@ mkUniformSetter M34F    = do {t <- newIORef (V4 z3 z3 z3 z3);             return
 mkUniformSetter M42F    = do {t <- newIORef (V2 z4 z4);                   return $! (\i -> readIORef t >>= setUM42F i,  SM42F $!  writeIORef t)}
 mkUniformSetter M43F    = do {t <- newIORef (V3 z4 z4 z4);                return $! (\i -> readIORef t >>= setUM43F i,  SM43F $!  writeIORef t)}
 mkUniformSetter M44F    = do {t <- newIORef (V4 z4 z4 z4 z4);             return $! (\i -> readIORef t >>= setUM44F i,  SM44F $!  writeIORef t)}
+mkUniformSetter FTexture2D  = do {t <- newIORef (TextureData 0);            return $! (\i -> readIORef t >>= setTextureData i,  SFTexture2D $!  writeIORef t)}
+
+-- FIXME: implement properly
+setTextureData :: GLint -> TextureData -> IO ()
+setTextureData texUnitIdx (TextureData texObj) = do
+    glActiveTexture $ gl_TEXTURE0 + fromIntegral texUnitIdx
+    glBindTexture gl_TEXTURE_2D texObj
 
 b2w :: Bool -> GLuint
 b2w True = 1

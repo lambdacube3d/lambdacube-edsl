@@ -17,7 +17,7 @@ convertPrimFun a = case a of
     T.PrimAdd                       -> PrimAdd 
     T.PrimAddS                      -> PrimAddS
     T.PrimSub                       -> PrimSub 
-    T.PrimSubS                        -> PrimSubS  
+    T.PrimSubS                      -> PrimSubS  
     T.PrimMul                       -> PrimMul 
     T.PrimMulS                      -> PrimMulS
     T.PrimDiv                       -> PrimDiv 

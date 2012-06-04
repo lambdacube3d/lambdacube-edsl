@@ -8,6 +8,13 @@ import Foreign.Ptr
 
 import LC_G_Type
 
+import Graphics.Rendering.OpenGL.Raw.Core32
+
+data TextureData
+    = TextureData
+    { textureObject :: GLuint
+    }
+
 data Primitive  = TriangleStrip | TriangleList | TriangleFan | LineStrip | LineList | PointList deriving (Eq,Ord,Bounded,Enum,Show, Data,Typeable)
 
 -- GPU type value reification, needed for shader codegen
@@ -77,7 +84,7 @@ data InputSetter
     | SSTexture2DRect
     -- float textures
     | SFTexture1D
-    | SFTexture2D
+    | SFTexture2D           (SetterFun TextureData)
     | SFTexture3D
     | SFTextureCube
     | SFTexture1DArray

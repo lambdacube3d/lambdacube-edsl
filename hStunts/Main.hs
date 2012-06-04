@@ -148,15 +148,24 @@ scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mouseP
 
     let Just (SM44F cameraSetter) = T.lookup "worldView" uniforms
         Just (SM44F projectionSetter) = T.lookup "projection" uniforms
+        lightViewProj = uniformM44F "lightViewProj" uniforms
         Just (SV3F lightPositionSetter) = T.lookup "lightPosition" uniforms
         carMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldView" u]
         wheelsU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis]
         setupGFX (w,h) cm carMat wheelsMats = do
             let pm = perspective 0.1 50000 (pi/2) (fromIntegral w / fromIntegral h)
+            let light' = Vec3 0 0 0
+                ldir = Vec3 (-1) (-1) (-1)
+                lup = Vec3 0 1 0
+                light = light' + (Vec3 5 0 0)
+                --d = 5 * sin (0.3 * time)
+                lm = fromProjective (lookat light (light + ldir) lup)
+                lpm = perspective 0.1 50000 (pi/1.3) 1--(fromIntegral w / fromIntegral h)
 
             lightPositionSetter $! vec3ToV3F $! lightPosition
             cameraSetter $! mat4ToM44F $! fromProjective cm
             projectionSetter $! mat4ToM44F $! pm
+            lightViewProj $! mat4ToM44F $! lm .*. lpm
             forM_ carMats $ \s -> s $! mat4ToM44F $! fromProjective carMat .*. fromProjective cm
             forM_ (zip wheelsU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu .*. fromProjective cm
     

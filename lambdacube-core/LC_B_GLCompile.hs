@@ -110,9 +110,12 @@ setupAccumulationContext = cvt
     cvt (DepthOp df dm : xs) = do
         -- TODO
         glDisable gl_STENCIL_TEST
-        glEnable  gl_DEPTH_TEST
-        glDepthMask (cvtBool dm)
-        glDepthFunc $! comparisonFunctionToGLType df
+        case df == Always && dm == False of
+            True    -> glDisable gl_DEPTH_TEST
+            False   -> do
+                glEnable gl_DEPTH_TEST
+                glDepthFunc $! comparisonFunctionToGLType df
+                glDepthMask (cvtBool dm)
         cvtC 0 xs
     cvt xs = do 
         glDisable gl_DEPTH_TEST

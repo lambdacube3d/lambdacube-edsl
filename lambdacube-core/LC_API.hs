@@ -40,6 +40,8 @@ module LC_API (
     uniformM43F,
     uniformM44F,
 
+    uniformFTexture2D,
+
     -- backend
     Buffer,
     compileBuffer,
@@ -58,7 +60,10 @@ module LC_API (
     Object,
     addObject,
     removeObject,
-    objectUniformSetter
+    objectUniformSetter,
+
+    -- texture (temporary)
+    compileTexture2DNoMipRGBAF
 ) where
 
 import Data.Int
@@ -125,6 +130,8 @@ uniformM34F   :: ByteString -> Trie InputSetter -> SetterFun M34F
 uniformM42F   :: ByteString -> Trie InputSetter -> SetterFun M42F
 uniformM43F   :: ByteString -> Trie InputSetter -> SetterFun M43F
 uniformM44F   :: ByteString -> Trie InputSetter -> SetterFun M44F
+
+uniformFTexture2D   :: ByteString -> Trie InputSetter -> SetterFun TextureData
 
 uniformBool n is = case T.lookup n is of
     Just (SBool fun)    -> fun
@@ -225,3 +232,7 @@ uniformM43F n is = case T.lookup n is of
 uniformM44F n is = case T.lookup n is of
     Just (SM44F fun)    -> fun
     _   -> nullSetter n "M44F"
+
+uniformFTexture2D n is = case T.lookup n is of
+    Just (SFTexture2D fun)    -> fun
+    _   -> nullSetter n "FTexture2D"

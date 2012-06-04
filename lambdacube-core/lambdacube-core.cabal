@@ -29,7 +29,9 @@ Library
         bytestring-trie,
         prettyclass,
         type-level-numbers,
-        OpenGLRaw
+        OpenGLRaw,
+        
+        bitmap
 
   Exposed-modules:
         LC_API
@@ -66,6 +68,9 @@ Library
         -fspec-constr-count=10
         -funbox-strict-fields
         -O2
+-- for profiling
+--        -auto-all
+--        -caf-all
 
   Extensions:
         BangPatterns

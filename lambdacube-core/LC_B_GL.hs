@@ -69,11 +69,10 @@ printFBOStatus = checkFBO >>= print
 mkSlotDescriptor :: Set GP -> IO SlotDescriptor
 mkSlotDescriptor gps = SlotDescriptor gps <$> newIORef Set.empty
 
-mkRenderTextures :: [GP] -> IO (Map Exp String, Map Exp GLuint, IO (), GP -> [Exp])
+mkRenderTextures :: [GP] -> IO (Map Exp String, Map Exp String, Map Exp GLuint, IO (), GP -> [Exp])
 mkRenderTextures allGPs = do
     let samplers = nubS [s | s@(Sampler _ _ _ _) <- expUniverse allGPs]
         samplersWithTexture = nubS [s | s@(Sampler _ _ _ (Texture {})) <- samplers]
-        samplersWithTextureSlot = nubS [s | s@(Sampler _ _ _ (TextureSlot {})) <- samplers]
         -- collect all render textures refers to a FrameBuffer
         isReferred :: GP -> Exp -> Bool
         isReferred f (Sampler _ _ _ (Texture _ _ _ [f'])) = findFrameBuffer f' == f
@@ -90,10 +89,11 @@ mkRenderTextures allGPs = do
         return ((smp,"renderTex_" ++ show sIdx),(smp,to),with to $ \pto -> glDeleteTextures 1 pto)
     let renderTexName   = Map.fromList renderTexNameList
         renderTexGLObj  = Map.fromList renderTexGLObjList
-    return (renderTexName, renderTexGLObj, sequence_ disposeTex, dependentSamplers)
+        texSlotName     = Map.fromList $ nubS [(s,SB.unpack n) | s@(Sampler _ _ _ (TextureSlot n _)) <- samplers]
+    return (texSlotName, renderTexName, renderTexGLObj, sequence_ disposeTex, dependentSamplers)
 
-mkRenderDescriptor :: Map Exp String -> Map Exp GLuint -> GP -> IO RenderDescriptor
-mkRenderDescriptor renderTexName renderTexGLObj f = case f of
+mkRenderDescriptor :: Map Exp String -> Map Exp String -> Map Exp GLuint -> GP -> IO RenderDescriptor
+mkRenderDescriptor texSlotName renderTexName renderTexGLObj f = case f of
     FrameBuffer {}  -> RenderDescriptor T.empty T.empty (compileClearFrameBuffer f) (return ()) <$> newIORef (ObjectSet (return ()) Map.empty)
     Accumulate {}   -> do
         {- 
@@ -107,14 +107,15 @@ mkRenderDescriptor renderTexName renderTexGLObj f = case f of
         let usedRenderSamplers  = nubS [s | s@(Sampler _ _ _ (Texture {})) <- expUniverse f]
             usedSlotSamplers    = nubS [s | s@(Sampler _ _ _ (TextureSlot {})) <- expUniverse f]
             usedRenderTexName   = [(s,n) | s <- usedRenderSamplers, let Just n = Map.lookup s renderTexName]
+            usedTexSlotName     = [(s,n) | s <- usedSlotSamplers, let Just n = Map.lookup s texSlotName]
             renderTexObjs       = [txObj | s <- usedRenderSamplers, let Just txObj = Map.lookup s renderTexGLObj]
-            textureSetup        = forM_ (zip (renderTexObjs ++ repeat 0) [0..fromIntegral maxTextureUnits-1]) $ \(texObj,texUnitIdx) -> do
+            textureSetup        = forM_ (zip renderTexObjs [0..fromIntegral maxTextureUnits-1]) $ \(texObj,texUnitIdx) -> do
                 glActiveTexture $ gl_TEXTURE0 + texUnitIdx
                 glBindTexture gl_TEXTURE_2D texObj
                 --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
 
         drawRef <- newIORef $ ObjectSet (return ()) Map.empty
-        (rA,dA,uT,sT) <- compileRenderFrameBuffer usedRenderTexName drawRef f
+        (rA,dA,uT,sT) <- compileRenderFrameBuffer (usedRenderTexName ++ usedTexSlotName) drawRef f
         return $ RenderDescriptor
             { uniformLocation   = uT
             , streamLocation    = sT
@@ -185,7 +186,8 @@ mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
 compileRenderer :: GPOutput -> IO Renderer
 compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
     let unis :: GP -> [(ByteString,InputType)]
-        unis fb = nubS [(name,t) | Uni ty name <- expUniverse fb, let [t] = codeGenType ty]
+        unis fb = nubS [(name,t) | Uni ty name <- expUniverse fb, let [t] = codeGenType ty] ++
+                  nubS [(name,t) | Sampler ty _ _ (TextureSlot name _) <- expUniverse fb, let [t] = codeGenType ty]
 
         ordFBs = orderedFrameBuffersFromGP gp
         allGPs = nubS $ concatMap gpUniverse' ordFBs
@@ -202,6 +204,8 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
         slotUniformTrie = foldl' (T.mergeBy (\a b -> Just (T.unionL a b))) T.empty slotUniformList
         (uniformNames,uniformTypes) = unzip $ nubS $ concatMap (T.toList . snd) $ T.toList slotUniformTrie
 
+    putStrLn $ "GP universe size:  " ++ show (length allGPs)
+    putStrLn $ "Exp universe size: " ++ show (length (nubS $ expUniverse gp))
     (uSetup,uSetter) <- unzip <$> mapM mkUniformSetter uniformTypes
     let uniformSetterTrie   = T.fromList $! zip uniformNames uSetter
         mkUniformSetupTrie  = T.fromList $! zip uniformNames uSetup
@@ -213,10 +217,10 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
     slotDescriptors <- T.fromList <$> mapM (\(n,a) -> (n,) <$> mkSlotDescriptor a) (T.toList slotGP)
 
     -- allocate render textures (output resource initialization)
-    (renderTexName,renderTexGLObj,renderTexDispose,dependentSamplers) <- mkRenderTextures allGPs
+    (texSlotName,renderTexName,renderTexGLObj,renderTexDispose,dependentSamplers) <- mkRenderTextures allGPs
 
     -- create RenderDescriptors
-    renderDescriptors <- Map.fromList <$> mapM (\a -> (a,) <$> mkRenderDescriptor renderTexName renderTexGLObj a) (nubS $ concatMap renderChain ordFBs)
+    renderDescriptors <- Map.fromList <$> mapM (\a -> (a,) <$> mkRenderDescriptor texSlotName renderTexName renderTexGLObj a) (nubS $ concatMap renderChain ordFBs)
 
     -- join compiled graphics network components
     (passRender,passDispose) <- fmap unzip $ forM ordFBs $ \fb -> do

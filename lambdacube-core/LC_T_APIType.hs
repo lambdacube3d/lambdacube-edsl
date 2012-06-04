@@ -268,6 +268,8 @@ type instance FTRepr (a :+: b :+: c :+: d :+: ZZ) = (a, b, c, d)
 type instance FTRepr (a :+: b :+: c :+: d :+: e :+: ZZ) = (a, b, c, d, e)
 type instance FTRepr (a :+: b :+: c :+: d :+: e :+: f :+: ZZ) = (a, b, c, d, e, f)
 type instance FTRepr (a :+: b :+: c :+: d :+: e :+: f :+: g :+: ZZ) = (a, b, c, d, e, f, g)
+type instance FTRepr (a :+: b :+: c :+: d :+: e :+: f :+: g :+: h :+: ZZ) = (a, b, c, d, e, f, g, h)
+type instance FTRepr (a :+: b :+: c :+: d :+: e :+: f :+: g :+: h :+: i :+: ZZ) = (a, b, c, d, e, f, g, h, i)
 
 -- helper type level function, used in language AST
 type family FTRepr' a :: *
@@ -278,6 +280,8 @@ type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: ZZ) = (a, b, c, d)
 type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: ZZ) = (a, b, c, d, e)
 type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: ZZ) = (a, b, c, d, e, f)
 type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: ZZ) = (a, b, c, d, e, f, g)
+type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
+type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
 
 -- helper type level function, used in language AST
 type family ColorRepr a :: *

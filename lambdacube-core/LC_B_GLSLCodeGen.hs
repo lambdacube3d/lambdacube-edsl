@@ -435,7 +435,7 @@ codeGenVertexShader smpName inVars = cvt
         ppE e a = pack $! show $! pPrint $! Compound [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         pp a    = pack $! show $! pPrint $! TranslationUnit a
         uniVars = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- expUniverse' body]
-        smpVars = Set.toList $ Set.fromList [(n,t) | s@(Sampler (Single t) _ _ (Texture {})) <- expUniverse' body, let Just n = Map.lookup s smpName]
+        smpVars = Set.toList $ Set.fromList [(n,t) | s@(Sampler (Single t) _ _ _) <- expUniverse' body, let Just n = Map.lookup s smpName]
         [posE]  = genExp pos
         [sizeE] = genExp size
         (oQ,oE,oT)  = unzip3 $! genIExp outs
@@ -490,7 +490,7 @@ codeGenFragmentShader smpName inVars ffilter = cvt
         pp a        = pack $! show $! pPrint $! TranslationUnit a
         allExps     = concat [expUniverse outs, expUniverse (map snd outs')]
         uniVars     = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- allExps]
-        smpVars     = Set.toList $ Set.fromList [(n,t) | s@(Sampler (Single t) _ _ (Texture {})) <- allExps, let Just n = Map.lookup s smpName]
+        smpVars     = Set.toList $ Set.fromList [(n,t) | s@(Sampler (Single t) _ _ _) <- allExps, let Just n = Map.lookup s smpName]
         (oE',oN')   = unzip $! [(genExp e,n) | (n,e) <- outs']
         (oE,oT)     = unzip $! genFExp outs
         body        = assigns (oN' ++ oNames) (concat oE' ++ concat oE)

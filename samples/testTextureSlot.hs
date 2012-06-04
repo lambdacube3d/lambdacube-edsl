@@ -20,61 +20,44 @@ import LC_API
 
 import Graphics.Rendering.OpenGL.Raw.Core32
 import LC_Mesh
+import Codec.Image.STB hiding (Image)
 
 import qualified Criterion.Measurement as C
 
 import VSM
 
-quad :: Mesh
-quad = Mesh
-    { mAttributes   = T.singleton "position" $ A_V2F $ V.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
-    , mPrimitive    = P_Triangles
-    , mGPUData      = Nothing
-    }
+simpleTexturing :: GP (FrameBuffer N1 (Float,V4F))
+simpleTexturing = Accumulate fragCtx PassAll frag rast clear
   where
-    a = -1
-    b = 1
-
-post :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
-post img = Accumulate fragCtx PassAll frag rast clear
-  where
-    fragCtx = DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
-    rast    = Rasterize triangleCtx prims
+    rastCtx = TriangleCtx (CullFront CW) PolygonFill NoOffset LastVertex
+    fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
+    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
+    rast    = Rasterize rastCtx prims
     prims   = Transform vert input
-    input   = Fetch "postSlot" Triangle (IV2F "position")
-    --input = FetchData Triangle (AV2F pos)
-    --pos   = V.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
+    input   = Fetch "scene" Triangle (IV3F "position", IV2F "UVTex")
+    worldViewProj = Uni (IM44F "worldViewProj")
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+    vert :: Exp V (V3F,V2F) -> VertexOut V2F
+    vert puv = VertexOut v4 (Const 1) (Smooth uv:.ZT)
       where
-        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
-        V2 u v  = unpack' uv
+        (p,uv)  = untup2 puv
+        v4      = worldViewProj @*. snoc p 1
 
     frag :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag uv' = FragmentOutRastDepth $ (s{- @+ c-}) :. ZT
+    frag uv = FragmentOutRastDepth $ c :. ZT
       where
-        s :: Exp F V4F
-        s = texture' smp uv (Const 0)
-        --s = texture' smp (Const $ V2 0.8 0.8) (Const 0)
-        c = pack' $ V4 (floatF 0) u v (floatF 1)
-        V2 u v = unpack' uv
-        uv = uv' @* floatF 0.5 @+ floatF 0.5
-
-    smp = Sampler LinearFilter Clamp tex
-    tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
+        V2 u v  = unpack' uv
+        c' = pack' $ V4 u v (floatF 0) (floatF 1)
+        c = texture' smp uv (Const 0)
+        smp = Sampler LinearFilter Clamp tex
+        tex = TextureSlot "diffuse" (Texture2D (Float RGBA) n1)
 
 main :: IO ()
 main = do
     let lcnet :: GP (Image N1 V4F)
-        --lcnet = PrjFrameBuffer "outFB" tix0 $ moments
-        lcnet = PrjFrameBuffer "outFB" tix0 vsm
-        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm
-        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 (blurVH $ PrjFrameBuffer "" tix0 vsm)
-        --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 $ FrameBuffer (V2 0 0) (DepthImage n1 0:.ColorImage n1 (V4 0 0 1 1 :: V4F):.ZT)
+        lcnet = PrjFrameBuffer "outFB" tix0 simpleTexturing
 
-    windowSize <- initCommon "LC DSL Texture Demo"
+    windowSize <- initCommon "LC DSL TextureSlot Demo"
 
     (t,renderer) <- C.time $ compileRenderer $ ScreenOut lcnet
     putStrLn $ C.secs t ++ " - compile renderer"
@@ -85,57 +68,26 @@ main = do
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
 
-    compiledQuad <- compileMesh quad
-    addMesh renderer "postSlot" compiledQuad []
-
     (t,mesh) <- C.time $ loadMesh "Monkey.lcmesh"
     putStrLn $ C.secs t ++ " - loadMesh Monkey.lcmesh"
     (t,mesh2) <- C.time $ loadMesh "Scene.lcmesh"
     putStrLn $ C.secs t ++ " - loadMesh Scene.lcmesh"
 
-    (t,obj) <- C.time $ addMesh renderer "streamSlot" mesh []
+    (t,obj) <- C.time $ addMesh renderer "scene" mesh []
     putStrLn $ C.secs t ++ " - addMesh Monkey.lcmesh"
-    (t,obj2) <- C.time $ addMesh renderer "streamSlot" mesh2 []
+    (t,obj2) <- C.time $ addMesh renderer "scene" mesh2 []
     putStrLn $ C.secs t ++ " - addMesh Scene.lcmesh"
-
---    addMesh renderer "streamSlot1" mesh []
---    addMesh renderer "streamSlot1" mesh2 []
-
-    -- TODO:
-    -- texture specification:
-    --  create buffer with image data
-    --  create Texture type from uploaded image data
-    --      idea: we should reuse TexSizeRepr for data specification
-    --  set sampler uniform to required texture
-{-
-  alternative A:
-    pixelBuffer <- compileBuffer $
-        [ Array ArrWord8 (3 * width * height) imagePixelData0
-        , Array ArrWord8 (3 * width * height) imagePixelData1
-        ]
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip $
-        [ ImageData pixelBuffer 0 -- mip levels
-        , ImageData pixelBuffer 1
-        ]
-  alternative B:
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip $
-        [ Array ArrWord8 (3 * width * height) imagePixelData0
-        , Array ArrWord8 (3 * width * height) imagePixelData1
-        ]
-  alternative C:
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip
-    updateTexture texture $
-        [ Array ArrWord8 (3 * width * height) imagePixelData0
-        , Array ArrWord8 (3 * width * height) imagePixelData1
-        ]
--}
 
     let objU  = objectUniformSetter obj
         slotU = uniformSetter renderer
+        diffuse = uniformFTexture2D "diffuse" slotU
         draw _ = do
             (t,_) <- C.time $ render renderer >> swapBuffers
             --putStrLn $ C.secs t ++ " - render frame"
             return ()
+    Right img <- loadImage "Panels_Diffuse.png"
+    diffuse =<< compileTexture2DNoMipRGBAF img
+    
     s <- fpsState
     sc <- start $ do
         u <- scene slotU objU windowSize mousePosition fblrPress
@@ -158,29 +110,11 @@ scene slotU objU windowSize mousePosition fblrPress = do
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
     cam <- userCamera (Vec3 (-4) 0 0) mouseMove fblrPress
     let matSetter       = uniformM44F "worldViewProj" slotU
-        lightSetter     = uniformM44F "lightViewProj" slotU
-        lightSetter2    = uniformM44F "lightViewProj2" slotU
-        timeSetter      = uniformFloat "time" slotU
-        scaleU          = uniformFloat "scaleU" slotU
-        scaleV          = uniformFloat "scaleV" slotU
         setupGFX (w,h) (cam,dir,up,_) time = do
-            let light' = Vec3 0 0 3
-                ldir = Vec3 0 0 (-1)
-                lup = Vec3 0 1 0
-                light = light' + (Vec3 d 0 0)
-                d = 5 * sin (0.3 * time)
-                lm = fromProjective (lookat light (light + ldir) lup)
-                cm = fromProjective (lookat cam (cam + dir) up)
+            let cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.1 50 (pi/2) (fromIntegral w / fromIntegral h)
-                lpm = perspective 0.1 100 (pi/1.3) (fromIntegral w / fromIntegral h)
             (t,_) <- C.time $ do
-                --timeSetter time
-                scaleU $! 1--512 / fromIntegral w
-                scaleV $! 1--512 / fromIntegral h
                 matSetter $! mat4ToM44F $! cm .*. pm
-                lightSetter $! mat4ToM44F $! lm .*. lpm
-                --lightSetter2 $! mat4ToM44F $! lm .*. pm
-            --putStrLn $ C.secs t ++ " - worldViewProj uniform setup via STM"
             return ()
     r <- effectful3 setupGFX windowSize cam time
     return r

@@ -9,6 +9,8 @@ import Data.Vect.Float hiding (reflect')
 import LC_API
 --import LCLanguage
 
+--import VSM hiding (floatF)
+
 -- specialized snoc
 padV3 :: Exp s V3F -> Float -> Exp s V4F
 padV3 v s = let V3 x y z = unpack' v in pack' $ V4 x y z (Const s)
@@ -73,18 +75,20 @@ stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
     worldView = Uni (IM44F "worldView")
     projection = Uni (IM44F "projection")
     lightPosition = Uni (IV3F "lightPosition")
+    lightViewProj = Uni (IM44F "lightViewProj")
 
-    vert :: Exp V (V3F,V3F,V4F,Int32,Float,Float) -> VertexOut (V4F,V3F,V3F,V3F,Int32,Float,Float)
-    vert attr = VertexOut projPos (Const 1) (Flat colour:.Smooth pos:.Smooth eyePos:.Smooth normal:.Flat pattern:.Flat zBias:.Flat shiny:.ZT)
+    vert :: Exp V (V3F,V3F,V4F,Int32,Float,Float) -> VertexOut (V4F,V4F,V3F,V3F,V3F,Int32,Float,Float)
+    vert attr = VertexOut projPos (Const 1) (Smooth lightViewPos:.Flat colour:.Smooth pos:.Smooth eyePos:.Smooth normal:.Flat pattern:.Flat zBias:.Flat shiny:.ZT)
       where
         viewPos = worldView @*. padV3 pos 1
         projPos = projection @*. viewPos
         normal = normalize' (trimM4 worldView @*. n)
         eyePos = trimV4 viewPos
+        lightViewPos = lightViewProj @*. padV3 pos 1
         
         (pos,n,colour,pattern,zBias,shiny) = untup6 attr
 
-    fragPassed :: Exp F (V4F,V3F,V3F,V3F,Int32,Float,Float) -> Exp F Bool
+    fragPassed :: Exp F (V4F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> Exp F Bool
     fragPassed attr = (pattern @== int32F 1) @|| ((pattern @/= int32F 0) @&& isSolid)
       where
         isSolid = solid1 @|| solid2 @|| solid3
@@ -101,9 +105,9 @@ stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
         solid3 = fract' (prod3 @+ rand @* smoothen diff3) @< floatF 0.2
         smoothen x = x @* x
 
-        (colour,pos,eyePos,normal,pattern,zBias,shiny) = untup7 attr
+        (_,colour,pos,eyePos,normal,pattern,zBias,shiny) = untup8 attr
 
-    frag :: Exp F (V4F,V3F,V3F,V3F,Int32,Float,Float) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    frag :: Exp F (V4F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag attr = FragmentOutDepth adjustedDepth (litColour :. ZT)
       where
         l = normalize' (lightPosition @- eyePos)
@@ -117,13 +121,28 @@ stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
         intensity = floatF 0.3 @+ max' (floatF 0) lambert @* floatF 0.5 @+ pow' phong (floatF 5) @* floatF 0.3
         highlight = pow' phong shiny @* min' (floatF 1.0) (shiny @* floatF 0.04)
 
-        litColour = padV3 (trimV4 (colour @* intensity @+ ((Const (V4 1 1 1 0) :: Exp F V4F) @* highlight))) 1
+        litColour = padV3 (trimV4 (colour @* (intensity {-@* p_max-}) @+ ((Const (V4 1 1 1 0) :: Exp F V4F) @* highlight))) 1
         
         fragDepth = get4Z fragCoord
         adjustedDepth = fragDepth @+ max' (exp' (floatF (-15) @- log' fragDepth)) (fwidth' fragDepth) @* zBias
 
-        (colour,pos,eyePos,normal,pattern,zBias,shiny) = untup7 attr
+        (lightViewPos,colour,pos,eyePos,normal,pattern,zBias,shiny) = untup8 attr
+{-
+        V4 tx ty tz tw = unpack' lightViewPos
+        u = tx @/ tw @* floatF 0.5 @+ floatF 0.5
+        v = ty @/ tw @* floatF 0.5 @+ floatF 0.5
+        V4 m1 m2 _ _ = unpack' $ texture' sampler (pack' $ V2 u v) (floatF 0)
+        variance = max' (floatF 0.002) (m2 @- m1 @* m1)
+        d = tz @- m1
+        p_max = variance @/ (variance @+ d @* d)
 
+    sampler = Sampler LinearFilter Clamp shadowMap
+    shadowMap :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    shadowMap = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
+
+    shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
+-}
 debugShader :: GP (FrameBuffer N1 (Float,V4F))
 debugShader = Accumulate fragCtx PassAll frag rast stuntsGFX
   where

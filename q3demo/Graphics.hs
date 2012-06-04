@@ -123,14 +123,14 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
     rastCtx = TriangleCtx cull (PolygonLine 2) offset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
-    input   = Fetch "missing shader" Triangle (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")
+    input   = Fetch "missing shader" Triangle (IV3F "position", IV4F "color")
     worldViewProj = Uni (IM44F "worldViewProj")
 
-    vert :: Exp V (V3F,V3F,V2F,V2F,V4F) -> VertexOut V4F
-    vert pndlc = VertexOut v4 (Const 1) (Smooth c:.ZT)
+    vert :: Exp V (V3F,V4F) -> VertexOut V4F
+    vert pc = VertexOut v4 (Const 1) (Smooth c:.ZT)
       where
         v4    = worldViewProj @*. snoc p 1
-        (p,n,d,l,c) = untup5 pndlc
+        (p,c) = untup2 pc
 
     frag :: Exp F V4F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag v = FragmentOutRastDepth $ (v @* (Const (V4 3 3 3 1) :: Exp F V4F)) :. ZT
@@ -145,15 +145,51 @@ errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
     rastCtx = TriangleCtx cull PolygonFill NoOffset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
-    input   = Fetch "missing shader" Triangle (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")
+    input   = Fetch "missing shader" Triangle (IV3F "position", IV4F "color")
     worldViewProj = Uni (IM44F "worldViewProj")
 
-    vert :: Exp V (V3F,V3F,V2F,V2F,V4F) -> VertexOut V4F
-    vert pndlc = VertexOut v4 (Const 1) (Smooth c:.ZT)
+    vert :: Exp V (V3F,V4F) -> VertexOut V4F
+    vert pc = VertexOut v4 (Const 1) (Smooth c:.ZT)
       where
         v4    = worldViewProj @*. snoc p 1
-        (p,n,d,l,c) = untup5 pndlc
+        (p,c) = untup2 pc
 
     frag :: Exp F V4F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag v = FragmentOutRastDepth $ v :. ZT
 
+{-
+identity - RGBA 1 1 1 1
+identity_lighting (identity_light_byte = ilb) - RGBA ilb ilb ilb ilb
+lighting_diffuse - ??? check: RB_CalcDiffuseColor
+exact_vertex - vertex color
+const - constant color
+vertex (identity_light = il, vertex_color*il) - RGBA (r*il) (g*il) (b*il) a
+one_minus_vertex = (identity_light = il, vertex_color*il) - RGBA ((1-r)*il) ((1-g)*il) ((1-b)*il) a
+fog - fog color
+waveform (c = clamp 0 1 (wave_value * identity_light)) - RGBA c c c 1
+entity - entity's shaderRGB
+one_minus_entity - 1 - entity's shaderRGB
+-}
+{-
+rgbExactVertex _ (_,_,_,r:.g:.b:._:.()) = r:.g:.b:.()
+rgbVertex _ (_,_,_,r:.g:.b:._:.()) = f r:.f g:.f b:.()
+  where
+    f a = toGPU identityLight * a
+rgbOneMinusVertex _ (_,_,_,r:.g:.b:._:.()) = f r:.f g:.f b:.()
+  where
+    f a = 1 - toGPU identityLight * a
+-- time vertexData
+--convRGBGen :: RGBGen -> 
+convRGBGen a = case a of
+    RGB_Const r g b      -> Const $ V3 r g b
+    RGB_Identity         -> Const $ V3 1 1 1
+    RGB_IdentityLighting -> Const $ V3 identityLight identityLight identityLight
+    RGB_ExactVertex      -> rgbExactVertex
+    RGB_Vertex           -> rgbVertex
+    RGB_OneMinusVertex   -> rgbOneMinusVertex
+    _   -> rgbIdentity
+--    RGB_Wave w          
+--    RGB_Entity
+--    RGB_OneMinusEntity
+--    RGB_LightingDiffuse
+-}

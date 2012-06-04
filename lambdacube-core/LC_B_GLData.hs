@@ -14,6 +14,9 @@ import qualified Data.Vector as V
 
 import Graphics.Rendering.OpenGL.Raw.Core32
 
+import Data.Word
+import Data.Bitmap
+
 import LC_B_GLType
 import LC_B_GLUtil
 import LC_G_APIType
@@ -126,7 +129,10 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
                                             , loc <- maybeToList $ T.lookup n uLocs
                                             ]
                 -- object uniform setup
-                objUSetup       = zipWithM_ (\n mkOUS -> let Just loc = T.lookup n uLocs in mkOUS loc) objUniforms mkObjUSetup
+                objUSetup       = sequence_ [ mkOUS loc
+                                            | (n,mkOUS) <- zip objUniforms mkObjUSetup
+                                            , loc <- maybeToList $ T.lookup n uLocs
+                                            ]
             --print sLocs
             -- create Vertex Array Object
             vao <- alloca $! \pvao -> glGenVertexArrays 1 pvao >> peek pvao
@@ -182,3 +188,25 @@ removeObject rend obj = do
         modifyIORef (drawObjectsIORef rd) $ \(ObjectSet _ drawMap) ->
             let drawMap' = Map.delete obj drawMap
             in ObjectSet (sequence_ $ Map.elems drawMap') drawMap'
+
+-- Texture
+
+-- FIXME: Temporary implemenation
+compileTexture2DNoMipRGBAF :: Bitmap Word8 -> IO TextureData
+compileTexture2DNoMipRGBAF bitmap = do
+    to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
+    glBindTexture gl_TEXTURE_2D to
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral gl_REPEAT
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral gl_REPEAT
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR_MIPMAP_LINEAR
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL 0
+    withBitmap bitmap $ \(w,h) nchn padding ptr -> do
+        let internalFormat  = fromIntegral gl_RGBA32F
+            dataFormat      = fromIntegral $ case nchn of
+                3   -> gl_RGB
+                4   -> gl_RGBA
+                _   -> error "unsupported texture format!"
+        glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
+    return $ TextureData to
