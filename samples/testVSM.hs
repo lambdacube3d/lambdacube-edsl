@@ -172,11 +172,11 @@ scene slotU objU windowSize mousePosition fblrPress = do
                 lm = fromProjective (lookat light (light + ldir) lup)
                 cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.1 50 (pi/2) (fromIntegral w / fromIntegral h)
-                lpm = perspective 0.1 100 (pi/1.3) (fromIntegral w / fromIntegral h)
+                lpm = perspective 0.1 100 (pi/(1.3 + 0.2 * sin (2.7 * time))) (fromIntegral w / fromIntegral h)
             (t,_) <- C.time $ do
                 --timeSetter time
-                scaleU $! 1--512 / fromIntegral w
-                scaleV $! 1--512 / fromIntegral h
+                scaleU $! 1 --512 / fromIntegral w
+                scaleV $! 1 --512 / fromIntegral h
                 matSetter $! mat4ToM44F $! cm .*. pm
                 lightSetter $! mat4ToM44F $! lm .*. lpm
                 --lightSetter2 $! mat4ToM44F $! lm .*. pm

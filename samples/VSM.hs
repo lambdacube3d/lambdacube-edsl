@@ -135,30 +135,49 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "streamSlot" Triangle (IV3F "position")
+    input   = Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
     worldViewProj = Uni (IM44F "worldViewProj")
     lightViewProj = Uni (IM44F "lightViewProj")
     scaleU  = Uni (IFloat "scaleU")
     scaleV  = Uni (IFloat "scaleV")
 
-    vert :: Exp V V3F -> VertexOut V4F
-    vert p = VertexOut v4 (floatV 1) (Smooth v4l:.ZT)
+    trimV4 :: Exp s V4F -> Exp s V3F
+    trimV4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
+
+    trimM4 :: Exp s M44F -> Exp s M33F
+    trimM4 v = let V4 i j k _ = unpack' v in pack' $ V3 (trimV4 i) (trimV4 j) (trimV4 k)
+    
+    vert :: Exp V (V3F, V3F) -> VertexOut (V4F, V3F)
+    vert attr = VertexOut v4 (floatV 1) (Smooth v4l:.Smooth n:.ZT)
       where
         v4 = worldViewProj @*. snoc p 1
         v4l = lightViewProj @*. snoc p 1
+        n3 = normalize' (trimM4 worldViewProj @*. n)
+        (p,n) = untup2 attr
 
-    calcLuminance :: Exp F V4F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    calcLuminance l = FragmentOutRastDepth $ (amb @+ p_max):. ZT
+    calcLuminance :: Exp F (V4F, V3F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    calcLuminance attr = FragmentOutRastDepth $ ({- amb @+ -}p_max):. ZT
       where
         amb :: Exp F V4F
         amb = Const $ V4 0.1 0.1 0.3 1
         V4 tx ty tz tw = unpack' l
-        u = (tx @/ tw @* floatF 0.5 @+ floatF 0.5) @* (scaleU :: Exp F Float)
-        v = (ty @/ tw @* floatF 0.5 @+ floatF 0.5) @* (scaleV :: Exp F Float)
+        clampUV x = clamp' x (floatF 0) (floatF 1)
+        scale x = x @* floatF 0.5 @+ floatF 0.5
+        u = clampUV (scale (tx @/ tw)) @* (scaleU :: Exp F Float)
+        v = clampUV (scale (ty @/ tw)) @* (scaleV :: Exp F Float)
         V4 m1 m2 _ _ = unpack' $ texture' sampler (pack' $ V2 u v) (floatF 0)
         variance = max' (floatF 0.002) (m2 @- m1 @* m1)
-        d = tz @- m1
-        p_max = variance @/ (variance @+ d @* d)
+        d = max' (floatF 0) (tz @- m1)
+        u' = u @- floatF 0.5
+        v' = v @- floatF 0.5
+        -- assuming light direction of (0 0 -1)
+        V3 _ _ nz = unpack' n
+        nz' = max' (floatF 0) nz
+        intensity = max' (floatF 0) ((floatF 1 @- sqrt' (u' @* u' @+ v' @* v') @* floatF 4) @* nz')
+        ltr = (round' (u' @* floatF 10) @* floatF 0.5 @+ floatF 0.5) @* intensity
+        ltg = (round' (v' @* floatF 10) @* floatF 0.5 @+ floatF 0.5) @* intensity
+        p_max = pack' (V4 ltr ltg intensity (floatF 1)) @* (variance @/ (variance @+ d @* d))
+        (l,n) = untup2 attr
 
     sampler = Sampler LinearFilter Clamp shadowMapBlur
     --Texture gp dim arr t ar
