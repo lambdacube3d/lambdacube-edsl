@@ -151,7 +151,14 @@ skyParms <farbox> <cloudheight> <nearbox>
 
 skyParms = pass <$> kw "skyparms" <* (kw "-" <|> (const () <$> word)) <* (kw "-" <|> (const () <$> word)) <* kw "-"
 
-cull = pass <$> kw "cull" <* (kw "front" <|> kw "back" <|> kw "disable" <|> kw "none" <|> kw "twosided" <|> kw "backsided")
+cull = (\_ a ca -> ca {caCull = a}) <$> kw "cull" <*> (
+    val CT_FrontSided "front"   <|>
+    val CT_TwoSided "none"      <|>
+    val CT_TwoSided "twosided"  <|>
+    val CT_TwoSided "disable"   <|>
+    val CT_BackSided "back"     <|>
+    val CT_BackSided "backside" <|>
+    val CT_BackSided "backsided")
 
 deformVertexes = (\v ca -> ca {caDeformVertexes = v:caDeformVertexes ca}) <$ kw "deformvertexes" <*> (
     val D_AutoSprite "autosprite" <|>

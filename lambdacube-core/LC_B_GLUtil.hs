@@ -109,6 +109,7 @@ setTextureData :: GLint -> TextureData -> IO ()
 setTextureData texUnitIdx (TextureData texObj) = do
     glActiveTexture $ gl_TEXTURE0 + fromIntegral texUnitIdx
     glBindTexture gl_TEXTURE_2D texObj
+    --putStrLn (" -- uniform setup - Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj)")
 
 b2w :: Bool -> GLuint
 b2w True = 1

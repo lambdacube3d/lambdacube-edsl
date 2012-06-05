@@ -112,10 +112,10 @@ mkRenderDescriptor texSlotName renderTexName renderTexGLObj f = case f of
             textureSetup        = forM_ (zip renderTexObjs [0..fromIntegral maxTextureUnits-1]) $ \(texObj,texUnitIdx) -> do
                 glActiveTexture $ gl_TEXTURE0 + texUnitIdx
                 glBindTexture gl_TEXTURE_2D texObj
-                --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
+                putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
 
         drawRef <- newIORef $ ObjectSet (return ()) Map.empty
-        (rA,dA,uT,sT) <- compileRenderFrameBuffer (usedRenderTexName ++ usedTexSlotName) drawRef f
+        (rA,dA,uT,sT) <- compileRenderFrameBuffer usedRenderTexName usedTexSlotName drawRef f
         return $ RenderDescriptor
             { uniformLocation   = uT
             , streamLocation    = sT

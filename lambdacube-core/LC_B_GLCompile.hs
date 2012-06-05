@@ -365,14 +365,15 @@ compileClearFrameBuffer (FrameBuffer fb) = cvt fb
 
 -- FIXME: simple solution, does not support sharing
 -- result: (RenderAction, DisposeAction, UniformLocation, StreamLocation)
-compileRenderFrameBuffer :: [(Exp,String)] -> IORef ObjectSet -> GP -> IO (IO (), IO (), Trie GLint, Trie GLuint)
-compileRenderFrameBuffer samplerNames objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx (Transform vsh (Fetch slotName _ slotInput))) fb) = do
+compileRenderFrameBuffer :: [(Exp,String)] -> [(Exp,String)] -> IORef ObjectSet -> GP -> IO (IO (), IO (), Trie GLint, Trie GLuint)
+compileRenderFrameBuffer samplerNames slotSamplerNames objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx (Transform vsh (Fetch slotName _ slotInput))) fb) = do
     --rndr <- compileFrameBuffer fb rndr'
     po <- glCreateProgram
     let (shl,fragOuts) = {-case gs of
             NoGeometryShader    -> -}([VertexShaderSrc srcV, FragmentShaderSrc srcF], (map fst outF)) {-
             _                   -> ([VertexShaderSrc srcV, GeometryShaderSrc srcG, FragmentShaderSrc srcF], (map fst outF)) -}
-        samplerNameMap = Map.fromList samplerNames
+        allSamplerNames = samplerNames ++ slotSamplerNames 
+        samplerNameMap  = Map.fromList allSamplerNames
         (srcV,outV) = codeGenVertexShader samplerNameMap slotInput vsh
         (srcG,outG) = ("",outV)--codeGenGeometryShader samplerNameMap outV gs
         (srcF,outF) = codeGenFragmentShader samplerNameMap outG ffilter fsh
@@ -407,12 +408,23 @@ compileRenderFrameBuffer samplerNames objsIORef (Accumulate aCtx ffilter fsh (Ra
 
     -- set sampler mapping
     glUseProgram po
-    forM_ (zip [0..] (map (SB.pack . snd) samplerNames)) $ \(tuIdx,n) -> case T.lookup n uLoc of
+    forM_ (zip [0..] (map (SB.pack . snd) allSamplerNames)) $ \(tuIdx,n) -> case T.lookup n uLoc of
         Nothing -> fail $ "missing sampler from shader: " ++ show n
         Just i  -> (setSampler i tuIdx) >> putStr ("    + setup texture unit mapping (smp " ++ show i ++ " <-> TexUnit " ++ show tuIdx ++": ") >> printGLStatus
 
     -- HINT: we get the uniform location now, so we have to provide this info to the renderer
-    let uLoc' = foldl' (\t (_,n) -> T.delete (SB.pack n) t) uLoc samplerNames
+    let uLoc' = foldl' (\t (_,n) -> setSamplerLoc t (SB.pack n)) uLoc allSamplerNames
+        renderSmpNamesS = Set.fromList $ map (SB.pack . snd) samplerNames
+        renderSmpCount  = Set.size renderSmpNamesS
+        slotSmpName     = map (SB.pack . snd) slotSamplerNames
+
+        setSamplerLoc :: Trie GLint -> ByteString -> Trie GLint
+        setSamplerLoc t n
+            | Set.member n renderSmpNamesS  = T.delete n t
+            | otherwise                     = T.adjust (\_ -> fromIntegral $ renderSmpCount + idx) n t
+              where
+                Just idx = elemIndex n slotSmpName
+
         disposeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
         renderFun = do
             ObjectSet drawObjs objsMap <- readIORef objsIORef
@@ -421,4 +433,6 @@ compileRenderFrameBuffer samplerNames objsIORef (Accumulate aCtx ffilter fsh (Ra
                 setupAccumulationContext aCtx
                 glUseProgram po
                 drawObjs
+    print slotName
+    print uLoc'
     return $! (renderFun, disposeFun, uLoc', sLoc)
