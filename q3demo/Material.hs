@@ -41,6 +41,11 @@ data Deform
     | D_Text7
     | D_Wave !Float !Wave
 
+data CullType
+    = CT_FrontSided
+    | CT_BackSided
+    | CT_TwoSided
+
 data CommonAttrs
     = CommonAttrs
     { caSkyParms        :: !() -- TODO
@@ -49,7 +54,7 @@ data CommonAttrs
     , caSort            :: !Int -- default: 3 or 6 depends on blend function
     , caEntityMergable  :: !Bool
     , caFogOnly         :: !Bool
-    , caCull            :: !() -- TODO, default = front
+    , caCull            :: !CullType -- default: front
     , caDeformVertexes  :: ![Deform]
     , caNoMipMaps       :: !Bool
     , caPolygonOffset   :: !Bool
@@ -64,7 +69,7 @@ defaultCommonAttrs = CommonAttrs
     , caSort            = 3
     , caEntityMergable  = False
     , caFogOnly         = False
-    , caCull            = ()
+    , caCull            = CT_FrontSided
     , caDeformVertexes  = []
     , caNoMipMaps       = False
     , caPolygonOffset   = False
@@ -115,6 +120,7 @@ data StageTexture
     | ST_AnimMap    !Float ![SB.ByteString]
     | ST_Lightmap
     | ST_WhiteImage
+    deriving (Show, Eq, Ord)
 
 data AlphaFunction
     = A_Gt0
@@ -159,7 +165,7 @@ defaultStageAttrs = StageAttrs
     , saTCGen       = TG_Base
     , saTCMod       = []
     , saTexture     = ST_WhiteImage
-    , saDepthWrite  = False
+    , saDepthWrite  = True--False
     , saDepthFunc   = D_Lequal
     , saAlphaFunc   = Nothing
     }

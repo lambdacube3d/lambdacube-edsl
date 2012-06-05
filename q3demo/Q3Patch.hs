@@ -32,7 +32,7 @@ tessellate controls level = do
         forM_ [0..level] $ \j -> let a' = fromIntegral j / fromIntegral level in MV.write vertex (i * l1 + j) $ mix a' c0 c1 c2
     v <- V.unsafeFreeze vertex
     -- merge triangle strips using degenerate triangles
-    let idx row col2 | col2 `mod` 2 == 0 = (row + 1) * l1 + col2 `div` 2
+    let idx row col2 | col2 `mod` 2 == 1 = (row + 1) * l1 + col2 `div` 2
                      | otherwise         = row * l1 + col2 `div` 2
         strips = [V.generate (l1*2) (idx row) | row <- [0..level-1]]
         separate (a:b:c:xs) = a:b:c:separate (b:c:xs)

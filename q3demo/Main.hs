@@ -8,7 +8,8 @@ import Data.Attoparsec.Char8
 import Data.ByteString.Char8 (ByteString)
 import Data.Char
 import Data.IORef
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf,partition)
+import Data.Trie (Trie)
 import Data.Vect
 import Data.Vect.Float.Instances ()
 import FRP.Elerea.Param
@@ -22,6 +23,10 @@ import qualified Data.Vector as V
 
 import TypeLevel.Number.Nat.Num
 import Graphics.Rendering.OpenGL.Raw.Core32
+
+import Data.Bitmap
+import Data.Digest.CRC32
+import Codec.Image.STB hiding (Image)
 
 import LC_API
 --import LCGL
@@ -38,6 +43,21 @@ main :: IO ()
 main = do
     ar <- loadArchive
 
+    let imageShader txName = defaultCommonAttrs {caStages = sa:saLM:[]}
+          where
+            sa = defaultStageAttrs
+                { saTexture     = ST_Map txName
+                --, saBlend = Just (SrcColor,Zero)
+                --, saBlend = Just (SrcColor,DstColor)
+                , saDepthWrite  = True
+                }
+            saLM = defaultStageAttrs
+                { saTexture = ST_Lightmap
+                , saTCGen   = TG_Lightmap
+                --, saBlend = Just (SrcColor,One)
+                , saBlend   = Just (B_SrcColor,B_DstColor)
+                }
+
     args <- getArgs
     let bspMap = T.fromList [(SB.pack $ takeBaseName n, decompress' e) | e <- ar, let n = eFilePath e, ".bsp" == takeExtensionCI n, isPrefixOfCI "maps" n]
         bspName = case args of
@@ -46,7 +66,14 @@ main = do
         Just bspData = T.lookup bspName bspMap
         bsp = readBSP bspData
         shNames = Set.fromList $ map shName $ V.toList $ blShaders bsp
-        shMap = T.mapBy (\n sh -> if Set.member n shNames then Just sh else Nothing) $ shaderMap ar
+        shMap' = shaderMap ar
+        (normalShNames,textureShNames) = partition (\n -> T.member n shMap') $ Set.toList shNames
+        normalShNameSet     = Set.fromList normalShNames
+        textureShNameSet    = Set.fromList textureShNames
+        normalShMap     = T.mapBy (\n sh -> if Set.member n normalShNameSet then Just sh else Nothing) $ shaderMap ar
+        --textureShMap    = T.fromList [(n,defaultCommonAttrs {caStages = [defaultStageAttrs {saTexture = ST_Map n, saDepthWrite = True}]}) | n <- Set.toList textureShNameSet]
+        textureShMap    = T.fromList [(n,imageShader n) | n <- Set.toList textureShNameSet]
+        shMap = T.unionL normalShMap textureShMap
         -- create gfx network to render active materials
         {-
         TODO: gfx network should be created from shaderMap and bsp
@@ -68,8 +95,39 @@ main = do
 
     windowSize <- initCommon "LC DSL Quake 3 Demo"
 
+    -- CommonAttrs
     renderer <- compileRenderer $ ScreenOut lcnet
     print "renderer created"
+    --print $ slotUniform renderer
+    --print $ slotStream renderer
+
+    let slotU           = uniformSetter renderer
+        draw _          = render renderer >> swapBuffers
+        entityRGB       = uniformV3F "entityRGB" slotU
+        entityAlpha     = uniformFloat "entityAlpha" slotU
+        identityLight   = uniformFloat "identityLight" slotU
+
+    entityRGB one'
+    entityAlpha 1
+    identityLight 1
+
+    putStrLn "loading textures:"
+    -- load textures
+    let archiveTrie     = T.fromList [(SB.pack $ eFilePath a,a) | a <- ar]
+        redBitmap       = createSingleChannelBitmap (8,8) $ \x y -> if (x+y) `mod` 2 == 0 then 255 else 0
+        zeroBitmap      = emptyBitmap (8,8) 1
+        oneBitmap       = createSingleChannelBitmap (8,8) $ \x y -> 255
+
+    defaultTexture <- compileTexture2DNoMipRGBAF $ combineChannels [redBitmap,zeroBitmap,zeroBitmap,oneBitmap]
+    forM_ (Set.toList $ Set.fromList $ map saTexture $ concatMap caStages $ T.elems shMap) $ \stageTex -> do
+        let texSlotName = SB.pack $ "Tex_" ++ show (crc32 $ SB.pack $ show stageTex)
+            setTex img  = uniformFTexture2D texSlotName slotU =<< loadQ3Texture defaultTexture archiveTrie img
+        case stageTex of
+            ST_Map img          -> setTex img
+            ST_ClampMap img     -> setTex img
+            ST_AnimMap t imgs   -> setTex (head imgs)
+            _ -> return ()
+
 
     putStrLn $ "loading: " ++ show bspName
     addBSP renderer bsp
@@ -86,8 +144,7 @@ main = do
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
 
-    let slotU = uniformSetter renderer
-        draw _ = render renderer >> swapBuffers
+
     s <- fpsState
     sc <- start $ do
         u <- scene p0 slotU windowSize mousePosition fblrPress
@@ -282,3 +339,22 @@ parseEntities n s = eval n $ parse entities s
         Done rem r  -> error $ show (n,"Input is not consumed", rem, r)
         Fail _ c _  -> error $ show (n,"Fail",c)
         Partial f'  -> eval n (f' "")
+
+
+
+loadQ3Texture :: TextureData -> Trie Entry -> ByteString -> IO TextureData
+loadQ3Texture defaultTex ar name = do
+    let name' = SB.unpack name
+        n1 = SB.pack $ replaceExtension name' "tga"
+        n2 = SB.pack $ replaceExtension name' "jpg"
+        b0 = T.member name ar
+        b1 = T.member n1 ar
+        b2 = T.member n2 ar
+    case T.lookup (if b0 then name else if b1 then n1 else n2) ar of
+        Nothing -> return defaultTex
+        Just d  -> do
+            eimg <- decodeImage $ decompress d
+            putStrLn $ "  load: " ++ SB.unpack name
+            case eimg of
+                Left msg    -> putStrLn ("    error: " ++ msg) >> return defaultTex
+                Right img   -> compileTexture2DNoMipRGBAF img

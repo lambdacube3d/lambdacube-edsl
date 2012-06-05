@@ -15,7 +15,7 @@ import qualified Data.Vector as V
 import Graphics.Rendering.OpenGL.Raw.Core32
 
 import Data.Word
-import Data.Bitmap
+import Data.Bitmap.Pure
 
 import LC_B_GLType
 import LC_B_GLUtil
@@ -141,7 +141,9 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
             iSetup -- setup index buffer
             let renderFun = do
                     --print "draw object"
+                    --putStrLn $ "  setup global uniforms: " ++ show [n | n <- globalUNames, T.member n uLocs]
                     globalUSetup            -- setup uniforms
+                    --putStrLn $ "  setup object uniforms: " ++ show [n | n <- objUniforms, T.member n uLocs]
                     objUSetup
                     glBindVertexArray vao   -- setup stream input (aka object attributes)
                     draw                    -- execute draw function

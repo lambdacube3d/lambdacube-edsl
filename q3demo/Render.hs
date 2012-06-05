@@ -10,6 +10,8 @@ import Foreign
 import qualified Data.Trie as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
+import qualified Data.ByteString.Char8 as SB
+import Data.Bitmap.IO
 
 import BSP
 import LC_API
@@ -68,20 +70,33 @@ addObject' rndr name prim idx attrs unis = addObject rndr name' prim idx attrs' 
         _           -> error $ "material not found: " ++ show name'
 
 addBSP renderer bsp = do
-    let shaderNames = V.map shName $ blShaders bsp
+    let alig = Just 4
+    
+    --zeroBitmap <- createSingleChannelBitmap (128,128) alig (\_ _ -> 0)
+    oneBitmap <- createSingleChannelBitmap (128,128) alig (\_ _ -> 255)
+    lightMapTextures <- fmap V.fromList $ forM (V.toList $ blLightmaps bsp) $ \(Lightmap d) -> SB.useAsCString d $ \ptr -> do
+        bitmap <- copyBitmapFromPtr (128,128) 3 0 (castPtr ptr) alig
+        [r,g,b] <- extractChannels bitmap alig
+        bitmapRGBA <- combineChannels [r,g,b,oneBitmap] alig
+        --bitmapRGBA <- combineChannels [oneBitmap,zeroBitmap,zeroBitmap,oneBitmap] alig
+        compileTexture2DNoMipRGBAF $ unsafeFreezeBitmap bitmapRGBA
+
+    let lightMapTexturesSize = V.length lightMapTextures
+        shaderNames = V.map shName $ blShaders bsp
         convertSurface (objs,lenV,arrV,lenI,arrI) sf = case srSurfaceType sf of
             Planar          -> objs'
             TriangleSoup    -> objs'
             -- tesselate, concatenate vertex and index data to fixed vertex and index buffer
-            Patch           -> ((lenV, lenV', lenI, lenI', TriangleStrip, name):objs, lenV+lenV', v:arrV, lenI+lenI', i:arrI)
+            Patch           -> ((lmIdx, lenV, lenV', lenI, lenI', TriangleStrip, name):objs, lenV+lenV', v:arrV, lenI+lenI', i:arrI)
               where
                 (v,i) = tesselatePatch drawV sf 5
                 lenV' = V.length v
                 lenI' = V.length i
             Flare           -> skip
           where
-            skip  = ((srFirstVertex sf, srNumVertices sf, srFirstIndex sf, 0, TriangleList, name):objs, lenV, arrV, lenI, arrI)
-            objs' = ((srFirstVertex sf, srNumVertices sf, srFirstIndex sf, srNumIndices sf, TriangleList, name):objs, lenV, arrV, lenI, arrI)
+            lmIdx = srLightmapNum sf
+            skip  = ((lmIdx,srFirstVertex sf, srNumVertices sf, srFirstIndex sf, 0, TriangleList, name):objs, lenV, arrV, lenI, arrI)
+            objs' = ((lmIdx,srFirstVertex sf, srNumVertices sf, srFirstIndex sf, srNumIndices sf, TriangleList, name):objs, lenV, arrV, lenI, arrI)
             name  = shaderNames V.! (srShaderNum sf)
         drawV = blDrawVertices bsp
         drawI = blDrawIndices bsp
@@ -102,7 +117,7 @@ addBSP renderer bsp = do
         , Array ArrFloat (4 * vertexCount) $ attribute dvColor
         ]
     indexBuffer <- compileBuffer [Array ArrWord32 (SV.length indices) $ withV SV.unsafeWith indices]
-    let obj (startV,countV,startI,countI,prim,name) = do
+    let obj (lmIdx,startV,countV,startI,countI,prim,name) = do
             let attrs = T.fromList $
                     [ ("position",      Stream TV3F vertexBuffer 0 startV countV)
                     , ("diffuseUV",     Stream TV2F vertexBuffer 1 startV countV)
@@ -111,7 +126,11 @@ addBSP renderer bsp = do
                     , ("color",         Stream TV4F vertexBuffer 4 startV countV)
                     ]
                 index = IndexStream indexBuffer 0 startI countI
-            addObject' renderer name prim (Just index) attrs []
+                isValidIdx i = i >= 0 && i < lightMapTexturesSize
+            o <- addObject' renderer name prim (Just index) attrs ["LightMap"]
+            let lightMap = uniformFTexture2D "LightMap" $ objectUniformSetter o
+            when (isValidIdx lmIdx) $ lightMap $ lightMapTextures V.! lmIdx
+            return o
     V.mapM obj $ V.fromList objs
     -- foldl' ([],sizeV,[],sizeI,[])    -- list of (startV countV startI countI)
                                         -- size of generated blDrawVertices
