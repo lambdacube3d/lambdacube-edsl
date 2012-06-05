@@ -155,7 +155,7 @@ codeGenPrim PrimExp                 ty [a]          = [functionCall "exp"       
 codeGenPrim PrimLog                 ty [a]          = [functionCall "log"                [a]]
 codeGenPrim PrimExp2                ty [a]          = [functionCall "exp2"               [a]]
 codeGenPrim PrimLog2                ty [a]          = [functionCall "log2"               [a]]
-codeGenPrim PrimSqrt                ty [a]          = [functionCall "sgrt"               [a]]
+codeGenPrim PrimSqrt                ty [a]          = [functionCall "sqrt"               [a]]
 codeGenPrim PrimInvSqrt             ty [a]          = [functionCall "inversesqrt"        [a]]
 
 -- Common Functions
