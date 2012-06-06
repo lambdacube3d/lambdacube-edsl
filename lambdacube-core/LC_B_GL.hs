@@ -112,7 +112,7 @@ mkRenderDescriptor texSlotName renderTexName renderTexGLObj f = case f of
             textureSetup        = forM_ (zip renderTexObjs [0..fromIntegral maxTextureUnits-1]) $ \(texObj,texUnitIdx) -> do
                 glActiveTexture $ gl_TEXTURE0 + texUnitIdx
                 glBindTexture gl_TEXTURE_2D texObj
-                putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
+                --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
 
         drawRef <- newIORef $ ObjectSet (return ()) Map.empty
         (rA,dA,uT,sT) <- compileRenderFrameBuffer usedRenderTexName usedTexSlotName drawRef f
@@ -129,6 +129,8 @@ mkPassSetup :: Map Exp GLuint -> (GP -> [Exp]) -> Bool -> GP -> IO (IO (), IO ()
 mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
     True    -> do
         let setup = do
+                --glViewport 100 100 312 312 --(fromIntegral depthW) (fromIntegral depthH)
+                --glViewport 0 0 512 512 --(fromIntegral depthW) (fromIntegral depthH)
                 glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
                 glDrawBuffer gl_BACK_LEFT
                 --putStr " -- default FB bind: " >> printGLStatus
@@ -139,6 +141,7 @@ mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
         -- FIXME: impelement properly
         let depthW = 512
             depthH = 512
+        --glViewport 0 0 (fromIntegral depthW) (fromIntegral depthH)
         depthTex <- alloca $! \pto -> glGenRenderbuffers 1 pto >> peek pto
         putStr "    - alloc depth texture: " >> printGLStatus
         glBindRenderbuffer gl_RENDERBUFFER depthTex

@@ -6,7 +6,7 @@ import qualified Data.ByteString.Char8 as SB
 import Data.List
 import Data.Digest.CRC32
 import Data.Maybe
-
+import Data.Vect
 import LC_API
 
 import Material hiding (Blending)
@@ -31,11 +31,6 @@ drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 
 drop3 :: Exp s V3F -> Exp s V2F
 drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
-
-
--- TODO: requires texture support
-deform :: Deform -> Exp V a -> Exp V a
-deform = undefined
 
 mkRasterContext :: CommonAttrs -> RasterContext Triangle
 mkRasterContext ca = TriangleCtx cull PolygonFill offset LastVertex
@@ -73,33 +68,6 @@ mkAccumulationContext sa = DepthOp depthFunc depthWrite:.ColorOp blend (one' :: 
         B_Zero              -> Zero
 
 {-
-data WaveType
-    = WT_Sin
-    | WT_Triangle
-    | WT_Square
-    | WT_Sawtooth
-    | WT_InverseSawtooth
-    | WT_Noise
-
-data Wave = Wave !WaveType !Float !Float !Float !Float
-
-data Deform
-    = D_AutoSprite
-    | D_AutoSprite2
-    | D_Bulge !Float !Float !Float
-    | D_Move !Vec3 !Wave
-    | D_Normal !Float !Float
-    | D_ProjectionShadow
-    | D_Text0
-    | D_Text1
-    | D_Text2
-    | D_Text3
-    | D_Text4
-    | D_Text5
-    | D_Text6
-    | D_Text7
-    | D_Wave !Float !Wave
-
 data CommonAttrs
     = CommonAttrs
     { caSkyParms        :: !()
@@ -144,10 +112,11 @@ mkColor ca sa rgbaV = snoc' rgb alpha
     entityRGB       = Uni (IV3F "entityRGB") :: Exp V V3F
     entityAlpha     = Uni (IFloat "entityAlpha") :: Exp V Float
     identityLight   = Uni (IFloat "identityLight") :: Exp V Float
-    red             = Const $ V3 1 0 0
+    --red             = Const $ V3 1 0 0
+    green           = Const $ V3 0 1 0
     V4 rV gV bV aV  = unpack' rgbaV
     rgb = case saRGBGen sa of
-        RGB_Wave _              -> red -- TODO
+        RGB_Wave w              -> let c = mkWave w in pack' $ V3 c c c
         RGB_Const r g b         -> v3V $ V3 r g b
         RGB_Identity            -> v3V one'
         RGB_IdentityLighting    -> pack' $ V3 identityLight identityLight identityLight
@@ -155,11 +124,11 @@ mkColor ca sa rgbaV = snoc' rgb alpha
         RGB_OneMinusEntity      -> v3V one' @- entityRGB
         RGB_ExactVertex         -> pack' $ V3 rV gV bV
         RGB_Vertex              -> (pack' $ V3 rV gV bV) @* identityLight
-        RGB_LightingDiffuse     -> red -- TODO
+        RGB_LightingDiffuse     -> green -- TODO
         RGB_OneMinusVertex      -> v3V one' @- ((pack' $ V3 rV gV bV) @* identityLight)
 
     alpha = case saAlphaGen sa of
-        A_Wave _            -> floatV 1 -- TODO
+        A_Wave w            -> mkWave w
         A_Const a           -> floatV a
         A_Portal            -> floatV 1 -- TODO
         A_Identity          -> floatV 1
@@ -169,15 +138,93 @@ mkColor ca sa rgbaV = snoc' rgb alpha
         A_LightingSpecular  -> floatV 1 -- TODO
         A_OneMinusVertex    -> floatV 1 @- aV
 
-mkTexCoord :: StageAttrs -> Exp V V2F -> Exp V V2F -> Exp V V2F
-mkTexCoord sa uvD uvL = uv
+mkWave' :: Exp V Float -> Wave -> Exp V Float
+mkWave' off (Wave wFunc base amplitude phase freq) = floatV base @+ v @* floatV amplitude
   where
-    -- TODO: TCMod
+    time        = Uni (IFloat "time") :: Exp V Float
+    u           = off @+ floatV phase @+ floatV freq @* time
+    uv          = pack' $ V2 u (Const 0)
+    V4 v _ _ _  = unpack' $ texture' sampler uv (Const 0)
+    sampler     = Sampler LinearFilter Wrap $ TextureSlot name (Texture2D (Float RGBA) n1)
+    name        = case wFunc of
+        WT_Sin              -> "SinTable"
+        WT_Triangle         -> "TriangleTable"
+        WT_Square           -> "SquareTable"
+        WT_Sawtooth         -> "SawToothTable"
+        WT_InverseSawtooth  -> "InverseSawToothTable"
+        WT_Noise            -> ""
+
+mkWave :: Wave -> Exp V Float
+mkWave = mkWave' $ floatV 0
+{-
+data Deform
+    = D_AutoSprite
+    | D_AutoSprite2
+    | D_Bulge !Float !Float !Float
+    | D_Move !Vec3 !Wave
+    | D_Normal !Float !Float
+    | D_ProjectionShadow
+    | D_Text0
+    | D_Text1
+    | D_Text2
+    | D_Text3
+    | D_Text4
+    | D_Text5
+    | D_Text6
+    | D_Text7
+    | D_Wave !Float !Wave
+-}
+mkDeform :: Exp V V2F -> Exp V V3F -> Exp V V3F -> Deform -> Exp V V3F
+mkDeform uv normal pos d = case d of
+    D_Move (Vec3 x y z) w   -> pos @+ v3V (V3 x y z) @* mkWave w
+    D_Wave spread w@(Wave _ _ _ _ f)
+        | f < 0.000001  -> pos @+ normal @* mkWave w
+        | otherwise     ->
+            let V3 x y z    = unpack' pos
+                off         = (x @+ y @+ z) @* floatV spread
+            in pos @+ normal @* mkWave' off w
+    D_Bulge w h s   -> let time     = Uni (IFloat "time") :: Exp V Float
+                           V2 u _   = unpack' uv
+                           off      = u @* floatV w @+ time @* floatV s
+                       in pos @+ normal @* sin' off @* floatV h
+    _ -> pos
+
+{-
+data TCMod
+    = TM_EntityTranslate
+    | TM_Turb !Float !Float !Float !Float
+-}
+mkTCMod :: Exp V V2F -> TCMod -> Exp V V2F
+mkTCMod uv m = case m of
+    TM_Scroll su sv -> uv @+ (Const $ V2 su sv :: Exp V V2F) @* (Uni (IFloat "time") :: Exp V Float)
+    TM_Scale su sv  -> uv @* (Const $ V2 su sv :: Exp V V2F)
+    TM_Stretch w    -> let s = mkWave w in uv @* s-- @- uv @* (s @* floatV 0.5)
+    TM_Rotate speed -> let time = Uni (IFloat "time") :: Exp V Float
+                           fi   = floatV (-speed) @* time
+                           s    = sin' fi
+                           ms   = s @* floatV (-1)
+                           c    = cos' fi
+                           mA   = pack' $ V2 c s
+                           mB   = pack' $ V2 ms c
+                           m    = pack' $ V2 mA mB
+                       in m @*. uv
+    TM_Transform m00 m01 m10 m11 t0 t1  -> let V2 u v   = unpack' uv
+                                               u'       = u @* floatV m00 @+ v @* floatV m10 @+ floatV t0
+                                               v'       = v @* floatV m01 @+ u @* floatV m11 @+ floatV t1
+                                           in pack' $ V2 u' v'
+    --TM_Turb base amp phase freq ->  let V2 u v   = unpack' uv
+    _ -> uv
+
+mkTexCoord :: Exp V V3F -> StageAttrs -> Exp V V2F -> Exp V V2F -> Exp V V2F
+mkTexCoord pos sa uvD uvL = foldl' mkTCMod uv $ saTCMod sa
+  where
     uv = case saTCGen sa of
         TG_Base         -> uvD
         TG_Lightmap     -> uvL
         TG_Environment  -> Const zero' -- TODO
-        TG_Vector _ _   -> Const zero' -- TODO
+        TG_Vector (Vec3 sx sy sz) (Vec3 tx ty tz)   -> let s    = Const $ V3 sx sy sz :: Exp V V3F
+                                                           t    = Const $ V3 tx ty tz :: Exp V V3F
+                                                       in pack' $ V2 (pos @. s) (pos @. t)
 
 mkVertexShader :: CommonAttrs -> StageAttrs -> Exp V (V3F,V3F,V2F,V2F,V4F) -> VertexOut (V2F,V4F)
 mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) (Smooth uv:.Smooth color:.ZT)
@@ -185,8 +232,8 @@ mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) (Smooth uv:.Smooth co
     worldViewProj   = Uni (IM44F "worldViewProj")
     (p,n,d,l,c)     = untup5 pndlc
     screenPos       = worldViewProj @*. snoc pos 1
-    pos             = p -- TODO: deform
-    uv              = mkTexCoord sa d l
+    pos             = foldl' (mkDeform d n) p $ caDeformVertexes ca
+    uv              = mkTexCoord pos sa d l
     color           = mkColor ca sa c
 
 mkFragmentShader :: StageAttrs -> Exp F (V2F,V4F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
@@ -231,31 +278,8 @@ mkStage name ca prevFB sa = Accumulate aCtx fFun fSh (Rasterize rCtx (Transform 
 mkShader :: GP (FrameBuffer N1 (Float,V4F)) -> (ByteString,CommonAttrs) -> GP (FrameBuffer N1 (Float,V4F))
 mkShader fb (name,ca) = foldl' (mkStage name ca) fb $ caStages ca
 
-{-
-mkShader' :: GP (FrameBuffer N1 (Float,V4F)) -> (ByteString,CommonAttrs) -> GP (FrameBuffer N1 (Float,V4F))
-mkShader' fb (name,ca) = Accumulate fragCtx PassAll frag rast fb
-  where
-    cull    = CullNone
-    offset  = if caPolygonOffset ca then Offset (-1) (-2) else NoOffset
-    fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
-    rastCtx = TriangleCtx cull PolygonFill offset LastVertex
-    rast    = Rasterize rastCtx prims
-    prims   = Transform vert input
-    input   = Fetch name Triangle (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")
-    worldViewProj = Uni (IM44F "worldViewProj")
-
-    vert :: Exp V (V3F,V3F,V2F,V2F,V4F) -> VertexOut V4F
-    vert pndlc = VertexOut v4 (Const 1) (Smooth c:.ZT)
-      where
-        v4    = worldViewProj @*. snoc p 1
-        (p,n,d,l,c) = untup5 pndlc
-
-    frag :: Exp F V4F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag a = FragmentOutRastDepth $ a :. ZT
--}
-
 q3GFX :: [(ByteString,CommonAttrs)] -> GP (FrameBuffer N1 (Float,V4F))
-q3GFX shl = {-errorShader $ -} foldl' mkShader clear ordered
+q3GFX shl = errorShader $ foldl' mkShader clear ordered
   where
     ordered = sortBy (\(_,a) (_,b) -> caSort a `compare` caSort b) shl
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
@@ -314,27 +338,4 @@ fog - fog color
 waveform (c = clamp 0 1 (wave_value * identity_light)) - RGBA c c c 1
 entity - entity's shaderRGB
 one_minus_entity - 1 - entity's shaderRGB
--}
-{-
-rgbExactVertex _ (_,_,_,r:.g:.b:._:.()) = r:.g:.b:.()
-rgbVertex _ (_,_,_,r:.g:.b:._:.()) = f r:.f g:.f b:.()
-  where
-    f a = toGPU identityLight * a
-rgbOneMinusVertex _ (_,_,_,r:.g:.b:._:.()) = f r:.f g:.f b:.()
-  where
-    f a = 1 - toGPU identityLight * a
--- time vertexData
---convRGBGen :: RGBGen -> 
-convRGBGen a = case a of
-    RGB_Const r g b      -> Const $ V3 r g b
-    RGB_Identity         -> Const $ V3 1 1 1
-    RGB_IdentityLighting -> Const $ V3 identityLight identityLight identityLight
-    RGB_ExactVertex      -> rgbExactVertex
-    RGB_Vertex           -> rgbVertex
-    RGB_OneMinusVertex   -> rgbOneMinusVertex
-    _   -> rgbIdentity
---    RGB_Wave w          
---    RGB_Entity
---    RGB_OneMinusEntity
---    RGB_LightingDiffuse
 -}

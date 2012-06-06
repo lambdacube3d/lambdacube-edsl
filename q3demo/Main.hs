@@ -39,6 +39,37 @@ import Render
 import ShaderParser
 import Zip
 
+-- Utility code
+tableTexture :: [Float] -> ByteString -> Trie InputSetter -> IO ()
+tableTexture t n s = do
+    let width       = length t
+        v           = V.fromList t
+        bitmap      = createSingleChannelBitmap (width,1) $ \x y -> floor $ min 255 $ max 0 $ 128 + 128 * v V.! x
+        oneBitmap   = createSingleChannelBitmap (width,1) $ \x y -> 255
+        texture     = uniformFTexture2D n s
+
+    tex <- compileTexture2DNoMipRGBAF $ combineChannels [bitmap,bitmap,bitmap,oneBitmap]
+    texture tex
+
+setupTables :: Trie InputSetter -> IO ()
+setupTables s = do
+    let funcTableSize = 1024 :: Float
+        sinTexture              = [sin (i*2*pi/(funcTableSize-1)) | i <- [0..funcTableSize-1]]
+        squareTexture           = [if i < funcTableSize / 2 then 1 else -1 | i <- [0..funcTableSize-1]]
+        sawToothTexture         = [i / funcTableSize | i <- [0..funcTableSize-1]]
+        inverseSawToothTexture  = reverse [i / funcTableSize | i <- [0..funcTableSize-1]]
+        triangleTexture         = l1 ++ map ((-1)*) l1
+          where
+            n = funcTableSize / 4
+            l0 = [i / n | i <- [0..n-1]]
+            l1 = l0 ++ reverse l0
+    
+    tableTexture sinTexture "SinTable" s
+    tableTexture squareTexture "SquareTable" s
+    tableTexture sawToothTexture "SawToothTable" s
+    tableTexture inverseSawToothTexture "InverseSawToothTable" s
+    tableTexture triangleTexture "TriangleTable" s
+
 main :: IO ()
 main = do
     ar <- loadArchive
@@ -110,24 +141,26 @@ main = do
     entityRGB one'
     entityAlpha 1
     identityLight 1
+    setupTables slotU
 
     putStrLn "loading textures:"
     -- load textures
     let archiveTrie     = T.fromList [(SB.pack $ eFilePath a,a) | a <- ar]
-        redBitmap       = createSingleChannelBitmap (8,8) $ \x y -> if (x+y) `mod` 2 == 0 then 255 else 0
-        zeroBitmap      = emptyBitmap (8,8) 1
-        oneBitmap       = createSingleChannelBitmap (8,8) $ \x y -> 255
+        redBitmap       = createSingleChannelBitmap (32,32) $ \x y -> if (x+y) `mod` 2 == 0 then 255 else 0
+        zeroBitmap      = emptyBitmap (32,32) 1
+        oneBitmap       = createSingleChannelBitmap (32,32) $ \x y -> 255
 
-    defaultTexture <- compileTexture2DNoMipRGBAF $ combineChannels [redBitmap,zeroBitmap,zeroBitmap,oneBitmap]
-    forM_ (Set.toList $ Set.fromList $ map saTexture $ concatMap caStages $ T.elems shMap) $ \stageTex -> do
+    defaultTexture <- compileTexture2DNoMipRGBAF $ combineChannels [redBitmap,redBitmap,zeroBitmap,oneBitmap]
+    animTex <- fmap concat $ forM (Set.toList $ Set.fromList $ map saTexture $ concatMap caStages $ T.elems shMap) $ \stageTex -> do
         let texSlotName = SB.pack $ "Tex_" ++ show (crc32 $ SB.pack $ show stageTex)
             setTex img  = uniformFTexture2D texSlotName slotU =<< loadQ3Texture defaultTexture archiveTrie img
         case stageTex of
-            ST_Map img          -> setTex img
-            ST_ClampMap img     -> setTex img
-            ST_AnimMap t imgs   -> setTex (head imgs)
-            _ -> return ()
-
+            ST_Map img          -> setTex img >> return []
+            ST_ClampMap img     -> setTex img >> return []
+            ST_AnimMap t imgs   -> do
+                txList <- mapM (loadQ3Texture defaultTexture archiveTrie) imgs
+                return [(1 / t / fromIntegral (length imgs),cycle $ zip (repeat (uniformFTexture2D texSlotName slotU)) txList)]
+            _ -> return []
 
     putStrLn $ "loading: " ++ show bspName
     addBSP renderer bsp
@@ -147,7 +180,8 @@ main = do
 
     s <- fpsState
     sc <- start $ do
-        u <- scene p0 slotU windowSize mousePosition fblrPress
+        anim <- animateMaps animTex
+        u <- scene p0 slotU windowSize mousePosition fblrPress anim
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
@@ -155,27 +189,41 @@ main = do
     print "renderer destroyed"
     closeWindow
 
+animateMaps :: [(Float, [(SetterFun TextureData, TextureData)])] -> SignalGen Float (Signal [(Float, [(SetterFun TextureData, TextureData)])])
+animateMaps l0 = stateful l0 $ \dt l -> zipWith (f dt) l timing
+  where
+    timing  = map fst l0
+    f :: Float -> (Float,[(SetterFun TextureData,TextureData)]) -> Float -> (Float,[(SetterFun TextureData,TextureData)])
+    f dt (t,a) t0
+        | t - dt <= 0   = (t-dt+t0,tail a)
+        | otherwise     = (t-dt,a)
+
 scene :: Vec3
       -> T.Trie InputSetter
       -> Signal (Int, Int)
       -> Signal (Float, Float)
       -> Signal (Bool, Bool, Bool, Bool, Bool)
+      -> Signal [(Float, [(SetterFun TextureData, TextureData)])]
       -> SignalGen Float (Signal ())
-scene p0 slotU windowSize mousePosition fblrPress = do
+scene p0 slotU windowSize mousePosition fblrPress anim = do
     time <- stateful 0 (+)
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
     cam <- userCamera p0 mouseMove fblrPress
-    let Just (SM44F matSetter) = T.lookup "worldViewProj" slotU
-        Just (SFloat timeSetter) = T.lookup "time" slotU
-        setupGFX (w,h) (cam,dir,up,_) time = do
+    let matSetter   = uniformM44F "worldViewProj" slotU
+        orientation = uniformM44F "orientation" slotU
+        timeSetter  = uniformFloat "time" slotU
+        setupGFX (w,h) (cam,dir,up,_) time anim = do
             let cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.01 50 (pi/2) (fromIntegral w / fromIntegral h)
                 sm = fromProjective (scaling $ Vec3 s s s)
                 s  = 0.005
-            --timeSetter time
+                V4 orientA orientB orientC _ = mat4ToM44F $! cm .*. sm
+            timeSetter $ time-- / 25
+            --orientation $ V4 orientA orientB orientC $ V4 0 0 0 1
             matSetter $! mat4ToM44F $! cm .*. sm .*. pm
-    r <- effectful3 setupGFX windowSize cam time
+            forM_ anim $ \(_,a) -> let (s,t) = head a in s t
+    r <- effectful4 setupGFX windowSize cam time anim
     return r
 
 vec4ToV4F :: Vec4 -> V4F
