@@ -37,6 +37,9 @@ data CameraMode = FollowNear | FollowFar | UserControl
 lightPosition :: Vec3
 lightPosition = Vec3 400 800 400
 
+upwards :: Vec3
+upwards = Vec3 0 1 0
+
 main :: IO ()
 main = do
     let mediaPath = "."
@@ -75,19 +78,19 @@ main = do
 
     carUnis <- forM carMesh $ \m -> do
         cm <- compileMesh m
-        objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView"]
+        objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView", "worldPosition"]
 
     wheelsUnis <- forM wheels $ \(_,_,_,ml) -> forM ml $ \m -> do
         cm <- compileMesh m
-        objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView"]
+        objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView", "worldPosition"]
 
     -- setup physics
     physicsWorld <- mkPhysicsWorld
-    addStaticPlane physicsWorld (Vec3 0 1 0) 0 1 1
+    addStaticPlane physicsWorld upwards 0 1 1
     addStaticShape physicsWorld trackMesh 1 1
     addStaticShape physicsWorld terrainMesh 1000 1000
     let (sO,Vec3 sX sY sZ) = startPos
-    car <- addCar physicsWorld carMesh wheels $ translateAfter4 (Vec3 sX (sY + 1) sZ) $ rotMatrixProj4 sO (Vec3 0 1 0)
+    car <- addCar physicsWorld carMesh wheels $ translateAfter4 (Vec3 sX (sY + 1) sZ) $ rotMatrixProj4 sO upwards
 
     -- setup FRP network
     (mousePosition,mousePositionSink) <- external (0,0)
@@ -136,8 +139,8 @@ scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mouseP
         pickMode _ (_,_,True) _ = UserControl
         pickMode _ _ mode       = mode
 
-        selectCam FollowNear  (cam,dir) _ _      = lookat cam (cam &+ dir) (Vec3 0 1 0)
-        selectCam FollowFar   _ (cam,dir) _      = lookat cam (cam &+ dir) (Vec3 0 1 0)
+        selectCam FollowNear  (cam,dir) _ _      = lookat cam (cam &+ dir) upwards
+        selectCam FollowFar   _ (cam,dir) _      = lookat cam (cam &+ dir) upwards
         selectCam UserControl _ _ (cam,dir,up,_) = lookat cam (cam &+ dir) up
 
     followCamNear <- followCamera 2 4 6 carPos
@@ -147,27 +150,29 @@ scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mouseP
     let camera = selectCam <$> camMode <*> followCamNear <*> followCamFar <*> userCam
 
     let Just (SM44F cameraSetter) = T.lookup "worldView" uniforms
+        Just (SM44F positionSetter) = T.lookup "worldPosition" uniforms
         Just (SM44F projectionSetter) = T.lookup "projection" uniforms
         lightViewProj = uniformM44F "lightViewProj" uniforms
         Just (SV3F lightPositionSetter) = T.lookup "lightPosition" uniforms
-        carMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldView" u]
-        wheelsU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis]
+        carPositionMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldPosition" u]
+        carViewMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldView" u]
+        wheelsPositionU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldPosition" u] | wu <- wheelsUnis]
+        wheelsViewU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis]
         setupGFX (w,h) cm carMat wheelsMats = do
             let pm = perspective 0.1 50000 (pi/2) (fromIntegral w / fromIntegral h)
-            let light' = Vec3 0 0 0
-                ldir = Vec3 (-1) (-1) (-1)
-                lup = Vec3 0 1 0
-                light = light' + (Vec3 5 0 0)
-                --d = 5 * sin (0.3 * time)
-                lm = fromProjective (lookat light (light + ldir) lup)
-                lpm = perspective 0.1 50000 (pi/1.3) 1--(fromIntegral w / fromIntegral h)
+                carPos = _4 (fromProjective carMat)
+                lm = fromProjective (lookat lightPosition (trim carPos) upwards)
+                lpm = perspective 0.1 50000 (pi/60) 1
 
             lightPositionSetter $! vec3ToV3F $! lightPosition
             cameraSetter $! mat4ToM44F $! fromProjective cm
+            positionSetter $! mat4ToM44F $! idmtx
             projectionSetter $! mat4ToM44F $! pm
             lightViewProj $! mat4ToM44F $! lm .*. lpm
-            forM_ carMats $ \s -> s $! mat4ToM44F $! fromProjective carMat .*. fromProjective cm
-            forM_ (zip wheelsU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu .*. fromProjective cm
+            forM_ carPositionMats $ \s -> s $! mat4ToM44F $! fromProjective carMat
+            forM_ carViewMats $ \s -> s $! mat4ToM44F $! fromProjective cm
+            forM_ (zip wheelsPositionU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu
+            forM_ (zip wheelsViewU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective cm
     
     effectful4 setupGFX windowSize camera carPos wheelPos
 
