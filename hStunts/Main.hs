@@ -162,7 +162,7 @@ scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mouseP
             let pm = perspective 0.1 50000 (pi/2) (fromIntegral w / fromIntegral h)
                 carPos = _4 (fromProjective carMat)
                 lm = fromProjective (lookat lightPosition (trim carPos) upwards)
-                lpm = perspective 0.1 50000 (pi/60) 1
+                lpm = perspective 0.1 50000 (pi/150) 1 {- .*. fromProjective (scaling (Vec3 (512 / fromIntegral w) (512 / fromIntegral h) 1)) -}
 
             lightPositionSetter $! vec3ToV3F $! lightPosition
             cameraSetter $! mat4ToM44F $! fromProjective cm
