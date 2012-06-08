@@ -125,6 +125,13 @@ mkColor ca sa rgbaV = snoc' rgb alpha
         RGB_ExactVertex         -> pack' $ V3 rV gV bV
         RGB_Vertex              -> (pack' $ V3 rV gV bV) @* identityLight
         RGB_LightingDiffuse     -> green -- TODO
+        {-  input:
+                entity: ambientLight
+                        directedLight
+                        lightDir
+                model:  position
+                        normal
+        -}
         RGB_OneMinusVertex      -> v3V one' @- ((pack' $ V3 rV gV bV) @* identityLight)
 
     alpha = case saAlphaGen sa of
@@ -136,15 +143,21 @@ mkColor ca sa rgbaV = snoc' rgb alpha
         A_OneMinusEntity    -> floatV 1 @- entityAlpha
         A_Vertex            -> aV
         A_LightingSpecular  -> floatV 1 -- TODO
+        {-  input:
+                model:  position
+                        normal
+                user:   viewOrigin
+        -}
         A_OneMinusVertex    -> floatV 1 @- aV
 
 mkWave' :: Exp V Float -> Wave -> Exp V Float
-mkWave' off (Wave wFunc base amplitude phase freq) = floatV base @+ v @* floatV amplitude
+mkWave' off (Wave wFunc base amplitude phase freq) = floatV base @+ a @* floatV amplitude
   where
     time        = Uni (IFloat "time") :: Exp V Float
     u           = off @+ floatV phase @+ floatV freq @* time
     uv          = pack' $ V2 u (Const 0)
     V4 v _ _ _  = unpack' $ texture' sampler uv (Const 0)
+    a           = (v @- floatV 0.5) @* floatV 2
     sampler     = Sampler LinearFilter Wrap $ TextureSlot name (Texture2D (Float RGBA) n1)
     name        = case wFunc of
         WT_Sin              -> "SinTable"
@@ -176,7 +189,7 @@ data Deform
 -}
 mkDeform :: Exp V V2F -> Exp V V3F -> Exp V V3F -> Deform -> Exp V V3F
 mkDeform uv normal pos d = case d of
-    D_Move (Vec3 x y z) w   -> pos @+ v3V (V3 x y z) @* mkWave w
+    D_Move (Vec3 x y z) w   -> pos @+ v3V (V3 x z (-y)) @* mkWave w
     D_Wave spread w@(Wave _ _ _ _ f)
         | f < 0.000001  -> pos @+ normal @* mkWave w
         | otherwise     ->
@@ -192,13 +205,15 @@ mkDeform uv normal pos d = case d of
 {-
 data TCMod
     = TM_EntityTranslate
-    | TM_Turb !Float !Float !Float !Float
 -}
-mkTCMod :: Exp V V2F -> TCMod -> Exp V V2F
-mkTCMod uv m = case m of
+mkTCMod :: Exp V V3F -> Exp V V2F -> TCMod -> Exp V V2F
+mkTCMod pos uv m = case m of
     TM_Scroll su sv -> uv @+ (Const $ V2 su sv :: Exp V V2F) @* (Uni (IFloat "time") :: Exp V Float)
     TM_Scale su sv  -> uv @* (Const $ V2 su sv :: Exp V V2F)
-    TM_Stretch w    -> let s = mkWave w in uv @* s-- @- uv @* (s @* floatV 0.5)
+    TM_Stretch w    -> let p    = floatV 8 @/ mkWave w 
+                           v0_5 = floatV 0.5
+                           off  = v0_5 @- v0_5 @* p
+                       in uv @* p @+ pack' (V2 off off)
     TM_Rotate speed -> let time = Uni (IFloat "time") :: Exp V Float
                            fi   = floatV (-speed) @* time
                            s    = sin' fi
@@ -206,24 +221,39 @@ mkTCMod uv m = case m of
                            c    = cos' fi
                            mA   = pack' $ V2 c s
                            mB   = pack' $ V2 ms c
-                           m    = pack' $ V2 mA mB
-                       in m @*. uv
+                           m    = pack' $ V2 mA mB :: Exp V M22F
+                           v0_5 = floatV 0.5
+                           off  = pack' $ V2 (v0_5 @- v0_5 @* c @+ v0_5 @* s) (v0_5 @- v0_5 @* s @- v0_5 @* c)
+                       in m @*. uv @+ off
     TM_Transform m00 m01 m10 m11 t0 t1  -> let V2 u v   = unpack' uv
                                                u'       = u @* floatV m00 @+ v @* floatV m10 @+ floatV t0
-                                               v'       = v @* floatV m01 @+ u @* floatV m11 @+ floatV t1
+                                               v'       = u @* floatV m01 @+ v @* floatV m11 @+ floatV t1
                                            in pack' $ V2 u' v'
-    --TM_Turb base amp phase freq ->  let V2 u v   = unpack' uv
+    TM_Turb base amp phase freq ->  let V2 u v      = unpack' uv
+                                        V3 x y z    = unpack' pos
+                                        time        = Uni (IFloat "time") :: Exp V Float
+                                        now         = floatV phase @+ time @* floatV freq
+                                        offU        = (x @- y) @* floatV (0.125 / 128) @+ now
+                                        offV        = z @* floatV (0.125 / 128) @+ now
+                                    in uv @+ sin' (pack' $ V2 offU offV) @* floatV amp
     _ -> uv
 
-mkTexCoord :: Exp V V3F -> StageAttrs -> Exp V V2F -> Exp V V2F -> Exp V V2F
-mkTexCoord pos sa uvD uvL = foldl' mkTCMod uv $ saTCMod sa
+mkTexCoord :: Exp V V3F -> Exp V V3F -> StageAttrs -> Exp V V2F -> Exp V V2F -> Exp V V2F
+mkTexCoord pos normal sa uvD uvL = foldl' (mkTCMod pos) uv $ saTCMod sa
   where
     uv = case saTCGen sa of
         TG_Base         -> uvD
         TG_Lightmap     -> uvL
-        TG_Environment  -> Const zero' -- TODO
-        TG_Vector (Vec3 sx sy sz) (Vec3 tx ty tz)   -> let s    = Const $ V3 sx sy sz :: Exp V V3F
-                                                           t    = Const $ V3 tx ty tz :: Exp V V3F
+        TG_Environment  ->  let viewOrigin  = Uni (IV3F "viewOrigin")
+                                viewer      = viewOrigin @- pos
+                                d           = normal @. viewer
+                                reflected   = normal @* d @* floatV 2 @- viewer
+                                V3 _ y z    = unpack' reflected
+                                v0_5        = floatV 0.5
+--                            in pack' $ V2 (v0_5 @+ y @* v0_5) (v0_5 @- z @* v0_5)
+                            in pack' $ V2 (v0_5 @+ z @* v0_5) (v0_5 @+ y @* v0_5)
+        TG_Vector (Vec3 sx sy sz) (Vec3 tx ty tz)   -> let s    = Const $ V3 sx sz (-sy) :: Exp V V3F
+                                                           t    = Const $ V3 tx tz (-ty) :: Exp V V3F
                                                        in pack' $ V2 (pos @. s) (pos @. t)
 
 mkVertexShader :: CommonAttrs -> StageAttrs -> Exp V (V3F,V3F,V2F,V2F,V4F) -> VertexOut (V2F,V4F)
@@ -233,7 +263,7 @@ mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) (Smooth uv:.Smooth co
     (p,n,d,l,c)     = untup5 pndlc
     screenPos       = worldViewProj @*. snoc pos 1
     pos             = foldl' (mkDeform d n) p $ caDeformVertexes ca
-    uv              = mkTexCoord pos sa d l
+    uv              = mkTexCoord pos n sa d l
     color           = mkColor ca sa c
 
 mkFragmentShader :: StageAttrs -> Exp F (V2F,V4F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)

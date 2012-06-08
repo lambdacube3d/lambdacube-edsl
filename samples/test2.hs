@@ -11,6 +11,7 @@ import Data.Vect.Float.Instances ()
 import FRP.Elerea.Param
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
+import Data.Typeable
 
 import TypeLevel.Number.Nat.Num
 
@@ -40,21 +41,34 @@ drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 drop3 :: Exp s V3F -> Exp s V2F
 drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
 
+simple' :: GP (FrameBuffer N1 (Float,V4F))
 simple' = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (one'::V4F):.ZT)
 
---simple :: GP (VertexStream Triangle (V3F,V3F)) -> GP (FrameBuffer N1 (Float,V4F))
+simple :: GP (VertexStream Triangle (V3F,V3F)) -> GP (FrameBuffer N1 (Float,V4F))
 simple objs = Accumulate fragCtx (Filter filter) frag rast clear
   where
+    rastCtx :: RasterContext Triangle
     rastCtx = TriangleCtx (CullFront CW) PolygonFill NoOffset LastVertex
+    
+    fragCtx :: FlatTuple Typeable FragmentOperation (Depth Float :+: (Color (V4 Float) :+: ZZ))
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
+    
+    clear :: GP (FrameBuffer N1 (Float,V4F))
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
+    
+    rast :: GP (FragmentStream N1 V3F)
     rast    = Rasterize rastCtx prims
+
+    prims :: GP (PrimitiveStream Triangle N1 V V3F)
     prims   = Transform vert objs
+
+    worldViewProj :: Exp V M44F
     worldViewProj = Uni (IM44F "worldViewProj")
 
     vert :: Exp V (V3F,V3F) -> VertexOut V3F
     vert pn = VertexOut v4 (Const 1) (Flat (drop4 v4):.ZT)
       where
+        v4 :: Exp V V4F
         v4    = worldViewProj @*. snoc p 1
         (p,n) = untup2 pn
 

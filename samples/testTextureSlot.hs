@@ -13,6 +13,7 @@ import qualified Data.Trie as T
 import qualified Data.Vector.Storable as V
 
 import TypeLevel.Number.Nat.Num
+import Data.Typeable
 
 import LC_API
 --import LCLanguage
@@ -29,27 +30,48 @@ import VSM
 simpleTexturing :: GP (FrameBuffer N1 (Float,V4F))
 simpleTexturing = Accumulate fragCtx PassAll frag rast clear
   where
+    rastCtx :: RasterContext Triangle
     rastCtx = TriangleCtx (CullFront CW) PolygonFill NoOffset LastVertex
+
+    fragCtx :: FlatTuple Typeable FragmentOperation (Depth Float :+: Color V4F :+: ZZ)
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
+
+    clear :: GP (FrameBuffer N1 (Float,V4F))
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
+
+    rast :: GP (FragmentStream N1 V2F)
     rast    = Rasterize rastCtx prims
+
+    prims :: GP (PrimitiveStream Triangle N1 V V2F)
     prims   = Transform vert input
+
+    input :: GP (VertexStream Triangle (V3F,V2F))
     input   = Fetch "scene" Triangle (IV3F "position", IV2F "UVTex")
+
+    worldViewProj :: Exp V M44F
     worldViewProj = Uni (IM44F "worldViewProj")
 
     vert :: Exp V (V3F,V2F) -> VertexOut V2F
     vert puv = VertexOut v4 (Const 1) (Smooth uv:.ZT)
       where
         (p,uv)  = untup2 puv
+        v4 :: Exp V V4F
         v4      = worldViewProj @*. snoc p 1
 
     frag :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag uv = FragmentOutRastDepth $ c :. ZT
       where
         V2 u v  = unpack' uv
+        c' :: Exp F V4F
         c' = pack' $ V4 u v (floatF 0) (floatF 1)
+
+        c :: Exp F V4F
         c = texture' smp uv (Const 0)
+
+        smp :: Exp F (Sampler DIM2 SingleTex (Regular Float) RGBA)
         smp = Sampler LinearFilter Clamp tex
+
+        tex :: Texture GP DIM2 SingleTex (Regular Float) RGBA
         tex = TextureSlot "diffuse" (Texture2D (Float RGBA) n1)
 
 main :: IO ()

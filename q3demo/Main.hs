@@ -211,6 +211,7 @@ scene p0 slotU windowSize mousePosition fblrPress anim = do
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
     cam <- userCamera p0 mouseMove fblrPress
     let matSetter   = uniformM44F "worldViewProj" slotU
+        viewOrigin  = uniformV3F "viewOrigin" slotU
         orientation = uniformM44F "orientation" slotU
         timeSetter  = uniformFloat "time" slotU
         setupGFX (w,h) (cam,dir,up,_) time anim = do
@@ -219,7 +220,9 @@ scene p0 slotU windowSize mousePosition fblrPress anim = do
                 sm = fromProjective (scaling $ Vec3 s s s)
                 s  = 0.005
                 V4 orientA orientB orientC _ = mat4ToM44F $! cm .*. sm
+                Vec3 cx cy cz = cam
             timeSetter $ time-- / 25
+            viewOrigin $ V3 cx cy cz
             --orientation $ V4 orientA orientB orientC $ V4 0 0 0 1
             matSetter $! mat4ToM44F $! cm .*. sm .*. pm
             forM_ anim $ \(_,a) -> let (s,t) = head a in s t

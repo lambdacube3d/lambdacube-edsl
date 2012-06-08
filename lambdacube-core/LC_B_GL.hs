@@ -245,9 +245,9 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
         , slotStream            = slotStreamTrie
         , uniformSetter         = uniformSetterTrie
         , render                = do
-                                    --print " * Frame Started"
+                                    print " * Frame Started"
                                     sequence_ passRender
-                                    --print " * Frame Ended"
+                                    print " * Frame Ended"
         , dispose               = renderTexDispose >> sequence_ passDispose
 
         -- internal
