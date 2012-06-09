@@ -5,6 +5,8 @@ import Data.IORef
 import Data.Map (Map)
 import Data.Set (Set)
 import Data.Trie (Trie)
+import Data.Vector.Unboxed.Mutable (IOVector)
+import qualified Data.Vector.Unboxed.Mutable as MV
 
 import Graphics.Rendering.OpenGL.Raw.Core32
 
@@ -96,6 +98,7 @@ data Renderer -- internal type
     , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm
     , slotDescriptor        :: Trie SlotDescriptor
     , renderDescriptor      :: Map GP RenderDescriptor
+    , renderState           :: RenderState
     }
 
 data RenderDescriptor
@@ -133,3 +136,8 @@ instance Eq Object where
 
 instance Ord Object where
     a `compare` b  = vertexArrayObject a `compare` vertexArrayObject b
+
+data RenderState
+    = RenderState
+    { textureUnitState  :: IOVector Int
+    }

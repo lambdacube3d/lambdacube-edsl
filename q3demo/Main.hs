@@ -74,7 +74,7 @@ main :: IO ()
 main = do
     ar <- loadArchive
 
-    let imageShader txName = defaultCommonAttrs {caStages = sa:saLM:[]}
+    let imageShader txName = defaultCommonAttrs {caStages = sa:{-saLM:-}[]}
           where
             sa = defaultStageAttrs
                 { saTexture     = ST_Map txName
@@ -159,7 +159,8 @@ main = do
             ST_ClampMap img     -> setTex img >> return []
             ST_AnimMap t imgs   -> do
                 txList <- mapM (loadQ3Texture defaultTexture archiveTrie) imgs
-                return [(1 / t / fromIntegral (length imgs),cycle $ zip (repeat (uniformFTexture2D texSlotName slotU)) txList)]
+                --return [(1 / t / fromIntegral (length imgs),cycle $ zip (repeat (uniformFTexture2D texSlotName slotU)) txList)]
+                return [(1/t,cycle $ zip (repeat (uniformFTexture2D texSlotName slotU)) txList)]
             _ -> return []
 
     putStrLn $ "loading: " ++ show bspName
@@ -222,6 +223,7 @@ scene p0 slotU windowSize mousePosition fblrPress anim = do
                 V4 orientA orientB orientC _ = mat4ToM44F $! cm .*. sm
                 Vec3 cx cy cz = cam
             timeSetter $ time-- / 25
+            putStrLn $ "time: " ++ show time
             viewOrigin $ V3 cx cy cz
             --orientation $ V4 orientA orientB orientC $ V4 0 0 0 1
             matSetter $! mat4ToM44F $! cm .*. sm .*. pm

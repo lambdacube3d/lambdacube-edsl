@@ -1,0 +1,60 @@
+-- arithmetic types
+Float   V2F V3F V4F M22F M23F M24F M32F M33F M34F M42F M43F M44F
+Int     V2I V3I V4I
+Word    V2U V3U V4U
+Bool    V2B V3B V4B
+
+-- stages
+V a, G a, F a
+
+-- stream types
+VertexStream Triangle (V3F,V3F)
+PrimitiveStream Triangle N1 V V3F
+FragmentStream N1 V3F
+
+-- special tuples
+FrameBuffer N1 (Float,V4F)
+VertexOut V3F
+GeometryOut t
+FragmentOut (Depth Float, Color V4F)
+
+-- type classes
+IsNum a
+IsSigned a
+IsFloating a
+IsIntegral a
+
+IsComponent a
+IsNumComponent a
+
+IsVec a
+IsVecScalar a
+
+IsMat a
+IsMatVec a
+IsMatVecScalar a
+
+-- uniform introduction
+const worldViewProj :: M44F
+
+-- misc types
+Triangle, Line, Point
+Blending a
+Interpolated a
+RasterContext Triangle
+FragmentOperation (Depth Float, Color (V4 Float))
+
+-- image related
+Color a, Depth a, Stencil a
+Image N1 V4F
+
+-- texture related
+DIM1, DIM2, DIM3, DIM4, Rect
+Red, RG, RGB, RGBA
+Regular a, Shadow a, MultiSample a, Buffer a
+SingleTex, ArrayTex, CubeTex
+
+Sampler dim layerCount t ar
+TextureDataType (Regular Float) a
+TextureType dim mip arr layerCount t ar
+Texture dim arr t ar

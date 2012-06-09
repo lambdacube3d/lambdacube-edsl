@@ -20,17 +20,16 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
     prims :: PrimitiveStream Triangle N1 V V3F
     prims   = Transform vert objs
 
-    worldViewProj :: V M44F
-    worldViewProj = uniformM44F
+    const worldViewProj :: M44F
 
     vert :: V (V3F,V3F) -> VertexOut V3F
-    vert (p,n) = VertexOut v4 1 (Flat (drop4 v4))
+    vert (p,n) = VertexOut v4 1 (Flat v4.xyz)
       where
         v4 :: V V4F
-        v4 = worldViewProj *. snoc p 1
+        v4 = worldViewProj *. vec4 p 1
 
     frag :: F V3F -> FragmentOut (Depth Float, Color V4F)
-    frag a = FragmentOutRastDepth $ (snoc a 1)
+    frag a = FragmentOutRastDepth $ vec4 a 1
 
     filter :: F a -> F Bool
     filter a = (primitiveID % 2) == 0

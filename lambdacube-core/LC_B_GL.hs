@@ -17,6 +17,7 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.Traversable as T
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed.Mutable as MV
 
 import Graphics.Rendering.OpenGL.Raw.Core32
 
@@ -92,8 +93,8 @@ mkRenderTextures allGPs = do
         texSlotName     = Map.fromList $ nubS [(s,SB.unpack n) | s@(Sampler _ _ _ (TextureSlot n _)) <- samplers]
     return (texSlotName, renderTexName, renderTexGLObj, sequence_ disposeTex, dependentSamplers)
 
-mkRenderDescriptor :: Map Exp String -> Map Exp String -> Map Exp GLuint -> GP -> IO RenderDescriptor
-mkRenderDescriptor texSlotName renderTexName renderTexGLObj f = case f of
+mkRenderDescriptor :: RenderState -> Map Exp String -> Map Exp String -> Map Exp GLuint -> GP -> IO RenderDescriptor
+mkRenderDescriptor rendState texSlotName renderTexName renderTexGLObj f = case f of
     FrameBuffer {}  -> RenderDescriptor T.empty T.empty (compileClearFrameBuffer f) (return ()) <$> newIORef (ObjectSet (return ()) Map.empty)
     Accumulate {}   -> do
         {- 
@@ -103,16 +104,20 @@ mkRenderDescriptor texSlotName renderTexName renderTexGLObj f = case f of
                     - the shader should be setup at the creation
                     - we have to setup texture binding before each render action call
         -}
-        maxTextureUnits <- glGetIntegerv1 gl_MAX_COMBINED_TEXTURE_IMAGE_UNITS
         let usedRenderSamplers  = nubS [s | s@(Sampler _ _ _ (Texture {})) <- expUniverse f]
             usedSlotSamplers    = nubS [s | s@(Sampler _ _ _ (TextureSlot {})) <- expUniverse f]
             usedRenderTexName   = [(s,n) | s <- usedRenderSamplers, let Just n = Map.lookup s renderTexName]
             usedTexSlotName     = [(s,n) | s <- usedSlotSamplers, let Just n = Map.lookup s texSlotName]
             renderTexObjs       = [txObj | s <- usedRenderSamplers, let Just txObj = Map.lookup s renderTexGLObj]
-            textureSetup        = forM_ (zip renderTexObjs [0..fromIntegral maxTextureUnits-1]) $ \(texObj,texUnitIdx) -> do
-                glActiveTexture $ gl_TEXTURE0 + texUnitIdx
-                glBindTexture gl_TEXTURE_2D texObj
-                --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
+            texUnitState        = textureUnitState rendState
+            textureSetup        = forM_ (zip renderTexObjs [0.. MV.length texUnitState-1]) $ \(texObj,texUnitIdx) -> do
+                let texObj' = fromIntegral texObj
+                curTexObj <- MV.read texUnitState texUnitIdx
+                when (curTexObj /= texObj') $ do
+                    MV.write texUnitState texUnitIdx texObj'
+                    glActiveTexture $ gl_TEXTURE0 + fromIntegral texUnitIdx
+                    glBindTexture gl_TEXTURE_2D texObj
+                    --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
 
         drawRef <- newIORef $ ObjectSet (return ()) Map.empty
         (rA,dA,uT,sT) <- compileRenderFrameBuffer usedRenderTexName usedTexSlotName drawRef f
@@ -180,6 +185,14 @@ mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
                 with depthTex $ \pto -> glDeleteTextures 1 pto
         return (renderAct,disposeAct)
 
+mkRenderState :: IO RenderState
+mkRenderState = do
+    maxTextureUnits <- glGetIntegerv1 gl_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+    texUnitState <- MV.new $ fromIntegral maxTextureUnits
+    MV.set texUnitState (-1)
+    return $ RenderState
+        { textureUnitState  = texUnitState
+        }
 {-
   Note: Input mapping problem
     more programs use the same slot    -> minimize vertex attribute mapping collisions (best case: use the same mapping)
@@ -209,7 +222,11 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
 
     putStrLn $ "GP universe size:  " ++ show (length allGPs)
     putStrLn $ "Exp universe size: " ++ show (length (nubS $ expUniverse gp))
-    (uSetup,uSetter) <- unzip <$> mapM mkUniformSetter uniformTypes
+
+    -- create RenderState
+    rendState <- mkRenderState
+
+    (uSetup,uSetter) <- unzip <$> mapM (mkUniformSetter rendState) uniformTypes
     let uniformSetterTrie   = T.fromList $! zip uniformNames uSetter
         mkUniformSetupTrie  = T.fromList $! zip uniformNames uSetup
 
@@ -223,7 +240,7 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
     (texSlotName,renderTexName,renderTexGLObj,renderTexDispose,dependentSamplers) <- mkRenderTextures allGPs
 
     -- create RenderDescriptors
-    renderDescriptors <- Map.fromList <$> mapM (\a -> (a,) <$> mkRenderDescriptor texSlotName renderTexName renderTexGLObj a) (nubS $ concatMap renderChain ordFBs)
+    renderDescriptors <- Map.fromList <$> mapM (\a -> (a,) <$> mkRenderDescriptor rendState texSlotName renderTexName renderTexGLObj a) (nubS $ concatMap renderChain ordFBs)
 
     -- join compiled graphics network components
     (passRender,passDispose) <- fmap unzip $ forM ordFBs $ \fb -> do
@@ -254,4 +271,5 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
         , mkUniformSetup        = mkUniformSetupTrie
         , slotDescriptor        = slotDescriptors
         , renderDescriptor      = renderDescriptors
+        , renderState           = rendState
         }

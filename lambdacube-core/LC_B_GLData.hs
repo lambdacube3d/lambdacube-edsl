@@ -107,8 +107,9 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
         uniformType     = T.fromList $ concat [T.toList t | (_,t) <- T.toList $ slotUniform renderer]
         mkUSetup        = mkUniformSetup renderer
         globalUNames    = Set.toList $! (Set.fromList $! T.keys uniformType) Set.\\ (Set.fromList objUniforms)
+        rendState       = renderState renderer
         
-    (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUniformSetter t | n <- objUniforms, t <- maybeToList $ T.lookup n uniformType])
+    (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUniformSetter rendState t | n <- objUniforms, t <- maybeToList $ T.lookup n uniformType])
     let objUSetterTrie = T.fromList $! zip objUniforms objUSetters
     
         mkDrawAction :: GP -> IO (GLuint,IO ())
