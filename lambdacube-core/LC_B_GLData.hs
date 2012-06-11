@@ -12,6 +12,8 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 
+--import Control.DeepSeq
+
 import Graphics.Rendering.OpenGL.Raw.Core32
 
 import Data.Word
@@ -124,7 +126,15 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
                                             ,   loc <- maybeToList $ T.lookup n sLocs
                                             ]
                 -- global uniform setup
+                {-
                 globalUSetup    = sequence_ [ mkUS loc 
+                                            | n <- globalUNames
+                                            , let Just mkUS = T.lookup n mkUSetup
+                                            , loc <- maybeToList $ T.lookup n uLocs
+                                            ]
+                -}
+                globalUSetup    = V.sequence_ $ V.fromList
+                                            [ mkUS loc
                                             | n <- globalUNames
                                             , let Just mkUS = T.lookup n mkUSetup
                                             , loc <- maybeToList $ T.lookup n uLocs

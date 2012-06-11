@@ -67,7 +67,7 @@ Library
         -fno-warn-unused-do-bind
         -fspec-constr-count=10
         -funbox-strict-fields
---        -O2
+        -O2
 -- for profiling
 --        -auto-all
 --        -caf-all

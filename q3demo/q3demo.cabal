@@ -1,0 +1,54 @@
+Name:          q3demo
+Version:       0.1.1
+Cabal-Version: >= 1.2
+Synopsis:      Simple First Person Shooter (LambdaCube tech demo)
+Category:      Graphics, Game
+Description:
+               TBD
+Author:        Csaba Hruska
+Maintainer:    csaba (dot) hruska (at) gmail (dot) com
+Copyright:     (c) 2011-2012, Csaba Hruska
+Homepage:      http://www.haskell.org/haskellwiki/LambdaCubeEngine
+Bug-Reports:   http://code.google.com/p/lambdacube/issues
+License:       BSD3
+License-File:  LICENSE
+Stability:     experimental
+Build-Type:    Simple
+Extra-Source-Files:
+  BSP.hs
+  Graphics.hs
+  Items.hs
+  MD3.hs
+  Main.hs
+  Material.hs
+  Q3Patch.hs
+  Render.hs
+  ShaderParser.hs
+  Zip.hs
+
+Executable q3demo
+  HS-Source-Dirs: .
+  Main-IS:        Main.hs
+  GHC-Options:    -Wall -fno-warn-unused-do-bind -fno-warn-name-shadowing -O1 -fspec-constr-count=6 -rtsopts
+  Build-Depends:  base >= 4 && < 5,
+                  binary,
+                  bytestring,
+                  containers,
+                  directory,
+                  filepath,
+                  vector,
+
+                  GLFW-b,
+                  OpenGLRaw,
+                  attoparsec,
+                  bitmap,
+                  bytestring-trie,
+                  data-binary-ieee754,
+                  digest,
+                  elerea,
+                  lambdacube-core,
+                  mmap,
+                  stb-image,
+                  type-level-numbers,
+                  vect,
+                  zlib

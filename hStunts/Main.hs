@@ -11,7 +11,7 @@ import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as SB
 
 import qualified Data.Trie as T
-import Control.Concurrent.STM
+--import Control.Concurrent.STM
 import Data.Vect.Float
 
 import LC_API

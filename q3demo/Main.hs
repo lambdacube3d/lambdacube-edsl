@@ -2,7 +2,7 @@
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
-import Control.Concurrent.STM
+--import Control.Concurrent.STM
 import Control.Monad
 import Data.Attoparsec.Char8
 import Data.ByteString.Char8 (ByteString)
