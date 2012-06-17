@@ -2,7 +2,7 @@
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
-import Control.Concurrent.STM
+--import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
 import Data.IORef
@@ -35,11 +35,23 @@ v4v3 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 snoc :: Exp s V3F -> Float -> Exp s V4F
 snoc v s = let V3 x y z = unpack' v in pack' $ V4 x y z (Const s)
 
+snoc' :: Exp s V3F -> Exp s Float -> Exp s V4F
+snoc' v s = let V3 x y z = unpack' v in pack' $ V4 x y z s
+
 drop4 :: Exp s V4F -> Exp s V3F
 drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 
 drop3 :: Exp s V3F -> Exp s V2F
 drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
+
+floatF :: Float -> Exp F Float
+floatF = Const
+
+intF :: Int32 -> Exp F Int32
+intF = Const
+
+v4F :: V4F -> Exp F V4F
+v4F = Const
 
 simple' :: GP (FrameBuffer N1 (Float,V4F))
 simple' = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (one'::V4F):.ZT)
@@ -73,7 +85,11 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
         (p,n) = untup2 pn
 
     frag :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag a = FragmentOutRastDepth $ (snoc a 1) :. ZT
+    frag a = FragmentOutRastDepth $ (snoc a 1 @* color) :. ZT
+      where
+        color = Cond (primitiveID @< intF 5) (v4F (V4 1 0 0 1) @* sin' x) (v4F $ V4 0 1 0 1)
+        --V2 x y = unpack' pointCoord
+        x = floatF 1
 
     filter :: Exp F a -> Exp F Bool
     filter a = (primitiveID @% (Const 2 :: Exp F Int32)) @== (Const 0 :: Exp F Int32)

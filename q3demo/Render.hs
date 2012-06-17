@@ -46,8 +46,8 @@ data Surface
     }
 -}
 
-tesselatePatch :: V.Vector DrawVertex -> Surface -> Int -> (V.Vector DrawVertex,V.Vector Int)
-tesselatePatch drawV sf level = (V.concat vl,V.concat il)
+tessellatePatch :: V.Vector DrawVertex -> Surface -> Int -> (V.Vector DrawVertex,V.Vector Int)
+tessellatePatch drawV sf level = (V.concat vl,V.concat il)
   where
     (w,h)   = srPatchSize sf
     gridF :: [DrawVertex] -> [[DrawVertex]]
@@ -86,10 +86,10 @@ addBSP renderer bsp = do
         convertSurface (objs,lenV,arrV,lenI,arrI) sf = case srSurfaceType sf of
             Planar          -> objs'
             TriangleSoup    -> objs'
-            -- tesselate, concatenate vertex and index data to fixed vertex and index buffer
+            -- tessellate, concatenate vertex and index data to fixed vertex and index buffer
             Patch           -> ((lmIdx, lenV, lenV', lenI, lenI', TriangleStrip, name):objs, lenV+lenV', v:arrV, lenI+lenI', i:arrI)
               where
-                (v,i) = tesselatePatch drawV sf 5
+                (v,i) = tessellatePatch drawV sf 5
                 lenV' = V.length v
                 lenI' = V.length i
             Flare           -> skip

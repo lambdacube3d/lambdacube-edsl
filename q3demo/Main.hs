@@ -74,7 +74,7 @@ main :: IO ()
 main = do
     ar <- loadArchive
 
-    let imageShader txName = defaultCommonAttrs {caStages = sa:{-saLM:-}[]}
+    let imageShader txName = defaultCommonAttrs {caStages = sa:saLM:[]}
           where
             sa = defaultStageAttrs
                 { saTexture     = ST_Map txName

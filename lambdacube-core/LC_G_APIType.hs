@@ -183,6 +183,7 @@ data StreamType
 data Ty
     = Single InputType
     | Tuple [Ty]
+    | Unknown
     deriving (Show,Eq,Ord, Data,Typeable)
 
 -- describes a stream type (in GPU side)

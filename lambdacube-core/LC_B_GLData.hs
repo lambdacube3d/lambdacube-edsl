@@ -209,10 +209,11 @@ compileTexture2DNoMipRGBAF :: Bitmap Word8 -> IO TextureData
 compileTexture2DNoMipRGBAF bitmap = do
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     glBindTexture gl_TEXTURE_2D to
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral gl_REPEAT
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral gl_REPEAT
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral gl_REPEAT--gl_CLAMP_TO_EDGE
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral gl_REPEAT--gl_CLAMP_TO_EDGE
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR_MIPMAP_LINEAR
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR
+--    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR_MIPMAP_LINEAR
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL 0
     withBitmap bitmap $ \(w,h) nchn padding ptr -> do

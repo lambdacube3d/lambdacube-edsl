@@ -165,7 +165,7 @@ mkWave' off (Wave wFunc base amplitude phase freq) = floatV base @+ a @* floatV 
         WT_Square           -> "SquareTable"
         WT_Sawtooth         -> "SawToothTable"
         WT_InverseSawtooth  -> "InverseSawToothTable"
-        WT_Noise            -> ""
+        WT_Noise            -> "Noise"
 
 mkWave :: Wave -> Exp V Float
 mkWave = mkWave' $ floatV 0
