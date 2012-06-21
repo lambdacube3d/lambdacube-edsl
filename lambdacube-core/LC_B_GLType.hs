@@ -3,6 +3,7 @@ module LC_B_GLType where
 import Data.ByteString.Char8 (ByteString)
 import Data.IORef
 import Data.Map (Map)
+--import Data.IntMap (IntMap)
 import Data.Set (Set)
 import Data.Trie (Trie)
 import Data.Vector.Unboxed.Mutable (IOVector)
@@ -97,7 +98,7 @@ data Renderer -- internal type
     -- internal
     , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm
     , slotDescriptor        :: Trie SlotDescriptor
-    , renderDescriptor      :: Map GP RenderDescriptor
+    , renderDescriptor      :: Map Exp RenderDescriptor --Map GP RenderDescriptor
     , renderState           :: RenderState
     }
 
@@ -114,7 +115,7 @@ data RenderDescriptor
 
 data SlotDescriptor
     = SlotDescriptor
-    { attachedGP        :: Set GP
+    { attachedGP        :: Set Exp
     , objectSet         :: IORef (Set Object)       -- objects, added to this slot (set by user)
     }
 

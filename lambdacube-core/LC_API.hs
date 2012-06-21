@@ -82,6 +82,7 @@ import LC_T_Language
 import qualified LC_T_APIType as H
 import qualified LC_T_HOAS as H
 
+import qualified LC_U_DeBruijn as U
 import LC_C_Convert
 
 import LC_B_GL hiding (compileRenderer)
@@ -91,12 +92,15 @@ import LC_B_GLType
 import LC_B_GLUtil (Buffer)
 import qualified LC_B_GL as GL
 
+import Control.Monad.State
 import Data.ByteString.Char8 (ByteString)
 import Data.ByteString.Char8 as SB
 import Data.Trie as T
 
-compileRenderer :: GPOutput -> IO Renderer
-compileRenderer l = GL.compileRenderer $ convertGPOutput l
+compileRenderer :: H.GPOutput -> IO Renderer
+compileRenderer l = GL.compileRenderer dag $ U.toExp dag l'
+  where
+    (l', dag) = runState (U.unN $ fst $ runState (convertGPOutput l) 0) U.emptyDAG
 
 nullSetter :: ByteString -> String -> a -> IO ()
 nullSetter n t _ = Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t

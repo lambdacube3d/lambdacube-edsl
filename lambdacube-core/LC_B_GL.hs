@@ -37,26 +37,26 @@ import LC_B_GLCompile
 nubS :: Ord a => [a] -> [a]
 nubS = Set.toList . Set.fromList
 
-findFetch :: GP -> Maybe GP
-findFetch f = listToMaybe [a | a@Fetch {} <- drawOperations f]
+findFetch :: DAG -> Exp -> Maybe Exp
+findFetch dag f = listToMaybe [a | a@Fetch {} <- drawOperations dag f]
 
 -- odered according pass dependency (topology order)
-orderedFrameBuffersFromGP :: GP -> [GP]
-orderedFrameBuffersFromGP orig = order deps
+orderedFrameBuffersFromGP :: DAG -> Exp -> [Exp]
+orderedFrameBuffersFromGP dag orig = order deps
   where 
-    deps :: Map GP (Set GP)
-    deps = add Map.empty $ findFrameBuffer orig
+    deps :: Map Exp (Set Exp)
+    deps = add Map.empty $ findFrameBuffer dag orig
 
-    add :: Map GP (Set GP) -> GP -> Map GP (Set GP)
+    add :: Map Exp (Set Exp) -> Exp -> Map Exp (Set Exp)
     add m fb = Map.unionsWith Set.union $ m' : map (add m') fbl
       where
         m'  = Map.alter fun fb m
-        fbl = concat [map findFrameBuffer l | Sampler _ _ _ (Texture _ _ _ l) <- concatMap expUniverse (gpUniverse fb)]
+        fbl = concat [map (findFrameBuffer dag . toExp dag) l | Sampler _ _ tx <- concatMap (expUniverse dag) (gpUniverse dag fb), Texture _ _ _ l <- [toExp dag tx]]
         fbs = Set.fromList fbl
         fun Nothing     = Just fbs
         fun (Just a)    = Just (a `Set.union` fbs)
 
-    order :: Map GP (Set GP) -> [GP]
+    order :: Map Exp (Set Exp) -> [Exp]
     order d
         | Map.null d = []
         | otherwise  = leaves ++ order (Map.map (Set.\\ (Set.fromList leaves)) hasDeps)
@@ -67,16 +67,18 @@ orderedFrameBuffersFromGP orig = order deps
 printGLStatus = checkGL >>= print
 printFBOStatus = checkFBO >>= print
 
-mkSlotDescriptor :: Set GP -> IO SlotDescriptor
+mkSlotDescriptor :: Set Exp -> IO SlotDescriptor
 mkSlotDescriptor gps = SlotDescriptor gps <$> newIORef Set.empty
 
-mkRenderTextures :: [GP] -> IO (Map Exp String, Map Exp String, Map Exp GLuint, IO (), GP -> [Exp])
-mkRenderTextures allGPs = do
-    let samplers = nubS [s | s@(Sampler _ _ _ _) <- expUniverse allGPs]
-        samplersWithTexture = nubS [s | s@(Sampler _ _ _ (Texture {})) <- samplers]
+mkRenderTextures :: DAG -> [Exp] -> IO (Map Exp String, Map Exp String, Map Exp GLuint, IO (), Exp -> [Exp])
+mkRenderTextures dag allGPs = do
+    let samplers = nubS [s | s@Sampler {} <- expUniverse dag allGPs]
+        samplersWithTexture = nubS [s | s@(Sampler _ _ tx) <- samplers, Texture {} <- [toExp dag tx]]
         -- collect all render textures refers to a FrameBuffer
-        isReferred :: GP -> Exp -> Bool
-        isReferred f (Sampler _ _ _ (Texture _ _ _ [f'])) = findFrameBuffer f' == f
+        isReferred :: Exp -> Exp -> Bool
+        isReferred f (Sampler _ _ tx) = findFrameBuffer dag (toExp dag f') == f
+          where
+            Texture _ _ _ [f'] = toExp dag tx
         isReferred _ _ = False
         dependentSamplers f = filter (isReferred f) samplersWithTexture
         -- texture attributes: GL texture target (1D,2D,etc), arity, float/word/int, size, mipmap
@@ -85,16 +87,16 @@ mkRenderTextures allGPs = do
 
     -- question: how should we handle the Stencil and Depth textures at multipass rendering
     (renderTexNameList,renderTexGLObjList,disposeTex) <- fmap unzip3 $ forM (zip [0..] samplersWithTexture) $ \(sIdx,smp) -> do
-        to <- createGLTextureObject smp
+        to <- createGLTextureObject dag smp
         putStr (" -- Render Texture " ++ show sIdx ++ ": ") >> printGLStatus
         return ((smp,"renderTex_" ++ show sIdx),(smp,to),with to $ \pto -> glDeleteTextures 1 pto)
     let renderTexName   = Map.fromList renderTexNameList
         renderTexGLObj  = Map.fromList renderTexGLObjList
-        texSlotName     = Map.fromList $ nubS [(s,SB.unpack n) | s@(Sampler _ _ _ (TextureSlot n _)) <- samplers]
+        texSlotName     = Map.fromList $ nubS [(s,SB.unpack n) | s@(Sampler _ _ txExp) <- samplers, TextureSlot n _ <- [toExp dag txExp]]
     return (texSlotName, renderTexName, renderTexGLObj, sequence_ disposeTex, dependentSamplers)
 
-mkRenderDescriptor :: RenderState -> Map Exp String -> Map Exp String -> Map Exp GLuint -> GP -> IO RenderDescriptor
-mkRenderDescriptor rendState texSlotName renderTexName renderTexGLObj f = case f of
+mkRenderDescriptor :: DAG -> RenderState -> Map Exp String -> Map Exp String -> Map Exp GLuint -> Exp -> IO RenderDescriptor
+mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj f = case f of
     FrameBuffer {}  -> RenderDescriptor T.empty T.empty (compileClearFrameBuffer f) (return ()) <$> newIORef (ObjectSet (return ()) Map.empty)
     Accumulate {}   -> do
         {- 
@@ -104,8 +106,8 @@ mkRenderDescriptor rendState texSlotName renderTexName renderTexGLObj f = case f
                     - the shader should be setup at the creation
                     - we have to setup texture binding before each render action call
         -}
-        let usedRenderSamplers  = nubS [s | s@(Sampler _ _ _ (Texture {})) <- expUniverse f]
-            usedSlotSamplers    = nubS [s | s@(Sampler _ _ _ (TextureSlot {})) <- expUniverse f]
+        let usedRenderSamplers  = nubS [s | s@(Sampler _ _ te) <- expUniverse dag f, Texture {} <- [toExp dag te]]
+            usedSlotSamplers    = nubS [s | s@(Sampler _ _ te) <- expUniverse dag f, TextureSlot {} <- [toExp dag te]]
             usedRenderTexName   = [(s,n) | s <- usedRenderSamplers, let Just n = Map.lookup s renderTexName]
             usedTexSlotName     = [(s,n) | s <- usedSlotSamplers, let Just n = Map.lookup s texSlotName]
             renderTexObjs       = [txObj | s <- usedRenderSamplers, let Just txObj = Map.lookup s renderTexGLObj]
@@ -120,7 +122,7 @@ mkRenderDescriptor rendState texSlotName renderTexName renderTexGLObj f = case f
                     --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
 
         drawRef <- newIORef $ ObjectSet (return ()) Map.empty
-        (rA,dA,uT,sT) <- compileRenderFrameBuffer usedRenderTexName usedTexSlotName drawRef f
+        (rA,dA,uT,sT) <- compileRenderFrameBuffer dag usedRenderTexName usedTexSlotName drawRef f
         return $ RenderDescriptor
             { uniformLocation   = uT
             , streamLocation    = sT
@@ -130,8 +132,8 @@ mkRenderDescriptor rendState texSlotName renderTexName renderTexGLObj f = case f
             }
     _ -> error $ "GP node type error: should be FrameBuffer but got: " ++ (head $ words $ show f)
 
-mkPassSetup :: Map Exp GLuint -> (GP -> [Exp]) -> Bool -> GP -> IO (IO (), IO ())
-mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
+mkPassSetup :: DAG -> Map Exp GLuint -> (Exp -> [Exp]) -> Bool -> Exp -> IO (IO (), IO ())
+mkPassSetup dag renderTexGLObj dependentSamplers isLast fb = case isLast of
     True    -> do
         let setup = do
                 --glViewport 100 100 312 312 --(fromIntegral depthW) (fromIntegral depthH)
@@ -164,7 +166,9 @@ mkPassSetup renderTexGLObj dependentSamplers isLast fb = case isLast of
         putStr "    - attach depth texture: " >> printGLStatus
         let depSamplers = dependentSamplers fb
         fboMapping <- forM (zip [0..] depSamplers) $ \(i,smp) -> do
-            let Sampler _ _ _ (Texture _ _ _ [PrjFrameBuffer _ prjIdx _]) = smp
+            let Sampler _ _ txExp  = smp
+                Texture _ _ _ [prjFBExp] = toExp dag txExp
+                PrjFrameBuffer _ prjIdx _               = toExp dag prjFBExp
                 Just txObj  = Map.lookup smp renderTexGLObj
             glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D txObj 0
             putStr ("    - attach to color slot" ++ show (i,txObj) ++ ": ") >> printGLStatus
@@ -199,29 +203,33 @@ mkRenderState = do
     more programs use the same uniform -> minimize uniform mapping collisions (best case: use the same mapping)
 -}
 -- FIXME: implement properly
-compileRenderer :: GPOutput -> IO Renderer
-compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
-    let unis :: GP -> [(ByteString,InputType)]
-        unis fb = nubS [(name,t) | Uni ty name <- expUniverse fb, let [t] = codeGenType ty] ++
-                  nubS [(name,t) | Sampler ty _ _ (TextureSlot name _) <- expUniverse fb, let [t] = codeGenType ty]
+compileRenderer :: DAG -> Exp -> IO Renderer
+compileRenderer dag (ScreenOut img) = do
+    let PrjFrameBuffer n idx gpId = toExp dag img
+        gp  = toExp dag gpId
+        unis :: Exp -> [(ByteString,InputType)]
+        unis fb = nubS [(name,t) | u@(Uni name) <- expUniverse dag fb, let [t] = codeGenType $ expType dag u] ++
+                  nubS [(name,t) | s@(Sampler _ _ ts) <- expUniverse dag fb
+                       , TextureSlot name _ <- [toExp dag ts]
+                       , let [t] = codeGenType $ expType dag s]
 
-        ordFBs = orderedFrameBuffersFromGP gp
-        allGPs = nubS $ concatMap gpUniverse' ordFBs
+        ordFBs = orderedFrameBuffersFromGP dag gp
+        allGPs = nubS $ concatMap (gpUniverse' dag) ordFBs
 
         -- collect slot info: name, primitive type, stream input, uniform input
         (slotStreamList, slotUniformList, slotGPList) = unzip3
               [ (T.singleton name (primType,T.fromList inputs)
                 ,T.singleton name (T.fromList $ unis fb)
                 ,T.singleton name (Set.singleton fb))
-              | fb <- concatMap renderChain ordFBs
-              , Fetch name primType inputs <- maybeToList $ findFetch fb
+              | fb <- concatMap (renderChain dag) ordFBs
+              , Fetch name primType inputs <- maybeToList $ findFetch dag fb
               ]
         slotStreamTrie  = foldl' (T.mergeBy (\(a1,a2) (b1,b2) -> Just (a1, T.unionL a2 b2))) T.empty slotStreamList
         slotUniformTrie = foldl' (T.mergeBy (\a b -> Just (T.unionL a b))) T.empty slotUniformList
         (uniformNames,uniformTypes) = unzip $ nubS $ concatMap (T.toList . snd) $ T.toList slotUniformTrie
 
     putStrLn $ "GP universe size:  " ++ show (length allGPs)
-    putStrLn $ "Exp universe size: " ++ show (length (nubS $ expUniverse gp))
+    putStrLn $ "Exp universe size: " ++ show (length (nubS $ expUniverse dag gp))
 
     -- create RenderState
     rendState <- mkRenderState
@@ -230,26 +238,26 @@ compileRenderer (ScreenOut (PrjFrameBuffer n idx gp)) = do
     let uniformSetterTrie   = T.fromList $! zip uniformNames uSetter
         mkUniformSetupTrie  = T.fromList $! zip uniformNames uSetup
 
-        slotGP :: Trie (Set GP)
+        slotGP :: Trie (Set Exp)
         slotGP = foldl' (T.mergeBy (\a b -> Just $ Set.union a b)) T.empty slotGPList
 
     -- create SlotDescriptors (input setup)
     slotDescriptors <- T.fromList <$> mapM (\(n,a) -> (n,) <$> mkSlotDescriptor a) (T.toList slotGP)
 
     -- allocate render textures (output resource initialization)
-    (texSlotName,renderTexName,renderTexGLObj,renderTexDispose,dependentSamplers) <- mkRenderTextures allGPs
+    (texSlotName,renderTexName,renderTexGLObj,renderTexDispose,dependentSamplers) <- mkRenderTextures dag allGPs
 
     -- create RenderDescriptors
-    renderDescriptors <- Map.fromList <$> mapM (\a -> (a,) <$> mkRenderDescriptor rendState texSlotName renderTexName renderTexGLObj a) (nubS $ concatMap renderChain ordFBs)
+    renderDescriptors <- Map.fromList <$> mapM (\a -> (a,) <$> mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj a) (nubS $ concatMap (renderChain dag) ordFBs)
 
     -- join compiled graphics network components
     (passRender,passDispose) <- fmap unzip $ forM ordFBs $ \fb -> do
-        let (drawList, disposeList) = unzip [(renderAction rd, disposeAction rd) | f <- renderChain fb, let Just rd = Map.lookup f renderDescriptors]
-        (passSetup,passDispose) <- mkPassSetup renderTexGLObj dependentSamplers (fb == gp) fb
+        let (drawList, disposeList) = unzip [(renderAction rd, disposeAction rd) | f <- renderChain dag fb, let Just rd = Map.lookup f renderDescriptors]
+        (passSetup,passDispose) <- mkPassSetup dag renderTexGLObj dependentSamplers (fb == gp) fb
         return (passSetup >> sequence_ drawList, passDispose >> sequence_ disposeList)
 
     -- debug
-    putStrLn $ "number of passes: " ++ show (length ordFBs) ++ "   is output the last? " ++ show (findFrameBuffer gp == last ordFBs)
+    putStrLn $ "number of passes: " ++ show (length ordFBs) ++ "   is output the last? " ++ show (findFrameBuffer dag gp == last ordFBs)
 
     -- TODO: validate
     --          all slot name should be unique

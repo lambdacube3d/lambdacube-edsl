@@ -179,7 +179,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
         p_max = pack' (V4 ltr ltg intensity (floatF 1)) @* (variance @/ (variance @+ d @* d))
         (l,n) = untup2 attr
 
-    sampler = Sampler LinearFilter Clamp shadowMapBlur
+    sampler = Sampler LinearFilter Clamp shadowMap
     --Texture gp dim arr t ar
     shadowMap :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     shadowMap = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]

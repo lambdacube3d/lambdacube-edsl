@@ -628,8 +628,9 @@ data TextureType - gl texture target
     | TextureBuffer TextureDataType
     deriving (Show, Eq, Ord)
 -}
-createGLTextureObject :: Exp -> IO GLuint
-createGLTextureObject (Sampler ty txFilter txEdgeMode (Texture txType txSize txMipMap txGPList)) = do
+createGLTextureObject :: DAG -> Exp -> IO GLuint
+createGLTextureObject dag (Sampler txFilter txEdgeMode tx) = do
+    let Texture txType txSize txMipMap txGPList = toExp dag tx
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     {-
         void glTexImage1D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, void *data );

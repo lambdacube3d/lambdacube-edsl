@@ -20,13 +20,13 @@ data Blending
                     ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
                     V4F
     deriving (Show,Eq,Ord)
-
+{-
 data Interpolated e
     = Flat          e
     | Smooth        e
     | NoPerspective e
     deriving (Show, Eq, Ord)
-
+-}
 data RasterContext
     = PointCtx
     | LineCtx       Float ProvokingVertex
@@ -67,8 +67,9 @@ data MipMap
     | NoMip 
     | AutoMip       Int Int -- Base level, Max level
     deriving (Show,Eq,Ord)
-
+{-
 data Texture gp
     = TextureSlot   ByteString TextureType
     | Texture       TextureType Value MipMap [gp] -- hint: type, size, mip, data
     deriving (Show, Eq, Ord)
+-}

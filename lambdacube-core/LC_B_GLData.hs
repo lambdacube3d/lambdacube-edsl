@@ -8,6 +8,7 @@ import Data.List as L
 import Data.Maybe
 import Data.Trie as T
 import Foreign
+--import qualified Data.IntMap as IM
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as V
@@ -114,7 +115,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
     (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUniformSetter rendState t | n <- objUniforms, t <- maybeToList $ T.lookup n uniformType])
     let objUSetterTrie = T.fromList $! zip objUniforms objUSetters
     
-        mkDrawAction :: GP -> IO (GLuint,IO ())
+        mkDrawAction :: Exp -> IO (GLuint,IO ())
         mkDrawAction gp = do
             let Just rd = Map.lookup gp renderDescriptorMap
                 sLocs   = streamLocation rd

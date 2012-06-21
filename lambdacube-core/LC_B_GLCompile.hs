@@ -270,7 +270,7 @@ setupAccumulationContext = cvt
         however blending or LogicOp can be disabled separatly to each render target.
 -}
 
-compileClearFrameBuffer :: GP -> IO ()
+compileClearFrameBuffer :: Exp -> IO ()
 compileClearFrameBuffer (FrameBuffer fb) = cvt fb
   where
     -- we have to handle depth and stencil specially, available configurations:
@@ -365,18 +365,21 @@ compileClearFrameBuffer (FrameBuffer fb) = cvt fb
 
 -- FIXME: simple solution, does not support sharing
 -- result: (RenderAction, DisposeAction, UniformLocation, StreamLocation)
-compileRenderFrameBuffer :: [(Exp,String)] -> [(Exp,String)] -> IORef ObjectSet -> GP -> IO (IO (), IO (), Trie GLint, Trie GLuint)
-compileRenderFrameBuffer samplerNames slotSamplerNames objsIORef (Accumulate aCtx ffilter fsh (Rasterize rCtx (Transform vsh (Fetch slotName _ slotInput))) fb) = do
+compileRenderFrameBuffer :: DAG -> [(Exp,String)] -> [(Exp,String)] -> IORef ObjectSet -> Exp -> IO (IO (), IO (), Trie GLint, Trie GLuint)
+compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate aCtx ffilter fsh rastExp fb) = do
     --rndr <- compileFrameBuffer fb rndr'
     po <- glCreateProgram
-    let (shl,fragOuts) = {-case gs of
+    let Rasterize rCtx transExp     = toExp dag rastExp
+        Transform vsh fetchExp      = toExp dag transExp
+        Fetch slotName _ slotInput  = toExp dag fetchExp
+        (shl,fragOuts) = {-case gs of
             NoGeometryShader    -> -}([VertexShaderSrc srcV, FragmentShaderSrc srcF], (map fst outF)) {-
             _                   -> ([VertexShaderSrc srcV, GeometryShaderSrc srcG, FragmentShaderSrc srcF], (map fst outF)) -}
         allSamplerNames = samplerNames ++ slotSamplerNames 
         samplerNameMap  = Map.fromList allSamplerNames
-        (srcV,outV) = codeGenVertexShader samplerNameMap slotInput vsh
+        (srcV,outV) = codeGenVertexShader dag samplerNameMap slotInput $ toExp dag vsh
         (srcG,outG) = ("",outV)--codeGenGeometryShader samplerNameMap outV gs
-        (srcF,outF) = codeGenFragmentShader samplerNameMap outG ffilter fsh
+        (srcF,outF) = codeGenFragmentShader dag samplerNameMap outG (toExp dag ffilter) $ toExp dag fsh
         createAndAttach [] _ = return $! Nothing
         createAndAttach sl t = do
             mapM_ SB.putStrLn sl
@@ -384,8 +387,11 @@ compileRenderFrameBuffer samplerNames slotSamplerNames objsIORef (Accumulate aCt
             compileShader o sl
             glAttachShader po o
             return $! Just o
+    putStrLn " + compile vertex shader"
     vsh <- createAndAttach [s | VertexShaderSrc s <- shl] gl_VERTEX_SHADER
+    putStrLn " + compile geometry shader"
     gsh <- createAndAttach [s | GeometryShaderSrc s <- shl] gl_GEOMETRY_SHADER
+    putStrLn " + compile fragment shader"
     fsh <- createAndAttach [s | FragmentShaderSrc s <- shl] gl_FRAGMENT_SHADER
 
     let printGLStatus = checkGL >>= print

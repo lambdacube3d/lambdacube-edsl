@@ -85,7 +85,7 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
         (p,n) = untup2 pn
 
     frag :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag a = FragmentOutRastDepth $ (snoc a 1 @* color) :. ZT
+    frag a = FragmentOutRastDepth $ (v4F (V4 0 0 1 1) @+ snoc a 1 @* color) :. ZT
       where
         color = Cond (primitiveID @< intF 5) (v4F (V4 1 0 0 1) @* sin' x) (v4F $ V4 0 1 0 1)
         --V2 x y = unpack' pointCoord

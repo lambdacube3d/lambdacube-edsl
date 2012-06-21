@@ -18,6 +18,7 @@ data Exp stage t where
     -- Needed for conversion to de Bruijn form
     Tag     :: GPU t
             => Int
+            -> Int
             -> Exp stage t
                  -- environment size at defining occurrence
 

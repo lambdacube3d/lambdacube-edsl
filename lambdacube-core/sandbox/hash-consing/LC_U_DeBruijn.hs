@@ -30,6 +30,13 @@ hashcons t e = do
                    tm'    = IM.insert k t tm
                in put (DAG m' tm') >> return k
     Just k  -> return k
+
+exp :: DAG -> ExpId -> Exp
+exp (DAG m _) k = lookup_val k m
+
+expType :: DAG -> ExpId -> Ty
+expType (DAG _ tm) k = tm IM.! k
+
 {-
   TODO:
     represent these as tuples from specific types:  VertexOut, GeometryOut, FragmentOut, FragmentOutDepth, FragmentOutRastDepth

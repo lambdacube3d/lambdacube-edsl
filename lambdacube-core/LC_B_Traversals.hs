@@ -6,85 +6,81 @@ import LC_U_APIType
 import LC_U_DeBruijn
 
 class HasExp a where
-    expUniverse    :: a -> [Exp]
+    expUniverse    :: DAG -> a -> [Exp]
 
 instance HasExp a => HasExp [a] where
-    expUniverse a = concatMap expUniverse a
+    expUniverse dag a = concatMap (expUniverse dag) a
 
-instance HasExp FragmentFilter where
-    expUniverse (Filter f) = expUniverse f
-    expUniverse _ = []
 
-instance HasExp GeometryShader where
-    expUniverse (GeometryShader _ _ _ a b c) = expUniverse a ++ expUniverse b ++ expUniverse c
-    expUniverse _ = []
-
-instance HasExp ExpFun where
-    expUniverse (Body e)   = e : expUniverse e
-    expUniverse (Lam f)    = expUniverse f
+instance HasExp ExpId where
+    expUniverse dag e = expUniverse dag $ toExp dag e
 
 instance HasExp Exp where
-    expUniverse exp = case exp of
-        Tup _ l                 -> l ++ expUniverse l
-        Prj _ _ e               -> e : expUniverse e
-        Cond _ a b c            -> a : b : c : expUniverse a ++ expUniverse b ++ expUniverse c
-        PrimApp _ _ a           -> a : expUniverse a
-        VertexOut a b c         -> a : b : expUniverse a ++ expUniverse b ++ expUniverse c
-        GeometryOut a b c d e f -> a : b : c : d : e : expUniverse a ++ expUniverse b ++ expUniverse c ++ expUniverse d ++ expUniverse e ++ expUniverse f
-        FragmentOut a           -> a ++ expUniverse a
-        FragmentOutDepth a b    -> a : b ++ expUniverse a ++ expUniverse b
-        FragmentOutRastDepth a  -> a ++ expUniverse a
+    expUniverse dag exp = case exp of
+        Lam f                   -> expUniverse dag f
+        Tup l                   -> let e = map (toExp dag) l
+                                   in e ++ expUniverse dag e
+        Prj _ i                 -> let e = toExp dag i 
+                                   in e : expUniverse dag e
+        Cond ia ib ic           -> let [a,b,c] = map (toExp dag) [ia,ib,ic]
+                                   in a : b : c : expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c
+        PrimApp _ ia            -> let a = toExp dag ia
+                                   in a : expUniverse dag a
+        VertexOut ia ib ic      -> let [a,b] = map (toExp dag) [ia,ib]
+                                   in a : b : expUniverse dag a ++ expUniverse dag b ++ expUniverse dag ic
+        GeometryOut i j k l m n -> let [a,b,c,d,e] = map (toExp dag) [i,j,k,l,m]
+                                   in a : b : c : d : e : expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c ++ expUniverse dag d ++ expUniverse dag e ++ expUniverse dag n
+        FragmentOut i           -> let a = map (toExp dag) i
+                                   in a ++ expUniverse dag a
+        FragmentOutDepth i j    -> let a:b = map (toExp dag) (i:j)
+                                   in a : b ++ expUniverse dag a ++ expUniverse dag b
+        FragmentOutRastDepth i  -> let a = map (toExp dag) i
+                                   in a ++ expUniverse dag a
+        Transform a b           -> expUniverse dag a ++ expUniverse dag b
+        Reassemble a b          -> expUniverse dag a ++ expUniverse dag b
+        Rasterize _ a           -> expUniverse dag a
+        Accumulate _ a b c _    -> expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c
+        PrjFrameBuffer _ _ a    -> expUniverse dag a
+        PrjImage _ _ a          -> expUniverse dag a
+        Filter f                -> expUniverse dag f
+        Flat a                  -> toExp dag a : expUniverse dag a
+        Smooth a                -> toExp dag a : expUniverse dag a
+        NoPerspective a         -> toExp dag a : expUniverse dag a 
+        GeometryShader _ _ _ a b c  -> expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c
         _                       -> []
 
-instance HasExp (Interpolated Exp) where
-    expUniverse a  = case a of
-        Flat a          -> a : expUniverse a
-        Smooth a        -> a : expUniverse a
-        NoPerspective a -> a : expUniverse a
-
-instance HasExp GP where
-    expUniverse gp = case gp of
-        Transform a b           -> expUniverse a ++ expUniverse b
-        Reassemble a b          -> expUniverse a ++ expUniverse b
-        Rasterize _ a           -> expUniverse a
-        Accumulate _ a b c _    -> expUniverse a ++ expUniverse b ++ expUniverse c
-        PrjFrameBuffer _ _ a    -> expUniverse a
-        PrjImage _ _ a          -> expUniverse a
-        _                       -> []
-
-gpUniverse :: GP -> [GP]
-gpUniverse gp = gp : case gp of
-    Transform _ a           -> gpUniverse a
-    Reassemble _ a          -> gpUniverse a
-    Rasterize _ a           -> gpUniverse a
-    Accumulate _ _ _ a b    -> gpUniverse a ++ gpUniverse b
-    PrjFrameBuffer _ _ a    -> gpUniverse a
-    PrjImage _ _ a          -> gpUniverse a
+gpUniverse :: DAG -> Exp -> [Exp]
+gpUniverse dag gp = gp : case gp of
+    Transform _ a           -> gpUniverse dag $ toExp dag a
+    Reassemble _ a          -> gpUniverse dag $ toExp dag a
+    Rasterize _ a           -> gpUniverse dag $ toExp dag a
+    Accumulate _ _ _ a b    -> gpUniverse dag (toExp dag a) ++ gpUniverse dag (toExp dag b)
+    PrjFrameBuffer _ _ a    -> gpUniverse dag $ toExp dag a
+    PrjImage _ _ a          -> gpUniverse dag $ toExp dag a
     _                       -> []
 
 -- includes the origin
-gpUniverse' :: GP -> [GP]
-gpUniverse' gp = gp : gpUniverse gp
+gpUniverse' :: DAG -> Exp -> [Exp]
+gpUniverse' dag gp = gp : gpUniverse dag gp
 
 -- includes the origin
-expUniverse' :: Exp -> [Exp]
-expUniverse' e = e : expUniverse e
+expUniverse' :: DAG -> Exp -> [Exp]
+expUniverse' dag e = e : expUniverse dag e
 
-findFrameBuffer :: GP -> GP
-findFrameBuffer a = head $ dropWhile notFrameBuffer $ gpUniverse' a
+findFrameBuffer :: DAG -> Exp -> Exp
+findFrameBuffer dag a = head $ dropWhile notFrameBuffer $ gpUniverse' dag a
   where
     notFrameBuffer (Accumulate {})  = False
     notFrameBuffer (FrameBuffer {}) = False
     notFrameBuffer _ = True
 
 -- starts from a FrameBuffer GP and track the draw action chain until the FrameBuffer definition
-renderChain :: GP -> [GP]
-renderChain fb@(FrameBuffer {}) = [fb]
-renderChain fb@(Accumulate _ _ _ _ a) = renderChain a ++ [fb]
-renderChain _ = []
+renderChain :: DAG -> Exp -> [Exp]
+renderChain _ fb@(FrameBuffer {}) = [fb]
+renderChain dag fb@(Accumulate _ _ _ _ a) = renderChain dag (toExp dag a) ++ [fb]
+renderChain _ _ = []
 
-
-drawOperations :: GP -> [GP]
-drawOperations fb@(FrameBuffer {}) = [fb]
-drawOperations fb@(Accumulate _ _ _ a _) = fb : gpUniverse' a
-drawOperations _ = []
+drawOperations :: DAG -> Exp -> [Exp]
+drawOperations dag fb@(FrameBuffer {}) = [fb]
+drawOperations dag fb@(Accumulate _ _ _ a _) = fb : gpUniverse' dag (toExp dag a)
+drawOperations _ _ = []

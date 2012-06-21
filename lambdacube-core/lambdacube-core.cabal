@@ -24,6 +24,7 @@ Library
         binary,
         bytestring,
         containers,
+        mtl,
         vector,
 
         bytestring-trie,
@@ -34,6 +35,7 @@ Library
         bitmap
 
   Exposed-modules:
+        BiMap
         LC_API
         LC_B_GL
         LC_B_GLCompile

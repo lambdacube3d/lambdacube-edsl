@@ -22,7 +22,7 @@ import LC_G_Type
 import LC_G_APIType hiding (LogicOperation(..), ComparisonFunction(..))
 import LC_U_APIType
 import LC_U_PrimFun
-import LC_U_DeBruijn
+import LC_U_DeBruijn hiding (ExpC(..))
 
 import LC_B_GLSLSyntax hiding (Const,InterpolationQualifier(..),TypeSpecifierNonArray(..))
 import LC_B_GLSLSyntax (TypeSpecifierNonArray)
@@ -367,36 +367,39 @@ codeGenConst (VM43F  v) = [matX3C "mat4x3" (v4C "vec4" floatC) v]
 codeGenConst (VM44F  v) = [matX4C "mat4"   (v4C "vec4" floatC) v]
 
 -- require: input names
-codeGenExp :: Map Exp String -> [ByteString] -> Exp -> [Expr]
-codeGenExp smpName inNames (PrimApp ty f arg)   = codeGenPrim f (codeGenType $ expType arg) (codeGenExp smpName inNames arg)
-codeGenExp smpName inNames (Const ty c)         = codeGenConst c
-codeGenExp smpName inNames (PrimVar ty n)       = [Variable $! unpack n]
-codeGenExp smpName inNames (Tup ty t)           = concatMap (codeGenExp smpName inNames) t
-codeGenExp smpName inNames (Uni ty n)           = [Variable $! unpack n]
-codeGenExp smpName inNames p@(Prj ty idx e)     = {-trace (unlines["gen: ",show p,show $! pPrint src])-} src
+codeGenExp :: DAG -> Map Exp String -> [ByteString] -> Exp -> [Expr]
+codeGenExp dag smpName inNames (PrimApp f arg)      = codeGenPrim f (codeGenType $ expIdType dag arg) (codeGenExp dag smpName inNames $ toExp dag arg)
+codeGenExp dag smpName inNames (Const c)            = codeGenConst c
+codeGenExp dag smpName inNames (PrimVar n)          = [Variable $! unpack n]
+codeGenExp dag smpName inNames (Tup t)              = concatMap (codeGenExp dag smpName inNames . toExp dag) t
+codeGenExp dag smpName inNames (Uni n)              = [Variable $! unpack n]
+codeGenExp dag smpName inNames p@(Prj idx e)        = {-trace (unlines["gen: ",show p,show $! pPrint src])-} src
   where
+    ty  = expType dag p
     src = reverse
         . take (length $ codeGenType ty)
         . drop idx
         . reverse
-        $ codeGenExp smpName inNames e
-codeGenExp smpName inNames (Var ty i)
+        $ codeGenExp dag smpName inNames $ toExp dag e
+
+codeGenExp dag smpName inNames e@(Var i li)
     | i == 0 && length inNames == arity       = [Variable (unpack n) | n <- inNames]
     | otherwise = throw $ userError $ unlines $
         [ "codeGenExp failed: "
-        , "  Var " ++ show i ++ " :: " ++ show ty
+        , "  Var " ++ show i ++ " (" ++ show li ++ ") :: " ++ show ty
         , "  input names:  " ++ show inNames
         , "  arity:        " ++ show arity
         ]
   where
-    arity = length $! codeGenType ty
+    ty      = expType dag e
+    arity   = length $! codeGenType ty
 
-codeGenExp smpName inNames (Cond ty p t e)      = zipWith branch (codeGenExp smpName inNames t) (codeGenExp smpName inNames e)
+codeGenExp dag smpName inNames (Cond p t e)         = zipWith branch (codeGenExp dag smpName inNames $ toExp dag t) (codeGenExp dag smpName inNames $ toExp dag e)
   where
-    [predicate] = codeGenExp smpName inNames p
+    [predicate] = codeGenExp dag smpName inNames $ toExp dag p
     branch a b  = Selection predicate a b
 
-codeGenExp smpName inNames s@(Sampler ty f e t)   = case Map.lookup s smpName of
+codeGenExp dag smpName inNames s@(Sampler f e t)    = case Map.lookup s smpName of
     Just name   -> [Variable name]
     Nothing     -> error "Unknown sampler value!"
 
@@ -405,24 +408,25 @@ codeGenExp smpName inNames s@(Sampler ty f e t)   = case Map.lookup s smpName of
   if we disable inline functions, it simplifies variable name gen
 -}
 
-codeGenVertexShader :: Map Exp String
+codeGenVertexShader :: DAG
+                    -> Map Exp String
                     -> [(ByteString,InputType)]
-                    -> ExpFun
+                    -> Exp
                     -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
-codeGenVertexShader smpName inVars = cvt
+codeGenVertexShader dag smpName inVars = cvt
   where
     genExp :: Exp -> [Expr]
-    genExp = codeGenExp smpName (map fst inVars)
+    genExp = codeGenExp dag smpName (map fst inVars)
 
-    genIExp :: [Interpolated Exp] -> [(GLSL.InterpolationQualifier,[Expr],[InputType])]
-    genIExp ((Flat e) : xs)             = (GLSL.Flat,genExp e,codeGenType $ expType e) : genIExp xs
-    genIExp ((Smooth e) : xs)           = (GLSL.Smooth,genExp e,codeGenType $ expType e) : genIExp xs
-    genIExp ((NoPerspective e) : xs)    = (GLSL.NoPerspective,genExp e,codeGenType $ expType e) : genIExp xs
+    genIExp :: [Exp] -> [(GLSL.InterpolationQualifier,[Expr],[InputType])]
+    genIExp ((Flat e) : xs)             = (GLSL.Flat,genExp $ toExp dag e,codeGenType $ expIdType dag e) : genIExp xs
+    genIExp ((Smooth e) : xs)           = (GLSL.Smooth,genExp $ toExp dag e,codeGenType $ expIdType dag e) : genIExp xs
+    genIExp ((NoPerspective e) : xs)    = (GLSL.NoPerspective,genExp $ toExp dag e,codeGenType $ expIdType dag e) : genIExp xs
     genIExp [] = []
 
-    cvt :: ExpFun -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
-    cvt (Lam lam) = cvt lam
-    cvt (Body body@(VertexOut pos size outs)) = (SB.unlines $!
+    cvt :: Exp -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
+    cvt (Lam lam) = cvt $ toExp dag lam
+    cvt body@(VertexOut pos size outs) = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
@@ -434,45 +438,46 @@ codeGenVertexShader smpName inVars = cvt
       where
         ppE e a = pack $! show $! pPrint $! Compound [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         pp a    = pack $! show $! pPrint $! TranslationUnit a
-        uniVars = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- expUniverse' body]
-        smpVars = Set.toList $ Set.fromList [(n,t) | s@(Sampler (Single t) _ _ _) <- expUniverse' body, let Just n = Map.lookup s smpName]
-        [posE]  = genExp pos
-        [sizeE] = genExp size
-        (oQ,oE,oT)  = unzip3 $! genIExp outs
+        uniVars = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- expUniverse' dag body, let Single t = expType dag u]
+        smpVars = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- expUniverse' dag body, let Single t = expType dag s, let Just n = Map.lookup s smpName]
+        [posE]  = genExp $ toExp dag pos
+        [sizeE] = genExp $ toExp dag size
+        (oQ,oE,oT)  = unzip3 $! genIExp $ map (toExp dag) outs
         oNames      = [pack $ "v" ++ show i | i <- [0..]]
 
 -- TODO
 codeGenGeometryShader samplerNameMap inVars _ = ("", inVars)
 
-codeGenFragmentShader :: Map Exp String
+codeGenFragmentShader :: DAG
+                      -> Map Exp String
                       -> [(ByteString,GLSL.InterpolationQualifier,InputType)]
-                      -> FragmentFilter
-                      -> ExpFun
+                      -> Exp
+                      -> Exp
                       -> (ByteString, [(ByteString,InputType)])
-codeGenFragmentShader smpName inVars ffilter = cvt
+codeGenFragmentShader dag smpName inVars ffilter = cvt
   where
-    cvtF :: ExpFun -> Expr
-    cvtF (Lam lam) = cvtF lam
-    cvtF (Body body) = let [e] = genExp body in e
+    cvtF :: Exp -> Expr
+    cvtF (Lam lam) = cvtF $ toExp dag lam
+    cvtF body = let [e] = genExp body in e
 
-    cvt :: ExpFun -> (ByteString, [(ByteString,InputType)])
-    cvt (Lam lam) = cvt lam
-    cvt (Body body) = case body of
+    cvt :: Exp -> (ByteString, [(ByteString,InputType)])
+    cvt (Lam lam) = cvt $ toExp dag lam
+    cvt body = case body of
         FragmentOut e             -> src e []
-        FragmentOutDepth de e     -> src e [("gl_FragDepth",de)]
+        FragmentOutDepth de e     -> src e [("gl_FragDepth",toExp dag de)]
         FragmentOutRastDepth e    -> src e []
 
     genExp :: Exp -> [Expr]
-    genExp = codeGenExp smpName [n | (n,_,_) <- inVars]
+    genExp = codeGenExp dag smpName [n | (n,_,_) <- inVars]
 
-    genFExp :: [Exp] -> [([Expr],[InputType])]
-    genFExp (e : xs) = (genExp e,codeGenType $ expType e) : genFExp xs
+    genFExp :: [ExpId] -> [([Expr],[InputType])]
+    genFExp (e : xs) = (genExp $ toExp dag e,codeGenType $ expIdType dag e) : genFExp xs
     genFExp [] = []
 
     oNames :: [ByteString]
     oNames = [pack $ "f" ++ show i | i <- [0..]]
 
-    src :: [Exp] -> [(ByteString,Exp)] -> (ByteString, [(ByteString,InputType)])
+    src :: [ExpId] -> [(ByteString,Exp)] -> (ByteString, [(ByteString,InputType)])
     src outs outs' = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
@@ -482,15 +487,15 @@ codeGenFragmentShader smpName inVars ffilter = cvt
         , "void main ()"
         , ppBody $ case ffilter of
             PassAll     -> body
-            Filter f    -> [SelectionStatement (UnaryNot $ cvtF f) Discard $ Just (CompoundStatement $ Compound body)]
+            Filter f    -> [SelectionStatement (UnaryNot $ cvtF $ toExp dag f) Discard $ Just (CompoundStatement $ Compound body)]
         ], [(n,t) | n <- oNames | [t] <- oT])
       where
         assigns a e = [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         ppBody l    = pack $! show $! pPrint $! Compound l
         pp a        = pack $! show $! pPrint $! TranslationUnit a
-        allExps     = concat [expUniverse outs, expUniverse (map snd outs')]
-        uniVars     = Set.toList $ Set.fromList [(n,t) | Uni (Single t) n <- allExps]
-        smpVars     = Set.toList $ Set.fromList [(n,t) | s@(Sampler (Single t) _ _ _) <- allExps, let Just n = Map.lookup s smpName]
+        allExps     = concat [expUniverse dag outs, expUniverse dag (map snd outs')]
+        uniVars     = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- allExps, let Single t = expType dag u]
+        smpVars     = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- allExps, let Single t = expType dag s, let Just n = Map.lookup s smpName]
         (oE',oN')   = unzip $! [(genExp e,n) | (n,e) <- outs']
         (oE,oT)     = unzip $! genFExp outs
         body        = assigns (oN' ++ oNames) (concat oE' ++ concat oE)
@@ -498,18 +503,6 @@ codeGenFragmentShader smpName inVars ffilter = cvt
 codeGenType :: Ty -> [InputType]
 codeGenType (Single ty) = [ty]
 codeGenType (Tuple l)   = concatMap codeGenType l
-
-expType :: Exp -> Ty
-expType e =
-  case e of
-    (Var ty _)          -> ty
-    (Const ty _)        -> ty
-    (PrimVar ty _)      -> ty
-    (Uni ty _)          -> ty
-    (Tup ty _)          -> ty
-    (Prj ty _ _)        -> ty
-    (Cond ty _ _ _)     -> ty
-    (PrimApp ty _ _)    -> ty
 
 -- Utility functions
 toGLSLType :: InputType -> TypeSpecifierNonArray
