@@ -1,5 +1,6 @@
 module LC_U_DeBruijn where
 
+import Data.Typeable
 import Debug.Trace
 import Control.Applicative hiding (empty,Const)
 import Control.Monad.State
@@ -63,7 +64,7 @@ data Exp
     -- Fun
     = Lam                   ExpId
     | Let                   ExpId ExpId
-    | Var                   Int Int   -- index, layout counter
+    | Var                   Int TypeRep   -- index, layout counter
     | Apply                 ExpId ExpId
 
     -- Exp
@@ -116,7 +117,7 @@ class ExpC exp where
     -- exp constructors
     lam         :: exp -> exp
     let_        :: Ty -> exp -> exp -> exp
-    var         :: Ty -> Int -> Int -> exp -- type, index, layout counter (this needed for proper sharing)
+    var         :: Ty -> Int -> TypeRep -> exp -- type, index, layout counter (this needed for proper sharing)
     apply       :: Ty -> exp -> exp -> exp
     const_      :: Ty -> Value -> exp
     primVar     :: Ty -> ByteString -> exp

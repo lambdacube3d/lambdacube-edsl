@@ -100,7 +100,7 @@ import Data.Trie as T
 compileRenderer :: H.GPOutput -> IO Renderer
 compileRenderer l = GL.compileRenderer dag $ U.toExp dag l'
   where
-    (l', dag) = runState (U.unN $ fst $ runState (convertGPOutput l) 0) U.emptyDAG
+    (l', dag) = runState (U.unN $ convertGPOutput l) U.emptyDAG
 
 nullSetter :: ByteString -> String -> a -> IO ()
 nullSetter n t _ = Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t

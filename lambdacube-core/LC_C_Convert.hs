@@ -1,7 +1,5 @@
 module LC_C_Convert (convertGPOutput) where
 
-import Control.Applicative
-import Control.Monad.State
 import Data.Typeable
 import Debug.Trace
 
@@ -24,7 +22,6 @@ prjToInt :: TupleIdx t e -> Int
 prjToInt ZeroTupIdx     = 0
 prjToInt (SuccTupIdx i) = 1 + prjToInt i
 
-type C a = State Int a
 type Layout = [Ty]
 
 genTy :: GPU a => a -> Ty
@@ -38,160 +35,160 @@ genTy a = case cvt $ T.tupleType a of
 --    cvt (PairTuple UnitTuple b ) = cvt b
     cvt (PairTuple a b )  = cvt a ++ cvt b
 
-convertGPOutput :: ExpC exp => H.GPOutput -> C exp
-convertGPOutput (H.ImageOut a b)    = imageOut a <$> convertGP b
-convertGPOutput (H.ScreenOut a)     = screenOut <$> convertGP a
+convertGPOutput :: ExpC exp => H.GPOutput -> exp
+convertGPOutput (H.ImageOut a b)    = imageOut a $ convertGP b
+convertGPOutput (H.ScreenOut a)     = screenOut $ convertGP a
 
 -- GP
-convertGP :: ExpC exp => H.GP t -> C exp
+convertGP :: ExpC exp => H.GP t -> exp
 convertGP = convertOpenGP []
 
-convertOpenGP :: ExpC exp => Layout -> H.GP t -> C exp
+convertOpenGP :: ExpC exp => Layout -> H.GP t -> exp
 convertOpenGP = cvt
   where
-    cvt :: ExpC exp => Layout -> H.GP t -> C exp
+    cvt :: ExpC exp => Layout -> H.GP t -> exp
     cvt glyt (H.GPtag i)                    = error "GPtag is not implemented yet!"-- var (genTy (undefined :: t')) (prjIdx i glyt) <$> get
-    cvt glyt (H.Fetch n p i)                = return $ fetch n (T.toPrimitive p) (T.toInputList i)
-    cvt glyt (H.Transform vs ps)            = transform <$> convertFun1Vert glyt vs <*> cvt glyt ps
-    cvt glyt (H.Reassemble sh ps)           = reassemble <$> convertGeometryShader glyt sh <*> cvt glyt ps
-    cvt glyt (H.Rasterize ctx ps)           = rasterize (convertRasterContext ctx) <$> cvt glyt ps
-    cvt glyt (H.FrameBuffer fb)             = return $ frameBuffer (convertFrameBuffer fb)
-    cvt glyt (H.Accumulate ctx f sh fs fb)  = accumulate (convertAccumulationContext ctx) <$> convertFragmentFilter glyt f 
-                                                                                          <*> convertFun1Frag glyt sh
-                                                                                          <*> cvt glyt fs
-                                                                                          <*> cvt glyt fb
-    cvt glyt (H.PrjFrameBuffer n idx fb)    = prjFrameBuffer n (prjToInt idx) <$> convertGP fb
-    cvt glyt (H.PrjImage n idx img)         = prjImage n (toInt idx) <$> convertGP img
+    cvt glyt (H.Fetch n p i)                = fetch n (T.toPrimitive p) (T.toInputList i)
+    cvt glyt (H.Transform vs ps)            = transform  (convertFun1Vert glyt vs) (cvt glyt ps)
+    cvt glyt (H.Reassemble sh ps)           = reassemble (convertGeometryShader glyt sh) (cvt glyt ps)
+    cvt glyt (H.Rasterize ctx ps)           = rasterize (convertRasterContext ctx) $ cvt glyt ps
+    cvt glyt (H.FrameBuffer fb)             = frameBuffer (convertFrameBuffer fb)
+    cvt glyt (H.Accumulate ctx f sh fs fb)  = accumulate (convertAccumulationContext ctx) (convertFragmentFilter glyt f)
+                                                                                          (convertFun1Frag glyt sh)
+                                                                                          (cvt glyt fs)
+                                                                                          (cvt glyt fb)
+    cvt glyt (H.PrjFrameBuffer n idx fb)    = prjFrameBuffer n (prjToInt idx) $ convertGP fb
+    cvt glyt (H.PrjImage n idx img)         = prjImage n (toInt idx) $ convertGP img
 
 -- Vertex
 convertOpenVertexOut :: ExpC exp => forall t.
                         Layout       -- scalar environment
                      -> Layout      -- array environment
                      -> H.VertexOut t               -- expression to be converted
-                     -> C exp
+                     -> exp
 convertOpenVertexOut lyt glyt = cvt
   where
-    cvt :: ExpC exp => H.VertexOut t' -> C exp
-    cvt (H.VertexOut e1 e2 ie :: H.VertexOut t')  = vertexOut <$> convertOpenExp lyt glyt e1 <*> convertOpenExp lyt glyt e2 <*> convertOpenInterpolatedFlatExp lyt glyt ie
+    cvt :: ExpC exp => H.VertexOut t' -> exp
+    cvt (H.VertexOut e1 e2 ie :: H.VertexOut t')  = vertexOut (convertOpenExp lyt glyt e1) (convertOpenExp lyt glyt e2) (convertOpenInterpolatedFlatExp lyt glyt ie)
 
 -- Fragment
 convertOpenFragmentOut :: ExpC exp => forall t.
                           Layout       -- scalar environment
                        -> Layout      -- array environment
                        -> H.FragmentOut t               -- expression to be converted
-                       -> C exp
+                       -> exp
 convertOpenFragmentOut lyt glyt = cvt
   where
-    cvt :: ExpC exp => H.FragmentOut t' -> C exp
-    cvt (H.FragmentOut fe :: H.FragmentOut t')          = fragmentOut <$> convertOpenFlatExp lyt glyt fe
-    cvt (H.FragmentOutDepth e fe :: H.FragmentOut t')   = fragmentOutDepth <$> convertOpenExp lyt glyt e <*> convertOpenFlatExp lyt glyt fe
-    cvt (H.FragmentOutRastDepth fe :: H.FragmentOut t') = fragmentOutRastDepth <$> convertOpenFlatExp lyt glyt fe
+    cvt :: ExpC exp => H.FragmentOut t' -> exp
+    cvt (H.FragmentOut fe :: H.FragmentOut t')          = fragmentOut $ convertOpenFlatExp lyt glyt fe
+    cvt (H.FragmentOutDepth e fe :: H.FragmentOut t')   = fragmentOutDepth (convertOpenExp lyt glyt e) (convertOpenFlatExp lyt glyt fe)
+    cvt (H.FragmentOutRastDepth fe :: H.FragmentOut t') = fragmentOutRastDepth $ convertOpenFlatExp lyt glyt fe
 
 convertFragmentFilter :: (ExpC exp, GPU a)
                       => Layout
                       -> H.FragmentFilter a
-                      -> C exp
+                      -> exp
 convertFragmentFilter = cvt
   where
-    cvt :: (ExpC exp, GPU a) => Layout -> H.FragmentFilter a -> C exp
-    cvt glyt H.PassAll      = return passAll
-    cvt glyt (H.Filter f)   = filter_ <$> convertFun1Exp glyt f
+    cvt :: (ExpC exp, GPU a) => Layout -> H.FragmentFilter a -> exp
+    cvt glyt H.PassAll      = passAll
+    cvt glyt (H.Filter f)   = filter_ $ convertFun1Exp glyt f
 
 -- Geometry
 convertOpenGeometryOut :: ExpC exp => forall t.
                           Layout       -- scalar environment
                        -> Layout      -- array environment
                        -> H.GeometryOut t               -- expression to be converted
-                       -> C exp
+                       -> exp
 convertOpenGeometryOut lyt glyt = cvt
   where
-    cvt :: ExpC exp => H.GeometryOut t' -> C exp
-    cvt (H.GeometryOut e1 e2 e3 e4 e5 ie :: H.GeometryOut t') = geometryOut <$> convertOpenExp lyt glyt e1
-                                                                            <*> convertOpenExp lyt glyt e2
-                                                                            <*> convertOpenExp lyt glyt e3
-                                                                            <*> convertOpenExp lyt glyt e4
-                                                                            <*> convertOpenExp lyt glyt e5
-                                                                            <*> convertOpenInterpolatedFlatExp lyt glyt ie
+    cvt :: ExpC exp => H.GeometryOut t' -> exp
+    cvt (H.GeometryOut e1 e2 e3 e4 e5 ie :: H.GeometryOut t') = geometryOut (convertOpenExp lyt glyt e1)
+                                                                            (convertOpenExp lyt glyt e2)
+                                                                            (convertOpenExp lyt glyt e3)
+                                                                            (convertOpenExp lyt glyt e4)
+                                                                            (convertOpenExp lyt glyt e5)
+                                                                            (convertOpenInterpolatedFlatExp lyt glyt ie)
 
 convertGeometryShader :: ExpC exp
                       => Layout
                       -> H.GeometryShader primIn primOut layerNum a b
-                      -> C exp
+                      -> exp
 convertGeometryShader = cvt
   where
-    cvt :: ExpC exp => Layout -> H.GeometryShader primIn primOut layerNum a b -> C exp
-    cvt glyt (H.GeometryShader a b c e1 e2 e3)  = geometryShader (toInt a) (T.toPrimitive b) c <$> convertFun1Exp glyt e1
-                                                                                               <*> convertFun1Exp glyt e2
-                                                                                               <*> convertFun1Geom glyt e3
+    cvt :: ExpC exp => Layout -> H.GeometryShader primIn primOut layerNum a b -> exp
+    cvt glyt (H.GeometryShader a b c e1 e2 e3)  = geometryShader (toInt a) (T.toPrimitive b) c (convertFun1Exp glyt e1)
+                                                                                               (convertFun1Exp glyt e2)
+                                                                                               (convertFun1Geom glyt e3)
 
 -- Common
 convertOpenInterpolatedFlatExp :: ExpC exp => forall stage t.
                                   Layout       -- scalar environment
                                -> Layout      -- array environment
                                -> H.InterpolatedFlatExp stage t               -- expression to be converted
-                               -> C [exp]
+                               -> [exp]
 convertOpenInterpolatedFlatExp lyt glyt = cvt
   where
-    cvt :: ExpC exp => H.InterpolatedFlatExp stage t' -> C [exp]
-    cvt (ZT)    = return []
-    cvt (e:.xs) = (:) <$> cvt' e <*> cvt xs
+    cvt :: ExpC exp => H.InterpolatedFlatExp stage t' -> [exp]
+    cvt (ZT)    = []
+    cvt (e:.xs) = cvt' e : cvt xs
 
-    cvt' :: ExpC exp => T.Interpolated (H.Exp stage) t' -> C exp
-    cvt' (T.Flat e)           = flat          <$> convertOpenExp lyt glyt e
-    cvt' (T.Smooth e)         = smooth        <$> convertOpenExp lyt glyt e
-    cvt' (T.NoPerspective e)  = noPerspective <$> convertOpenExp lyt glyt e
+    cvt' :: ExpC exp => T.Interpolated (H.Exp stage) t' -> exp
+    cvt' (T.Flat e)           = flat          $ convertOpenExp lyt glyt e
+    cvt' (T.Smooth e)         = smooth        $ convertOpenExp lyt glyt e
+    cvt' (T.NoPerspective e)  = noPerspective $ convertOpenExp lyt glyt e
 
 convertOpenFlatExp :: ExpC exp => forall stage t.
                       Layout       -- scalar environment
                    -> Layout      -- array environment
                    -> H.FlatExp stage t               -- expression to be converted
-                   -> C [exp]
+                   -> [exp]
 convertOpenFlatExp lyt glyt = cvt
   where
-    cvt :: ExpC exp => H.FlatExp stage t' -> C [exp]
-    cvt (ZT)    = return []
-    cvt (e:.xs) = (:) <$> convertOpenExp lyt glyt e <*> cvt xs
+    cvt :: ExpC exp => H.FlatExp stage t' -> [exp]
+    cvt (ZT)    = []
+    cvt (e:.xs) = convertOpenExp lyt glyt e : cvt xs
 
 convertOpenExp :: ExpC exp => forall stage t.
                   Layout       -- scalar environment
                -> Layout      -- array environment
                -> H.Exp stage t               -- expression to be converted
-               -> C exp
+               -> exp
 convertOpenExp lyt glyt = cvt
   where
-    cvt :: ExpC exp => H.Exp stage t' -> C exp
-    cvt (H.Tag i li :: H.Exp stage t')        = return $ var (genTy (undefined :: t')) (prjIdx i lyt) li
-    cvt (H.Const v :: H.Exp stage t')         = return $ const_ (genTy (undefined :: t')) (T.toValue v)
-    cvt (H.PrimVar v :: H.Exp stage t')       = return $ primVar (genTy (undefined :: t')) (fst $ T.toInput v)
-    cvt (H.Uni v :: H.Exp stage t')           = return $ uni (genTy (undefined :: t')) (fst $ T.toInput v)
-    cvt (H.Tup tupl :: H.Exp stage t')        = tup (genTy (undefined :: t')) <$> convertTuple lyt glyt tupl
-    cvt (H.Prj idx e :: H.Exp stage t')       = prj (genTy (undefined :: t')) (prjToInt idx) <$> cvt e
-    cvt (H.Cond e1 e2 e3 :: H.Exp stage t')   = cond (genTy (undefined :: t')) <$> cvt e1 <*> cvt e2 <*> cvt e3
-    cvt (H.PrimApp p e :: H.Exp stage t')     = primApp (genTy (undefined :: t')) (convertPrimFun p) <$> cvt e
-    cvt (H.Sampler f em t :: H.Exp stage t')  = sampler (genTy (undefined :: t')) f em <$> convertTexture t
+    cvt :: ExpC exp => H.Exp stage t' -> exp
+    cvt (H.Tag i li :: H.Exp stage t')        = var (genTy (undefined :: t')) (prjIdx i lyt) li
+    cvt (H.Const v :: H.Exp stage t')         = const_ (genTy (undefined :: t')) (T.toValue v)
+    cvt (H.PrimVar v :: H.Exp stage t')       = primVar (genTy (undefined :: t')) (fst $ T.toInput v)
+    cvt (H.Uni v :: H.Exp stage t')           = uni (genTy (undefined :: t')) (fst $ T.toInput v)
+    cvt (H.Tup tupl :: H.Exp stage t')        = tup (genTy (undefined :: t')) $ convertTuple lyt glyt tupl
+    cvt (H.Prj idx e :: H.Exp stage t')       = prj (genTy (undefined :: t')) (prjToInt idx) $ cvt e
+    cvt (H.Cond e1 e2 e3 :: H.Exp stage t')   = cond (genTy (undefined :: t')) (cvt e1) (cvt e2) (cvt e3)
+    cvt (H.PrimApp p e :: H.Exp stage t')     = primApp (genTy (undefined :: t')) (convertPrimFun p) $ cvt e
+    cvt (H.Sampler f em t :: H.Exp stage t')  = sampler (genTy (undefined :: t')) f em $ convertTexture t
 
 convertFun1Vert :: ExpC exp => forall a b. GPU a =>
                    Layout
                 -> (H.Exp V a -> H.VertexOut b) 
-                -> C exp
+                -> exp
 convertFun1Vert = convertFun1 convertOpenVertexOut
 
 convertFun1Geom :: ExpC exp => forall a b. GPU a =>
                    Layout
                 -> (H.Exp G a -> H.GeometryOut b) 
-                -> C exp
+                -> exp
 convertFun1Geom = convertFun1 convertOpenGeometryOut
 
 convertFun1Frag :: ExpC exp => forall a b. GPU a =>
                    Layout 
                 -> (H.Exp F a -> H.FragmentOut b) 
-                -> C exp
+                -> exp
 convertFun1Frag = convertFun1 convertOpenFragmentOut
 
 convertFun1Exp :: ExpC exp => forall stage a b. GPU a
                => Layout 
                -> (H.Exp stage a -> H.Exp stage b) 
-               -> C exp
+               -> exp
 convertFun1Exp = convertFun1 convertOpenExp
 
 {-
@@ -201,38 +198,38 @@ convertFun1 :: (GPU a, Typeable a)
             -> (H.Exp a -> he b)
             -> D.OpenFun de env genv (a -> b)
 -}
-
-convertFun1 cvt glyt f = do
-    li <- get
-    modify (1+)
-    let a     = H.Tag 0 li
-        lyt   = [undefined]{-EmptyLayout 
-                `PushLayout` 
-                ZeroIdx-}
-                --(ZeroIdx :: Idx ((), EltRepr a) (EltRepr a))
-    lam <$> cvt lyt glyt (f a)
+convertFun1 :: (GPU t, ExpC b) => ([t3] -> t1 -> t2 -> b) -> t1 -> (H.Exp stage t -> t2) -> b
+convertFun1 cvt glyt f = lam $ cvt lyt glyt (f a)
+  where
+    a     = case f of
+              (fv :: H.Exp stage t -> t2) -> H.Tag 0 (typeOf (undefined :: t))
+    lyt   = [undefined]{-EmptyLayout 
+            `PushLayout` 
+            ZeroIdx-}
+            --(ZeroIdx :: Idx ((), EltRepr a) (EltRepr a))
+    
 
 convertExp :: ExpC exp
            => Layout      -- array environment
            -> H.Exp stage t          -- expression to be converted
-           -> C exp
+           -> exp
 convertExp glyt = convertOpenExp [] glyt
 
 convertTuple :: ExpC exp
              => Layout
              -> Layout
              -> Tuple (H.Exp stage) t 
-             -> C [exp]
-convertTuple _lyt _glyt NilTup          = return []
-convertTuple lyt  glyt (es `SnocTup` e) = (++) <$> convertTuple lyt glyt es <*> sequence [convertOpenExp lyt glyt e]
+             -> [exp]
+convertTuple _lyt _glyt NilTup          = []
+convertTuple lyt  glyt (es `SnocTup` e) = convertTuple lyt glyt es ++ [convertOpenExp lyt glyt e]
 
 -- data type conversion
 
 convertTexture :: ExpC exp
                => T.Texture (H.GP) dim arr t ar
-               -> C exp
-convertTexture (T.TextureSlot n t) = return $ textureSlot n (convertTextureType t)
-convertTexture (T.Texture t s m d) = texture (convertTextureType t) (T.toValue s) (convertMipMap m) <$> mapM convertGP d
+               -> exp
+convertTexture (T.TextureSlot n t) = textureSlot n (convertTextureType t)
+convertTexture (T.Texture t s m d) = texture (convertTextureType t) (T.toValue s) (convertMipMap m) (map convertGP d)
 
 convertTextureDataType :: T.TextureDataType t ar -> TextureDataType
 convertTextureDataType (T.Float a)  = FloatT (T.toColorArity a)
