@@ -426,7 +426,7 @@ codeGenVertexShader dag smpName inVars = cvt
 
     cvt :: Exp -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
     cvt (Lam lam) = cvt $ toExp dag lam
-    cvt body@(VertexOut pos size outs) = (SB.unlines $!
+    cvt (Body bodyExp) = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
@@ -436,10 +436,11 @@ codeGenVertexShader dag smpName inVars = cvt
         , ppE (posE:sizeE:concat oE) ("gl_Position":"gl_PointSize":oNames)
         ], [(n,q,t) | n <- oNames | q <- oQ | [t] <- oT])
       where
+        VertexOut pos size outs = toExp dag bodyExp
         ppE e a = pack $! show $! pPrint $! Compound [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         pp a    = pack $! show $! pPrint $! TranslationUnit a
-        uniVars = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- expUniverse' dag body, let Single t = expType dag u]
-        smpVars = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- expUniverse' dag body, let Single t = expType dag s, let Just n = Map.lookup s smpName]
+        uniVars = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- expUniverse' dag (toExp dag bodyExp), let Single t = expType dag u]
+        smpVars = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- expUniverse' dag (toExp dag bodyExp), let Single t = expType dag s, let Just n = Map.lookup s smpName]
         [posE]  = genExp $ toExp dag pos
         [sizeE] = genExp $ toExp dag size
         (oQ,oE,oT)  = unzip3 $! genIExp $ map (toExp dag) outs
@@ -458,11 +459,11 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
   where
     cvtF :: Exp -> Expr
     cvtF (Lam lam) = cvtF $ toExp dag lam
-    cvtF body = let [e] = genExp body in e
+    cvtF (Body bodyExp) = let [e] = genExp (toExp dag bodyExp) in e
 
     cvt :: Exp -> (ByteString, [(ByteString,InputType)])
     cvt (Lam lam) = cvt $ toExp dag lam
-    cvt body = case body of
+    cvt (Body bodyExp) = case toExp dag bodyExp of
         FragmentOut e             -> src e []
         FragmentOutDepth de e     -> src e [("gl_FragDepth",toExp dag de)]
         FragmentOutRastDepth e    -> src e []

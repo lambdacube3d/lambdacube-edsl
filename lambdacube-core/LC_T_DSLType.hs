@@ -705,7 +705,7 @@ instance Typeable8 (,,,,,,,) where
     typeOf8 _ = myMkTyCon "(,,,,,,,)" `mkTyConApp` []
 
 typeOf7Default :: (Typeable8 t, Typeable a) => t a b c d e f g h -> TypeRep
-typeOf7Default x = typeOf7 x `mkAppTy` typeOf (argType x)
+typeOf7Default x = (id $! typeOf7 x) `mkAppTy` (id $! typeOf (argType x))
   where
     argType :: t a b c d e f g h -> a
     argType =  undefined

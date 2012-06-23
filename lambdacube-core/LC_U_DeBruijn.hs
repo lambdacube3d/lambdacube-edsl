@@ -35,7 +35,7 @@ hashcons t e = do
     Nothing -> let (k,m') = insert e m
                    tm'    = IM.insert k t tm
                in put (DAG m' tm') >> return k
-    Just k  -> trace ("sharing : " ++ show k ) $ return k
+    Just k  -> trace ("sharing : " ++ show k ++ " :: " ++ show (tm IM.! k)) $ return k
 
 --hashcons = dontShare
 dontShare :: Ty -> Exp -> State DAG ExpId
@@ -47,6 +47,9 @@ dontShare t e = do
 
 toExp :: DAG -> ExpId -> Exp
 toExp (DAG m _) k = lookup_val k m
+
+toExpId :: DAG -> Exp -> ExpId
+toExpId (DAG m _) v = let Just k = lookup_key v m in k
 
 expIdType :: DAG -> ExpId -> Ty
 expIdType (DAG _ tm) k = tm IM.! k
@@ -63,6 +66,7 @@ expType dag@(DAG m tm) e = case lookup_key e m of
 data Exp
     -- Fun
     = Lam                   ExpId
+    | Body                  ExpId
     | Let                   ExpId ExpId
     | Var                   Int TypeRep   -- index, layout counter
     | Apply                 ExpId ExpId
@@ -116,6 +120,7 @@ data Exp
 class ExpC exp where
     -- exp constructors
     lam         :: exp -> exp
+    body        :: exp -> exp
     let_        :: Ty -> exp -> exp -> exp
     var         :: Ty -> Int -> TypeRep -> exp -- type, index, layout counter (this needed for proper sharing)
     apply       :: Ty -> exp -> exp -> exp
@@ -164,6 +169,9 @@ instance ExpC N where
     lam a = N $ do
         h1 <- unN a
         hashcons Unknown $ Lam h1
+    body a = N $ do
+        h1 <- unN a
+        hashcons Unknown $ Body h1
     let_ t a b    = N $ do
         h1 <- unN a
         h2 <- unN b
@@ -218,35 +226,34 @@ instance ExpC N where
     fragmentOutRastDepth a  = N $ do
         h <- mapM unN a
         hashcons Unknown $ FragmentOutRastDepth h
-
     -- gp constructors
     fetch a b c = N $ do
-        hashcons Unknown $ Fetch a b c
+        hashcons VertexStream' $ Fetch a b c
     transform a b = N $ do
         h1 <- unN a
         h2 <- unN b
-        hashcons Unknown $ Transform h1 h2
+        hashcons PrimitiveStream' $ Transform h1 h2
     reassemble a b = N $ do
         h1 <- unN a
         h2 <- unN b
-        hashcons Unknown $ Reassemble h1 h2
+        hashcons PrimitiveStream' $ Reassemble h1 h2
     rasterize a b = N $ do
         h1 <- unN b
-        hashcons Unknown $ Rasterize a h1
+        hashcons FragmentStream' $ Rasterize a h1
     frameBuffer a = N $ do
-        hashcons Unknown $ FrameBuffer a
+        hashcons FrameBuffer' $ FrameBuffer a
     accumulate a b c d e = N $ do
         h1 <- unN b
         h2 <- unN c
         h3 <- unN d
         h4 <- unN e
-        hashcons Unknown $ Accumulate a h1 h2 h3 h4
+        hashcons FrameBuffer' $ Accumulate a h1 h2 h3 h4
     prjFrameBuffer a b c = N $ do
         h1 <- unN c
-        hashcons Unknown $ PrjFrameBuffer a b h1
+        hashcons Image' $ PrjFrameBuffer a b h1
     prjImage a b c = N $ do
         h1 <- unN c
-        hashcons Unknown $ PrjImage a b h1
+        hashcons Image' $ PrjImage a b h1
     -- texture constructors
     textureSlot a b = N $ hashcons Unknown $ TextureSlot a b
     texture a b c d = N $ do

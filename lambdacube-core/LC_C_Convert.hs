@@ -199,7 +199,7 @@ convertFun1 :: (GPU a, Typeable a)
             -> D.OpenFun de env genv (a -> b)
 -}
 convertFun1 :: (GPU t, ExpC b) => ([t3] -> t1 -> t2 -> b) -> t1 -> (H.Exp stage t -> t2) -> b
-convertFun1 cvt glyt f = lam $ cvt lyt glyt (f a)
+convertFun1 cvt glyt f = lam $ body $ cvt lyt glyt (f a)
   where
     a     = case f of
               (fv :: H.Exp stage t -> t2) -> H.Tag 0 (typeOf (undefined :: t))

@@ -183,6 +183,11 @@ data StreamType
 data Ty
     = Single InputType
     | Tuple [Ty]
+    | FrameBuffer'
+    | Image'
+    | PrimitiveStream'
+    | VertexStream'
+    | FragmentStream'
     | Unknown
     deriving (Show,Eq,Ord, Data,Typeable)
 
