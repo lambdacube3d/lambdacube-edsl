@@ -7,7 +7,9 @@ module LC_B_GLSLCodeGen (
 
 import Debug.Trace
 
+import Control.Applicative hiding (Const)
 import Control.Exception
+import Control.Monad.State
 import Data.Word
 import Data.Int
 import Data.ByteString.Char8 (ByteString,pack,unpack)
@@ -17,6 +19,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 
 import LC_G_Type
 import LC_G_APIType hiding (LogicOperation(..), ComparisonFunction(..))
@@ -57,6 +61,7 @@ codeGenPrim PrimTupToV4             ty [a,b,c,d]
     | all (==V2F)   ty                              = [functionCall "mat2x4"             [a,b,c,d]]
     | all (==V3F)   ty                              = [functionCall "mat3x4"             [a,b,c,d]]
     | all (==V4F)   ty                              = [functionCall "mat4"               [a,b,c,d]]
+
 codeGenPrim PrimV2ToTup             ty [a]
     | all isMatrix ty                               = [ Bracket a (IntConstant Decimal 0)
                                                       , Bracket a (IntConstant Decimal 1)
@@ -339,70 +344,85 @@ matX3C name f (V3 x y z) = functionCall name [f x, f y, f z]
 matX4C :: String -> (v Float -> Expr) -> V4 (v Float) -> Expr
 matX4C name f (V4 x y z w) = functionCall name [f x, f y, f z, f w]
 
-codeGenConst :: Value -> [Expr]
-codeGenConst (VBool  v) = [boolC v]
-codeGenConst (VV2B   v) = [v2C "bvec2" boolC v]
-codeGenConst (VV3B   v) = [v3C "bvec3" boolC v]
-codeGenConst (VV4B   v) = [v4C "bvec4" boolC v]
-codeGenConst (VWord  v) = [wordC v]
-codeGenConst (VV2U   v) = [v2C "uvec2" wordC v]
-codeGenConst (VV3U   v) = [v3C "uvec3" wordC v]
-codeGenConst (VV4U   v) = [v4C "uvec4" wordC v]
-codeGenConst (VInt   v) = [intC v]
-codeGenConst (VV2I   v) = [v2C "ivec2" intC v]
-codeGenConst (VV3I   v) = [v3C "ivec3" intC v]
-codeGenConst (VV4I   v) = [v4C "ivec4" intC v]
-codeGenConst (VFloat v) = [floatC v]
-codeGenConst (VV2F   v) = [v2C "vec2" floatC v]
-codeGenConst (VV3F   v) = [v3C "vec3" floatC v]
-codeGenConst (VV4F   v) = [v4C "vec4" floatC v]
-codeGenConst (VM22F  v) = [matX2C "mat2"   (v2C "vec2" floatC) v]
-codeGenConst (VM23F  v) = [matX3C "mat2x3" (v2C "vec2" floatC) v]
-codeGenConst (VM24F  v) = [matX4C "mat2x4" (v2C "vec2" floatC) v]
-codeGenConst (VM32F  v) = [matX2C "mat3x2" (v3C "vec3" floatC) v]
-codeGenConst (VM33F  v) = [matX3C "mat3"   (v3C "vec3" floatC) v]
-codeGenConst (VM34F  v) = [matX4C "mat3x4" (v3C "vec3" floatC) v]
-codeGenConst (VM42F  v) = [matX2C "mat4x2" (v4C "vec4" floatC) v]
-codeGenConst (VM43F  v) = [matX3C "mat4x3" (v4C "vec4" floatC) v]
-codeGenConst (VM44F  v) = [matX4C "mat4"   (v4C "vec4" floatC) v]
+codeGenConst :: Value -> Expr
+codeGenConst (VBool  v) = boolC v
+codeGenConst (VV2B   v) = v2C "bvec2" boolC v
+codeGenConst (VV3B   v) = v3C "bvec3" boolC v
+codeGenConst (VV4B   v) = v4C "bvec4" boolC v
+codeGenConst (VWord  v) = wordC v
+codeGenConst (VV2U   v) = v2C "uvec2" wordC v
+codeGenConst (VV3U   v) = v3C "uvec3" wordC v
+codeGenConst (VV4U   v) = v4C "uvec4" wordC v
+codeGenConst (VInt   v) = intC v
+codeGenConst (VV2I   v) = v2C "ivec2" intC v
+codeGenConst (VV3I   v) = v3C "ivec3" intC v
+codeGenConst (VV4I   v) = v4C "ivec4" intC v
+codeGenConst (VFloat v) = floatC v
+codeGenConst (VV2F   v) = v2C "vec2" floatC v
+codeGenConst (VV3F   v) = v3C "vec3" floatC v
+codeGenConst (VV4F   v) = v4C "vec4" floatC v
+codeGenConst (VM22F  v) = matX2C "mat2"   (v2C "vec2" floatC) v
+codeGenConst (VM23F  v) = matX3C "mat2x3" (v2C "vec2" floatC) v
+codeGenConst (VM24F  v) = matX4C "mat2x4" (v2C "vec2" floatC) v
+codeGenConst (VM32F  v) = matX2C "mat3x2" (v3C "vec3" floatC) v
+codeGenConst (VM33F  v) = matX3C "mat3"   (v3C "vec3" floatC) v
+codeGenConst (VM34F  v) = matX4C "mat3x4" (v3C "vec3" floatC) v
+codeGenConst (VM42F  v) = matX2C "mat4x2" (v4C "vec4" floatC) v
+codeGenConst (VM43F  v) = matX3C "mat4x3" (v4C "vec4" floatC) v
+codeGenConst (VM44F  v) = matX4C "mat4"   (v4C "vec4" floatC) v
+
+type CGen a = State ([Statement],IntMap [Expr]) a
+
+store :: DAG -> Int -> Expr -> CGen [Expr]
+store dag expId exp = do
+    let name    = "val" ++ show expId
+        newVar  = Variable name
+        t       = codeGenType $ expIdType dag expId
+        [ty]    = trace (show expId ++ " [ty]    = " ++ show t) t
+        newStmt = varStmt name (toGLSLType ty) exp
+    (stmt,varMap) <- get
+    put (newStmt:stmt,IntMap.insert expId [newVar] varMap)
+    return [newVar]
 
 -- require: input names
-codeGenExp :: DAG -> Map Exp String -> [ByteString] -> Exp -> [Expr]
-codeGenExp dag smpName inNames (PrimApp f arg)      = codeGenPrim f (codeGenType $ expIdType dag arg) (codeGenExp dag smpName inNames $ toExp dag arg)
-codeGenExp dag smpName inNames (Const c)            = codeGenConst c
-codeGenExp dag smpName inNames (PrimVar n)          = [Variable $! unpack n]
-codeGenExp dag smpName inNames (Tup t)              = concatMap (codeGenExp dag smpName inNames . toExp dag) t
-codeGenExp dag smpName inNames (Uni n)              = [Variable $! unpack n]
-codeGenExp dag smpName inNames p@(Prj idx e)        = {-trace (unlines["gen: ",show p,show $! pPrint src])-} src
-  where
-    ty  = expType dag p
-    src = reverse
-        . take (length $ codeGenType ty)
-        . drop idx
-        . reverse
-        $ codeGenExp dag smpName inNames $ toExp dag e
-
-codeGenExp dag smpName inNames e@(Var i li)
-    | i == 0 && length inNames == arity       = [Variable (unpack n) | n <- inNames]
-    | otherwise = throw $ userError $ unlines $
-        [ "codeGenExp failed: "
-        , "  Var " ++ show i ++ " (" ++ show li ++ ") :: " ++ show ty
-        , "  input names:  " ++ show inNames
-        , "  arity:        " ++ show arity
-        ]
-  where
-    ty      = expType dag e
-    arity   = length $! codeGenType ty
-
-codeGenExp dag smpName inNames (Cond p t e)         = zipWith branch (codeGenExp dag smpName inNames $ toExp dag t) (codeGenExp dag smpName inNames $ toExp dag e)
-  where
-    [predicate] = codeGenExp dag smpName inNames $ toExp dag p
-    branch a b  = Selection predicate a b
-
-codeGenExp dag smpName inNames s@(Sampler f e t)    = case Map.lookup s smpName of
-    Just name   -> [Variable name]
-    Nothing     -> error "Unknown sampler value!"
-
+codeGenExp' :: DAG -> Map Exp String -> [ByteString] -> ExpId -> CGen [Expr]
+codeGenExp' dag smpName inNames expId = do
+    (stmt,varMap) <- get
+    case IntMap.lookup expId varMap of
+        Just v  -> return v
+        Nothing -> case toExp dag expId of
+            Const c             -> store dag expId $ codeGenConst c
+            Uni n               -> return [Variable $! unpack n]
+            PrimVar n           -> return [Variable $! unpack n]
+            PrimApp f arg       -> do
+                arg' <- codeGenExp' dag smpName inNames arg
+                let argTy   = codeGenType $ expIdType dag arg
+                    e       = codeGenPrim f argTy arg'
+                if length e > 1 then return e else
+                    store dag expId $ head e
+            s@(Sampler f e t)   -> case Map.lookup s smpName of
+                Just name   -> return [Variable name]
+                Nothing     -> error "Unknown sampler value!"
+            Cond p t e          -> do
+                [p'] <- codeGenExp' dag smpName inNames p
+                t' <- codeGenExp' dag smpName inNames t
+                e' <- codeGenExp' dag smpName inNames e
+                let branch a b  = Selection p' a b
+                return $ zipWith branch t' e'
+            e@(Var i li)        -> do
+                let ty      = expType dag e
+                    arity   = length $! codeGenType ty
+                if i == 0 && length inNames == arity then return [Variable (unpack n) | n <- inNames] else throw $ userError $ unlines $
+                    [ "codeGenExp failed: "
+                    , "  Var " ++ show i ++ " (" ++ show li ++ ") :: " ++ show ty
+                    , "  input names:  " ++ show inNames
+                    , "  arity:        " ++ show arity
+                    ]
+            Tup t               -> concat <$> mapM (codeGenExp' dag smpName inNames) t
+            p@(Prj idx e)       -> do
+                let ty  = expType dag p
+                e' <- codeGenExp' dag smpName inNames e
+                return $ reverse . take (length $ codeGenType ty) . drop idx . reverse $ e'
 {-
   required info: output variable names
   if we disable inline functions, it simplifies variable name gen
@@ -415,14 +435,13 @@ codeGenVertexShader :: DAG
                     -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
 codeGenVertexShader dag smpName inVars = cvt
   where
-    genExp :: Exp -> [Expr]
-    genExp = codeGenExp dag smpName (map fst inVars)
+    genExp :: ExpId -> CGen [Expr]
+    genExp = codeGenExp' dag smpName (map fst inVars)
 
-    genIExp :: [Exp] -> [(GLSL.InterpolationQualifier,[Expr],[InputType])]
-    genIExp ((Flat e) : xs)             = (GLSL.Flat,genExp $ toExp dag e,codeGenType $ expIdType dag e) : genIExp xs
-    genIExp ((Smooth e) : xs)           = (GLSL.Smooth,genExp $ toExp dag e,codeGenType $ expIdType dag e) : genIExp xs
-    genIExp ((NoPerspective e) : xs)    = (GLSL.NoPerspective,genExp $ toExp dag e,codeGenType $ expIdType dag e) : genIExp xs
-    genIExp [] = []
+    genIExp :: Exp -> CGen (GLSL.InterpolationQualifier,[Expr],[InputType])
+    genIExp (Flat e)            = (GLSL.Flat,,codeGenType $ expIdType dag e) <$> genExp e
+    genIExp (Smooth e)          = (GLSL.Smooth,,codeGenType $ expIdType dag e) <$> genExp e
+    genIExp (NoPerspective e)   = (GLSL.NoPerspective,,codeGenType $ expIdType dag e) <$> genExp e
 
     cvt :: Exp -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
     cvt (Lam lam) = cvt $ toExp dag lam
@@ -437,13 +456,18 @@ codeGenVertexShader dag smpName inVars = cvt
         ], [(n,q,t) | n <- oNames | q <- oQ | [t] <- oT])
       where
         VertexOut pos size outs = toExp dag bodyExp
-        ppE e a = pack $! show $! pPrint $! Compound [assign (Variable (unpack n)) ex | ex <- e | n <- a]
+        ppE e a = pack $! show $! pPrint $! Compound $ reverse stmt ++ [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         pp a    = pack $! show $! pPrint $! TranslationUnit a
         uniVars = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- expUniverse' dag (toExp dag bodyExp), let Single t = expType dag u]
         smpVars = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- expUniverse' dag (toExp dag bodyExp), let Single t = expType dag s, let Just n = Map.lookup s smpName]
-        [posE]  = genExp $ toExp dag pos
-        [sizeE] = genExp $ toExp dag size
-        (oQ,oE,oT)  = unzip3 $! genIExp $ map (toExp dag) outs
+        ((posE,sizeE,oQ,oE,oT),(stmt,_)) = runState genSrc ([],IntMap.empty)
+        genSrc = do
+            --[posE']      <- genExp pos
+            a <- genExp pos
+            let [posE'] = trace ("let [posE'] = " ++ show a) a
+            [sizeE']     <- genExp size
+            (oQ',oE',oT')  <- unzip3 <$> mapM genIExp (map (toExp dag) outs)
+            return (posE',sizeE',oQ',oE',oT')
         oNames      = [pack $ "v" ++ show i | i <- [0..]]
 
 -- TODO
@@ -457,28 +481,29 @@ codeGenFragmentShader :: DAG
                       -> (ByteString, [(ByteString,InputType)])
 codeGenFragmentShader dag smpName inVars ffilter = cvt
   where
-    cvtF :: Exp -> Expr
+    cvtF :: Exp -> CGen Expr
     cvtF (Lam lam) = cvtF $ toExp dag lam
-    cvtF (Body bodyExp) = let [e] = genExp (toExp dag bodyExp) in e
+    cvtF (Body bodyExp) = do
+        [e] <- genExp bodyExp
+        return e
 
     cvt :: Exp -> (ByteString, [(ByteString,InputType)])
     cvt (Lam lam) = cvt $ toExp dag lam
     cvt (Body bodyExp) = case toExp dag bodyExp of
         FragmentOut e             -> src e []
-        FragmentOutDepth de e     -> src e [("gl_FragDepth",toExp dag de)]
+        FragmentOutDepth de e     -> src e [("gl_FragDepth",de)]
         FragmentOutRastDepth e    -> src e []
 
-    genExp :: Exp -> [Expr]
-    genExp = codeGenExp dag smpName [n | (n,_,_) <- inVars]
+    genExp :: ExpId -> CGen [Expr]
+    genExp = codeGenExp' dag smpName [n | (n,_,_) <- inVars]
 
-    genFExp :: [ExpId] -> [([Expr],[InputType])]
-    genFExp (e : xs) = (genExp $ toExp dag e,codeGenType $ expIdType dag e) : genFExp xs
-    genFExp [] = []
+    genFExp :: ExpId -> CGen ([Expr],[InputType])
+    genFExp e = (,codeGenType $ expIdType dag e) <$> genExp e
 
     oNames :: [ByteString]
     oNames = [pack $ "f" ++ show i | i <- [0..]]
 
-    src :: [ExpId] -> [(ByteString,Exp)] -> (ByteString, [(ByteString,InputType)])
+    src :: [ExpId] -> [(ByteString,ExpId)] -> (ByteString, [(ByteString,InputType)])
     src outs outs' = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
@@ -487,8 +512,8 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
         , pp [outVar    (unpack n)    (toGLSLType t) | n <- oNames | [t] <- oT]
         , "void main ()"
         , ppBody $ case ffilter of
-            PassAll     -> body
-            Filter f    -> [SelectionStatement (UnaryNot $ cvtF $ toExp dag f) Discard $ Just (CompoundStatement $ Compound body)]
+            PassAll     -> reverse stmt ++ body
+            Filter f    -> reverse fstmt ++ [SelectionStatement (UnaryNot fexpr) Discard $ Just (CompoundStatement $ Compound $ reverse stmt ++ body)]
         ], [(n,t) | n <- oNames | [t] <- oT])
       where
         assigns a e = [assign (Variable (unpack n)) ex | ex <- e | n <- a]
@@ -497,9 +522,17 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
         allExps     = concat [expUniverse dag outs, expUniverse dag (map snd outs')]
         uniVars     = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- allExps, let Single t = expType dag u]
         smpVars     = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- allExps, let Single t = expType dag s, let Just n = Map.lookup s smpName]
-        (oE',oN')   = unzip $! [(genExp e,n) | (n,e) <- outs']
-        (oE,oT)     = unzip $! genFExp outs
         body        = assigns (oN' ++ oNames) (concat oE' ++ concat oE)
+        ((oE',oN',oE,oT,fstmt,fexpr),(stmt,_)) = runState genSrc ([],IntMap.empty)
+        genSrc      = do
+            fexpr' <- case ffilter of
+                PassAll     -> return $ boolC True
+                Filter f    -> cvtF $ toExp dag f
+            (fstmt',s) <- get
+            put ([],s)
+            (oE'',oN'')   <- unzip <$> sequence [(,n) <$> genExp e | (n,e) <- outs']
+            (oE',oT')     <- unzip <$> mapM genFExp outs
+            return (oE'',oN'',oE',oT',fstmt',fexpr')
 
 codeGenType :: Ty -> [InputType]
 codeGenType (Single ty) = [ty]
@@ -604,3 +637,6 @@ varyingIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just V
 
 assign :: Expr -> Expr -> Statement
 assign l r = ExpressionStatement $ Just $ Equal l r
+
+varStmt :: String -> TypeSpecifierNonArray -> Expr -> Statement
+varStmt name ty val = DeclarationStatement $ varInit name ty Nothing $ Just val
