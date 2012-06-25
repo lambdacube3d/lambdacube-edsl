@@ -142,8 +142,9 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         V4 m1 m2 _ _ = unpack' $ texture' sampler (pack' $ V2 u v) (floatF 0)
         variance = max' (floatF 0.002) (m2 @- m1 @* m1)
         d = max' (floatF 0) (tz @- m1)
-        segment x = ceil' (max' (floatF 0) (floatF 0.5 @- abs' (x @- floatF 0.5)))
-        inShadowTex = floatF 1 @- (segment u @* segment v)
+        --segment x = ceil' (max' (floatF 0) (floatF 0.5 @- abs' (x @- floatF 0.5)))
+        --inShadowTex = floatF 1 @- (segment u @* segment v)
+        inShadowTex = Cond (u @>= floatF 0 @&& u @<= floatF 1 @&& v @>= floatF 0 @&& v @<= floatF 1) (floatF 0) (floatF 1)
         p_max = max' inShadowTex (variance @/ (variance @+ d @* d))
         
     sampler = Sampler LinearFilter Clamp shadowMap
