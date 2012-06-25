@@ -181,7 +181,7 @@ data StreamType
     deriving (Show,Eq,Ord, Data,Typeable)
 
 data Ty
-    = Single InputType
+    = Single !InputType
     | Tuple [Ty]
     | FrameBuffer'
     | Image'

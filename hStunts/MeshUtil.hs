@@ -5,7 +5,7 @@ Functions for combining meshes.
 
 -}
 
-module MeshUtil (transformMesh,transformMesh') where
+module MeshUtil (transformMesh,transformMesh',joinMesh) where
 
 import qualified Data.Vector.Storable as SV
 
@@ -13,118 +13,11 @@ import qualified Data.Trie as T
 import LC_API
 import LC_Mesh
 
+import Data.List
 import Data.ByteString.Char8 (ByteString)
 import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
-{-
-type MeshGroup = (String,VVB,Maybe VIB,Proj4,OperationType)
 
--- | Build a single mesh that represents the union of a list of
--- transformed meshes (given the orientation and translation for each
--- constituent).  The resulting mesh is optimised with respect to
--- context switches during rendering.
-mkMesh :: [(U,Vec3,Mesh)] -> Mesh
-mkMesh vml = mkVMesh' [((orthogonal $ rightOrthoU o) .*. translation p,m) | (o,p,m) <- vml]
-
--- | Build a single mesh that represents the union of a list of
--- transformed meshes (given the transformation matrix for each
--- constituent).  The resulting mesh is optimised with respect to
--- context switches during rendering.
-
--- FIXME: problem shared geom vs private geom
-vertexData :: [(Proj4,VMesh)] -> [MeshGroup]
-vertexData l =
-    [ (materialName, sortedVData gData vData, iData, proj, opType)
-    | (proj, VMesh subMeshList gData) <- l
-    , VSubMesh materialName opType vData iData <- subMeshList
-    ]
-  where
-    sortedVData local global = V.modify (V.sortBy (comparing vectorVertexType)) $ case (local,global) of
-        (Just a, _) -> a
-        (Nothing, Just a) -> a
-        _ -> error "illegal mesh format"
-
-groupByMaterial :: [MeshGroup] -> [[MeshGroup]]
-groupByMaterial = groupSetBy (\(a,_,_,_,_) (b,_,_,_,_) -> compare a b)
-
-groupByGeometry :: [[MeshGroup]] -> [[MeshGroup]]
-groupByGeometry l = groupSetBy compareMeshItem =<< l
-  where
-    compareMeshItem (_,_,Just _,_,_) (_,_,Nothing,_,_) = GT
-    compareMeshItem (_,_,Nothing,_,_) (_,_,Just _,_,_) = LT
-    compareMeshItem (_,a1,_,_,a2) (_,b1,_,_,b2) = compare (V.map vectorVertexType a1, a2) (V.map vectorVertexType b1, b2)
-
-joinGroup :: [MeshGroup] -> VSubMesh
-joinGroup groupMeshList = VSubMesh materialName operationType joinedVertexData joinedIndexData
-  where
-    (materialName,_,indexData,_,operationType) = head groupMeshList
-    vertexDataList :: [[(VectorVertexData,Proj4)]]
-    vertexDataList = [[(v,proj) | v <- V.toList vd] | (_,vd,_,proj,_) <- groupMeshList]
-
-    joinedIndexData = case indexData of
-        Nothing -> Nothing
-        Just _  -> let indexDataList = [fromJust id | (_,_,id,_,_) <- groupMeshList]
-                       offsets = scanl (+) 0 [V.length v | a <- vertexDataList, (VVD_POSITION v,_) <- a]
-                   in Just $ V.concat $ zipWith (\o v -> V.map (+o) v) offsets indexDataList
-
-    joinedVertexData :: Maybe VVB
-    joinedVertexData = Just $ V.fromList $ map mergeAttribs $ transpose vertexDataList
-
-mergeAttribs :: [(VectorVertexData, Proj4)] -> VectorVertexData
-mergeAttribs ca = case vectorVertexType $ (fst (head ca)) of
-    VVT_BINORMAL ->             VVD_BINORMAL $             V.concat [rot proj v      | (VVD_BINORMAL v,proj) <- ca]
-    VVT_BLEND_INDICES ->        VVD_BLEND_INDICES $        V.concat [v               | (VVD_BLEND_INDICES v,_proj) <- ca]
-    VVT_BLEND_WEIGHTS ->        VVD_BLEND_WEIGHTS $        V.concat [v               | (VVD_BLEND_WEIGHTS v,_proj) <- ca]
-    VVT_DIFFUSE ->              VVD_DIFFUSE $              V.concat [v               | (VVD_DIFFUSE v,_proj) <- ca]
-    VVT_NORMAL ->               VVD_NORMAL $               V.concat [rot proj v      | (VVD_NORMAL v,proj) <- ca]
-    VVT_POSITION ->             VVD_POSITION $             V.concat [rotTrans proj v | (VVD_POSITION v,proj) <- ca]
-    VVT_SPECULAR ->             VVD_SPECULAR $             V.concat [v               | (VVD_SPECULAR v,_proj) <- ca]
-    VVT_TANGENT ->              VVD_TANGENT $              V.concat [rot proj v      | (VVD_TANGENT v,proj) <- ca]
-    VVT_TEXTURE_COORDINATES1 -> VVD_TEXTURE_COORDINATES1 $ V.concat [v               | (VVD_TEXTURE_COORDINATES1 v,_proj) <- ca]
-    VVT_TEXTURE_COORDINATES2 -> VVD_TEXTURE_COORDINATES2 $ V.concat [v               | (VVD_TEXTURE_COORDINATES2 v,_proj) <- ca]
-    VVT_TEXTURE_COORDINATES3 -> VVD_TEXTURE_COORDINATES3 $ V.concat [v               | (VVD_TEXTURE_COORDINATES3 v,_proj) <- ca]
-  where
-    mulProj4 :: Proj4 -> Vec3 -> Vec3
-    mulProj4 p v = trim ((extendWith 1 v :: Vec4) .* fromProjective p)
-    rot proj v = V.map (mulProj4 proj') v
-      where
-        proj' = linear $ trim $ fromProjective proj :: Proj4
-    rotTrans proj v = V.map (mulProj4 proj) v
--}
-{-
-data MeshAttribute
-    = A_Float   (V.Vector Float)
-    | A_V2F     (V.Vector V2F)
-    | A_V3F     (V.Vector V3F)
-    | A_V4F     (V.Vector V4F)
-    | A_M22F    (V.Vector M22F)
-    | A_M33F    (V.Vector M33F)
-    | A_M44F    (V.Vector M44F)
-    | A_Int     (V.Vector Int32)
-    | A_Word    (V.Vector Word32)
-
-data MeshPrimitive
-    = P_Points
-    | P_TriangleStrip
-    | P_Triangles
-    | P_TriangleStripI  (V.Vector Int)
-    | P_TrianglesI      (V.Vector Int)
-
-data Mesh
-    = Mesh
-    { mAttributes   :: T.Trie MeshAttribute
-    , mPrimitive    :: MeshPrimitive
-    , mGPUData      :: Maybe GPUData
-    }
--}
-{-
-    group by primitive type
-    handle both indexed and non indexed meshes
--}
-{-
-mkMesh' :: [(Proj4,Mesh)] -> [(Primitive,Mesh)]
-mkMesh' vml = Mesh [joinGroup g | g <- groupByGeometry $ groupByMaterial $ vertexData vml] Nothing
--}
 -- make non indexed joinded mesh
 {-
     validate: all mesh should have same primitive type
@@ -142,8 +35,41 @@ mkMesh' vml = Mesh [joinGroup g | g <- groupByGeometry $ groupByMaterial $ verte
         non indexed only - keep non indexed
         mixed   - can be convert all mesh to indexed or non indexed depends on how can we save more memory
 -}
+
+-- join a set of meshes with same primitive types and attribute set
 joinMesh :: [Mesh] -> Mesh
-joinMesh = undefined
+joinMesh [] = error "joinMesh: no mesh to join!"
+joinMesh ml@(Mesh a0 p0 _:_) = Mesh joinedAttrs joinedPrims Nothing
+  where
+    (attrs,prims)   = foldl' (\(a,p) (Mesh at pr _) -> (addAttr a at, pr:p)) (T.fromList $ zip (T.keys a0) (repeat []),[]) ml
+    addAttr a at    = foldl' (\b (k,bt) -> T.adjust (bt:) k b) a $ T.toList at
+    offset          = scanl (+) 0 [attrSize a | a <- head $ T.elems attrs]
+    attrSize :: MeshAttribute -> Int32
+    attrSize a = fromIntegral $ case a of
+        A_Float v -> SV.length v
+        A_V2F   v -> SV.length v
+        A_V3F   v -> SV.length v
+        A_V4F   v -> SV.length v
+        A_M22F  v -> SV.length v
+        A_M33F  v -> SV.length v
+        A_M44F  v -> SV.length v
+        A_Int   v -> SV.length v
+        A_Word  v -> SV.length v
+    joinedPrims = case p0 of
+        P_TriangleStripI _  -> P_TriangleStripI $ SV.concat $ zipWith (\o v -> SV.map (+o) v) offset [v | P_TriangleStripI v <- prims]
+        P_TrianglesI _      -> P_TrianglesI $ SV.concat $ zipWith (\o v -> SV.map (+o) v) offset [v | P_TrianglesI v <- prims]
+        p                   -> p
+    joinedAttrs = T.mapBy joinAttrs attrs
+    joinAttrs n l = case head l of
+        A_Float _ -> Just $ A_Float $ SV.concat [v | A_Float v <- l]
+        A_V2F   _ -> Just $ A_V2F   $ SV.concat [v | A_V2F   v <- l]
+        A_V3F   _ -> Just $ A_V3F   $ SV.concat [v | A_V3F   v <- l]
+        A_V4F   _ -> Just $ A_V4F   $ SV.concat [v | A_V4F   v <- l]
+        A_M22F  _ -> Just $ A_M22F  $ SV.concat [v | A_M22F  v <- l]
+        A_M33F  _ -> Just $ A_M33F  $ SV.concat [v | A_M33F  v <- l]
+        A_M44F  _ -> Just $ A_M44F  $ SV.concat [v | A_M44F  v <- l]
+        A_Int   _ -> Just $ A_Int   $ SV.concat [v | A_Int   v <- l]
+        A_Word  _ -> Just $ A_Word  $ SV.concat [v | A_Word  v <- l]
 
 transformMesh :: U -> Vec3 -> Mesh -> Mesh
 transformMesh o p = transformMesh' ((orthogonal $ rightOrthoU o) .*. translation p)

@@ -1,0 +1,23 @@
+from language:
+    viewport resizing (accumulation parameter, Maybe ByteString - viewport name)
+    render texture resizing (add name to render textures and from the user side it could be referred and resized)
+    fetch from immediate data
+    texture from immediate data
+
+from backend:
+    geometry shader generator
+    support all texture types
+
+optimization:
+    render call sorting
+    sharing:
+        primitive stream (transform feedback)
+        shader objects
+        shader programs
+        framebuffer (framebuffer copy)
+        uniform block (efficient uniform sharing)
+    conditional rendering
+    parallel draw commands / instancing
+
+data storage optimiziation:
+    efficient stream data layout (storage format/precision)

@@ -690,7 +690,7 @@ tix8 = SuccTupIdx tix7
 data TupleType a where
   UnitTuple   ::                               TupleType ()
   SingleTuple :: IsScalar a =>            a -> TupleType a
-  PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
+  PairTuple   :: !(TupleType a) -> !(TupleType b) -> TupleType (a, b)
 
 -- Extend Typeable support for 8- and 9-tuple
 -- ------------------------------------------
@@ -704,11 +704,11 @@ class Typeable8 t where
 instance Typeable8 (,,,,,,,) where
     typeOf8 _ = myMkTyCon "(,,,,,,,)" `mkTyConApp` []
 
-typeOf7Default :: (Typeable8 t, Typeable a) => t a b c d e f g h -> TypeRep
-typeOf7Default x = (id $! typeOf7 x) `mkAppTy` (id $! typeOf (argType x))
-  where
-    argType :: t a b c d e f g h -> a
-    argType =  undefined
+typeOf7Default :: forall t a b c d e f g h. (Typeable8 t, Typeable a) => t a b c d e f g h -> TypeRep
+typeOf7Default = \_ -> rep 
+ where
+    rep = typeOf8 (undefined :: t a b c d e f g h) `mkAppTy` 
+          typeOf  (undefined :: a)
 
 instance (Typeable8 s, Typeable a) => Typeable7 (s a) where
     typeOf7 = typeOf7Default
@@ -719,11 +719,11 @@ class Typeable9 t where
 instance Typeable9 (,,,,,,,,) where
     typeOf9 _ = myMkTyCon "(,,,,,,,,)" `mkTyConApp` []
 
-typeOf8Default :: (Typeable9 t, Typeable a) => t a b c d e f g h i -> TypeRep
-typeOf8Default x = typeOf8 x `mkAppTy` typeOf (argType x)
-  where
-    argType :: t a b c d e f g h i -> a
-    argType =  undefined
+typeOf8Default :: forall t a b c d e f g h i. (Typeable9 t, Typeable a) => t a b c d e f g h i -> TypeRep
+typeOf8Default = \_ -> rep 
+ where
+    rep = typeOf9 (undefined :: t a b c d e f g h i) `mkAppTy` 
+          typeOf  (undefined :: a)
 
 instance (Typeable9 s, Typeable a) => Typeable8 (s a) where
     typeOf8 = typeOf8Default

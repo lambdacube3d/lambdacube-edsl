@@ -45,6 +45,7 @@ module LC_API (
     -- backend
     Buffer,
     compileBuffer,
+    updateBuffer,
     bufferSize,
     arraySize,
     arrayType,

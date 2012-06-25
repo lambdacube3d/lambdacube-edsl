@@ -7,6 +7,7 @@ import Data.Map (Map)
 import Data.Set (Set)
 import Data.Trie (Trie)
 import Data.Vector.Unboxed.Mutable (IOVector)
+import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed.Mutable as MV
 
 import Graphics.Rendering.OpenGL.Raw.Core32
@@ -142,3 +143,21 @@ data RenderState
     = RenderState
     { textureUnitState  :: IOVector Int
     }
+
+type StreamSetter = Stream Buffer -> IO ()
+
+data Buffer -- internal type
+    = Buffer
+    { bufArrays :: V.Vector ArrayDesc
+    , bufGLObj  :: GLuint
+    }
+    deriving (Show,Eq)
+
+data ArrayDesc
+    = ArrayDesc
+    { arrType   :: ArrayType
+    , arrLength :: Int  -- item count
+    , arrOffset :: Int  -- byte position in buffer
+    , arrSize   :: Int  -- size in bytes
+    }
+    deriving (Show,Eq)

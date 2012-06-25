@@ -17,26 +17,26 @@ import qualified Data.Vector as V
 
 data Frame
     = Frame
-    { frMins    :: Vec3
-    , frMaxs    :: Vec3
-    , frOrigin  :: Vec3
-    , frRadius  :: Float
-    , frName    :: SB.ByteString
+    { frMins    :: !Vec3
+    , frMaxs    :: !Vec3
+    , frOrigin  :: !Vec3
+    , frRadius  :: !Float
+    , frName    :: !SB.ByteString
     } deriving Show
 
 data Tag
     = Tag
-    { tgName    :: SB.ByteString
-    , tgOrigin  :: Vec3
-    , tgAxisX   :: Vec3
-    , tgAxisY   :: Vec3
-    , tgAxisZ   :: Vec3
+    { tgName    :: !SB.ByteString
+    , tgOrigin  :: !Vec3
+    , tgAxisX   :: !Vec3
+    , tgAxisY   :: !Vec3
+    , tgAxisZ   :: !Vec3
     } deriving Show
 
 data Shader
     = Shader
-    { shName    :: SB.ByteString
-    , shIndex   :: Int
+    { shName    :: !SB.ByteString
+    , shIndex   :: !Int
     } deriving Show
 
 data Surface

@@ -64,8 +64,10 @@ Library
   GHC-options:
 --        -Werror
         -Wall
-        -fno-warn-orphans
         -fno-warn-missing-signatures
+        -fno-warn-name-shadowing
+        -fno-warn-orphans
+        -fno-warn-unused-binds
         -fno-warn-unused-do-bind
         -fspec-constr-count=10
         -funbox-strict-fields

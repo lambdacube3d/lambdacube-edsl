@@ -45,24 +45,6 @@ import LC_U_APIType
 import LC_U_DeBruijn
 import LC_B_GLType
 
-type StreamSetter = Stream Buffer -> IO ()
-
-data Buffer -- internal type
-    = Buffer
-    { bufArrays :: V.Vector ArrayDesc
-    , bufGLObj  :: GLuint
-    }
-    deriving (Show,Eq)
-
-data ArrayDesc
-    = ArrayDesc
-    { arrType   :: ArrayType
-    , arrLength :: Int  -- item count
-    , arrOffset :: Int  -- byte position in buffer
-    , arrSize   :: Int  -- size in bytes
-    }
-    deriving (Show,Eq)
-
 setSampler :: GLint -> Int32 -> IO ()
 setSampler i v = glUniform1i i $ fromIntegral v
 

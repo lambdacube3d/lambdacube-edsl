@@ -10,6 +10,7 @@ import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as SB
 
+import qualified Data.Vector.Storable as V
 import qualified Data.Trie as T
 --import Control.Concurrent.STM
 import Data.Vect.Float
@@ -29,6 +30,7 @@ import GameData
 import GamePhysics
 import GameGraphics
 import Utils
+import MeshUtil
 
 type Sink a = a -> IO ()
 
@@ -72,9 +74,24 @@ main = do
     renderer <- compileRenderer $ ScreenOut gfxNet
     let draw _ = render renderer >> swapBuffers
 
+        quad :: Mesh
+        quad = Mesh
+            { mAttributes   = T.singleton "position" $ A_V2F $ V.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
+            , mPrimitive    = P_Triangles
+            , mGPUData      = Nothing
+            }
+          where
+            a = -1
+            b = 1
+    compiledQuad <- compileMesh quad
+    addMesh renderer "postSlot" compiledQuad []
+    {-
     forM_ (terrainMesh ++ trackMesh) $ \m -> do
         cm <- compileMesh m
         addMesh renderer "streamSlot" cm []
+    -}
+    cm <- compileMesh $ joinMesh $ terrainMesh ++ trackMesh
+    addMesh renderer "streamSlot" cm []
 
     carUnis <- forM carMesh $ \m -> do
         cm <- compileMesh m

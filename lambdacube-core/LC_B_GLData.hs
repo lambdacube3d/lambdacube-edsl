@@ -40,6 +40,15 @@ compileBuffer arrs = do
     glBindBuffer gl_ARRAY_BUFFER 0
     return $! Buffer (V.fromList $! reverse arrDescs) bo
 
+updateBuffer :: Buffer -> [(Int,Array)] -> IO ()
+updateBuffer (Buffer arrDescs bo) arrs = do
+    glBindBuffer gl_ARRAY_BUFFER bo
+    forM arrs $ \(i,Array arrType cnt setter) -> do
+        let ArrayDesc ty len offset size = arrDescs V.! i
+        when (ty == arrType && cnt == len) $
+            setter $! glBufferSubData gl_ARRAY_BUFFER (fromIntegral offset) (fromIntegral size)
+    glBindBuffer gl_ARRAY_BUFFER 0
+
 bufferSize :: Buffer -> Int
 bufferSize = V.length . bufArrays
 

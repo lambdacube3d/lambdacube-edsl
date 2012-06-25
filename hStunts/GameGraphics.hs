@@ -68,7 +68,7 @@ opaqueZBias
 transparent
 -}
 stuntsGFX :: GP (FrameBuffer N1 (Float,V4F))
-stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
+stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter fragPassed) frag rast clear
   where
     fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
@@ -151,8 +151,8 @@ stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
     shadowMap :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     shadowMap = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
     
-    --shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
-    --shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
+    shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
 
     moments :: GP (FrameBuffer N1 (Float,V4F))
     moments = Accumulate fragCtx (Filter fragPassed) storeDepth rast clear
@@ -187,6 +187,73 @@ stuntsGFX = Accumulate fragCtx (Filter fragPassed) frag rast clear
             moment2 = depth @* depth @+ floatF 0.25 @* (dx @* dx @+ dy @* dy)
             (depth,_pos,_pattern) = untup3 attr
 
+-- blur
+
+blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> GP (FrameBuffer N1 (Float,V4F))
+blur' frag = Accumulate fragCtx PassAll frag rast clear
+  where
+    fragCtx = DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
+    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
+    rast    = Rasterize triangleCtx prims
+    prims   = Transform vert input
+    input   = Fetch "postSlot" Triangle (IV2F "position")
+
+    vert :: Exp V V2F -> VertexOut V2F
+    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+      where
+        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
+        V2 u v  = unpack' uv
+
+gaussFilter7 :: [(Float,Float)]
+gaussFilter7 = 
+    [ (-3.0,   0.015625)
+    , (-2.0,   0.09375)
+    , (-1.0,   0.234375)
+    , (0.0,    0.3125)
+    , (1.0,    0.234375)
+    , (2.0,    0.09375)
+    , (3.0,    0.015625)
+    ]
+
+gaussFilter9 :: [(Float,Float)]
+gaussFilter9 = 
+    [ (-4.0,   0.05)
+    , (-3.0,   0.09)
+    , (-2.0,   0.12)
+    , (-1.0,   0.15)
+    , (0.0,    0.16)
+    , (1.0,    0.15)
+    , (2.0,    0.12)
+    , (3.0,    0.09)
+    , (4.0,    0.05)
+    ]
+
+blurVH :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
+blurVH img = blur' fragH
+  where
+    sizeT = 512
+    sizeI = floor sizeT
+    uvH v = Const (V2 (v/sizeT) 0) :: Exp F V2F
+    uvV v = Const (V2 0 (v/sizeT)) :: Exp F V2F
+    fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    fragH uv' = FragmentOutRastDepth $ (sampleH gaussFilter9) :. ZT
+      where
+        sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) (Const 0) @* floatF c
+        sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) (Const 0) @* floatF c) @+ sampleH xs
+        V2 u v = unpack' uv
+        uv = uv' @* floatF 0.5 @+ floatF 0.5
+        smp = Sampler LinearFilter Clamp tex
+        tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [PrjFrameBuffer "" tix0 (blur' fragV)]
+
+    fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    fragV uv' = FragmentOutRastDepth $ (sampleV gaussFilter9) :. ZT
+      where
+        sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) (Const 0) @* floatF c
+        sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) (Const 0) @* floatF c) @+ sampleV xs
+        V2 u v = unpack' uv
+        uv = uv' @* floatF 0.5 @+ floatF 0.5
+        smp = Sampler LinearFilter Clamp tex
+        tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]
 {-
 debugShader :: GP (FrameBuffer N1 (Float,V4F))
 debugShader = Accumulate fragCtx PassAll frag rast stuntsGFX
