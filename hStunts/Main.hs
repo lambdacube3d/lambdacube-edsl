@@ -39,6 +39,9 @@ data CameraMode = FollowNear | FollowFar | UserControl
 lightPosition :: Vec3
 lightPosition = Vec3 400 800 400
 
+lightDirection :: Vec3
+lightDirection = Vec3 250 (-600) 400
+
 upwards :: Vec3
 upwards = Vec3 0 1 0
 
@@ -177,11 +180,13 @@ scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mouseP
         wheelsViewU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis]
         setupGFX (w,h) cm carMat wheelsMats = do
             let pm = perspective 0.1 50000 (pi/2) (fromIntegral w / fromIntegral h)
-                carPos = _4 (fromProjective carMat)
-                lm = fromProjective (lookat lightPosition (trim carPos) upwards)
-                lpm = perspective 0.1 50000 (pi/150) 1 {- .*. fromProjective (scaling (Vec3 (512 / fromIntegral w) (512 / fromIntegral h) 1)) -}
+                carPos = trim (_4 (fromProjective carMat))
+                lightPosition' = carPos &- lightDirection
+                ldist = len (lightPosition' &- carPos)
+                lm = fromProjective (lookat lightPosition' carPos upwards)
+                lpm = perspective (ldist-80) (ldist+80) (pi/100) 1
 
-            lightPositionSetter $! vec3ToV3F $! lightPosition
+            lightPositionSetter $! vec3ToV3F $! lightPosition'
             cameraSetter $! mat4ToM44F $! fromProjective cm
             positionSetter $! mat4ToM44F $! idmtx
             projectionSetter $! mat4ToM44F $! pm
