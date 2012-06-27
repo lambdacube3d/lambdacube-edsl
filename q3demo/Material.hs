@@ -126,6 +126,7 @@ data AlphaFunction
     = A_Gt0
     | A_Lt128
     | A_Ge128
+    deriving (Show, Eq, Ord)
 
 data DepthFunction
     = D_Equal

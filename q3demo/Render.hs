@@ -69,6 +69,7 @@ addObject' rndr name prim idx attrs unis = addObject rndr name' prim idx attrs' 
         Just (_,x)  -> x
         _           -> error $ "material not found: " ++ show name'
 
+addBSP :: Renderer -> BSPLevel -> IO (V.Vector Object)
 addBSP renderer bsp = do
     let alig = Just 4
     

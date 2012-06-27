@@ -11,6 +11,7 @@ import LC_API
 
 import Material hiding (Blending)
 
+import Debug.Trace
 
 -- specialized snoc
 v3v4 :: Exp s V3F -> Exp s V4F
@@ -280,7 +281,6 @@ mkFragmentShader sa uvrgba = FragmentOutRastDepth $ color :. ZT
         ST_AnimMap {}   -> rgba @* texColor Wrap  stageTexN
     texColor em name = texture' sampler uv (Const 0)
       where
-        rgbaTex     = texture' sampler uv (Const 0)
         sampler     = Sampler LinearFilter em $ TextureSlot name (Texture2D (Float RGBA) n1)
 
 mkFilterFunction :: StageAttrs -> FragmentFilter (V2F,V4F)
@@ -288,9 +288,20 @@ mkFilterFunction sa = case saAlphaFunc sa of
     Nothing -> PassAll
     Just f  -> Filter $ \uvrgba ->
         let
+            V4 _ _ _ a  = unpack' color
             (uv,rgba)   = untup2 uvrgba
-            V4 _ _ _ a  = unpack' rgba
-        in case f of
+            stageTex    = saTexture sa
+            stageTexN   = SB.pack $ "Tex_" ++ show (crc32 $ SB.pack $ show stageTex)
+            color       = case stageTex of
+                ST_WhiteImage   -> rgba
+                ST_Lightmap     -> rgba @* texColor Clamp "LightMap"
+                ST_Map {}       -> rgba @* texColor Wrap  stageTexN
+                ST_ClampMap {}  -> rgba @* texColor Clamp stageTexN
+                ST_AnimMap {}   -> rgba @* texColor Wrap  stageTexN
+            texColor em name = texture' sampler uv (Const 0)
+              where
+                sampler     = Sampler LinearFilter em $ TextureSlot name (Texture2D (Float RGBA) n1)
+        in case trace ("aplha filter: " ++ show f) f of
             A_Gt0   -> a @> floatF 0
             A_Lt128 -> a @< floatF 0.5
             A_Ge128 -> a @>= floatF 0.5
