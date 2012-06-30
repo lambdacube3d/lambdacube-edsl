@@ -141,10 +141,11 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         v = ty @/ tw @* floatF 0.5 @+ floatF 0.5
         V4 m1 m2 env _ = unpack' $ texture' sampler (pack' $ V2 u v) (floatF 0)
         inShadowTex = Cond (u @>= floatF 0.05 @&& u @<= floatF 0.95 @&& v @>= floatF 0.05 @&& v @<= floatF 0.95) (floatF 0) (floatF 1)
-        variance = max' (floatF 0.002) (m2 @- m1 @* m1)
+        variance = max' (floatF 0.002) ((m2 @- m1 @* m1) @/ (max' (floatF 1) (exp' (tz @- env))))
         d = max' (floatF 0) (tz @- m1)
-        pmax = Cond (tz @> env) (floatF 0) (variance @/ (variance @+ d @* d))
-        light = max' inShadowTex pmax
+        pmax = {-Cond (tz @> env) (floatF 0)-} (variance @/ (variance @+ d @* d))
+        light = min' (floatF 1) (max' inShadowTex pmax)
+        --light = min' (floatF 1) (max' inShadowTex ((pmax @- floatF 0.5) @* max' (floatF 1) (exp' (floatF 5 @- d)) @+ floatF 0.5))
         --f x = exp' (x @* floatF 0.01)
         --light = min' (floatF 1) (max' inShadowTex (pow' (f m1 @/ f tz) (floatF 20)))
         
@@ -186,7 +187,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
             (_depth,pos,pattern) = untup3 attr
             
         storeDepth :: Exp F (Float, V3F, Int32) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-        storeDepth attr = FragmentOutRastDepth $ pack' (V4 moment1 moment2 (floatF 1) (floatF 1)) :. ZT
+        storeDepth attr = FragmentOutRastDepth $ pack' (V4 moment1 moment2 (floatF 500) (floatF 1)) :. ZT
           where
             dx = dFdx' depth
             dy = dFdy' depth

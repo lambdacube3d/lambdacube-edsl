@@ -184,7 +184,7 @@ scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mouseP
                 lightPosition' = carPos &- lightDirection
                 ldist = len (lightPosition' &- carPos)
                 lm = fromProjective (lookat lightPosition' carPos upwards)
-                lpm = perspective (ldist-80) (ldist+80) (pi/100) 1
+                lpm = perspective (ldist-80) (ldist+80) (pi/150) 1
 
             lightPositionSetter $! vec3ToV3F $! lightPosition'
             cameraSetter $! mat4ToM44F $! fromProjective cm
