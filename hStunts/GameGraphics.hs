@@ -154,7 +154,10 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
     shadowMap = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
     
     shadowMapEnvelope :: Texture GP DIM2 SingleTex (Regular Float) RGBA
-    shadowMapEnvelope = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ {- blurVH $ PrjFrameBuffer "blur" tix0 $ -} shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
+    shadowMapEnvelope = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
+
+    shadowMapEnvelopeBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    shadowMapEnvelopeBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 $ shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
 
     shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]

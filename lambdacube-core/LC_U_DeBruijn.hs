@@ -122,6 +122,7 @@ class ExpC exp where
     lam         :: exp -> exp
     body        :: exp -> exp
     let_        :: Ty -> exp -> exp -> exp
+    --let_        :: Ty -> exp -> (exp -> exp) -> exp
     var         :: Ty -> Int -> TypeRep -> exp -- type, index, layout counter (this needed for proper sharing)
     apply       :: Ty -> exp -> exp -> exp
     const_      :: Ty -> Value -> exp

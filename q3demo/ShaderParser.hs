@@ -291,7 +291,7 @@ tcMod = (\_ v sa -> sa {saTCMod = v:saTCMod sa}) <$> kw "tcmod" <*> (
 depthFunc = (\_ v sa -> sa {saDepthFunc = v}) <$> kw "depthfunc" <*> (val D_Lequal "lequal" <|> val D_Equal "equal")
 depthWrite = (\_ sa -> sa {saDepthWrite = True}) <$> kw "depthwrite"
 detail = pass <$> kw "detail"
-alphaFunc = pass <$> kw "alphafunc" <* (kw "gt0" <|> kw "lt128" <|> kw "ge128")
+alphaFunc = (\_ v sa -> sa {saAlphaFunc = Just v}) <$> kw "alphafunc" <*> (val A_Gt0 "gt0" <|> val A_Lt128 "lt128" <|> val A_Ge128 "ge128")
 
 --
 -- Q3MAP Specific Shader Keywords

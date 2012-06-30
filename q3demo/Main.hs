@@ -74,19 +74,19 @@ main :: IO ()
 main = do
     ar <- loadArchive
 
-    let imageShader txName = defaultCommonAttrs {caStages = sa:saLM:[]}
+    let imageShader txName = defaultCommonAttrs {caStages = saLM:sa:[]}
           where
             sa = defaultStageAttrs
                 { saTexture     = ST_Map txName
                 --, saBlend = Just (SrcColor,Zero)
-                --, saBlend = Just (SrcColor,DstColor)
+                , saBlend = Just (B_SrcColor,B_One)
                 , saDepthWrite  = True
                 }
             saLM = defaultStageAttrs
                 { saTexture = ST_Lightmap
                 , saTCGen   = TG_Lightmap
                 --, saBlend = Just (SrcColor,One)
-                , saBlend   = Just (B_SrcColor,B_DstColor)
+                --, saBlend   = Just (B_SrcColor,B_DstColor)
                 }
 
     args <- getArgs
