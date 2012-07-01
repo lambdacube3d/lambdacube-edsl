@@ -38,7 +38,7 @@ quad = Mesh
 post :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
 post img = Accumulate fragCtx PassAll frag rast clear
   where
-    fragCtx = DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input

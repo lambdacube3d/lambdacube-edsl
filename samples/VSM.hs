@@ -37,7 +37,7 @@ intF = Const
 blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> GP (FrameBuffer N1 (Float,V4F))
 blur' frag = Accumulate fragCtx PassAll frag rast clear
   where
-    fragCtx = DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
@@ -106,7 +106,7 @@ blurVH img = blur' fragH
 moments :: GP (FrameBuffer N1 (Float,V4F))
 moments = Accumulate fragCtx PassAll storeDepth rast clear
   where
-    fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 0 0 1 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
@@ -131,7 +131,7 @@ moments = Accumulate fragCtx PassAll storeDepth rast clear
 vsm :: GP (FrameBuffer N1 (Float,V4F))
 vsm = Accumulate fragCtx PassAll calcLuminance rast clear
   where
-    fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input

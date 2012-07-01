@@ -57,6 +57,7 @@ module LC_API (
     uniformSetter,
     render,
     dispose,
+    setScreenSize,
 
     Object,
     addObject,

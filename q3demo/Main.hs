@@ -4,6 +4,7 @@ import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
 --import Control.Concurrent.STM
 import Control.Monad
+import Data.Word
 import Data.Attoparsec.Char8
 import Data.ByteString.Char8 (ByteString)
 import Data.Char
@@ -182,7 +183,7 @@ main = do
     s <- fpsState
     sc <- start $ do
         anim <- animateMaps animTex
-        u <- scene p0 slotU windowSize mousePosition fblrPress anim
+        u <- scene (setScreenSize renderer) p0 slotU windowSize mousePosition fblrPress anim
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
@@ -199,14 +200,15 @@ animateMaps l0 = stateful l0 $ \dt l -> zipWith (f dt) l timing
         | t - dt <= 0   = (t-dt+t0,tail a)
         | otherwise     = (t-dt,a)
 
-scene :: Vec3
+scene :: (Word -> Word -> IO ())
+      -> Vec3
       -> T.Trie InputSetter
       -> Signal (Int, Int)
       -> Signal (Float, Float)
       -> Signal (Bool, Bool, Bool, Bool, Bool)
       -> Signal [(Float, [(SetterFun TextureData, TextureData)])]
       -> SignalGen Float (Signal ())
-scene p0 slotU windowSize mousePosition fblrPress anim = do
+scene setSize p0 slotU windowSize mousePosition fblrPress anim = do
     time <- stateful 0 (+)
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
@@ -228,6 +230,7 @@ scene p0 slotU windowSize mousePosition fblrPress anim = do
             --orientation $ V4 orientA orientB orientC $ V4 0 0 0 1
             matSetter $! mat4ToM44F $! cm .*. sm .*. pm
             forM_ anim $ \(_,a) -> let (s,t) = head a in s t
+            setSize (fromIntegral w) (fromIntegral h)
     r <- effectful4 setupGFX windowSize cam time anim
     return r
 

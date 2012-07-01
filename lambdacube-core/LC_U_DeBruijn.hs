@@ -93,7 +93,7 @@ data Exp
     | Reassemble            !ExpId !ExpId
     | Rasterize             RasterContext !ExpId
     | FrameBuffer           [Image]
-    | Accumulate            [FragmentOperation] !ExpId !ExpId !ExpId !ExpId
+    | Accumulate            AccumulationContext !ExpId !ExpId !ExpId !ExpId
     | PrjFrameBuffer        ByteString Int !ExpId
     | PrjImage              ByteString Int !ExpId
 
@@ -145,7 +145,7 @@ class ExpC exp where
     reassemble      :: exp -> exp -> exp
     rasterize       :: RasterContext -> exp -> exp
     frameBuffer     :: [Image] -> exp
-    accumulate      :: [FragmentOperation] -> exp -> exp -> exp -> exp -> exp
+    accumulate      :: AccumulationContext -> exp -> exp -> exp -> exp -> exp
     prjFrameBuffer  :: ByteString -> Int -> exp -> exp
     prjImage        :: ByteString -> Int -> exp -> exp
     -- texture constructors

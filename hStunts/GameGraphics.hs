@@ -70,7 +70,7 @@ transparent
 stuntsGFX :: GP (FrameBuffer N1 (Float,V4F))
 stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter fragPassed) frag rast clear
   where
-    fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
     clear   = FrameBuffer (DepthImage n1 100000:.ColorImage n1 (V4 0.36 0.99 0.99 1 :: V4F):.ZT)
     rast    = Rasterize rastCtx $ Transform vert $ Fetch "streamSlot" Triangle input
@@ -166,7 +166,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
     moments :: GP (FrameBuffer N1 (Float,V4F))
     moments = Accumulate fragCtx (Filter fragPassed) storeDepth rast clear
       where
-        fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
+        fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
         clear   = FrameBuffer (DepthImage n1 100000:.ColorImage n1 (V4 0 0 1 1):.ZT)
         rast    = Rasterize triangleCtx prims
         prims   = Transform vert input
@@ -198,7 +198,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
 shadowEnvelope :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
 shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
   where
-    fragCtx = DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
@@ -231,7 +231,7 @@ shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
 blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> GP (FrameBuffer N1 (Float,V4F))
 blur' frag = Accumulate fragCtx PassAll frag rast clear
   where
-    fragCtx = DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
@@ -298,7 +298,7 @@ debugShader :: GP (FrameBuffer N1 (Float,V4F))
 debugShader = Accumulate fragCtx PassAll frag rast stuntsGFX
   where
     offset  = NoOffset
-    fragCtx = DepthOp Lequal True:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Lequal True:.ColorOp NoBlending (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone (PolygonLine 2) offset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input

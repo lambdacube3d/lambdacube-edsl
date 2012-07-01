@@ -64,7 +64,6 @@ arrayType buf arrIdx = arrType $! bufArrays buf V.! arrIdx
 nullObject :: Object
 nullObject = Object "" T.empty []
 
--- WARNING: sub network slot sharing is not supported at the moment!
 addObject :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> Trie (Stream Buffer) -> [ByteString] -> IO Object
 addObject renderer slotName prim objIndices objAttributes objUniforms =
   if (not $ T.member slotName $! slotUniform renderer) then do

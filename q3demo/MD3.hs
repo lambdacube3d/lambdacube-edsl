@@ -52,7 +52,7 @@ data MD3Model
     = MD3Model
     { mdFrames      :: Vector Frame
     , mdTags        :: Vector (Vector Tag)
-    , msSurfaces    :: Vector Surface
+    , mdSurfaces    :: Vector Surface
     } deriving Show
 
 getString   = fmap (SB.takeWhile (/= '\0')) . getByteString

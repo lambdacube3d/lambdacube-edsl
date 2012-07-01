@@ -2,6 +2,7 @@
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans
+import Data.Word
 import Data.IORef
 import Data.List hiding (transpose)
 import FRP.Elerea.Param
@@ -123,7 +124,7 @@ main = do
 
     s <- fpsState
     sc <- start $ do
-        u <- scene carUnis wheelsUnis (uniformSetter renderer) physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress debugPress
+        u <- scene (setScreenSize renderer) carUnis wheelsUnis (uniformSetter renderer) physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress debugPress
         return $ draw <$> u
 
     driveNetwork sc (readInput physicsWorld car s carPosSink wheelPosSink
@@ -135,7 +136,8 @@ main = do
     terminate
 
 scene :: BtDynamicsWorldClass bc
-      => [T.Trie InputSetter]
+      => (Word -> Word -> IO ())
+      -> [T.Trie InputSetter]
       -> [[T.Trie InputSetter]]
       -> T.Trie InputSetter
       -> bc
@@ -147,7 +149,7 @@ scene :: BtDynamicsWorldClass bc
       -> Signal (Bool, Bool, Bool)
       -> Signal Bool
       -> SignalGen Float (Signal ())
-scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress debugPress = do
+scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress debugPress = do
     time <- stateful 0 (+)
     frameCount <- stateful (0 :: Int) (\_ c -> c + 1)
 
@@ -195,7 +197,7 @@ scene carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mouseP
             forM_ carViewMats $ \s -> s $! mat4ToM44F $! fromProjective cm
             forM_ (zip wheelsPositionU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu
             forM_ (zip wheelsViewU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective cm
-    
+            setSize (fromIntegral w) (fromIntegral h)
     effectful4 setupGFX windowSize camera carPos wheelPos
 
 vec3ToV3F :: Vec3 -> V3F

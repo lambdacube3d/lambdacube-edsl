@@ -33,6 +33,13 @@ data FragmentOperation
     | ColorOp       Blending Value
     deriving (Show, Eq, Ord)
 
+data AccumulationContext
+    = AccumulationContext
+    { accViewportName   :: Maybe ByteString
+    , accOperations     :: [FragmentOperation]
+    }
+    deriving (Show, Eq, Ord)
+
 data Image
     = DepthImage    Int Float
     | StencilImage  Int Int32

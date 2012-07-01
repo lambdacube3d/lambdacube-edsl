@@ -2,6 +2,7 @@ module LC_B_GLType where
 
 import Data.ByteString.Char8 (ByteString)
 import Data.IORef
+import Data.Word
 import Data.Map (Map)
 --import Data.IntMap (IntMap)
 import Data.Set (Set)
@@ -95,6 +96,7 @@ data Renderer -- internal type
     , uniformSetter         :: Trie InputSetter         -- global uniform
     , render                :: IO ()
     , dispose               :: IO ()
+    , setScreenSize         :: Word -> Word -> IO ()
 
     -- internal
     , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm

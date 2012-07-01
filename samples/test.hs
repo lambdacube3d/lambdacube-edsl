@@ -36,7 +36,7 @@ simple objs = Accumulate fragCtx PassAll frag rast clear
   where
     worldViewProj = Uni (IM44F "worldViewProj")
     clear   = FrameBuffer (ColorImage n1 (zero'::V4F):.ZT)
-    fragCtx = ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert objs
 

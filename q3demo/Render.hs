@@ -9,6 +9,7 @@ import Data.List
 import Foreign
 import qualified Data.Trie as T
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable.Mutable as SMV
 import qualified Data.Vector.Storable as SV
 import qualified Data.ByteString.Char8 as SB
 import Data.Bitmap.IO
@@ -16,6 +17,7 @@ import Data.Bitmap.IO
 import BSP
 import LC_API
 import MD3 (MD3Model)
+import qualified MD3 as MD3
 import Q3Patch
 
 {-
@@ -139,8 +141,92 @@ addBSP renderer bsp = do
                                         -- size of generated blDrawIndices
                                         -- list of generated blDrawIndices chunks
 
-addMD3 :: Renderer -> MD3Model -> [ByteString] -> IO Object
-addMD3 = undefined
+data LCMD3
+    = LCMD3
+    { lcmd3Object   :: [Object]
+    , lcmd3Buffer   :: Buffer
+    , lcmd3Frames   :: V.Vector [(Int,Array)]
+    }
+
+setMD3Frame :: LCMD3 -> Int -> IO ()
+setMD3Frame (LCMD3 _ buf frames) idx = updateBuffer buf $ frames V.! idx
+
+{-
+data Shader
+    = Shader
+    { shName    :: !SB.ByteString
+    , shIndex   :: !Int
+    } deriving Show
+
+data Surface
+    = Surface
+    { srName        :: SB.ByteString
+    , srShaders     :: Vector Shader
+    , srTriangles   :: Vector (Int,Int,Int)
+    , srTexCoords   :: Vector Vec2
+    , srXyzNormal   :: Vector (Vector (Vec3,Vec3))
+    } deriving Show
+
+data MD3Model
+    = MD3Model
+    { mdFrames      :: Vector Frame
+    , mdTags        :: Vector (Vector Tag)
+    , mdSurfaces    :: Vector Surface
+    } deriving Show
+-}
+addMD3 :: Renderer -> MD3Model -> [ByteString] -> IO LCMD3
+addMD3 r model unis = do
+    {-
+        done - index buffer
+        done - texcoords
+        done - normals
+        done - positions
+    -}
+    --Array ArrayType Int BufferSetter
+    let cvtSurface :: MD3.Surface -> (Array,Array,V.Vector (Array,Array))
+        cvtSurface sf = ( Array ArrWord16 (SV.length indices) (withV indices)
+                        , Array ArrFloat (2 * SV.length texcoords) (withV texcoords)
+                        , posNorms
+                        )
+          where
+            withV a f = SV.unsafeWith a (\p -> f $ castPtr p)
+            tris = MD3.srTriangles sf
+            intToWord16 :: Int -> Word16
+            intToWord16 = fromIntegral
+            addIndex v i (a,b,c) = do
+                SMV.write v i $ intToWord16 a
+                SMV.write v (i+1) $ intToWord16 b
+                SMV.write v (i+2) $ intToWord16 c
+                return (i+3)
+            indices = SV.create $ do
+                v <- SMV.new $ 3 * V.length tris
+                V.foldM_ (addIndex v) 0 tris
+                return v
+            texcoords = SV.convert $ MD3.srTexCoords sf :: SV.Vector Vec2
+            cvtPosNorm pn = (f p, f n)
+              where
+                f :: V.Vector Vec3 -> Array
+                f v = Array ArrFloat (3 * V.length v) $ withV $ SV.convert v
+                (p,n) = V.unzip pn
+            posNorms = V.map cvtPosNorm $ MD3.srXyzNormal sf
+    --compileBuffer :: [Array] -> IO Buffer
+    --addObject :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> Trie (Stream Buffer) -> [ByteString] -> IO Object
+    let addSurface (il,tl,nl,pl,npl) sf = (i:il,t:tl,n:nl,p:pl,np:npl)
+          where
+            (i,t,np) = cvtSurface sf
+            (n,p)    = V.head np
+        (il,tl,nl,pl,nlp) = foldl' addSurface ([],[],[],[],[]) $ V.toList $ MD3.mdSurfaces model
+    buffer <- compileBuffer $ concat [il,tl,nl,pl]
+    -- question: how will be the referred shaders loaded?
+    --           general problem: should the gfx network contain all passes (every possible materials)?
+    -- TODO
+    -- create buffer
+    -- create objects
+    return $ LCMD3
+        { lcmd3Object   = undefined
+        , lcmd3Buffer   = buffer
+        , lcmd3Frames   = undefined
+        }
 --addMD3 renderer md3 ["world"]
 
 {-

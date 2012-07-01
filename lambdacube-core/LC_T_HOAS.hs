@@ -22,6 +22,12 @@ data Exp stage t where
             -> Exp stage t
                  -- environment size at defining occurrence
 
+    -- let support
+    Let     :: (GPU a, GPU b)
+            => Exp stage a
+            -> (Exp stage a -> Exp stage b)
+            -> Exp stage b
+
     -- constant value
     Const   :: (GPU t,IsScalar t)
             => t

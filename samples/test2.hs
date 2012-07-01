@@ -2,6 +2,7 @@
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
+import Data.Word
 --import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
@@ -62,8 +63,8 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
     rastCtx :: RasterContext Triangle
     rastCtx = TriangleCtx (CullFront CW) PolygonFill NoOffset LastVertex
     
-    fragCtx :: FlatTuple Typeable FragmentOperation (Depth Float :+: (Color (V4 Float) :+: ZZ))
-    fragCtx = DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx :: AccumulationContext (Depth Float :+: (Color (V4 Float) :+: ZZ))
+    fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     
     clear :: GP (FrameBuffer N1 (Float,V4F))
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
@@ -129,7 +130,7 @@ main = do
             return ()
     s <- fpsState
     sc <- start $ do
-        u <- scene slotU objU windowSize mousePosition fblrPress
+        u <- scene (setScreenSize renderer) slotU objU windowSize mousePosition fblrPress
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
@@ -137,13 +138,14 @@ main = do
     print "renderer destroyed"
     closeWindow
 
-scene :: T.Trie InputSetter
+scene :: (Word -> Word -> IO ())
+      -> T.Trie InputSetter
       -> T.Trie InputSetter
       -> Signal (Int, Int)
       -> Signal (Float, Float)
       -> Signal (Bool, Bool, Bool, Bool, Bool)
       -> SignalGen Float (Signal ())
-scene slotU objU windowSize mousePosition fblrPress = do
+scene setSize slotU objU windowSize mousePosition fblrPress = do
     time <- stateful 0 (+)
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
@@ -157,6 +159,7 @@ scene slotU objU windowSize mousePosition fblrPress = do
                 --timeSetter time
                 matSetter $! mat4ToM44F $! cm .*. pm
             --putStrLn $ C.secs t ++ " - worldViewProj uniform setup via STM"
+            setSize (fromIntegral w) (fromIntegral h)
             return ()
     r <- effectful3 setupGFX windowSize cam time
     return r

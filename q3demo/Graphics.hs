@@ -43,7 +43,7 @@ mkRasterContext ca = TriangleCtx cull PolygonFill offset LastVertex
         CT_TwoSided     -> CullNone
 
 --mkAccumulationContext :: StageAttrs -> (FragmentOperation (Depth Float)):+:(FragmentOperation (Color V4F)):+:ZZ
-mkAccumulationContext sa = DepthOp depthFunc depthWrite:.ColorOp blend (one' :: V4B):.ZT
+mkAccumulationContext sa = AccumulationContext Nothing $ DepthOp depthFunc depthWrite:.ColorOp blend (one' :: V4B):.ZT
   where
     depthWrite  = saDepthWrite sa
     depthFunc   = case saDepthFunc sa of
@@ -329,7 +329,7 @@ errorShader :: GP (FrameBuffer N1 (Float,V4F)) -> GP (FrameBuffer N1 (Float,V4F)
 errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
   where
     offset  = NoOffset--Offset (0) (-10)
-    fragCtx = DepthOp Lequal True:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Lequal True:.ColorOp NoBlending (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone (PolygonLine 2) offset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
@@ -351,7 +351,7 @@ errorShaderFill :: GP (FrameBuffer N1 (Float,V4F)) -> GP (FrameBuffer N1 (Float,
 errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
   where
     blend   = NoBlending
-    fragCtx = DepthOp Less True:.ColorOp blend (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp blend (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input

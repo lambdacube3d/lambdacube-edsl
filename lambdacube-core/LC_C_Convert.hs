@@ -37,7 +37,7 @@ genTy a = case cvt $ T.tupleType a of
 
 convertGPOutput :: ExpC exp => H.GPOutput -> exp
 convertGPOutput (H.ImageOut a b)    = imageOut a $ convertGP b
-convertGPOutput (H.ScreenOut a)     = screenOut $ convertGP a
+convertGPOutput (H.ScreenOut a)   = screenOut $ convertGP a
 
 -- GP
 convertGP :: ExpC exp => H.GP t -> exp
@@ -261,10 +261,10 @@ convertBlending T.NoBlending        = NoBlending
 convertBlending (T.BlendLogicOp a)  = BlendLogicOp a
 convertBlending (T.Blend a b c)     = Blend a b c
 
-convertAccumulationContext :: T.AccumulationContext b -> [FragmentOperation]
-convertAccumulationContext = cvt
+convertAccumulationContext :: T.AccumulationContext b -> AccumulationContext
+convertAccumulationContext (T.AccumulationContext n ops) = AccumulationContext n $ cvt ops
   where
-    cvt :: T.AccumulationContext b -> [FragmentOperation]
+    cvt :: FlatTuple Typeable T.FragmentOperation b -> [FragmentOperation]
     cvt ZT                          = []
     cvt (T.DepthOp a b:.xs)         = DepthOp a b : cvt xs
     cvt (T.StencilOp a b c :. xs)   = StencilOp a b c : cvt xs

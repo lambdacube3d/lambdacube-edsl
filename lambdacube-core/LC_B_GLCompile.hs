@@ -97,8 +97,8 @@ setupRasterContext = cvt
         -- provoking vertex
         setProvokingVertex pv
 
-setupAccumulationContext :: [FragmentOperation] -> IO ()
-setupAccumulationContext = cvt
+setupAccumulationContext :: AccumulationContext -> IO ()
+setupAccumulationContext (AccumulationContext n ops) = cvt ops
   where
     cvt :: [FragmentOperation] -> IO ()
     cvt (StencilOp a b c : DepthOp f m : xs) = do

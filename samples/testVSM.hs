@@ -3,6 +3,7 @@
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
 import Control.Monad
+import Data.Word
 import Data.ByteString.Char8 (ByteString)
 import Data.IORef
 import Data.Vect
@@ -38,7 +39,7 @@ quad = Mesh
 post :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
 post img = Accumulate fragCtx PassAll frag rast clear
   where
-    fragCtx = DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
+    fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
@@ -138,7 +139,7 @@ main = do
             return ()
     s <- fpsState
     sc <- start $ do
-        u <- scene slotU objU windowSize mousePosition fblrPress
+        u <- scene (setScreenSize renderer) slotU objU windowSize mousePosition fblrPress
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
@@ -146,13 +147,14 @@ main = do
     print "renderer destroyed"
     closeWindow
 
-scene :: T.Trie InputSetter
+scene :: (Word -> Word -> IO ())
+      -> T.Trie InputSetter
       -> T.Trie InputSetter
       -> Signal (Int, Int)
       -> Signal (Float, Float)
       -> Signal (Bool, Bool, Bool, Bool, Bool)
       -> SignalGen Float (Signal ())
-scene slotU objU windowSize mousePosition fblrPress = do
+scene setSize slotU objU windowSize mousePosition fblrPress = do
     time <- stateful 0 (+)
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
@@ -181,6 +183,7 @@ scene slotU objU windowSize mousePosition fblrPress = do
                 lightSetter $! mat4ToM44F $! lm .*. lpm
                 --lightSetter2 $! mat4ToM44F $! lm .*. pm
             --putStrLn $ C.secs t ++ " - worldViewProj uniform setup via STM"
+            setSize (fromIntegral w) (fromIntegral h)
             return ()
     r <- effectful3 setupGFX windowSize cam time
     return r
