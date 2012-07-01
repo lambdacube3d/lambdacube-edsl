@@ -165,7 +165,7 @@ main = do
             _ -> return []
 
     putStrLn $ "loading: " ++ show bspName
-    addBSP renderer bsp
+    objs <- addBSP renderer bsp
     -- add entities
     {-
         "origin" "1012 2090 108"
@@ -183,7 +183,7 @@ main = do
     s <- fpsState
     sc <- start $ do
         anim <- animateMaps animTex
-        u <- scene (setScreenSize renderer) p0 slotU windowSize mousePosition fblrPress anim
+        u <- scene bsp objs (setScreenSize renderer) p0 slotU windowSize mousePosition fblrPress anim
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
@@ -200,7 +200,9 @@ animateMaps l0 = stateful l0 $ \dt l -> zipWith (f dt) l timing
         | t - dt <= 0   = (t-dt+t0,tail a)
         | otherwise     = (t-dt,a)
 
-scene :: (Word -> Word -> IO ())
+scene :: BSPLevel
+      -> V.Vector Object
+      -> (Word -> Word -> IO ())
       -> Vec3
       -> T.Trie InputSetter
       -> Signal (Int, Int)
@@ -208,7 +210,7 @@ scene :: (Word -> Word -> IO ())
       -> Signal (Bool, Bool, Bool, Bool, Bool)
       -> Signal [(Float, [(SetterFun TextureData, TextureData)])]
       -> SignalGen Float (Signal ())
-scene setSize p0 slotU windowSize mousePosition fblrPress anim = do
+scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim = do
     time <- stateful 0 (+)
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
@@ -219,11 +221,15 @@ scene setSize p0 slotU windowSize mousePosition fblrPress anim = do
         timeSetter  = uniformFloat "time" slotU
         setupGFX (w,h) (cam,dir,up,_) time anim = do
             let cm = fromProjective (lookat cam (cam + dir) up)
-                pm = perspective 0.01 50 (pi/2) (fromIntegral w / fromIntegral h)
+                pm = perspective 0.01 15 (pi/2) (fromIntegral w / fromIntegral h)
                 sm = fromProjective (scaling $ Vec3 s s s)
                 s  = 0.005
                 V4 orientA orientB orientC _ = mat4ToM44F $! cm .*. sm
                 Vec3 cx cy cz = cam
+                near = 0.01/s
+                far  = 15/s
+                fovDeg = 90
+                frust = frustum fovDeg (fromIntegral w / fromIntegral h) (near) (far) cam (cam+dir) up
             timeSetter $ time-- / 25
             putStrLn $ "time: " ++ show time
             viewOrigin $ V3 cx cy cz
@@ -231,6 +237,7 @@ scene setSize p0 slotU windowSize mousePosition fblrPress anim = do
             matSetter $! mat4ToM44F $! cm .*. sm .*. pm
             forM_ anim $ \(_,a) -> let (s,t) = head a in s t
             setSize (fromIntegral w) (fromIntegral h)
+            cullSurfaces bsp cam frust objs
     r <- effectful4 setupGFX windowSize cam time anim
     return r
 

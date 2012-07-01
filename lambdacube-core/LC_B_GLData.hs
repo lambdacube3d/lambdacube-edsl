@@ -62,7 +62,7 @@ arrayType buf arrIdx = arrType $! bufArrays buf V.! arrIdx
 --  answer: YES
 -- Object
 nullObject :: Object
-nullObject = Object "" T.empty []
+nullObject = unsafePerformIO $ Object "" T.empty [] <$> newIORef False
 
 addObject :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> Trie (Stream Buffer) -> [ByteString] -> IO Object
 addObject renderer slotName prim objIndices objAttributes objUniforms =
@@ -120,6 +120,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
         globalUNames    = Set.toList $! (Set.fromList $! T.keys uniformType) Set.\\ (Set.fromList objUniforms)
         rendState       = renderState renderer
         
+    stateIORef <- newIORef True
     (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUniformSetter rendState t | n <- objUniforms, t <- maybeToList $ T.lookup n uniformType])
     let objUSetterTrie = T.fromList $! zip objUniforms objUSetters
     
@@ -159,7 +160,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
             glBindVertexArray vao
             sSetup -- setup vertex attributes
             iSetup -- setup index buffer
-            let renderFun = do
+            let renderFun = readIORef stateIORef >>= \enabled -> when enabled $ do
                     --print "draw object"
                     --putStrLn $ "  setup global uniforms: " ++ show [n | n <- globalUNames, T.member n uLocs]
                     globalUSetup            -- setup uniforms
@@ -181,6 +182,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
             { objectSlotName        = slotName
             , objectUniformSetter   = objUSetterTrie
             , vertexArrayObject     = vaoList
+            , objectEnabledIORef    = stateIORef
             }
 
     -- add object to slot's object set
@@ -210,6 +212,9 @@ removeObject rend obj = do
         modifyIORef (drawObjectsIORef rd) $ \(ObjectSet _ drawMap) ->
             let drawMap' = Map.delete obj drawMap
             in ObjectSet (sequence_ $ Map.elems drawMap') drawMap'
+
+enableObject :: Object -> Bool -> IO ()
+enableObject obj b = writeIORef (objectEnabledIORef obj) b
 
 -- Texture
 

@@ -133,6 +133,7 @@ data Object -- internal type
     { objectSlotName        :: ByteString
     , objectUniformSetter   :: Trie InputSetter
     , vertexArrayObject     :: [GLuint]
+    , objectEnabledIORef    :: IORef Bool
     }
 
 instance Eq Object where

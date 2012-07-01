@@ -13,6 +13,7 @@ import qualified Data.Vector.Storable.Mutable as SMV
 import qualified Data.Vector.Storable as SV
 import qualified Data.ByteString.Char8 as SB
 import Data.Bitmap.IO
+import Debug.Trace
 
 import BSP
 import LC_API
@@ -134,7 +135,7 @@ addBSP renderer bsp = do
             let lightMap = uniformFTexture2D "LightMap" $ objectUniformSetter o
             when (isValidIdx lmIdx) $ lightMap $ lightMapTextures V.! lmIdx
             return o
-    V.mapM obj $ V.fromList objs
+    V.mapM obj $ V.fromList $ reverse objs
     -- foldl' ([],sizeV,[],sizeI,[])    -- list of (startV countV startI countI)
                                         -- size of generated blDrawVertices
                                         -- list of generated blDrawVertices chunks
@@ -229,7 +230,7 @@ addMD3 r model unis = do
         }
 --addMD3 renderer md3 ["world"]
 
-{-
+
 isClusterVisible :: BSPLevel -> Int -> Int -> Bool
 isClusterVisible bl a b
     | a >= 0 = 0 /= (visSet .&. (shiftL 1 (b .&. 7)))
@@ -246,23 +247,82 @@ findLeafIdx bl camPos i
     node    = blNodes bl V.! i
     (f,b)   = ndChildren node 
     plane   = blPlanes bl V.! ndPlaneNum node
-    dist    = plNormal plane `Vect.dotprod` camPos - plDist plane
+    dist    = plNormal plane `dotprod` camPos - plDist plane
 
-cullSurfaces :: BSPLevel -> Vect.Vec3 -> Frustum -> V.Vector a -> V.Vector a
-cullSurfaces bsp cam frust surfaces = case leafIdx < 0 || leafIdx >= V.length leaves of
-    True    -> unsafePerformIO $ print ("findLeafIdx error") >> return surfaces
-    False   -> unsafePerformIO $ print ("findLeafIdx ok",leafIdx,camCluster) >> return (V.ifilter (\i _ -> surfaceMask V.! i) surfaces)
+cullSurfaces :: BSPLevel -> Vec3 -> Frustum -> V.Vector Object -> IO ()
+cullSurfaces bsp cam frust objs = case leafIdx < 0 || leafIdx >= V.length leaves of
+    True    -> {-trace "findLeafIdx error" $ -}V.forM_ objs $ \obj -> enableObject obj True
+    False   -> {-trace ("findLeafIdx ok " ++ show leafIdx ++ " " ++ show camCluster) -}surfaceMask
   where
     leafIdx = findLeafIdx bsp cam 0
     leaves = blLeaves bsp
     camCluster = lfCluster $ leaves V.! leafIdx
     visibleLeafs = V.filter (\a -> (isClusterVisible bsp camCluster $ lfCluster a) && inFrustum a) leaves
-    surfaceMask = unsafePerformIO $ do
+    surfaceMask = do
         let leafSurfaces = blLeafSurfaces bsp
-        mask <- MV.replicate (V.length surfaces) False
+        V.forM_ objs $ \obj -> enableObject obj False
         V.forM_ visibleLeafs $ \l ->
             V.forM_ (V.slice (lfFirstLeafSurface l) (lfNumLeafSurfaces l) leafSurfaces) $ \i ->
-                MV.write mask i True
-        V.unsafeFreeze mask
+                enableObject (objs V.! i) True
     inFrustum a = boxInFrustum (lfMaxs a) (lfMins a) frust
--}
+
+data Frustum
+    = Frustum
+    { frPlanes  :: [(Vec3, Float)]
+    , ntl       :: Vec3
+    , ntr       :: Vec3
+    , nbl       :: Vec3
+    , nbr       :: Vec3
+    , ftl       :: Vec3
+    , ftr       :: Vec3
+    , fbl       :: Vec3
+    , fbr       :: Vec3
+    }
+
+pointInFrustum p fr = foldl' (\b (n,d) -> b && d + n `dotprod` p >= 0) True $ frPlanes fr
+
+sphereInFrustum p r fr = foldl' (\b (n,d) -> b && d + n `dotprod` p >= (-r)) True $ frPlanes fr
+
+boxInFrustum pp pn fr = foldl' (\b (n,d) -> b && d + n `dotprod` (g pp pn n) >= 0) True $ frPlanes fr
+  where
+    g (Vec3 px py pz) (Vec3 nx ny nz) n = Vec3 (fx px nx) (fy py ny) (fz pz nz)
+      where
+        Vec3 x y z = n
+        [fx,fy,fz] = map (\a -> if a > 0 then max else min) [x,y,z]
+
+frustum :: Float -> Float -> Float -> Float -> Vec3 -> Vec3 -> Vec3 -> Frustum
+frustum angle ratio nearD farD p l u = Frustum [ (pl ntr ntl ftl)
+                                               , (pl nbl nbr fbr)
+                                               , (pl ntl nbl fbl)
+                                               , (pl nbr ntr fbr)
+                                               , (pl ntl ntr nbr)
+                                               , (pl ftr ftl fbl)
+                                               ] ntl ntr nbl nbr ftl ftr fbl fbr
+  where
+    pl a b c = (n,d)
+      where
+        n = normalize $ (c - b) `crossprod` (a - b)
+        d = -(n `dotprod` b)
+    m a v = scalarMul a v
+    ang2rad = pi / 180
+    tang    = tan $ angle * ang2rad * 0.5
+    nh  = nearD * tang
+    nw  = nh * ratio
+    fh  = farD * tang
+    fw  = fh * ratio
+    z   = normalize $ p - l
+    x   = normalize $ u `crossprod` z
+    y   = z `crossprod` x
+
+    nc  = p - m nearD z
+    fc  = p - m farD z
+
+    ntl = nc + m nh y - m nw x
+    ntr = nc + m nh y + m nw x
+    nbl = nc - m nh y - m nw x
+    nbr = nc - m nh y + m nw x
+
+    ftl = fc + m fh y - m fw x
+    ftr = fc + m fh y + m fw x
+    fbl = fc - m fh y - m fw x
+    fbr = fc - m fh y + m fw x

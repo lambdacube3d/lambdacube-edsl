@@ -166,6 +166,7 @@ convertOpenExp lyt glyt = cvt
     cvt (H.Cond e1 e2 e3 :: H.Exp stage t')   = cond (genTy (undefined :: t')) (cvt e1) (cvt e2) (cvt e3)
     cvt (H.PrimApp p e :: H.Exp stage t')     = primApp (genTy (undefined :: t')) (convertPrimFun p) $ cvt e
     cvt (H.Sampler f em t :: H.Exp stage t')  = sampler (genTy (undefined :: t')) f em $ convertTexture t
+    cvt (H.Loop e1 e2 e3 s :: H.Exp stage t') = loop (genTy (undefined :: t')) (convertFun1Exp glyt e1) (convertFun1Exp glyt e2) (convertFun1Exp glyt e3) (cvt s)
 
 convertFun1Vert :: ExpC exp => forall a b. GPU a =>
                    Layout

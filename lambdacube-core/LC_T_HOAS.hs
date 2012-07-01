@@ -72,6 +72,14 @@ data Exp stage t where
             -> Texture GP dim arr t ar
             -> Exp stage (Sampler dim arr t ar)
 
+    -- loop support
+    Loop    :: (GPU s, GPU a)
+            => (Exp stage s -> Exp stage s)     -- state transform function
+            -> (Exp stage s -> Exp stage Bool)  -- loop condition function
+            -> (Exp stage s -> Exp stage a)     -- state to result transform function
+            -> Exp stage s                      -- initial state
+            -> Exp stage a                      -- result
+
 type InterpolatedFlatExp stage a = FlatTuple GPU (Interpolated (Exp stage)) a
 type FlatExp stage a = FlatTuple GPU (Exp stage) a
 

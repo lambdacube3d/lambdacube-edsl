@@ -63,6 +63,7 @@ module LC_API (
     addObject,
     removeObject,
     objectUniformSetter,
+    enableObject,
 
     -- texture (temporary)
     compileTexture2DNoMipRGBAF

@@ -80,6 +80,7 @@ data Exp
     | Cond                  !ExpId !ExpId !ExpId
     | PrimApp               !PrimFun !ExpId
     | Sampler               !Filter !EdgeMode !ExpId
+    | Loop                  !ExpId !ExpId !ExpId !ExpId
     -- special tuple expressions
     | VertexOut             !ExpId !ExpId [ExpId]
     | GeometryOut           !ExpId !ExpId !ExpId !ExpId !ExpId [ExpId]
@@ -133,6 +134,7 @@ class ExpC exp where
     cond        :: Ty -> exp -> exp -> exp -> exp
     primApp     :: Ty -> PrimFun -> exp -> exp
     sampler     :: Ty -> Filter -> EdgeMode -> exp -> exp
+    loop        :: Ty -> exp -> exp -> exp -> exp -> exp
     -- special tuple expressions
     vertexOut               :: exp -> exp -> [exp] -> exp
     geometryOut             :: exp -> exp -> exp -> exp -> exp -> [exp] -> exp
@@ -202,6 +204,12 @@ instance ExpC N where
     sampler !t !a !b !c = N $ do
         !h1 <- unN c
         hashcons t $ Sampler a b h1
+    loop !t !a !b !c !d = N $ do
+        !h1 <- unN a
+        !h2 <- unN b
+        !h3 <- unN c
+        !h4 <- unN d
+        hashcons t $ Loop h1 h2 h3 h4
 
     -- special tuple expressions
     vertexOut !a !b !c = N $ do
