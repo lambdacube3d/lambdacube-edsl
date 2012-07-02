@@ -195,7 +195,7 @@ data GP t where
                     -> GP (FrameBuffer layerCount (FTRepr' b))
 
     PrjFrameBuffer  :: ByteString                       -- internal image output (can be allocated on request)
-                    -> TupleIdx (TupleRepr b) t
+                    -> TupleIdx (EltRepr b) t
                     -> GP (FrameBuffer layerCount b)
                     -> GP (Image layerCount t)
 
@@ -204,6 +204,12 @@ data GP t where
                     -> idx
                     -> GP (Image layerCount t)
                     -> GP (Image N1 t)
+
+    -- dynamic extension support
+    AccumulateSet   :: GPU a
+                    => ByteString
+                    -> GP (FrameBuffer layerCount a)
+                    -> GP (FrameBuffer layerCount a)
 
 deriving instance Typeable1 GP
 

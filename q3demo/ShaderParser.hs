@@ -75,7 +75,7 @@ shaders :: Parser [(ByteString,CommonAttrs)]
 shaders = skip *> many shader <* skip
 
 shader :: Parser (ByteString,CommonAttrs)
-shader = (\n _ l _ -> (n,fixAttribOrder $ foldl' (\s f -> f s) defaultCommonAttrs l)) <$> word' <*> kw' "{" <*> many shaderAttrs <*> kw' "}"
+shader = (\n _ l _ -> (bsToLower n,fixAttribOrder $ foldl' (\s f -> f s) defaultCommonAttrs l)) <$> word' <*> kw' "{" <*> many shaderAttrs <*> kw' "}"
 
 shaderAttrs :: Parser (CommonAttrs -> CommonAttrs)
 shaderAttrs = option id (choice [general, q3map, stage]) <* skipRest
@@ -207,16 +207,18 @@ one stage is one pass
 question: can we render in single pass?
 answer: yes, but the backend should optimize it. Now we should build multipass rendering.
 -}
+bsToLower :: ByteString -> ByteString
+bsToLower = B.map toLower
 
 mapP = (\_ v sa -> sa {saTexture = v}) <$> kw "map" <*> (
     val ST_Lightmap "$lightmap" <|> 
     val ST_WhiteImage "$whiteimage" <|> 
-    ST_Map <$> word
+    ST_Map . bsToLower <$> word
     )
 
-clampMap = (\v sa -> sa {saTexture = ST_ClampMap v}) <$> (kw "clampmap" *> word)
+clampMap = (\v sa -> sa {saTexture = ST_ClampMap $ bsToLower v}) <$> (kw "clampmap" *> word)
 
-animMap = (\_ f v sa -> sa {saTexture = ST_AnimMap f v}) <$> kw "animmap" <*> float <*> (B.words <$> takeTill fun)--many1 (skipWhile fun *> takeTill fun) -- FIXME: comment is not supported!
+animMap = (\_ f v sa -> sa {saTexture = ST_AnimMap f (map bsToLower v)}) <$> kw "animmap" <*> float <*> (B.words <$> takeTill fun)--many1 (skipWhile fun *> takeTill fun) -- FIXME: comment is not supported!
   where
     fun c = c == '\n' || c == '\r'
 

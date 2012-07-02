@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TupleSections #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -21,6 +21,7 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.Set as Set
 import qualified Data.Trie as T
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable as SV
 
 import TypeLevel.Number.Nat.Num
 import Graphics.Rendering.OpenGL.Raw.Core32
@@ -30,8 +31,11 @@ import Data.Digest.CRC32
 import Codec.Image.STB hiding (Image)
 
 import LC_API
+import LC_Mesh
 --import LCGL
 --import LCLanguage
+
+import Effect
 
 import BSP
 import Graphics
@@ -71,23 +75,33 @@ setupTables s = do
     tableTexture inverseSawToothTexture "InverseSawToothTable" s
     tableTexture triangleTexture "TriangleTable" s
 
+quad :: Mesh
+quad = Mesh
+    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
+    , mPrimitive    = P_Triangles
+    , mGPUData      = Nothing
+    }
+  where
+    a = -1
+    b = 1
+
 main :: IO ()
 main = do
     ar <- loadArchive
 
-    let imageShader txName = defaultCommonAttrs {caStages = saLM:sa:[]}
+    let imageShader txName = defaultCommonAttrs {caStages = sa:saLM:[]}
           where
             sa = defaultStageAttrs
                 { saTexture     = ST_Map txName
-                --, saBlend = Just (SrcColor,Zero)
-                , saBlend = Just (B_SrcColor,B_One)
+                , saBlend       = Nothing
                 , saDepthWrite  = True
+                , saRGBGen      = RGB_IdentityLighting
                 }
             saLM = defaultStageAttrs
                 { saTexture = ST_Lightmap
+                , saBlend   = Just (B_DstColor,B_Zero)
                 , saTCGen   = TG_Lightmap
-                --, saBlend = Just (SrcColor,One)
-                --, saBlend   = Just (B_SrcColor,B_DstColor)
+                , saRGBGen  = RGB_Identity
                 }
 
     args <- getArgs
@@ -115,6 +129,8 @@ main = do
         -}
         lcnet :: GP (Image N1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 $ q3GFX $ T.toList shMap
+        lcnetMenu :: GP (Image N1 V4F)
+        lcnetMenu = PrjFrameBuffer "outFB" tix0 screenQuad
 
         -- extract spawn points
         ents = parseEntities (SB.unpack bspName) $ blEntities bsp
@@ -129,9 +145,13 @@ main = do
 
     -- CommonAttrs
     renderer <- compileRenderer $ ScreenOut lcnet
+    menuRenderer <- compileRenderer $ ScreenOut lcnetMenu
     print "renderer created"
     --print $ slotUniform renderer
     --print $ slotStream renderer
+
+    compiledQuad <- compileMesh quad
+    --addMesh renderer "postSlot" compiledQuad []
 
     let slotU           = uniformSetter renderer
         draw _          = render renderer >> swapBuffers
@@ -141,7 +161,7 @@ main = do
 
     entityRGB one'
     entityAlpha 1
-    identityLight 1
+    identityLight 1.4
     setupTables slotU
 
     putStrLn "loading textures:"
@@ -166,6 +186,13 @@ main = do
 
     putStrLn $ "loading: " ++ show bspName
     objs <- addBSP renderer bsp
+
+    -- setup menu
+    levelShots <- sequence [(n,) <$> loadQ3Texture defaultTexture archiveTrie (SB.append "levelshots/" n) | n <- T.keys bspMap]
+    menuObj <- addMesh menuRenderer "postSlot" compiledQuad ["ScreenQuad"]
+    let menuObjUnis = objectUniformSetter menuObj
+    --uniformFTexture2D "ScreenQuad" menuObjUnis defaultTexture
+    uniformFTexture2D "ScreenQuad" menuObjUnis $ snd $ head levelShots
     -- add entities
     {-
         "origin" "1012 2090 108"

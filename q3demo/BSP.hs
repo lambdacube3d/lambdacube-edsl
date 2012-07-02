@@ -4,6 +4,7 @@ module BSP where
 import Control.Applicative
 import Control.Monad
 import Data.Bits
+import Data.Char
 import Data.Int
 import Data.Word
 
@@ -229,7 +230,7 @@ getSurfaceType  = getInt >>= \i -> case i of
     _ -> fail "Invalid surface type"
 
 getEntities l   = getString l
-getShaders      = getItems  72 $ Shader     <$> getString 64 <*> getInt <*> getInt
+getShaders      = getItems  72 $ Shader     <$> (SB.map toLower <$> getString 64) <*> getInt <*> getInt
 getPlanes       = getItems  16 $ Plane      <$> getVec3 <*> getFloat
 getNodes        = getItems  36 $ Node       <$> getInt <*> getInt2 <*> getVec3i <*> getVec3i
 getLeaves       = getItems  48 $ Leaf       <$> getInt <*> getInt <*> getVec3i <*> getVec3i <*> getInt <*> getInt <*> getInt <*> getInt

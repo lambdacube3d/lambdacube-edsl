@@ -161,7 +161,7 @@ data StageAttrs
 defaultStageAttrs :: StageAttrs
 defaultStageAttrs = StageAttrs
     { saBlend       = Nothing
-    , saRGBGen      = RGB_Identity
+    , saRGBGen      = RGB_IdentityLighting
     , saAlphaGen    = A_Identity
     , saTCGen       = TG_Base
     , saTCMod       = []

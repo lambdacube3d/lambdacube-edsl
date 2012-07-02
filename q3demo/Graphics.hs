@@ -10,6 +10,7 @@ import Data.Vect
 import LC_API
 
 import Material hiding (Blending)
+import Effect
 
 import Debug.Trace
 
@@ -301,7 +302,7 @@ mkFilterFunction sa = case saAlphaFunc sa of
             texColor em name = texture' sampler uv (Const 0)
               where
                 sampler     = Sampler LinearFilter em $ TextureSlot name (Texture2D (Float RGBA) n1)
-        in case trace ("aplha filter: " ++ show f) f of
+        in case trace ("alpha filter: " ++ show f) f of
             A_Gt0   -> a @> floatF 0
             A_Lt128 -> a @< floatF 0.5
             A_Ge128 -> a @>= floatF 0.5
@@ -320,7 +321,7 @@ mkShader :: GP (FrameBuffer N1 (Float,V4F)) -> (ByteString,CommonAttrs) -> GP (F
 mkShader fb (name,ca) = foldl' (mkStage name ca) fb $ caStages ca
 
 q3GFX :: [(ByteString,CommonAttrs)] -> GP (FrameBuffer N1 (Float,V4F))
-q3GFX shl = errorShader $ foldl' mkShader clear ordered
+q3GFX shl = {-blurVH $ PrjFrameBuffer "" tix0 $ -}errorShader $ foldl' mkShader clear ordered
   where
     ordered = sortBy (\(_,a) (_,b) -> caSort a `compare` caSort b) shl
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)

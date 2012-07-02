@@ -9,6 +9,7 @@ module Zip where
 import Control.Applicative
 import Data.Binary.Get
 import Data.Bits
+import Data.Char
 import Data.Word
 import System.IO.MMap
 import qualified Codec.Compression.Zlib.Raw as Zlib
@@ -56,4 +57,4 @@ getArchive = chunks 0x04034b50 $ do
     name <- SB.unpack <$> getByteString (fromIntegral nameLen)
     skip $! fromIntegral extraLen
     d <- if flag .&. 8 /= 0 then fail "Zip data descriptor is not supported!" else getLazyByteString $! fromIntegral size
-    return $! Entry name isComp d
+    return $! Entry (map toLower name) isComp d
