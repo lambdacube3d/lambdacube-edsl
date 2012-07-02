@@ -266,7 +266,7 @@ compileRenderer dag (ScreenOut img) = do
     --          all slot name should be unique
     --          all uniform with same name have the same type
     --          all stream input with same name have the same type
-
+    objIDSeed <- newIORef 1
     return $! Renderer
         -- public
         { slotUniform           = slotUniformTrie
@@ -284,4 +284,5 @@ compileRenderer dag (ScreenOut img) = do
         , slotDescriptor        = slotDescriptors
         , renderDescriptor      = renderDescriptors
         , renderState           = rendState
+        , objectIDSeed          = objIDSeed
         }

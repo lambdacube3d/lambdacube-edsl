@@ -103,6 +103,7 @@ data Renderer -- internal type
     , slotDescriptor        :: Trie SlotDescriptor
     , renderDescriptor      :: Map Exp RenderDescriptor --Map GP RenderDescriptor
     , renderState           :: RenderState
+    , objectIDSeed          :: IORef Int
     }
 
 data RenderDescriptor
@@ -124,23 +125,23 @@ data SlotDescriptor
 
 data ObjectSet
     = ObjectSet
-    { drawObject    :: IO ()
-    , drawObjectMap :: Map Object (IO ())
+    { drawObject    :: IO ()                -- synthetized/sorted render action
+    , drawObjectMap :: Map Object (IO ())   -- original render actions
     }
 
 data Object -- internal type
     = Object
     { objectSlotName        :: ByteString
     , objectUniformSetter   :: Trie InputSetter
-    , vertexArrayObject     :: [GLuint]
+    , objectID              :: Int
     , objectEnabledIORef    :: IORef Bool
     }
 
 instance Eq Object where
-    a == b  = vertexArrayObject a == vertexArrayObject b
+    a == b  = objectID a == objectID b
 
 instance Ord Object where
-    a `compare` b  = vertexArrayObject a `compare` vertexArrayObject b
+    a `compare` b  = objectID a `compare` objectID b
 
 data RenderState
     = RenderState

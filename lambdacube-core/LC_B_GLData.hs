@@ -62,7 +62,7 @@ arrayType buf arrIdx = arrType $! bufArrays buf V.! arrIdx
 --  answer: YES
 -- Object
 nullObject :: Object
-nullObject = unsafePerformIO $ Object "" T.empty [] <$> newIORef False
+nullObject = unsafePerformIO $ Object "" T.empty 0 <$> newIORef False
 
 addObject :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> Trie (Stream Buffer) -> [ByteString] -> IO Object
 addObject renderer slotName prim objIndices objAttributes objUniforms =
@@ -178,10 +178,12 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
     -}
     --print sType
     (vaoList,drawList) <- unzip <$> mapM mkDrawAction gpList
+    objID <- readIORef (objectIDSeed renderer)
+    modifyIORef (objectIDSeed renderer) (+1)
     let obj = Object
             { objectSlotName        = slotName
             , objectUniformSetter   = objUSetterTrie
-            , vertexArrayObject     = vaoList
+            , objectID              = objID
             , objectEnabledIORef    = stateIORef
             }
 
