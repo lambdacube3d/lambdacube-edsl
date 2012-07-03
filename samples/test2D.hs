@@ -12,6 +12,7 @@ import FRP.Elerea.Param
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
+import System.Environment
 
 import TypeLevel.Number.Nat.Num
 import Data.Typeable
@@ -80,11 +81,16 @@ main = do
     compiledQuad <- compileMesh quad
     obj <- addMesh renderer "postSlot" compiledQuad []
 
-    let objU  = objectUniformSetter obj
-        slotU = uniformSetter renderer
+    args <- getArgs
+    let objU    = objectUniformSetter obj
+        slotU   = uniformSetter renderer
         diffuse = uniformFTexture2D "ScreenQuad" slotU
-        draw _ = render renderer >> swapBuffers
-    Right img <- loadImage "Panels_Diffuse.png"
+        draw _  = render renderer >> swapBuffers
+        fname   = case args of
+            []  -> "Panels_Diffuse.png"
+            n:_ -> n
+
+    Right img <- loadImage fname
     diffuse =<< compileTexture2DNoMipRGBAF img
     
     s <- fpsState

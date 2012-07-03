@@ -223,6 +223,7 @@ enableObject obj b = writeIORef (objectEnabledIORef obj) b
 -- FIXME: Temporary implemenation
 compileTexture2DNoMipRGBAF :: Bitmap Word8 -> IO TextureData
 compileTexture2DNoMipRGBAF bitmap = do
+    glPixelStorei gl_UNPACK_ALIGNMENT 1
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     glBindTexture gl_TEXTURE_2D to
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral gl_REPEAT--gl_CLAMP_TO_EDGE
@@ -232,7 +233,7 @@ compileTexture2DNoMipRGBAF bitmap = do
 --    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR_MIPMAP_LINEAR
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL 0
-    withBitmap bitmap $ \(w,h) nchn padding ptr -> do
+    withBitmap bitmap $ \(w,h) nchn 0 ptr -> do
         let internalFormat  = fromIntegral gl_RGBA32F
             dataFormat      = fromIntegral $ case nchn of
                 3   -> gl_RGB

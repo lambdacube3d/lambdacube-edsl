@@ -166,7 +166,7 @@ class ExpC exp where
     imageOut        :: ByteString -> exp -> exp
     screenOut       :: exp -> exp
 
-data N = N {unN :: !(State DAG ExpId)}
+newtype N = N {unN :: State DAG ExpId}
 
 instance ExpC N where
     lam !a = N $ do

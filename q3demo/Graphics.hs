@@ -261,12 +261,13 @@ mkTexCoord pos normal sa uvD uvL = foldl' (mkTCMod pos) uv $ saTCMod sa
 mkVertexShader :: CommonAttrs -> StageAttrs -> Exp V (V3F,V3F,V2F,V2F,V4F) -> VertexOut (V2F,V4F)
 mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) (Smooth uv:.Smooth color:.ZT)
   where
-    worldViewProj   = Uni (IM44F "worldViewProj")
-    (p,n,d,l,c)     = untup5 pndlc
-    screenPos       = worldViewProj @*. snoc pos 1
-    pos             = foldl' (mkDeform d n) p $ caDeformVertexes ca
-    uv              = mkTexCoord pos n sa d l
-    color           = mkColor ca sa c
+    worldMat    = Uni (IM44F "worldMat")
+    viewProj    = Uni (IM44F "viewProj")
+    (p,n,d,l,c) = untup5 pndlc
+    screenPos   = viewProj @*. worldMat @*. snoc pos 1
+    pos         = foldl' (mkDeform d n) p $ caDeformVertexes ca
+    uv          = mkTexCoord pos n sa d l
+    color       = mkColor ca sa c
 
 mkFragmentShader :: StageAttrs -> Exp F (V2F,V4F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
 mkFragmentShader sa uvrgba = FragmentOutRastDepth $ color :. ZT
@@ -335,12 +336,13 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
     input   = Fetch "missing shader" Triangle (IV3F "position", IV4F "color")
-    worldViewProj = Uni (IM44F "worldViewProj")
+    worldMat = Uni (IM44F "worldMat")
+    viewProj = Uni (IM44F "viewProj")
 
     vert :: Exp V (V3F,V4F) -> VertexOut V4F
     vert pc = VertexOut v4 (Const 1) (Smooth c:.ZT)
       where
-        v4    = worldViewProj @*. snoc p 1
+        v4    = viewProj @*. worldMat @*. snoc p 1
         (p,c) = untup2 pc
 
     frag :: Exp F V4F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
@@ -357,12 +359,13 @@ errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
     input   = Fetch "missing shader" Triangle (IV3F "position", IV4F "color")
-    worldViewProj = Uni (IM44F "worldViewProj")
+    worldMat = Uni (IM44F "worldMat")
+    viewProj = Uni (IM44F "viewProj")
 
     vert :: Exp V (V3F,V4F) -> VertexOut V4F
     vert pc = VertexOut v4 (Const 1) (Smooth c:.ZT)
       where
-        v4    = worldViewProj @*. snoc p 1
+        v4    = viewProj @*. worldMat @*. snoc p 1
         (p,c) = untup2 pc
 
     frag :: Exp F V4F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)

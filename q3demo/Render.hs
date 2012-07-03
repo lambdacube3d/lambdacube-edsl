@@ -218,6 +218,19 @@ addMD3 r model unis = do
             (n,p)    = V.head np
         (il,tl,nl,pl,nlp) = foldl' addSurface ([],[],[],[],[]) $ V.toList $ MD3.mdSurfaces model
     buffer <- compileBuffer $ concat [il,tl,nl,pl]
+    -- "missing shader"
+    --objs <- forM $ \addObject r 
+    {-
+            let attrs = T.fromList $
+                    [ ("position",      Stream TV3F buffer 0 startV countV)
+                    , ("diffuseUV",     Stream TV2F buffer 1 startV countV)
+                    , ("lightmapUV",    Stream TV2F buffer 2 startV countV)
+                    , ("normal",        Stream TV3F buffer 3 startV countV)
+                    , ("color",         Stream TV4F buffer 4 startV countV)
+                    ]
+                index = IndexStream buffer 0 startI countI
+    -}
+    obj <- addObject r "missing shader" TriangleList (Just $ undefined) undefined ["worldMat"]
     -- question: how will be the referred shaders loaded?
     --           general problem: should the gfx network contain all passes (every possible materials)?
     -- TODO

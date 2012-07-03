@@ -158,7 +158,9 @@ main = do
         entityRGB       = uniformV3F "entityRGB" slotU
         entityAlpha     = uniformFloat "entityAlpha" slotU
         identityLight   = uniformFloat "identityLight" slotU
+        worldMat        = uniformM44F "worldMat" slotU
 
+    worldMat idmtx'
     entityRGB one'
     entityAlpha 1
     identityLight 1.4
@@ -242,7 +244,7 @@ scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim = do
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
     cam <- userCamera p0 mouseMove fblrPress
-    let matSetter   = uniformM44F "worldViewProj" slotU
+    let matSetter   = uniformM44F "viewProj" slotU
         viewOrigin  = uniformV3F "viewOrigin" slotU
         orientation = uniformM44F "orientation" slotU
         timeSetter  = uniformFloat "time" slotU
@@ -440,11 +442,12 @@ loadQ3Texture defaultTex ar name = do
         b0 = T.member name ar
         b1 = T.member n1 ar
         b2 = T.member n2 ar
-    case T.lookup (if b0 then name else if b1 then n1 else n2) ar of
+        fname   = if b0 then name else if b1 then n1 else n2
+    case T.lookup fname ar of
         Nothing -> return defaultTex
         Just d  -> do
             eimg <- decodeImage $ decompress d
-            putStrLn $ "  load: " ++ SB.unpack name
+            putStrLn $ "  load: " ++ SB.unpack fname
             case eimg of
                 Left msg    -> putStrLn ("    error: " ++ msg) >> return defaultTex
                 Right img   -> compileTexture2DNoMipRGBAF img
