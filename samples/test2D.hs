@@ -91,7 +91,7 @@ main = do
             n:_ -> n
 
     Right img <- loadImage fname
-    diffuse =<< compileTexture2DNoMipRGBAF img
+    diffuse =<< compileTexture2DRGBAF False True img
     
     s <- fpsState
     sc <- start $ do

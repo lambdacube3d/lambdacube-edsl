@@ -2,7 +2,6 @@
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
---import Control.Concurrent.STM
 import Control.Monad
 import Data.Word
 import Data.Attoparsec.Char8
@@ -20,8 +19,11 @@ import System.FilePath
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Set as Set
 import qualified Data.Trie as T
+import qualified Data.Trie.Internal as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
+
+import Debug.Trace
 
 import TypeLevel.Number.Nat.Num
 import Graphics.Rendering.OpenGL.Raw.Core32
@@ -32,8 +34,6 @@ import Codec.Image.STB hiding (Image)
 
 import LC_API
 import LC_Mesh
---import LCGL
---import LCLanguage
 
 import Effect
 
@@ -44,6 +44,9 @@ import Render
 import ShaderParser
 import Zip
 
+import Items
+import qualified MD3 as MD3
+
 -- Utility code
 tableTexture :: [Float] -> ByteString -> Trie InputSetter -> IO ()
 tableTexture t n s = do
@@ -53,7 +56,7 @@ tableTexture t n s = do
         oneBitmap   = createSingleChannelBitmap (width,1) $ \x y -> 255
         texture     = uniformFTexture2D n s
 
-    tex <- compileTexture2DNoMipRGBAF $ combineChannels [bitmap,bitmap,bitmap,oneBitmap]
+    tex <- compileTexture2DRGBAF False False $ combineChannels [bitmap,bitmap,bitmap,oneBitmap]
     texture tex
 
 setupTables :: Trie InputSetter -> IO ()
@@ -116,7 +119,7 @@ main = do
         (normalShNames,textureShNames) = partition (\n -> T.member n shMap') $ Set.toList shNames
         normalShNameSet     = Set.fromList normalShNames
         textureShNameSet    = Set.fromList textureShNames
-        normalShMap     = T.mapBy (\n sh -> if Set.member n normalShNameSet then Just sh else Nothing) $ shaderMap ar
+        normalShMap     = T.mapBy (\n sh -> if Set.member n normalShNameSet then Just sh else Nothing) shMap'
         --textureShMap    = T.fromList [(n,defaultCommonAttrs {caStages = [defaultStageAttrs {saTexture = ST_Map n, saDepthWrite = True}]}) | n <- Set.toList textureShNameSet]
         textureShMap    = T.fromList [(n,imageShader n) | n <- Set.toList textureShNameSet]
         shMap = T.unionL normalShMap textureShMap
@@ -139,7 +142,7 @@ main = do
             _ -> False
         Just sp0 = T.lookup "origin" $ head $ filter spawn ents
         [x0,y0,z0] = map read $ words $ SB.unpack sp0
-        p0 = Vec3 x0 z0 (-y0)
+        p0 = Vec3 x0 y0 z0
 
     windowSize <- initCommon "LC DSL Quake 3 Demo"
 
@@ -173,15 +176,16 @@ main = do
         zeroBitmap      = emptyBitmap (32,32) 1
         oneBitmap       = createSingleChannelBitmap (32,32) $ \x y -> 255
 
-    defaultTexture <- compileTexture2DNoMipRGBAF $ combineChannels [redBitmap,redBitmap,zeroBitmap,oneBitmap]
-    animTex <- fmap concat $ forM (Set.toList $ Set.fromList $ map saTexture $ concatMap caStages $ T.elems shMap) $ \stageTex -> do
+    defaultTexture <- compileTexture2DRGBAF True False $ combineChannels [redBitmap,redBitmap,zeroBitmap,oneBitmap]
+    animTex <- fmap concat $ forM (Set.toList $ Set.fromList $ map (\(s,m) -> (saTexture s,m)) $
+               concatMap (\sh -> [(s,caNoMipMaps sh) | s <- caStages sh]) $ T.elems shMap) $ \(stageTex,noMip) -> do
         let texSlotName = SB.pack $ "Tex_" ++ show (crc32 $ SB.pack $ show stageTex)
-            setTex img  = uniformFTexture2D texSlotName slotU =<< loadQ3Texture defaultTexture archiveTrie img
+            setTex isClamped img  = uniformFTexture2D texSlotName slotU =<< loadQ3Texture (not noMip) isClamped defaultTexture archiveTrie img
         case stageTex of
-            ST_Map img          -> setTex img >> return []
-            ST_ClampMap img     -> setTex img >> return []
+            ST_Map img          -> setTex False img >> return []
+            ST_ClampMap img     -> setTex True img >> return []
             ST_AnimMap t imgs   -> do
-                txList <- mapM (loadQ3Texture defaultTexture archiveTrie) imgs
+                txList <- mapM (loadQ3Texture (not noMip) False defaultTexture archiveTrie) imgs
                 --return [(1 / t / fromIntegral (length imgs),cycle $ zip (repeat (uniformFTexture2D texSlotName slotU)) txList)]
                 return [(1/t,cycle $ zip (repeat (uniformFTexture2D texSlotName slotU)) txList)]
             _ -> return []
@@ -190,20 +194,68 @@ main = do
     objs <- addBSP renderer bsp
 
     -- setup menu
-    levelShots <- sequence [(n,) <$> loadQ3Texture defaultTexture archiveTrie (SB.append "levelshots/" n) | n <- T.keys bspMap]
+    levelShots <- sequence [(n,) <$> loadQ3Texture True True defaultTexture archiveTrie (SB.append "levelshots/" n) | n <- T.keys bspMap]
     menuObj <- addMesh menuRenderer "postSlot" compiledQuad ["ScreenQuad"]
     let menuObjUnis = objectUniformSetter menuObj
     --uniformFTexture2D "ScreenQuad" menuObjUnis defaultTexture
     uniformFTexture2D "ScreenQuad" menuObjUnis $ snd $ head levelShots
+
     -- add entities
+{-
+data Item
+    = Item
+    { itClassName   :: String
+    , itPickupSound :: String
+    , itWorldModel  :: [String]
+    , itIcon        :: String
+    , itPickupName  :: String
+    , itQuantity    :: Int
+    , itType        :: ItemType
+    , itTag         :: Tag
+    , itPreCaches   :: String
+    , itSounds      :: String
+    } deriving Show
+
+items =
+readMD3 :: LB.ByteString -> MD3Model
+-}
+    -- load items
+    let itemModels = T.fromList [(SB.pack $ itClassName it, [ MD3.readMD3 $ decompress' e | n <- itWorldModel it
+                                                            , let Just e = T.lookup (SB.pack n) archiveTrie
+                                                            ]) | it <- items]
     {-
         "origin" "1012 2090 108"
         "angle" "180"
         "model" "models/mapobjects/visor_posed.md3"
         "classname" "misc_model"
     -}
-    --md3 <- loadMD3 ""
-    --addMD3 renderer md3 ["world",idmtx]
+    {-
+        {
+        "origin" "1120 2128 16"
+        "classname" "item_armor_shard"
+        }
+    -}
+    forM_ ents $ \e -> case T.lookup "classname" e of
+        Nothing -> return ()
+        Just k  -> case T.lookup k itemModels of
+            Just ml -> do
+                putStrLn $ "add model: " ++ SB.unpack k
+                let Just o = T.lookup "origin" e
+                    [x,y,z] = map read $ words $ SB.unpack o
+                    p = Vec3 x y z
+                forM_ ml $ \md3 -> do
+                    lcmd3 <- addMD3 renderer md3 ["worldMat"]
+                    forM_ (lcmd3Object lcmd3) $ \obj -> do
+                        let unis    = objectUniformSetter $  obj
+                            woldMat = uniformM44F "worldMat" unis
+                            sm = fromProjective (scaling $ Vec3 s s s)
+                            s  = 0.005 / 64 * 2 -- FIXE: what is the correct value?
+                        woldMat $ mat4ToM44F $ sm .*. (fromProjective $ translation p)
+            Nothing -> when (k == "misc_model") $ case T.lookup "model" e of
+                Nothing -> return ()
+                Just m  -> do
+                    -- TODO
+                    return ()
 
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
@@ -221,8 +273,9 @@ main = do
     closeWindow
 
 animateMaps :: [(Float, [(SetterFun TextureData, TextureData)])] -> SignalGen Float (Signal [(Float, [(SetterFun TextureData, TextureData)])])
-animateMaps l0 = stateful l0 $ \dt l -> zipWith (f dt) l timing
+animateMaps l0 = stateful l0 $ \dt l -> zipWith (f $ dt * timeScale) l timing
   where
+    timeScale = 1
     timing  = map fst l0
     f :: Float -> (Float,[(SetterFun TextureData,TextureData)]) -> Float -> (Float,[(SetterFun TextureData,TextureData)])
     f dt (t,a) t0
@@ -247,6 +300,7 @@ scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim = do
     let matSetter   = uniformM44F "viewProj" slotU
         viewOrigin  = uniformV3F "viewOrigin" slotU
         orientation = uniformM44F "orientation" slotU
+        viewMat     = uniformM44F "viewMat" slotU
         timeSetter  = uniformFloat "time" slotU
         setupGFX (w,h) (cam,dir,up,_) time anim = do
             let cm = fromProjective (lookat cam (cam + dir) up)
@@ -259,9 +313,10 @@ scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim = do
                 far  = 15/s
                 fovDeg = 90
                 frust = frustum fovDeg (fromIntegral w / fromIntegral h) (near) (far) cam (cam+dir) up
-            timeSetter $ time-- / 25
+            timeSetter $ time / 1
             putStrLn $ "time: " ++ show time
             viewOrigin $ V3 cx cy cz
+            viewMat $ mat4ToM44F cm
             --orientation $ V4 orientA orientB orientC $ V4 0 0 0 1
             matSetter $! mat4ToM44F $! cm .*. sm .*. pm
             forM_ anim $ \(_,a) -> let (s,t) = head a in s t
@@ -357,8 +412,8 @@ userCamera :: Real p => Vec3 -> Signal (Float, Float) -> Signal (Bool, Bool, Boo
            -> SignalGen p (Signal (Vec3, Vec3, Vec3, (Float, Float)))
 userCamera p mposs keyss = transfer2 (p,zero,zero,(0,0)) calcCam mposs keyss
   where
-    d0 = Vec4 0 0 (-1) 1
-    u0 = Vec4 0 1 0 1
+    d0 = Vec4 0 (-1) 0 1
+    u0 = Vec4 0 0 (-1) 1
     calcCam dt (dmx,dmy) (ka,kw,ks,kd,turbo) (p0,_,_,(mx,my)) = (p',d,u,(mx',my'))
       where
         f0 c n = if c then (&+ n) else id
@@ -391,7 +446,7 @@ perspective n f fovy aspect = transpose $
 
 -- | Pure orientation matrix defined by Euler angles.
 rotationEuler :: Vec3 -> Proj4
-rotationEuler (Vec3 a b c) = orthogonal $ toOrthoUnsafe $ rotMatrixY a .*. rotMatrixX b .*. rotMatrixZ c
+rotationEuler (Vec3 a b c) = orthogonal $ toOrthoUnsafe $ rotMatrixZ a .*. rotMatrixX b .*. rotMatrixY (-c)
 
 -- | Camera transformation matrix.
 lookat :: Vec3   -- ^ Camera position.
@@ -434,8 +489,8 @@ parseEntities n s = eval n $ parse entities s
 
 
 
-loadQ3Texture :: TextureData -> Trie Entry -> ByteString -> IO TextureData
-loadQ3Texture defaultTex ar name = do
+loadQ3Texture :: Bool -> Bool -> TextureData -> Trie Entry -> ByteString -> IO TextureData
+loadQ3Texture isMip isClamped defaultTex ar name = do
     let name' = SB.unpack name
         n1 = SB.pack $ replaceExtension name' "tga"
         n2 = SB.pack $ replaceExtension name' "jpg"
@@ -450,4 +505,4 @@ loadQ3Texture defaultTex ar name = do
             putStrLn $ "  load: " ++ SB.unpack fname
             case eimg of
                 Left msg    -> putStrLn ("    error: " ++ msg) >> return defaultTex
-                Right img   -> compileTexture2DNoMipRGBAF img
+                Right img   -> compileTexture2DRGBAF isMip isClamped img

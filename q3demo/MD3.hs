@@ -59,8 +59,8 @@ getString   = fmap (SB.takeWhile (/= '\0')) . getByteString
 getUByte    = B.get :: Get Word8
 getFloat    = getFloat32le
 getVec2     = Vec2 <$> getFloat <*> getFloat
-getVec3     = (\x y z -> Vec3 x z (-y)) <$> getFloat <*> getFloat <*> getFloat
-getVec3i16  = (\x y z -> Vec3 (fromIntegral x) (fromIntegral z) (fromIntegral (-y))) <$> getInt16 <*> getInt16 <*> getInt16
+getVec3     = Vec3 <$> getFloat <*> getFloat <*> getFloat
+getVec3i16  = (\x y z -> Vec3 (fromIntegral x) (fromIntegral y) (fromIntegral z)) <$> getInt16 <*> getInt16 <*> getInt16
 getInt16    = fromIntegral <$> getInt' :: Get Int
   where
     getInt' = fromIntegral <$> getWord16le :: Get Int16
@@ -107,4 +107,5 @@ getMD3Model = do
 loadMD3 :: String -> IO MD3Model
 loadMD3 n = readMD3 <$> LB.readFile n
 
+readMD3 :: LB.ByteString -> MD3Model
 readMD3 dat = runGet getMD3Model dat

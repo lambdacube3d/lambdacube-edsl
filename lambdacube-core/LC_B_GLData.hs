@@ -221,23 +221,30 @@ enableObject obj b = writeIORef (objectEnabledIORef obj) b
 -- Texture
 
 -- FIXME: Temporary implemenation
-compileTexture2DNoMipRGBAF :: Bitmap Word8 -> IO TextureData
-compileTexture2DNoMipRGBAF bitmap = do
+compileTexture2DRGBAF :: Bool -> Bool -> Bitmap Word8 -> IO TextureData
+compileTexture2DRGBAF isMip isClamped bitmap = do
     glPixelStorei gl_UNPACK_ALIGNMENT 1
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     glBindTexture gl_TEXTURE_2D to
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral gl_REPEAT--gl_CLAMP_TO_EDGE
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral gl_REPEAT--gl_CLAMP_TO_EDGE
+    let (width,height) = bitmapSize bitmap
+        wrapMode = case isClamped of
+            True    -> gl_CLAMP_TO_EDGE
+            False   -> gl_REPEAT
+        (minFilter,maxLevel) = case isMip of
+            False   -> (gl_LINEAR,0)
+            True    -> (gl_LINEAR_MIPMAP_LINEAR, floor $ log (fromIntegral $ max width height) / log 2)
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral wrapMode
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral wrapMode
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral minFilter
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR
---    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR_MIPMAP_LINEAR
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL 0
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL $ fromIntegral maxLevel
     withBitmap bitmap $ \(w,h) nchn 0 ptr -> do
-        let internalFormat  = fromIntegral gl_RGBA32F
+        let internalFormat  = fromIntegral gl_RGBA8
             dataFormat      = fromIntegral $ case nchn of
                 3   -> gl_RGB
                 4   -> gl_RGBA
                 _   -> error "unsupported texture format!"
         glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
+    when isMip $ glGenerateMipmap gl_TEXTURE_2D
     return $ TextureData to

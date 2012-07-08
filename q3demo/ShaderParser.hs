@@ -52,9 +52,10 @@ val v w = const v <$> kw w
 
 float :: Parser Float
 float = (\_ c a -> c * read a) <$> skipSpace' <*> option 1 ((const 1 <$> char '+') <|> (const (-1) <$> char '-')) <*>
-    ( ((\a _ b -> a ++ b) <$> many1 digit <*> char '.' <*> many1 digit) <|>
+    ( ((\a _ b -> a ++ "." ++ b) <$> many1 digit <*> char '.' <*> many1 digit) <|>
       ((\_ a -> "0." ++ a) <$> char '.' <*> many1 digit) <|>
-      (many1 digit) )
+      (many1 digit)
+    )
     
 int :: Parser Int
 int = skipSpace' *> decimal
@@ -175,7 +176,7 @@ deformVertexes = (\v ca -> ca {caDeformVertexes = v:caDeformVertexes ca}) <$ kw 
     val D_Text5 "text5" <|>
     val D_Text6 "text6" <|> 
     val D_Text7 "text7" <|>
-    D_Wave <$ kw "wave" <*> float <*> wave
+    (\s w -> D_Wave (if s == 0 then 100 else 1/s) w) <$ kw "wave" <*> float <*> wave
     )
   where
     v3 = Vec3 <$> float <*> float <*> float
@@ -272,10 +273,11 @@ alphaGen = (\_ v sa -> sa {saAlphaGen = v}) <$> kw "alphagen" <*> (
     val A_OneMinusVertex "oneminusvertex"
     )
 
-tcGen = (\_ v sa -> sa {saTCGen = v}) <$> kw "tcgen" <*> (
-    val TG_Base "base" <|>
-    val TG_Lightmap "lightmap" <|>
+tcGen = (\_ v sa -> sa {saTCGen = v}) <$> (kw "texgen" <|> kw "tcgen") <*> (
     val TG_Environment "environment" <|>
+    val TG_Lightmap "lightmap" <|>
+    val TG_Base "texture" <|>
+    val TG_Base "base" <|> 
     TG_Vector <$ kw "vector" <*> v3 <*> v3)
   where
     v3 = (\_ x y z _ -> Vec3 x y z) <$> kw "(" <*> float <*> float <*> float <*> kw ")"

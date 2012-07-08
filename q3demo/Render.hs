@@ -28,26 +28,6 @@ import Q3Patch
         - bloom
         - ssao
 -}
-{-
-data Surface
-    = Surface
-    { srShaderNum      :: Int
-    , srFogNum         :: Int
-    , srSurfaceType    :: SurfaceType
-    , srFirstVertex    :: Int
-    , srNumVertices    :: Int
-    , srFirstIndex     :: Int
-    , srNumIndices     :: Int
-    , srLightmapNum    :: Int
-    , srLightmapPos    :: Vec2
-    , srLightmapSize   :: Vec2
-    , srLightmapOrigin :: Vec3
-    , srLightmapVec1   :: Vec3
-    , srLightmapVec2   :: Vec3
-    , srLightmapVec3   :: Vec3
-    , srPatchSize      :: (Int,Int)
-    }
--}
 
 tessellatePatch :: V.Vector DrawVertex -> Surface -> Int -> (V.Vector DrawVertex,V.Vector Int)
 tessellatePatch drawV sf level = (V.concat vl,V.concat il)
@@ -74,7 +54,7 @@ addObject' rndr name prim idx attrs unis = addObject rndr name' prim idx attrs' 
 
 addBSP :: Renderer -> BSPLevel -> IO (V.Vector Object)
 addBSP renderer bsp = do
-    let alig = Just 4
+    let alig = Just 1
     
     --zeroBitmap <- createSingleChannelBitmap (128,128) alig (\_ _ -> 0)
     oneBitmap <- createSingleChannelBitmap (128,128) alig (\_ _ -> 255)
@@ -83,7 +63,10 @@ addBSP renderer bsp = do
         [r,g,b] <- extractChannels bitmap alig
         bitmapRGBA <- combineChannels [r,g,b,oneBitmap] alig
         --bitmapRGBA <- combineChannels [oneBitmap,zeroBitmap,zeroBitmap,oneBitmap] alig
-        compileTexture2DNoMipRGBAF $ unsafeFreezeBitmap bitmapRGBA
+        compileTexture2DRGBAF False True $ unsafeFreezeBitmap bitmapRGBA
+    whiteTex <- do
+        bitmapRGBA <- combineChannels [oneBitmap,oneBitmap,oneBitmap,oneBitmap] alig
+        compileTexture2DRGBAF False False $ unsafeFreezeBitmap bitmapRGBA
 
     let lightMapTexturesSize = V.length lightMapTextures
         shaderNames = V.map shName $ blShaders bsp
@@ -133,14 +116,10 @@ addBSP renderer bsp = do
                 isValidIdx i = i >= 0 && i < lightMapTexturesSize
             o <- addObject' renderer name prim (Just index) attrs ["LightMap"]
             let lightMap = uniformFTexture2D "LightMap" $ objectUniformSetter o
-            when (isValidIdx lmIdx) $ lightMap $ lightMapTextures V.! lmIdx
+            lightMap whiteTex
+            --when (isValidIdx lmIdx) $ lightMap $ lightMapTextures V.! lmIdx
             return o
     V.mapM obj $ V.fromList $ reverse objs
-    -- foldl' ([],sizeV,[],sizeI,[])    -- list of (startV countV startI countI)
-                                        -- size of generated blDrawVertices
-                                        -- list of generated blDrawVertices chunks
-                                        -- size of generated blDrawIndices
-                                        -- list of generated blDrawIndices chunks
 
 data LCMD3
     = LCMD3
@@ -152,38 +131,8 @@ data LCMD3
 setMD3Frame :: LCMD3 -> Int -> IO ()
 setMD3Frame (LCMD3 _ buf frames) idx = updateBuffer buf $ frames V.! idx
 
-{-
-data Shader
-    = Shader
-    { shName    :: !SB.ByteString
-    , shIndex   :: !Int
-    } deriving Show
-
-data Surface
-    = Surface
-    { srName        :: SB.ByteString
-    , srShaders     :: Vector Shader
-    , srTriangles   :: Vector (Int,Int,Int)
-    , srTexCoords   :: Vector Vec2
-    , srXyzNormal   :: Vector (Vector (Vec3,Vec3))
-    } deriving Show
-
-data MD3Model
-    = MD3Model
-    { mdFrames      :: Vector Frame
-    , mdTags        :: Vector (Vector Tag)
-    , mdSurfaces    :: Vector Surface
-    } deriving Show
--}
 addMD3 :: Renderer -> MD3Model -> [ByteString] -> IO LCMD3
 addMD3 r model unis = do
-    {-
-        done - index buffer
-        done - texcoords
-        done - normals
-        done - positions
-    -}
-    --Array ArrayType Int BufferSetter
     let cvtSurface :: MD3.Surface -> (Array,Array,V.Vector (Array,Array))
         cvtSurface sf = ( Array ArrWord16 (SV.length indices) (withV indices)
                         , Array ArrFloat (2 * SV.length texcoords) (withV texcoords)
@@ -210,39 +159,37 @@ addMD3 r model unis = do
                 f v = Array ArrFloat (3 * V.length v) $ withV $ SV.convert v
                 (p,n) = V.unzip pn
             posNorms = V.map cvtPosNorm $ MD3.srXyzNormal sf
-    --compileBuffer :: [Array] -> IO Buffer
-    --addObject :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> Trie (Stream Buffer) -> [ByteString] -> IO Object
-    let addSurface (il,tl,nl,pl,npl) sf = (i:il,t:tl,n:nl,p:pl,np:npl)
+
+        addSurface (il,tl,pl,nl,pnl) sf = (i:il,t:tl,p:pl,n:nl,pn:pnl)
           where
-            (i,t,np) = cvtSurface sf
-            (n,p)    = V.head np
-        (il,tl,nl,pl,nlp) = foldl' addSurface ([],[],[],[],[]) $ V.toList $ MD3.mdSurfaces model
-    buffer <- compileBuffer $ concat [il,tl,nl,pl]
-    -- "missing shader"
-    --objs <- forM $ \addObject r 
-    {-
-            let attrs = T.fromList $
-                    [ ("position",      Stream TV3F buffer 0 startV countV)
-                    , ("diffuseUV",     Stream TV2F buffer 1 startV countV)
-                    , ("lightmapUV",    Stream TV2F buffer 2 startV countV)
-                    , ("normal",        Stream TV3F buffer 3 startV countV)
-                    , ("color",         Stream TV4F buffer 4 startV countV)
-                    ]
-                index = IndexStream buffer 0 startI countI
-    -}
-    obj <- addObject r "missing shader" TriangleList (Just $ undefined) undefined ["worldMat"]
+            (i,t,pn) = cvtSurface sf
+            (p,n)    = V.head pn
+        addFrame f (idx,pn) = V.zipWith (\l (p,n) -> (2 * numSurfaces + idx,p):(3 * numSurfaces + idx,n):l) f pn
+        (il,tl,pl,nl,pnl)   = V.foldl' addSurface ([],[],[],[],[]) surfaces
+        surfaces            = MD3.mdSurfaces model
+        numSurfaces         = V.length surfaces
+        frames              = foldl' addFrame (V.replicate (V.length $ MD3.mdFrames model) []) $ zip [0..] pnl
+
+    buffer <- compileBuffer $ concat [reverse il,reverse tl,reverse pl,reverse nl]
+
+    objs <- forM (zip [0..] $ V.toList surfaces) $ \(idx,sf) -> do
+        let countV = V.length $ MD3.srTexCoords sf
+            countI = 3 * V.length (MD3.srTriangles sf)
+            attrs = T.fromList $
+                [ ("diffuseUV",     Stream TV2F buffer (1 * numSurfaces + idx) 0 countV)
+                , ("position",      Stream TV3F buffer (2 * numSurfaces + idx) 0 countV)
+                , ("normal",        Stream TV3F buffer (3 * numSurfaces + idx) 0 countV)
+                , ("color",         ConstV4F (V4 0.5 0 0 1))
+                ]
+            index = IndexStream buffer idx 0 countI
+        addObject' r "missing shader" TriangleList (Just index) attrs ["worldMat"]
     -- question: how will be the referred shaders loaded?
     --           general problem: should the gfx network contain all passes (every possible materials)?
-    -- TODO
-    -- create buffer
-    -- create objects
     return $ LCMD3
-        { lcmd3Object   = undefined
+        { lcmd3Object   = objs
         , lcmd3Buffer   = buffer
-        , lcmd3Frames   = undefined
+        , lcmd3Frames   = frames
         }
---addMD3 renderer md3 ["world"]
-
 
 isClusterVisible :: BSPLevel -> Int -> Int -> Bool
 isClusterVisible bl a b

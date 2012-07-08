@@ -109,7 +109,7 @@ main = do
             --putStrLn $ C.secs t ++ " - render frame"
             return ()
     Right img <- loadImage "Panels_Diffuse.png"
-    diffuse =<< compileTexture2DNoMipRGBAF img
+    diffuse =<< compileTexture2DRGBAF True False img
     
     s <- fpsState
     sc <- start $ do

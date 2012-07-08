@@ -198,9 +198,9 @@ getUByte3   = B.get :: Get (Word8,Word8,Word8)
 getFloat    = getFloat32le
 
 getVec2     = Vec2 <$> getFloat <*> getFloat
-getVec3     = (\x y z -> Vec3 x z (-y)) <$> getFloat <*> getFloat <*> getFloat
+getVec3     = Vec3 <$> getFloat <*> getFloat <*> getFloat
 getVec2i    = (\x y -> Vec2 (fromIntegral x) (fromIntegral y)) <$> getInt <*> getInt
-getVec3i    = (\x y z -> Vec3 (fromIntegral x) (fromIntegral z) (fromIntegral (-y))) <$> getInt <*> getInt <*> getInt
+getVec3i    = (\x y z -> Vec3 (fromIntegral x) (fromIntegral y) (fromIntegral z)) <$> getInt <*> getInt <*> getInt
 
 getVec4RGBA = (\r g b a -> Vec4 (f r) (f g) (f b) (f a)) <$> getUByte <*> getUByte <*> getUByte <*> getUByte
   where
