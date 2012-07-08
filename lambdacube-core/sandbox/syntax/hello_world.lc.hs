@@ -13,8 +13,8 @@ separableBlur weightsH weightsV img = blur True weightsH (prjFrameBuffer 0 (blur
     blur isHorizontal weights img = accumulate accumContext passAll frag fragStream clearBuffer
       where
         accumContext = {depthOp = (Always, Keep), colorOp = (NoBlending, [True, True, True, True])}
-        clearBuffer = FrameBuffer (DepthImage n1 1000, ColorImage n1 [1 0 0 1])
-        fragStream = rasterize defaultTriangleContext (transform vert (fetchArray quadVertices))
+        clearBuffer = FrameBuffer (DepthImage n1 1000, ColorImage n1 [0, 0, 0, 1])
+        fragStream = rasterize defaultTriangleContext (transform vert (fetchArray TriangleList quadVertices))
 
         frag :: V2F@F ~> (Depth Float, Color V4F)@F*
         frag uv = fragmentOutRasterDepth (sum <<texture' smp (uv + offset d) 0 * w | (d, w) <- weights>>)
