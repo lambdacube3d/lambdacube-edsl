@@ -387,6 +387,7 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
             compileShader o sl
             glAttachShader po o
             return $! Just o
+    putStrLn $ "compileRenderFrameBuffer: compiling program for slot: " ++ show slotName
     putStrLn " + compile vertex shader"
     vsh <- createAndAttach [s | VertexShaderSrc s <- shl] gl_VERTEX_SHADER
     putStrLn " + compile geometry shader"
@@ -411,6 +412,10 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
     -- query active uniforms, attributes and samplers
     (uLoc,uType) <- queryUniforms po
     (sLoc,sType) <- queryStreams po
+
+    putStrLn $ "shader program stream input: " ++ show sLoc
+    putStrLn $ "shader program uniform input: " ++ show uLoc
+    putStrLn $ "expected sampler input: " ++ show allSamplerNames
 
     -- set sampler mapping
     glUseProgram po
