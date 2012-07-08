@@ -447,7 +447,7 @@ codeGenVertexShader dag smpName inVars = cvt
     cvt (Lam lam) = cvt $ toExp dag lam
     cvt (Body bodyExp) = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
-        , "#pragma optimize(off)"
+        -- , "#pragma optimize(off)"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
         , pp [attribute (unpack n)    (toGLSLType t) | (n,t) <- inVars]
@@ -507,7 +507,7 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
     src :: [ExpId] -> [(ByteString,ExpId)] -> (ByteString, [(ByteString,InputType)])
     src outs outs' = (SB.unlines $!
         [ "#extension GL_EXT_gpu_shader4 : require"
-        , "#pragma optimize(off)"
+        -- , "#pragma optimize(off)"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
         , pp [varyingIQ (unpack n) iq (toGLSLType t) | (n,iq,t) <- inVars]

@@ -380,12 +380,14 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
         (srcV,outV) = codeGenVertexShader dag samplerNameMap slotInput $ toExp dag vsh
         (srcG,outG) = ("",outV)--codeGenGeometryShader samplerNameMap outV gs
         (srcF,outF) = codeGenFragmentShader dag samplerNameMap outG (toExp dag ffilter) $ toExp dag fsh
+        printGLStatus = checkGL >>= print
         createAndAttach [] _ = return $! Nothing
         createAndAttach sl t = do
             mapM_ SB.putStrLn sl
             o <- glCreateShader t
             compileShader o sl
             glAttachShader po o
+            putStr "    + compile shader source: " >> printGLStatus
             return $! Just o
     putStrLn $ "compileRenderFrameBuffer: compiling program for slot: " ++ show slotName
     putStrLn " + compile vertex shader"
@@ -395,8 +397,6 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
     putStrLn " + compile fragment shader"
     fsh <- createAndAttach [s | FragmentShaderSrc s <- shl] gl_FRAGMENT_SHADER
 
-    let printGLStatus = checkGL >>= print
-    putStr "    + compile shader source: " >> printGLStatus
     -- connect Fragment output to FBO
     forM_ (zip fragOuts [0..]) $ \(n,i) -> SB.useAsCString n $ \pn -> do
         print (n,i)
@@ -420,7 +420,7 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
     -- set sampler mapping
     glUseProgram po
     forM_ (zip [0..] (map (SB.pack . snd) allSamplerNames)) $ \(tuIdx,n) -> case T.lookup n uLoc of
-        Nothing -> fail $ "missing sampler from shader: " ++ show n
+        Nothing -> putStrLn $ "WARNING - unxepected inactive sampler: " ++ show n
         Just i  -> (setSampler i tuIdx) >> putStr ("    + setup texture unit mapping (smp " ++ show i ++ " <-> TexUnit " ++ show tuIdx ++": ") >> printGLStatus
 
     -- HINT: we get the uniform location now, so we have to provide this info to the renderer
