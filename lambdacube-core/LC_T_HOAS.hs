@@ -172,8 +172,8 @@ data GP t where
 
     Transform       :: (GPU a, GPU b)
                     => (Exp V a -> VertexOut b)                       -- vertex shader
-                    -> GP (VertexStream primIn a)
-                    -> GP (PrimitiveStream primOut N1 V b)
+                    -> GP (VertexStream prim a)
+                    -> GP (PrimitiveStream prim N1 V b)
 
     Reassemble      :: GeometryShader primIn primOut layerCount a b
                     -> GP (PrimitiveStream primIn N1 V a)
@@ -181,7 +181,7 @@ data GP t where
 
     Rasterize       :: RasterContext prim
                     -> GP (PrimitiveStream prim layerCount stage a)
-                    -> GP (FragmentStream layerCount b)
+                    -> GP (FragmentStream layerCount a)
 
     FrameBuffer     :: FrameBuffer layerCount t
                     -> GP (FrameBuffer layerCount (FTRepr' t))
