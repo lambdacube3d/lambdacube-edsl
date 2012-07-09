@@ -1,5 +1,5 @@
-blurredImage :: FrameBuffer 1 (Float, V4F)
-blurredImage = separableBlur gaussWeights7 gaussWeights7 imageToBlur
+simpleRendering :: FrameBuffer 1 (Float, V4F)
+simpleRendering = accumulate accumContext True frag fragStream clearBuffer
   where
     type ColorWithDepth = (Depth Float, Color V4F)
 
@@ -12,12 +12,6 @@ blurredImage = separableBlur gaussWeights7 gaussWeights7 imageToBlur
     
     stream inputStream :: Triangle InputGeometry
     
-    -- imageToBlur :: Image 1 V4F
-    imageToBlur = prjFrameBuffer 0 simpleRendering
-
-    -- simpleRendering :: FrameBuffer 1 (Float, V4F)
-    simpleRendering = accumulate accumContext True frag fragStream clearBuffer
-
     -- accumContext :: AccumulationContext ColorWithDepth
     accumContext = {depthOp = (Less, Write), colorOp = (NoBlending, [True, True, True, True])}
 
@@ -46,6 +40,12 @@ blurredImage = separableBlur gaussWeights7 gaussWeights7 imageToBlur
       where
         position = cameraProjection * cameraView * [input.position, 1]
         normal = (worldPosition * [input.normal, 0]).xyz
+
+blurredRendering :: FrameBuffer 1 (Float, V4F)
+blurredRendering = separableBlur gaussWeights7 gaussWeights7 imageToBlur
+  where
+    -- imageToBlur :: Image 1 V4F
+    imageToBlur = prjFrameBuffer 0 simpleRendering
 
 separableBlur :: Array (Float, Float) -> Array (Float, Float) -> Image 1 V4F -> FrameBuffer 1 (Float, V4F)
 separableBlur weightsH weightsV img = blur True weightsH (prjFrameBuffer 0 (blur False weightsV img))
@@ -102,10 +102,10 @@ Primitive p1, Primitive p2 => GeometryShader p1 p2 n a b ~ (n, p2, Int, Primitiv
 
 -- Multi-pass:
 
--- note: it is somewhat confusing that index 0 means the second (!) element of the tuple
-prjFrameBuffer :: TupleIndex a b -> FrameBuffer layerCount a -> Image layerCount b
+-- note: it is somewhat confusing that index 0 means the last element of the tuple, i.e. it is right to left
+prjFrameBuffer :: Projection a b -> FrameBuffer layerCount a -> Image layerCount b
 
--- TupleIndex a b is essentially a subset of (a -> b), and it will
+-- Projection a b is essentially a subset of (a -> b), and it will
 -- most likely be superseded by deconstruction through pattern
 -- matching (on a tuple that models the framebuffer)
 
