@@ -1,65 +1,77 @@
-simpleRendering :: FrameBuffer 1 (Float, V4F)
+simpleRendering :: FrameBuffer 1 (Float, Float[4])
 simpleRendering = accumulate accumContext True frag fragStream clearBuffer
   where
-    type ColorWithDepth = (Depth Float, Color V4F)
+    type ColorWithDepth = (Depth Float, Color Float[4])
 
-    const worldPosition :: M44F
-          worldView :: M44F
-          cameraProjection :: M44F
-          lightDirection :: V3F
+    const worldPosition :: Float[4,4]
+          worldView :: Float[4,4]
+          cameraProjection :: Float[4,4]
+          lightDirection :: Float[3]
 
-    record InputGeometry = { position :: V3F, normal :: V3F }
-    
+    record InputGeometry = { position :: Float[3]
+                           , normal :: Float[3]
+                           }
+
     stream inputStream :: Triangle InputGeometry
-    
+
     -- accumContext :: AccumulationContext ColorWithDepth
-    accumContext = {depthOp = (Less, Write), colorOp = (NoBlending, [True, True, True, True])}
+    accumContext = { depthOp = (Less, Write)
+                   , colorOp = (NoBlending, [True, True, True, True])
+                   }
 
     -- rasterContext :: RasterContext Triangle
-    rasterContext = TriangleContext {cullMode = None, polygonMode = Fill, polygonOffset = None, provokingVertex = Last}
+    rasterContext = TriangleContext { cullMode = None
+                                    , polygonMode = Fill
+                                    , polygonOffset = None
+                                    , provokingVertex = Last
+                                    }
 
     -- clearBuffer :: FrameBuffer 1 ColorWithDepth
     clearBuffer = FrameBuffer (DepthImage 1 10000, ColorImage 1 [0, 0, 0, 1])
 
-    -- fragStream :: FragmentStream layerCount V4F
+    -- fragStream :: FragmentStream layerCount Float[4]
     fragStream = Rasterize rasterContext (Transform vert inputStream)
 
-    -- cameraView :: M44F@C
+    -- cameraView :: Float[4,4]@C
     cameraView = worldView * worldPosition
 
-    -- cameraLightDirection :: V3F@C
+    -- cameraLightDirection :: Float[3]@C
     cameraLightDirection = (cameraView * [lightDirection, 0]).xyz
 
-    frag :: V3F@F ~> ColorWithDepth@F*
+    frag :: Float[3]@F ~> ColorWithDepth@F*
     frag normal = fragmentOutRasterDepth lightIntensity
       where
-        lightIntensity = max 0 (dot (normalize cameraLightDirection) (normalize normal))
+        lightIntensity = max 0 (dot
+                                (normalize cameraLightDirection)
+                                (normalize normal))
 
-    vert :: InputGeometry@V ~> V3F@V*
+    vert :: InputGeometry@V ~> Float[3]@V*
     vert input = vertexOut position 1 (smooth normal)
       where
         position = cameraProjection * cameraView * [input.position, 1]
         normal = (worldPosition * [input.normal, 0]).xyz
 
-blurredRendering :: FrameBuffer 1 (Float, V4F)
+blurredRendering :: FrameBuffer 1 (Float, Float[4])
 blurredRendering = separableBlur gaussWeights7 gaussWeights7 imageToBlur
   where
     -- imageToBlur :: Image 1 V4F
     imageToBlur = prjFrameBuffer 0 simpleRendering
 
-separableBlur :: Array (Float, Float) -> Array (Float, Float) -> Image 1 V4F -> FrameBuffer 1 (Float, V4F)
+separableBlur :: Array (Float, Float) -> Array (Float, Float) -> Image 1 Float[4] -> FrameBuffer 1 (Float, Float[4])
 separableBlur weightsH weightsV img = blur True weightsH (prjFrameBuffer 0 (blur False weightsV img))
   where
     -- size :: Number a => a
     size = 512
 
-    blur :: Bool -> Image 1 V4F -> FrameBuffer 1 (Float, V4F)
+    blur :: Bool -> Image 1 Float[4] -> FrameBuffer 1 (Float, Float[4])
     blur isHorizontal weights img = accumulate accumContext passAll frag fragStream clearBuffer
       where
-        type BlurBuffer = (Depth Float, Color V4F)
+        type BlurBuffer = (Depth Float, Color Float[4])
 
         -- accumContext :: AccumulationContext BlurBuffer
-        accumContext = {depthOp = (Always, Keep), colorOp = (NoBlending, [True, True, True, True])}
+        accumContext = { depthOp = (Always, Keep)
+                       , colorOp = (NoBlending, [True, True, True, True])
+                       }
 
         -- clearBuffer :: FrameBuffer 1 BlurBuffer
         clearBuffer = FrameBuffer (DepthImage 1 1000, ColorImage 1 [0, 0, 0, 1])
@@ -112,7 +124,7 @@ prjFrameBuffer :: Projection a b -> FrameBuffer layerCount a -> Image layerCount
 -- Other functions:
 
 sum :: Number a => Array a -> a
-       
+
 -- we know from the concrete Number instance (which includes phase
 -- information as well) what kind of addition and zero to use, and
 -- expand it statically
