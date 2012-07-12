@@ -3,15 +3,16 @@
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
 import Control.Monad
-import Data.Word
 import Data.Attoparsec.Char8
 import Data.ByteString.Char8 (ByteString)
 import Data.Char
 import Data.IORef
 import Data.List (isPrefixOf,partition)
+import Data.Maybe
 import Data.Trie (Trie)
 import Data.Vect
 import Data.Vect.Float.Instances ()
+import Data.Word
 import FRP.Elerea.Param
 import System.Directory
 import System.Environment
@@ -97,6 +98,7 @@ main = do
             sa = defaultStageAttrs
                 { saTexture     = ST_Map txName
                 , saBlend       = Nothing
+                , saTCGen       = TG_Base
                 , saDepthWrite  = True
                 , saRGBGen      = RGB_IdentityLighting
                 }
@@ -104,7 +106,7 @@ main = do
                 { saTexture = ST_Lightmap
                 , saBlend   = Just (B_DstColor,B_Zero)
                 , saTCGen   = TG_Lightmap
-                , saRGBGen  = RGB_Identity
+                , saRGBGen  = RGB_IdentityLighting
                 }
 
     args <- getArgs
@@ -162,11 +164,11 @@ main = do
         entityAlpha     = uniformFloat "entityAlpha" slotU
         identityLight   = uniformFloat "identityLight" slotU
         worldMat        = uniformM44F "worldMat" slotU
-
+        overbrightBits  = 0
     worldMat idmtx'
     entityRGB one'
     entityAlpha 1
-    identityLight 1.4
+    identityLight $ 1.6 --1 / (2 ^ overbrightBits)
     setupTables slotU
 
     putStrLn "loading textures:"
@@ -221,7 +223,7 @@ readMD3 :: LB.ByteString -> MD3Model
 -}
     -- load items
     let itemModels = T.fromList [(SB.pack $ itClassName it, [ MD3.readMD3 $ decompress' e | n <- itWorldModel it
-                                                            , let Just e = T.lookup (SB.pack n) archiveTrie
+                                                            , e <- maybeToList $ T.lookup (SB.pack n) archiveTrie
                                                             ]) | it <- items]
     {-
         "origin" "1012 2090 108"

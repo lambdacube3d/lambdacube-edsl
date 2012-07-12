@@ -69,8 +69,8 @@ addBSP renderer bsp = do
         compileTexture2DRGBAF False False $ unsafeFreezeBitmap bitmapRGBA
 
     let lightMapTexturesSize = V.length lightMapTextures
-        shaderNames = V.map shName $ blShaders bsp
-        convertSurface (objs,lenV,arrV,lenI,arrI) sf = case srSurfaceType sf of
+        shaders = blShaders bsp
+        convertSurface (objs,lenV,arrV,lenI,arrI) sf = if noDraw then skip else case srSurfaceType sf of
             Planar          -> objs'
             TriangleSoup    -> objs'
             -- tessellate, concatenate vertex and index data to fixed vertex and index buffer
@@ -84,7 +84,8 @@ addBSP renderer bsp = do
             lmIdx = srLightmapNum sf
             skip  = ((lmIdx,srFirstVertex sf, srNumVertices sf, srFirstIndex sf, 0, TriangleList, name):objs, lenV, arrV, lenI, arrI)
             objs' = ((lmIdx,srFirstVertex sf, srNumVertices sf, srFirstIndex sf, srNumIndices sf, TriangleList, name):objs, lenV, arrV, lenI, arrI)
-            name  = shaderNames V.! (srShaderNum sf)
+            Shader name sfFlags _ = shaders V.! (srShaderNum sf)
+            noDraw = sfFlags .&. 0x80 /= 0
         drawV = blDrawVertices bsp
         drawI = blDrawIndices bsp
         (objs,_,drawVl,_,drawIl) = V.foldl' convertSurface ([],V.length drawV,[drawV],V.length drawI,[drawI]) $! blSurfaces bsp
@@ -116,8 +117,15 @@ addBSP renderer bsp = do
                 isValidIdx i = i >= 0 && i < lightMapTexturesSize
             o <- addObject' renderer name prim (Just index) attrs ["LightMap"]
             let lightMap = uniformFTexture2D "LightMap" $ objectUniformSetter o
-            lightMap whiteTex
-            --when (isValidIdx lmIdx) $ lightMap $ lightMapTextures V.! lmIdx
+            {-
+                #define LIGHTMAP_2D			-4		// shader is for 2D rendering
+                #define LIGHTMAP_BY_VERTEX	-3		// pre-lit triangle models
+                #define LIGHTMAP_WHITEIMAGE	-2
+                #define	LIGHTMAP_NONE		-1
+            -}
+            case isValidIdx lmIdx of
+                False   -> lightMap whiteTex
+                True    -> lightMap $ lightMapTextures V.! lmIdx
             return o
     V.mapM obj $ V.fromList $ reverse objs
 

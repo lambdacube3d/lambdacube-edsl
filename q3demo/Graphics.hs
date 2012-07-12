@@ -137,7 +137,7 @@ mkColor ca sa rgbaV = snoc' rgb alpha
         RGB_OneMinusVertex      -> v3V one' @- ((pack' $ V3 rV gV bV) @* identityLight)
 
     alpha = case saAlphaGen sa of
-        A_Wave w            -> mkWave w
+        A_Wave w            -> let a = mkWave w in clamp' a (floatV 0) (floatV 1)
         A_Const a           -> floatV a
         A_Portal            -> floatV 1 -- TODO
         A_Identity          -> floatV 1
@@ -175,8 +175,6 @@ mkWave = mkWave' $ floatV 0
 data Deform
     = D_AutoSprite
     | D_AutoSprite2
-    | D_Bulge !Float !Float !Float
-    | D_Move !Vec3 !Wave
     | D_Normal !Float !Float
     | D_ProjectionShadow
     | D_Text0
@@ -187,7 +185,6 @@ data Deform
     | D_Text5
     | D_Text6
     | D_Text7
-    | D_Wave !Float !Wave
 -}
 mkDeform :: Exp V V2F -> Exp V V3F -> Exp V V3F -> Deform -> Exp V V3F
 mkDeform uv normal pos d = case d of
@@ -228,7 +225,6 @@ mkTCMod pos uv m = trace (show m) $ case m of
                            v0_5 = floatV 0.5
                            off  = pack' $ V2 (v0_5 @- v0_5 @* c @+ v0_5 @* s) (v0_5 @- v0_5 @* s @- v0_5 @* c)
                        in m @*. uv @+ off
-
     TM_Transform m00 m01 m10 m11 t0 t1  -> let V2 u v   = unpack' uv
                                                u'       = u @* floatV m00 @+ v @* floatV m10 @+ floatV t0
                                                v'       = u @* floatV m01 @+ v @* floatV m11 @+ floatV t1
@@ -249,9 +245,9 @@ mkTexCoord pos normal sa uvD uvL = foldl' (mkTCMod pos) uv $ saTCMod sa
         TG_Base         -> uvD
         TG_Lightmap     -> uvL
         TG_Environment  ->  let viewOrigin  = Uni (IV3F "viewOrigin")
-                                viewer      = viewOrigin @- pos
+                                viewer      = normalize' $ viewOrigin @- pos
                                 d           = normal @. viewer
-                                reflected   = normal @* d @* floatV 2 @- viewer
+                                reflected   = normal @* floatV 2 @*d @- viewer
                                 V3 _ y z    = unpack' reflected
                                 v0_5        = floatV 0.5
                             in pack' $ V2 (v0_5 @+ y @* v0_5) (v0_5 @- z @* v0_5)
@@ -269,7 +265,7 @@ mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) (Smooth uv:.Smooth co
     screenPos   = viewProj @*. worldMat @*. snoc pos 1
     pos         = foldl' (mkDeform d n) p $ caDeformVertexes ca
     norm        = drop4 $ viewMat @*. worldMat @*. snoc n 0
-    uv          = mkTexCoord pos norm sa d l
+    uv          = mkTexCoord pos n sa d l
     color       = mkColor ca sa c
 
 mkFragmentShader :: StageAttrs -> Exp F (V2F,V4F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
