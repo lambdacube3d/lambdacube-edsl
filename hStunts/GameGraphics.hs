@@ -149,16 +149,13 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         --f x = exp' (x @* floatF 0.01)
         --light = min' (floatF 1) (max' inShadowTex (pow' (f m1 @/ f tz) (floatF 20)))
         
-    sampler = Sampler LinearFilter Clamp shadowMapEnvelope
+    sampler = Sampler LinearFilter Clamp shadowMapBlur
     
     shadowMap :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     shadowMap = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
     
     shadowMapEnvelope :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     shadowMapEnvelope = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
-
-    shadowMapEnvelopeBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
-    shadowMapEnvelopeBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 $ shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
 
     shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
@@ -187,7 +184,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
             (_depth,pos,pattern) = untup3 attr
             
         storeDepth :: Exp F (Float, V3F, Int32) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-        storeDepth attr = FragmentOutRastDepth $ pack' (V4 moment1 moment2 (floatF 500) (floatF 1)) :. ZT
+        storeDepth attr = FragmentOutRastDepth $ pack' (V4 moment1 moment2 (moment1 @* floatF 1.05) (floatF 1)) :. ZT
           where
             dx = dFdx' depth
             dy = dFdy' depth
@@ -215,12 +212,12 @@ shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
     frag :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag uv' = FragmentOutRastDepth $ pack' (V4 moment1 moment2 envelope (floatF 1)) :. ZT
       where
-        envelope = mkEnv [(x,y) | x <- [-1,0,1], y <- [-1,0,1], (x,y) /= (0,0)] @* floatF 1.05
-        V4 moment1 moment2 _ _ = unpack' $ texture' smp uv (Const 0)
-        mkEnv [] = moment1
-        mkEnv ((dh,dv):ds) = max' moment1 (mkEnv ds)
+        envelope = mkEnv [(x,y) | x <- [-1,0,1], y <- [-1,0,1], (x,y) /= (0,0)]
+        V4 moment1 moment2 moment1' _ = unpack' $ texture' smp uv (Const 0)
+        mkEnv [] = moment1'
+        mkEnv ((dh,dv):ds) = max' moment1' (mkEnv ds)
           where
-            V4 moment1 _ _ _ = unpack' $ texture' smp (uv @+ (Const (V2 (dh/sizeT) (dv/sizeT)) :: Exp F V2F)) (Const 0)
+            V4 _ _ moment1' _ = unpack' $ texture' smp (uv @+ (Const (V2 (dh/sizeT) (dv/sizeT)) :: Exp F V2F)) (Const 0)
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -238,10 +235,20 @@ blur' frag = Accumulate fragCtx PassAll frag rast clear
     input   = Fetch "postSlot" Triangle (IV2F "position")
 
     vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+    vert uv = VertexOut v4 (Const 1) (NoPerspective uv':.ZT)
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
+        uv'     = uv @* floatV 0.5 @+ floatV 0.5
+
+gaussFilter5 :: [(Float,Float)]
+gaussFilter5 = 
+    [ (-2.0,   0.1)
+    , (-1.0,   0.2)
+    , (0.0,    0.4)
+    , (1.0,    0.2)
+    , (2.0,    0.1)
+    ]
 
 gaussFilter7 :: [(Float,Float)]
 gaussFilter7 = 
@@ -268,31 +275,24 @@ gaussFilter9 =
     ]
 
 blurVH :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
-blurVH img = blur' fragH
+blurVH img = blur' $ frag uvH $ PrjFrameBuffer "" tix0 $ blur' $ frag uvV img 
   where
     sizeT = 512
     sizeI = floor sizeT
     uvH v = Const (V2 (v/sizeT) 0) :: Exp F V2F
     uvV v = Const (V2 0 (v/sizeT)) :: Exp F V2F
-    fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    fragH uv' = FragmentOutRastDepth $ (sampleH gaussFilter7) :. ZT
+    
+    frag dFn img uv = FragmentOutRastDepth $ pack' (V4 m1 m2 env (floatF 1)) :. ZT
       where
-        sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) (Const 0) @* floatF c
-        sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) (Const 0) @* floatF c) @+ sampleH xs
-        V2 u v = unpack' uv
-        uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter Clamp tex
-        tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [PrjFrameBuffer "" tix0 (blur' fragV)]
-
-    fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    fragV uv' = FragmentOutRastDepth $ (sampleV gaussFilter7) :. ZT
-      where
-        sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) (Const 0) @* floatF c
-        sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) (Const 0) @* floatF c) @+ sampleV xs
-        V2 u v = unpack' uv
-        uv = uv' @* floatF 0.5 @+ floatF 0.5
+        wsum ((o,c):[])  = texture' smp (uv @+ dFn o) (Const 0) @* floatF c
+        wsum ((o,c):xs)  = (texture' smp (uv @+ dFn o) (Const 0) @* floatF c) @+ wsum xs
+        mkEnv ((o,c):[])  = texture' smp (uv @+ dFn o) (Const 0)
+        mkEnv ((o,c):xs)  = max' (texture' smp (uv @+ dFn o) (Const 0)) (mkEnv xs)
+        V4 m1 m2 _ _ = unpack' $ wsum gaussFilter5
+        V4 _ _ env _ = unpack' $ mkEnv gaussFilter5
         smp = Sampler LinearFilter Clamp tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]
+
 {-
 debugShader :: GP (FrameBuffer N1 (Float,V4F))
 debugShader = Accumulate fragCtx PassAll frag rast stuntsGFX
