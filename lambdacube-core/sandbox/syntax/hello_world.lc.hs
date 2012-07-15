@@ -38,14 +38,14 @@ simpleRendering = accumulate accumContext True frag fragStream clearBuffer
     -- cameraLightDirection :: Float[3]@C
     cameraLightDirection = (cameraView * [lightDirection, 0]).xyz
 
-    frag :: Float[3]@F ~> ColorWithDepth@F*
+    frag :: Float[3]@F -> ColorWithDepth@F*
     frag normal = fragmentOutRasterDepth lightIntensity
       where
         lightIntensity = max 0 (dot
                                 (normalize cameraLightDirection)
                                 (normalize normal))
 
-    vert :: InputGeometry@V ~> Float[3]@V*
+    vert :: InputGeometry@V -> Float[3]@V*
     vert input = vertexOut position 1 (smooth normal)
       where
         position = cameraProjection * cameraView * [input.position, 1]
