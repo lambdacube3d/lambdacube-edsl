@@ -1,7 +1,13 @@
 simpleRendering :: FrameBuffer 1 ColorWithDepth
 simpleRendering = accumulate accumContext True frag fragStream clearBuffer
   where
-    accumulate :: TODO
+    accumulate :: (FrameBuffer b)
+               => AccumulationContext b
+               -> Bool
+               -> (a@F -> b@F*)
+               -> TODO
+               -> FrameBuffer n b
+               -> FrameBuffer n b
 
     type ColorWithDepth = BufferDepth Float Float[4]
 
@@ -55,9 +61,9 @@ simpleRendering = accumulate accumContext True frag fragStream clearBuffer
     fragStream = Rasterize rasterContext (Transform vert inputStream)
       where
         -- ??
-        transform :: (a@V -> b@V*) -> TODO
+        transform :: (a@V -> b@V*) -> TODO -> TODO
         -- ??
-        rasterize :: (Prim prim) => RasterContext prim -> TODO
+        rasterize :: (Prim prim) => RasterContext prim -> TODO -> TODO
 
     cameraView :: Float[4,4]@C
     cameraView = worldView * worldPosition
