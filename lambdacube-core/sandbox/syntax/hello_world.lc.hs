@@ -63,7 +63,7 @@ separableBlur weightsH weightsV img = blur True weightsH (prjFrameBuffer 0 (blur
     -- size :: Number a => a
     size = 512
 
-    blur :: Bool -> Image 1 Float[4] -> FrameBuffer 1 (Float, Float[4])
+    blur :: Bool -> Array (Float, Float) -> Image 1 Float[4] -> FrameBuffer 1 (Float, Float[4])
     blur isHorizontal weights img = accumulate accumContext passAll frag fragStream clearBuffer
       where
         type BlurBuffer = (Depth Float, Color Float[4])
@@ -79,7 +79,7 @@ separableBlur weightsH weightsV img = blur True weightsH (prjFrameBuffer 0 (blur
         -- fragStream :: FragmentStream layerCount V2F
         fragStream = rasterize defaultTriangleContext (transform vert (fetchArray TriangleList quadVertices))
 
-        frag :: V2F@F ~> BlurBuffer@F*
+        frag :: Float[2]@F ~> BlurBuffer@F*
         frag uv = fragmentOutRasterDepth (sum <<texture' smp (uv + offset d) 0 * w | (d, w) <- weights>>)  -- note: array comprehension is fully static
           where
 	        -- offset :: Number a => a@p ~> (Vector 2 a)@p
@@ -87,10 +87,10 @@ separableBlur weightsH weightsV img = blur True weightsH (prjFrameBuffer 0 (blur
             smp = Sampler LinearFilter Clamp tex
             tex = Texture (Texture2D (Float RGBA) n1) [size, size] NoMip [img]
 
-        vert :: V2F@V ~> V2F@V*
+        vert :: Float[2]@V ~> Float[2]@V*
         vert uv = vertexOut [uv, 1, 1] 1 (noPerspective (uv * 0.5 + 0.5))
 
-quadVertices :: Array V2F
+quadVertices :: Array Float[2]
 quadVertices = <<[-1, 1], [-1, -1], [1, -1], [1, -1], [1, 1], [-1, 1]>>
 
 gaussWeights7 :: Array (Float, Float)
