@@ -110,6 +110,7 @@ data TCGen
     | TG_Lightmap
     | TG_Environment -- TODO, check: RB_CalcEnvironmentTexCoords
     | TG_Vector !Vec3 !Vec3
+    | TG_Undefined  -- FIXME: HACK!!
     deriving Show
 
 data TCMod
@@ -153,7 +154,7 @@ data Blending
     | B_SrcAlphaSaturate
     | B_SrcColor
     | B_Zero
-    deriving Show
+    deriving (Show, Eq)
 
 data StageAttrs
     = StageAttrs
@@ -174,21 +175,13 @@ defaultStageAttrs = StageAttrs
     { saBlend       = Nothing
     , saRGBGen      = RGB_IdentityLighting
     , saAlphaGen    = A_Identity
-    , saTCGen       = TG_Base
+    , saTCGen       = TG_Undefined
     , saTCMod       = []
     , saTexture     = ST_WhiteImage
     , saDepthWrite  = True--False
     , saDepthFunc   = D_Lequal
     , saAlphaFunc   = Nothing
     }
-
-fixAttribOrder :: CommonAttrs -> CommonAttrs
-fixAttribOrder ca = ca
-    { caDeformVertexes = reverse $ caDeformVertexes ca
-    , caStages = reverse $ map fixStage $ caStages ca
-    }
-  where
-    fixStage sa = sa {saTCMod = reverse $ saTCMod sa}
 
 {-
 typedef struct {

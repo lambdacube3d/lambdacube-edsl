@@ -76,10 +76,31 @@ shaders :: Parser [(ByteString,CommonAttrs)]
 shaders = skip *> many shader <* skip
 
 shader :: Parser (ByteString,CommonAttrs)
-shader = (\n _ l _ -> (bsToLower n,fixAttribOrder $ foldl' (\s f -> f s) defaultCommonAttrs l)) <$> word' <*> kw' "{" <*> many shaderAttrs <*> kw' "}"
+shader = (\n _ l _ -> (bsToLower n,finishShader $ foldl' (\s f -> f s) defaultCommonAttrs l)) <$> word' <*> kw' "{" <*> many shaderAttrs <*> kw' "}"
 
 shaderAttrs :: Parser (CommonAttrs -> CommonAttrs)
 shaderAttrs = option id (choice [general, q3map, stage]) <* skipRest
+
+data StageInfo
+    = StageInfo
+    { siWasDepthMask    :: Bool
+    , siWasRGBGen       :: Bool
+    , siWasTCGen        :: Bool
+    }
+
+finishShader :: CommonAttrs -> CommonAttrs
+finishShader ca = ca
+    { caDeformVertexes = reverse $ caDeformVertexes ca
+    , caStages = reverse $ map fixStage $ caStages ca
+    }
+  where
+    fixStage sa = sa {saTCMod = reverse $ saTCMod sa, saTCGen = tcGen}
+      where
+        tcGen = case saTCGen sa of
+            TG_Undefined    -> case saTexture sa of
+                ST_Lightmap -> TG_Lightmap
+                _           -> TG_Base
+            a               -> a
 
 {-
 general =
@@ -246,7 +267,7 @@ dstBlend = val B_One "gl_one"
        <|> val B_SrcColor "gl_src_color"
        <|> val B_OneMinusSrcColor "gl_one_minus_src_color"
 
-blendFunc = (\_ b sa -> sa {saBlend = Just b}) <$> kw "blendfunc" <*> choice [blendFuncFunc, (,) <$> srcBlend <*> dstBlend]
+blendFunc = (\_ b sa -> sa {saBlend = Just b, saDepthWrite = b == (B_One,B_Zero)}) <$> kw "blendfunc" <*> choice [blendFuncFunc, (,) <$> srcBlend <*> dstBlend]
 
 rgbGen = (\_ v sa -> sa {saRGBGen = v}) <$> kw "rgbgen" <*> (
     RGB_Wave <$ kw "wave" <*> wave <|>
