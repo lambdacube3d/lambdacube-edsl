@@ -81,7 +81,7 @@ simpleRendering = accumulate accumContext True frag fragStream clearBuffer
         dot :: (Vector a) => a@p -> a@p -> a@p
         normalize :: (Vector a) => a@p -> a@p
 
-        -- XXX but lightIntensity has type Float and our return type is BufferDepth Float Float[4]...
+        -- Note: ligthIntensity :: Float is automatically lifted to Float[4]
         fragmentOutRasterDepth :: a@F -> BufferDepth Float a@F*
 
     vert :: InputGeometry@V -> Float[3]@V*
