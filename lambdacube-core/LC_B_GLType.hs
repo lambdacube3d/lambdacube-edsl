@@ -11,7 +11,7 @@ import Data.Vector.Unboxed.Mutable (IOVector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed.Mutable as MV
 
-import Graphics.Rendering.OpenGL.Raw.Core32
+import Graphics.Rendering.OpenGL.Raw.Core32 (GLint, GLuint)
 
 import LC_G_APIType
 import LC_U_APIType

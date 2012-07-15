@@ -16,6 +16,56 @@ import qualified Data.Vector as V
 --import Control.DeepSeq
 
 import Graphics.Rendering.OpenGL.Raw.Core32
+    ( GLuint
+    
+    -- * FUNCTION APPLICATION related *
+    -- render call
+    , glDrawArrays
+    , glDrawElements
+    , gl_LINES
+    , gl_LINE_STRIP
+    , gl_POINTS
+    , gl_STATIC_DRAW
+    , gl_TRIANGLES
+    , gl_TRIANGLE_FAN
+    , gl_TRIANGLE_STRIP
+
+    -- * BUFFER related *
+    -- buffer data
+    , glBindBuffer
+    , glBindVertexArray
+    , glBufferData
+    , glBufferSubData
+    , glGenBuffers
+    , glGenVertexArrays
+    , gl_ARRAY_BUFFER
+    , gl_ELEMENT_ARRAY_BUFFER
+
+    -- * TEXTURE related *
+    -- texture data
+    , glBindTexture
+    , glGenTextures
+    , glGenerateMipmap
+    , glPixelStorei
+    , glTexImage2D
+    , glTexParameteri
+    , gl_CLAMP_TO_EDGE
+    , gl_LINEAR
+    , gl_LINEAR_MIPMAP_LINEAR
+    , gl_REPEAT
+    , gl_RGB
+    , gl_RGBA
+    , gl_RGBA8
+    , gl_TEXTURE_2D
+    , gl_TEXTURE_BASE_LEVEL
+    , gl_TEXTURE_MAG_FILTER
+    , gl_TEXTURE_MAX_LEVEL
+    , gl_TEXTURE_MIN_FILTER
+    , gl_TEXTURE_WRAP_S
+    , gl_TEXTURE_WRAP_T
+    , gl_UNPACK_ALIGNMENT
+    , gl_UNSIGNED_BYTE
+    )
 
 import Data.Word
 import Data.Bitmap.Pure

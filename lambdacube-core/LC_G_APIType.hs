@@ -8,7 +8,7 @@ import Foreign.Ptr
 
 import LC_G_Type
 
-import Graphics.Rendering.OpenGL.Raw.Core32
+import Graphics.Rendering.OpenGL.Raw.Core32 (GLuint)
 
 data TextureData
     = TextureData

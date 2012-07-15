@@ -20,6 +20,34 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed.Mutable as MV
 
 import Graphics.Rendering.OpenGL.Raw.Core32
+    ( GLuint
+    -- * FRAMEBUFFER related *
+    -- create
+    , glBindFramebuffer
+    , glDeleteFramebuffers
+    , glGenFramebuffers
+    -- content manipulation
+    , glActiveTexture
+    , glBindRenderbuffer
+    , glBindTexture
+    , glDeleteTextures
+    , glDrawBuffer
+    , glDrawBuffers
+    , glFramebufferRenderbuffer
+    , glFramebufferTexture2D
+    , glGenRenderbuffers
+    , glRenderbufferStorage
+    , glViewport
+    , gl_BACK_LEFT
+    , gl_COLOR_ATTACHMENT0
+    , gl_DEPTH_ATTACHMENT
+    , gl_DEPTH_COMPONENT32
+    , gl_DRAW_FRAMEBUFFER
+    , gl_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+    , gl_RENDERBUFFER
+    , gl_TEXTURE0
+    , gl_TEXTURE_2D
+    )
 
 import LC_G_Type
 import LC_G_APIType

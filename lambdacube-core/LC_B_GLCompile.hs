@@ -17,6 +17,77 @@ import qualified Data.Traversable as T
 import qualified Data.Vector as V
 
 import Graphics.Rendering.OpenGL.Raw.Core32
+    ( GLboolean
+    , GLenum
+    , GLint
+    , GLuint
+    , glDisable
+    , glEnable
+    , gl_TRUE
+
+    -- * SHADER PROGRAM related *
+    , glAttachShader
+    , glBindFragDataLocation
+    , glCreateProgram
+    , glCreateShader
+    , glDeleteProgram
+    , glDeleteShader
+    , glLinkProgram
+    , glUseProgram
+    , gl_FRAGMENT_SHADER
+    , gl_GEOMETRY_SHADER
+    , gl_LINK_STATUS
+    , gl_VERTEX_SHADER
+
+    -- * ACCUMULATION CONTEXT related *
+    -- blending
+    , glBlendColor
+    , glBlendEquationSeparate
+    , glBlendFuncSeparate
+    , gl_BLEND
+    -- logic operation
+    , glLogicOp
+    , gl_COLOR_LOGIC_OP
+    -- framebuffer related
+    , glClear
+    , glClearColor
+    , glClearDepth
+    , glColorMask
+    , gl_COLOR_BUFFER_BIT
+    , gl_DEPTH_BUFFER_BIT
+    -- depth and stencil filter functions
+    , glDepthFunc
+    , glDepthMask
+    , gl_DEPTH_TEST
+    , gl_STENCIL_TEST
+
+    -- * RASTER CONTEXT related *
+    , glProvokingVertex
+    , gl_FIRST_VERTEX_CONVENTION
+    , gl_LAST_VERTEX_CONVENTION
+    -- point
+    , glPointSize
+    , gl_PROGRAM_POINT_SIZE
+    -- line
+    , glLineWidth
+    -- triangle
+    , glCullFace
+    , glFrontFace
+    , glPolygonMode
+    , glPolygonOffset
+    , gl_BACK
+    , gl_CCW
+    , gl_CULL_FACE
+    , gl_CW
+    , gl_FILL
+    , gl_FRONT
+    , gl_FRONT_AND_BACK
+    , gl_LINE
+    , gl_POINT
+    , gl_POLYGON_OFFSET_FILL
+    , gl_POLYGON_OFFSET_LINE
+    , gl_POLYGON_OFFSET_POINT
+    )
 
 import LC_G_Type
 import LC_G_APIType

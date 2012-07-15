@@ -39,7 +39,7 @@ tessellatePatch drawV sf level = (V.concat vl,V.concat il)
         (x,xs)  -> x:gridF xs
     grid        = gridF $ V.toList $ V.take (srNumVertices sf) $ V.drop (srFirstVertex sf) drawV
     controls    = [V.fromList $ concat [take 3 $ drop x l | l <- lines] | x <- [0,2..w-3], y <- [0,2..h-3], let lines = take 3 $ drop y grid]
-    patches     = [unsafeTessellate c level | c <- controls]
+    patches     = [tessellate c level | c <- controls]
     (vl,il)     = unzip $ reverse $ snd $ foldl' (\(o,l) (v,i) -> (o+V.length v, (v,V.map (+o) i):l)) (0,[]) patches
 
 addObject' :: Renderer -> ByteString -> Primitive -> Maybe (IndexStream Buffer) -> T.Trie (Stream Buffer) -> [ByteString] -> IO Object

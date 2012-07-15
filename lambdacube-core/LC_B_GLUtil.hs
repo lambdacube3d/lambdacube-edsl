@@ -33,11 +33,260 @@ import Data.IORef
 import Data.List as L
 import Data.Trie as T
 import Foreign
-import Graphics.Rendering.OpenGL.Raw.Core32
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Vector as V
 import Data.Vector.Unboxed.Mutable (IOVector)
 import qualified Data.Vector.Unboxed.Mutable as MV
+
+import Graphics.Rendering.OpenGL.Raw.Core32
+    ( GLchar
+    , GLenum
+    , GLint
+    , GLsizei
+    , GLuint
+    , gl_FALSE
+    , gl_TRUE
+    , glGetIntegerv
+
+    -- * ERROR CHECKING related *
+    -- error handling
+    , glGetError
+    , glCheckFramebufferStatus
+    -- error checking
+    , gl_COMPILE_STATUS
+    , gl_DRAW_FRAMEBUFFER
+    , gl_FRAMEBUFFER_COMPLETE
+    , gl_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
+    , gl_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER
+    , gl_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS
+    , gl_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE
+    , gl_FRAMEBUFFER_INCOMPLETE_READ_BUFFER
+    , gl_FRAMEBUFFER_UNDEFINED
+    , gl_FRAMEBUFFER_UNSUPPORTED
+    , gl_INFO_LOG_LENGTH
+    , gl_INVALID_ENUM
+    , gl_INVALID_FRAMEBUFFER_OPERATION
+    , gl_INVALID_OPERATION
+    , gl_INVALID_VALUE
+    , gl_NO_ERROR
+    , gl_OUT_OF_MEMORY
+
+    -- * TEXTURE related *
+    -- texture data
+    , glActiveTexture
+    , glBindTexture
+    , glGenTextures
+    , glTexImage2D
+    , glTexParameteri
+    , gl_TEXTURE0
+
+    -- texture parameters
+    , gl_LINEAR
+    , gl_REPEAT
+    , gl_TEXTURE_2D
+    , gl_TEXTURE_MAG_FILTER
+    , gl_TEXTURE_MIN_FILTER
+    , gl_TEXTURE_WRAP_S
+    , gl_TEXTURE_WRAP_T
+
+    -- texture format
+    , gl_R32F
+    , gl_R32I
+    , gl_R32UI
+    , gl_RED
+    , gl_RG
+    , gl_RG32F
+    , gl_RG32I
+    , gl_RG32UI
+    , gl_RGBA
+    , gl_RGBA32F
+    , gl_RGBA32I
+    , gl_RGBA32UI
+
+    -- * SHADER related *
+    -- shader program
+    , glCompileShader
+    , glGetActiveAttrib
+    , glGetActiveUniform
+    , glGetAttribLocation
+    , glGetProgramInfoLog
+    , glGetProgramiv
+    , glGetShaderInfoLog
+    , glGetShaderiv
+    , glGetUniformLocation
+    , glShaderSource
+
+    -- stream data (stream parameter)
+    , glBindBuffer
+    , glDisableVertexAttribArray
+    , glEnableVertexAttribArray
+    , glVertexAttrib1fv
+    , glVertexAttrib2fv
+    , glVertexAttrib3fv
+    , glVertexAttrib4fv
+    , glVertexAttribI1iv
+    , glVertexAttribI1uiv
+    , glVertexAttribI2iv
+    , glVertexAttribI2uiv
+    , glVertexAttribI3iv
+    , glVertexAttribI3uiv
+    , glVertexAttribI4iv
+    , glVertexAttribI4uiv
+    , glVertexAttribIPointer
+    , glVertexAttribPointer
+    , gl_ACTIVE_ATTRIBUTES
+    , gl_ACTIVE_ATTRIBUTE_MAX_LENGTH
+    , gl_ARRAY_BUFFER
+
+    -- stream value representation
+    , gl_BYTE
+    , gl_HALF_FLOAT
+    , gl_SHORT
+    , gl_UNSIGNED_BYTE
+    , gl_UNSIGNED_SHORT
+
+    -- uniform data (constant parameter)
+    , glUniform1fv
+    , glUniform1i
+    , glUniform1iv
+    , glUniform1uiv
+    , glUniform2fv
+    , glUniform2iv
+    , glUniform2uiv
+    , glUniform3fv
+    , glUniform3iv
+    , glUniform3uiv
+    , glUniform4fv
+    , glUniform4iv
+    , glUniform4uiv
+    , glUniformMatrix2fv
+    , glUniformMatrix2x3fv
+    , glUniformMatrix2x4fv
+    , glUniformMatrix3fv
+    , glUniformMatrix3x2fv
+    , glUniformMatrix3x4fv
+    , glUniformMatrix4fv
+    , glUniformMatrix4x2fv
+    , glUniformMatrix4x3fv
+    , gl_ACTIVE_UNIFORMS
+    , gl_ACTIVE_UNIFORM_MAX_LENGTH
+
+    -- uniform types (constant value types)
+    , gl_BOOL
+    , gl_BOOL_VEC2
+    , gl_BOOL_VEC3
+    , gl_BOOL_VEC4
+    , gl_FLOAT
+    , gl_FLOAT_MAT2
+    , gl_FLOAT_MAT2x3
+    , gl_FLOAT_MAT2x4
+    , gl_FLOAT_MAT3
+    , gl_FLOAT_MAT3x2
+    , gl_FLOAT_MAT3x4
+    , gl_FLOAT_MAT4
+    , gl_FLOAT_MAT4x2
+    , gl_FLOAT_MAT4x3
+    , gl_FLOAT_VEC2
+    , gl_FLOAT_VEC3
+    , gl_FLOAT_VEC4
+    , gl_INT
+    , gl_INT_SAMPLER_1D
+    , gl_INT_SAMPLER_1D_ARRAY
+    , gl_INT_SAMPLER_2D
+    , gl_INT_SAMPLER_2D_ARRAY
+    , gl_INT_SAMPLER_2D_MULTISAMPLE
+    , gl_INT_SAMPLER_2D_MULTISAMPLE_ARRAY
+    , gl_INT_SAMPLER_2D_RECT
+    , gl_INT_SAMPLER_3D
+    , gl_INT_SAMPLER_BUFFER
+    , gl_INT_SAMPLER_CUBE
+    , gl_INT_VEC2
+    , gl_INT_VEC3
+    , gl_INT_VEC4
+    , gl_SAMPLER_1D
+    , gl_SAMPLER_1D_ARRAY
+    , gl_SAMPLER_1D_ARRAY_SHADOW
+    , gl_SAMPLER_1D_SHADOW
+    , gl_SAMPLER_2D
+    , gl_SAMPLER_2D_ARRAY
+    , gl_SAMPLER_2D_ARRAY_SHADOW
+    , gl_SAMPLER_2D_MULTISAMPLE
+    , gl_SAMPLER_2D_MULTISAMPLE_ARRAY
+    , gl_SAMPLER_2D_RECT
+    , gl_SAMPLER_2D_RECT_SHADOW
+    , gl_SAMPLER_2D_SHADOW
+    , gl_SAMPLER_3D
+    , gl_SAMPLER_BUFFER
+    , gl_SAMPLER_CUBE
+    , gl_SAMPLER_CUBE_SHADOW
+    , gl_UNSIGNED_INT
+    , gl_UNSIGNED_INT_SAMPLER_1D
+    , gl_UNSIGNED_INT_SAMPLER_1D_ARRAY
+    , gl_UNSIGNED_INT_SAMPLER_2D
+    , gl_UNSIGNED_INT_SAMPLER_2D_ARRAY
+    , gl_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE
+    , gl_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY
+    , gl_UNSIGNED_INT_SAMPLER_2D_RECT
+    , gl_UNSIGNED_INT_SAMPLER_3D
+    , gl_UNSIGNED_INT_SAMPLER_BUFFER
+    , gl_UNSIGNED_INT_SAMPLER_CUBE
+    , gl_UNSIGNED_INT_VEC2
+    , gl_UNSIGNED_INT_VEC3
+    , gl_UNSIGNED_INT_VEC4
+
+    -- * CONTEXT PARAMETER realted *
+    -- depth and stencil operation
+    , gl_ALWAYS
+    , gl_EQUAL
+    , gl_GEQUAL
+    , gl_GREATER
+    , gl_LEQUAL
+    , gl_LESS
+    , gl_NEVER
+    , gl_NOTEQUAL
+
+    -- blending function
+    , gl_FUNC_ADD
+    , gl_FUNC_REVERSE_SUBTRACT
+    , gl_FUNC_SUBTRACT
+    , gl_MAX
+    , gl_MIN
+
+    -- blending
+    , gl_CONSTANT_ALPHA
+    , gl_CONSTANT_COLOR
+    , gl_DST_ALPHA
+    , gl_DST_COLOR
+    , gl_ONE
+    , gl_ONE_MINUS_CONSTANT_ALPHA
+    , gl_ONE_MINUS_CONSTANT_COLOR
+    , gl_ONE_MINUS_DST_ALPHA
+    , gl_ONE_MINUS_DST_COLOR
+    , gl_ONE_MINUS_SRC_ALPHA
+    , gl_ONE_MINUS_SRC_COLOR
+    , gl_SRC_ALPHA
+    , gl_SRC_ALPHA_SATURATE
+    , gl_SRC_COLOR
+    , gl_ZERO
+
+    -- logic operation
+    , gl_AND
+    , gl_AND_INVERTED
+    , gl_AND_REVERSE
+    , gl_CLEAR
+    , gl_COPY
+    , gl_COPY_INVERTED
+    , gl_EQUIV
+    , gl_INVERT
+    , gl_NAND
+    , gl_NOOP
+    , gl_NOR
+    , gl_OR
+    , gl_OR_INVERTED
+    , gl_OR_REVERSE
+    , gl_SET
+    , gl_XOR
+    )
 
 import LC_G_Type
 import LC_G_APIType
@@ -463,47 +712,46 @@ comparisonFunctionToGLType Never    = gl_NEVER
 comparisonFunctionToGLType Notequal = gl_NOTEQUAL
 
 logicOperationToGLType :: LogicOperation -> GLenum
-logicOperationToGLType Clear        = gl_CLEAR
 logicOperationToGLType And          = gl_AND
-logicOperationToGLType AndReverse   = gl_AND_REVERSE
-logicOperationToGLType Copy         = gl_COPY
 logicOperationToGLType AndInverted  = gl_AND_INVERTED
-logicOperationToGLType Noop         = gl_NOOP
-logicOperationToGLType Xor          = gl_XOR
-logicOperationToGLType Or           = gl_OR
-logicOperationToGLType Nor          = gl_NOR
+logicOperationToGLType AndReverse   = gl_AND_REVERSE
+logicOperationToGLType Clear        = gl_CLEAR
+logicOperationToGLType Copy         = gl_COPY
+logicOperationToGLType CopyInverted = gl_COPY_INVERTED
 logicOperationToGLType Equiv        = gl_EQUIV
 logicOperationToGLType Invert       = gl_INVERT
-logicOperationToGLType OrReverse    = gl_OR_REVERSE
-logicOperationToGLType CopyInverted = gl_COPY_INVERTED
-logicOperationToGLType OrInverted   = gl_OR_INVERTED
 logicOperationToGLType Nand         = gl_NAND
+logicOperationToGLType Noop         = gl_NOOP
+logicOperationToGLType Nor          = gl_NOR
+logicOperationToGLType Or           = gl_OR
+logicOperationToGLType OrInverted   = gl_OR_INVERTED
+logicOperationToGLType OrReverse    = gl_OR_REVERSE
 logicOperationToGLType Set          = gl_SET
+logicOperationToGLType Xor          = gl_XOR
 
 blendEquationToGLType :: BlendEquation -> GLenum
 blendEquationToGLType FuncAdd               = gl_FUNC_ADD
-blendEquationToGLType FuncSubtract          = gl_FUNC_SUBTRACT
 blendEquationToGLType FuncReverseSubtract   = gl_FUNC_REVERSE_SUBTRACT
-blendEquationToGLType Min                   = gl_MIN
+blendEquationToGLType FuncSubtract          = gl_FUNC_SUBTRACT
 blendEquationToGLType Max                   = gl_MAX
-
+blendEquationToGLType Min                   = gl_MIN
 
 blendingFactorToGLType :: BlendingFactor -> GLenum
-blendingFactorToGLType Zero                  = gl_ZERO
-blendingFactorToGLType One                   = gl_ONE
-blendingFactorToGLType SrcColor              = gl_SRC_COLOR
-blendingFactorToGLType OneMinusSrcColor      = gl_ONE_MINUS_SRC_COLOR
-blendingFactorToGLType DstColor              = gl_DST_COLOR
-blendingFactorToGLType OneMinusDstColor      = gl_ONE_MINUS_DST_COLOR
-blendingFactorToGLType SrcAlpha              = gl_SRC_ALPHA
-blendingFactorToGLType OneMinusSrcAlpha      = gl_ONE_MINUS_SRC_ALPHA
-blendingFactorToGLType DstAlpha              = gl_DST_ALPHA
-blendingFactorToGLType OneMinusDstAlpha      = gl_ONE_MINUS_DST_ALPHA
-blendingFactorToGLType ConstantColor         = gl_CONSTANT_COLOR
-blendingFactorToGLType OneMinusConstantColor = gl_ONE_MINUS_CONSTANT_COLOR
 blendingFactorToGLType ConstantAlpha         = gl_CONSTANT_ALPHA
+blendingFactorToGLType ConstantColor         = gl_CONSTANT_COLOR
+blendingFactorToGLType DstAlpha              = gl_DST_ALPHA
+blendingFactorToGLType DstColor              = gl_DST_COLOR
+blendingFactorToGLType One                   = gl_ONE
 blendingFactorToGLType OneMinusConstantAlpha = gl_ONE_MINUS_CONSTANT_ALPHA
+blendingFactorToGLType OneMinusConstantColor = gl_ONE_MINUS_CONSTANT_COLOR
+blendingFactorToGLType OneMinusDstAlpha      = gl_ONE_MINUS_DST_ALPHA
+blendingFactorToGLType OneMinusDstColor      = gl_ONE_MINUS_DST_COLOR
+blendingFactorToGLType OneMinusSrcAlpha      = gl_ONE_MINUS_SRC_ALPHA
+blendingFactorToGLType OneMinusSrcColor      = gl_ONE_MINUS_SRC_COLOR
+blendingFactorToGLType SrcAlpha              = gl_SRC_ALPHA
 blendingFactorToGLType SrcAlphaSaturate      = gl_SRC_ALPHA_SATURATE
+blendingFactorToGLType SrcColor              = gl_SRC_COLOR
+blendingFactorToGLType Zero                  = gl_ZERO
 
 {-
 data ColorArity = Red | RG | RGB | RGBA deriving (Show,Eq,Ord)
