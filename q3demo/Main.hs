@@ -48,6 +48,9 @@ import Zip
 import Items
 import qualified MD3 as MD3
 
+import Codec.Image.DevIL
+import Foreign
+
 -- Utility code
 tableTexture :: [Float] -> ByteString -> Trie InputSetter -> IO ()
 tableTexture t n s = do
@@ -89,8 +92,15 @@ quad = Mesh
     a = -1
     b = 1
 
+-- framebuffer capture function
+withFrameBuffer :: Int -> Int -> Int -> Int -> (Ptr Word8 -> IO ()) -> IO ()
+withFrameBuffer x y w h fn = allocaBytes (w*h*4) $ \p -> do
+    glReadPixels (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h) gl_RGBA gl_UNSIGNED_BYTE $ castPtr p
+    fn p
+
 main :: IO ()
 main = do
+    ilInit
     ar <- loadArchive
 
     let imageShader txName = defaultCommonAttrs {caStages = sa:saLM:[]}

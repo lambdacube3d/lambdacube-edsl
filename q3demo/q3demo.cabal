@@ -51,4 +51,5 @@ Executable q3demo
                   stb-image,
                   type-level-numbers,
                   vect,
-                  zlib
+                  zlib,
+                  Codec-Image-DevIL

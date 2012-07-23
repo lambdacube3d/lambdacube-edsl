@@ -25,7 +25,6 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_LINES
     , gl_LINE_STRIP
     , gl_POINTS
-    , gl_STATIC_DRAW
     , gl_TRIANGLES
     , gl_TRIANGLE_FAN
     , gl_TRIANGLE_STRIP
@@ -40,6 +39,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , glGenVertexArrays
     , gl_ARRAY_BUFFER
     , gl_ELEMENT_ARRAY_BUFFER
+    , gl_STATIC_DRAW
 
     -- * TEXTURE related *
     -- texture data
