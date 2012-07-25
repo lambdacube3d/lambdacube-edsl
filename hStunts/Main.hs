@@ -40,12 +40,6 @@ data CameraMode = FollowNear | FollowFar | UserControl
 lightPosition :: Vec3
 lightPosition = Vec3 400 800 400
 
-lightDirection :: Vec3
-lightDirection = Vec3 250 (-600) 400
-
-upwards :: Vec3
-upwards = Vec3 0 1 0
-
 main :: IO ()
 main = do
     let mediaPath = "."
@@ -171,33 +165,31 @@ scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSiz
     camMode <- transfer FollowNear pickMode cameraPress
     let camera = selectCam <$> camMode <*> followCamNear <*> followCamFar <*> userCam
 
-    let Just (SM44F cameraSetter) = T.lookup "worldView" uniforms
+    let Just (SM44F worldViewSetter) = T.lookup "worldView" uniforms
         Just (SM44F positionSetter) = T.lookup "worldPosition" uniforms
         Just (SM44F projectionSetter) = T.lookup "projection" uniforms
-        lightViewProj = uniformM44F "lightViewProj" uniforms
-        Just (SV3F lightPositionSetter) = T.lookup "lightPosition" uniforms
+        Just (SV3F lightDirectionSetter) = T.lookup "lightDirection" uniforms
         carPositionMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldPosition" u]
         carViewMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldView" u]
         wheelsPositionU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldPosition" u] | wu <- wheelsUnis]
         wheelsViewU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis]
-        setupGFX (w,h) cm carMat wheelsMats = do
-            let pm = perspective 0.1 50000 (pi/2) (fromIntegral w / fromIntegral h)
-                carPos = trim (_4 (fromProjective carMat))
-                lightPosition' = carPos &- lightDirection
-                ldist = len (lightPosition' &- carPos)
-                lm = fromProjective (lookat lightPosition' carPos upwards)
-                lpm = perspective (ldist-80) (ldist+80) (pi/150) 1
-
-            lightPositionSetter $! vec3ToV3F $! lightPosition'
-            cameraSetter $! mat4ToM44F $! fromProjective cm
+        setupGFX (w,h) worldViewMat carMat wheelsMats = do
+            let fieldOfView = pi/2
+                aspectRatio = fromIntegral w / fromIntegral h
+                projection nearDepth farDepth = perspective nearDepth farDepth fieldOfView aspectRatio
+            
+            lightDirectionSetter $! vec3ToV3F $! lightDirection
+            worldViewSetter $! mat4ToM44F $! fromProjective worldViewMat
             positionSetter $! mat4ToM44F $! idmtx
-            projectionSetter $! mat4ToM44F $! pm
-            lightViewProj $! mat4ToM44F $! lm .*. lpm
-            forM_ carPositionMats $ \s -> s $! mat4ToM44F $! fromProjective carMat
-            forM_ carViewMats $ \s -> s $! mat4ToM44F $! fromProjective cm
+            projectionSetter $! mat4ToM44F $! projection 0.1 50000
+            forM_ (zip3 lightFrustumSlices (tail lightFrustumSlices) [1..]) $ \(near, far, slice) ->
+                uniformM44F (SB.pack ("lightViewProj" ++ show slice)) uniforms $! mat4ToM44F $! fromProjective (lightProjection near far fieldOfView aspectRatio worldViewMat)
+            forM_ carPositionMats $ \s -> s $! mat4ToM44F $! fromProjective carMat 
+            forM_ carViewMats $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
             forM_ (zip wheelsPositionU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu
-            forM_ (zip wheelsViewU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective cm
+            forM_ (zip wheelsViewU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
             setSize (fromIntegral w) (fromIntegral h)
+    
     effectful4 setupGFX windowSize camera carPos wheelPos
 
 vec3ToV3F :: Vec3 -> V3F

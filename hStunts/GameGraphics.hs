@@ -5,11 +5,23 @@ import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as SB
 import Data.Int
 import Data.Vect.Float hiding (reflect')
+import Data.List hiding (transpose)
 
 import LC_API
 --import LCLanguage
 
 --import VSM hiding (floatF)
+
+shadowMapSize :: Num a => a
+shadowMapSize = 1024
+
+lightDirection :: Vec3
+lightDirection = Vec3 250 (-600) 400
+
+lightFrustumSlices :: [Float]
+lightFrustumSlices = [0.1, 10, 30, 100, 300]
+
+lightFrustumSliceCount = length lightFrustumSlices - 1
 
 -- specialized snoc
 snoc :: Exp s V3F -> Float -> Exp s V4F
@@ -32,6 +44,9 @@ int32F = Const
 
 get4Z :: Exp s V4F -> Exp s Float
 get4Z v = let V4 _ _ z _ = unpack' v in z
+
+upwards :: Vec3
+upwards = Vec3 0 1 0
 
 {-
 data Primitive
@@ -78,8 +93,8 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
     worldPosition = Uni (IM44F "worldPosition")
     worldView = Uni (IM44F "worldView")
     projection = Uni (IM44F "projection")
-    lightPosition = Uni (IV3F "lightPosition")
-    lightViewProj = Uni (IM44F "lightViewProj")
+    lightDirection = Uni (IV3F "lightDirection")
+    lightViewProjs = [Uni (IM44F (SB.pack ("lightViewProj" ++ show slice))) | slice <- [1..lightFrustumSliceCount]]
     camMat = worldView @.*. worldPosition
 
     gridPattern :: Exp F V3F -> Exp F Int32 -> Exp F Bool
@@ -99,31 +114,36 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         solid3 = fract' (prod3 @+ rand @* smoothen diff3) @< floatF 0.2
         smoothen x = x @* x
 
-    vert :: Exp V (V3F,V3F,V4F,Int32,Float,Float) -> VertexOut (V4F,V4F,V3F,V3F,V3F,Int32,Float,Float)
+    vert :: Exp V (V3F,V3F,V4F,Int32,Float,Float) -> VertexOut (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float)
     vert attr = VertexOut projPos (Const 1) (Smooth lightViewPos:.Flat colour:.Smooth pos:.Smooth eyePos:.Smooth normal:.Flat pattern:.Flat zBias:.Flat shiny:.ZT)
       where
         viewPos = camMat @*. snoc pos 1
         projPos = projection @*. viewPos
         normal = normalize' (trimM4 camMat @*. n)
         eyePos = trimV4 viewPos
-        lightViewPos = lightViewProj @*. worldPosition @*. snoc pos 1
+        -- PUT THESE IN A MATRIX!
+        lightViewPos = pack' $ V4 lightViewPos1 lightViewPos2 lightViewPos3 lightViewPos4
+        lightViewPos1 = (lightViewProjs !! 0) @*. worldPosition @*. snoc pos 1
+        lightViewPos2 = (lightViewProjs !! 1) @*. worldPosition @*. snoc pos 1
+        lightViewPos3 = (lightViewProjs !! 2) @*. worldPosition @*. snoc pos 1
+        lightViewPos4 = (lightViewProjs !! 3) @*. worldPosition @*. snoc pos 1
         
         (pos,n,colour,pattern,zBias,shiny) = untup6 attr
     
-    fragPassed :: Exp F (V4F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> Exp F Bool
+    fragPassed :: Exp F (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> Exp F Bool
     fragPassed attr = gridPattern pos pattern
       where
         (_lightViewPos,_colour,pos,_eyePos,_normal,pattern,_zBias,_shiny) = untup8 attr
 
-    frag :: Exp F (V4F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    frag :: Exp F (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag attr = FragmentOutDepth adjustedDepth (litColour :. ZT)
       where
-        l = normalize' (trimV4 (worldView @*. snoc lightPosition 1) @- eyePos)
+        l = normalize' (trimV4 (worldView @*. snoc lightDirection 0))
         e = normalize' (neg' eyePos)
         n = normal
-        r = normalize' (reflect' (neg' l) n)
+        r = normalize' (reflect' l n)
         
-        lambert = l @. n
+        lambert = neg' l @. n
         phong = max' (r @. e) (floatF 0)
 
         intensity = floatF 0.3 @+ light @* (max' (floatF 0) lambert @* floatF 0.5 @+ pow' phong (floatF 5) @* floatF 0.3)
@@ -136,7 +156,25 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
 
         (lightViewPos,colour,pos,eyePos,normal,pattern,zBias,shiny) = untup8 attr
 
-        V4 tx ty tz tw = unpack' lightViewPos
+        light = lightSlice 0 @* lightSlice 1 @* lightSlice 2 @* lightSlice 3
+
+        V4 lp1 lp2 lp3 lp4 = unpack' lightViewPos
+        lightViewPosVectors = [lp1, lp2, lp3, lp4]
+        
+        eyeDistSq = dot' eyePos eyePos
+        lightSlice slice = Cond (inSlice @&& inShadow @&& d @< tz) (floatF 0) (floatF 1)
+          where
+            inSlice = eyeDistSq @>= lf slice @&& eyeDistSq @<= lf (slice+1)
+            inShadow = u @>= floatF 0.01 @&& u @<= floatF 0.99 @&& v @>= floatF 0.01 @&& v @<= floatF 0.99
+            
+            V4 tx ty tz tw = unpack' (lightViewPosVectors !! slice)
+            u = tx @/ tw @* floatF 0.5 @+ floatF 0.5
+            v = ty @/ tw @* floatF 0.5 @+ floatF 0.5
+            d = texture' (shadowSampler (slice+1)) (pack' (V2 u v)) (floatF 0)
+
+            lf s = floatF (lightFrustumSlices !! s * lightFrustumSlices !! s)
+        {-
+        V4 tx ty tz tw = unpack' lightViewPos1
         u = tx @/ tw @* floatF 0.5 @+ floatF 0.5
         v = ty @/ tw @* floatF 0.5 @+ floatF 0.5
         V4 m1 m2 env _ = unpack' $ texture' sampler (pack' $ V2 u v) (floatF 0)
@@ -148,28 +186,29 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         --light = min' (floatF 1) (max' inShadowTex ((pmax @- floatF 0.5) @* max' (floatF 1) (exp' (floatF 5 @- d)) @+ floatF 0.5))
         --f x = exp' (x @* floatF 0.01)
         --light = min' (floatF 1) (max' inShadowTex (pow' (f m1 @/ f tz) (floatF 20)))
+        -}
         
-    sampler = Sampler LinearFilter Clamp shadowMapBlur
+    shadowSampler slice = Sampler LinearFilter Clamp (shadowMap slice)
     
-    shadowMap :: Texture GP DIM2 SingleTex (Regular Float) RGBA
-    shadowMap = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
+    shadowMap :: Int -> Texture GP DIM2 SingleTex (Regular Float) Red
+    shadowMap slice = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 (moments slice)]
     
-    shadowMapEnvelope :: Texture GP DIM2 SingleTex (Regular Float) RGBA
-    shadowMapEnvelope = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
+    --shadowMapEnvelope :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    --shadowMapEnvelope = Texture (Texture2D (Float RGBA) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
+    --
+    --shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    --shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
 
-    shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
-    shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
-
-    moments :: GP (FrameBuffer N1 (Float,V4F))
-    moments = Accumulate fragCtx (Filter fragPassed) storeDepth rast clear
+    moments :: Int -> GP (FrameBuffer N1 (Float, Float {-V4F-}))
+    moments slice = Accumulate fragCtx (Filter fragPassed) storeDepth rast clear
       where
-        fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
-        clear   = FrameBuffer (DepthImage n1 100000:.ColorImage n1 (V4 0 0 1 1):.ZT)
+        fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: Bool {-V4B-}):.ZT
+        clear   = FrameBuffer (DepthImage n1 1:.ColorImage n1 0 {-(V4 0 0 1 1)-}:.ZT)
         rast    = Rasterize triangleCtx prims
         prims   = Transform vert input
         input   = Fetch "streamSlot" Triangle (IV3F "position", IInt "pattern")
         worldPosition = Uni (IM44F "worldPosition")
-        lightViewProj = Uni (IM44F "lightViewProj")
+        lightViewProj = Uni (IM44F (SB.pack ("lightViewProj" ++ show slice)))
     
         vert :: Exp V (V3F, Int32) -> VertexOut (Float, V3F, Int32)
         vert attr = VertexOut v4 (floatV 1) (Smooth depth:.Smooth pos:.Flat pattern:.ZT)
@@ -183,6 +222,11 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
           where
             (_depth,pos,pattern) = untup3 attr
             
+        storeDepth :: Exp F (Float, V3F, Int32) -> FragmentOut (Depth Float :+: Color Float {-V4F-} :+: ZZ)
+        storeDepth attr = FragmentOutRastDepth $ depth @+ fwidth' depth {-pack' (V4 (depth @+ fwidth' depth) (floatF 0) (floatF 0) (floatF 1))-} :. ZT
+          where
+            (depth,_pos,_pattern) = untup3 attr
+        {-
         storeDepth :: Exp F (Float, V3F, Int32) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
         storeDepth attr = FragmentOutRastDepth $ pack' (V4 moment1 moment2 (moment1 @* floatF 1.05) (floatF 1)) :. ZT
           where
@@ -191,6 +235,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
             moment1 = depth
             moment2 = depth @* depth @+ floatF 0.25 @* (dx @* dx @+ dy @* dy)
             (depth,_pos,_pattern) = untup3 attr
+        -}
 
 shadowEnvelope :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
 shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
@@ -207,7 +252,7 @@ shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
 
-    sizeT = 512
+    sizeT = shadowMapSize
     sizeI = floor sizeT
     frag :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag uv' = FragmentOutRastDepth $ pack' (V4 moment1 moment2 envelope (floatF 1)) :. ZT
@@ -277,7 +322,7 @@ gaussFilter9 =
 blurVH :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
 blurVH img = blur' $ frag uvH $ PrjFrameBuffer "" tix0 $ blur' $ frag uvV img 
   where
-    sizeT = 512
+    sizeT = shadowMapSize
     sizeI = floor sizeT
     uvH v = Const (V2 (v/sizeT) 0) :: Exp F V2F
     uvV v = Const (V2 0 (v/sizeT)) :: Exp F V2F
@@ -345,3 +390,26 @@ perspective n f fovy aspect = transpose $
     b = -t
     r = aspect*t
     l = -r
+
+lightProjection nearDepth farDepth fieldOfView aspectRatio worldViewMat =
+    lightSpaceOrientation .*. scaling (Vec3 xscale yscale zscale) .*. translation (Vec3 xtrans ytrans ztrans)
+  where
+    projection = perspective nearDepth farDepth fieldOfView aspectRatio
+    localFrustum = [Vec4 (x*z) (y*z) (-z) 1 | x <- [-extentX, extentX], y <- [-extentY, extentY], z <- [nearDepth, farDepth]]
+      where
+        extentY = tan (fieldOfView/2)
+        extentX = aspectRatio * extentY
+                
+    lightSpaceOrientation = lookat zero (neg lightDirection) upwards
+    lightCameraFrustum = [v .* fromProjective (inverse worldViewMat .*. lightSpaceOrientation) | v <- localFrustum]
+    Vec4 xmin ymin zmin _ = foldl1' (onVec4 min) lightCameraFrustum
+    Vec4 xmax ymax zmax _ = foldl1' (onVec4 max) lightCameraFrustum
+    (xscale, xtrans) = linearTransform xmin (-1) xmax 1
+    (yscale, ytrans) = linearTransform ymin (-1) ymax 1
+    (zscale, ztrans) = linearTransform zmin 0.8 zmax 1
+                
+    onVec4 f (Vec4 x1 y1 z1 w1) (Vec4 x2 y2 z2 w2) = Vec4 (f x1 x2) (f y1 y2) (f z1 z2) (f w1 w2)
+    linearTransform x0 y0 x1 y1 = (a, b)
+      where
+        a = (y1-y0)/(x1-x0)
+        b = y0-a*x0
