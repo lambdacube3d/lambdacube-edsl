@@ -15,11 +15,14 @@ import LC_API
 shadowMapSize :: Num a => a
 shadowMapSize = 1024
 
+maxCasterDistance :: Float
+maxCasterDistance = 100
+
 lightDirection :: Vec3
 lightDirection = Vec3 250 (-600) 400
 
 lightFrustumSlices :: [Float]
-lightFrustumSlices = [0.1, 10, 30, 100, 300]
+lightFrustumSlices = [0.1, 10, 40, 200, 1000]
 
 lightFrustumSliceCount = length lightFrustumSlices - 1
 
@@ -121,7 +124,6 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         projPos = projection @*. viewPos
         normal = normalize' (trimM4 camMat @*. n)
         eyePos = trimV4 viewPos
-        -- PUT THESE IN A MATRIX!
         lightViewPos = pack' $ V4 lightViewPos1 lightViewPos2 lightViewPos3 lightViewPos4
         lightViewPos1 = (lightViewProjs !! 0) @*. worldPosition @*. snoc pos 1
         lightViewPos2 = (lightViewProjs !! 1) @*. worldPosition @*. snoc pos 1
@@ -156,15 +158,17 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
 
         (lightViewPos,colour,pos,eyePos,normal,pattern,zBias,shiny) = untup8 attr
 
-        light = lightSlice 0 @* lightSlice 1 @* lightSlice 2 @* lightSlice 3
+        light = min' (min' (lightSlice 0) (lightSlice 1)) (min' (lightSlice 2) (lightSlice 3))
 
         V4 lp1 lp2 lp3 lp4 = unpack' lightViewPos
         lightViewPosVectors = [lp1, lp2, lp3, lp4]
         
-        eyeDistSq = dot' eyePos eyePos
-        lightSlice slice = Cond (inSlice @&& inShadow @&& d @< tz) (floatF 0) (floatF 1)
+        V3 _ _ eyeDist = unpack' (neg' eyePos)
+        lightSlice slice = Cond (inSlice @&& inShadow) lightLevel (floatF 1)
           where
-            inSlice = eyeDistSq @>= lf slice @&& eyeDistSq @<= lf (slice+1)
+            --lightLevel = min' (floatF 1) (exp' (floatF 10 @* (d @- tz)))
+            lightLevel = Cond (d @< tz) (floatF 0) (floatF 1)
+            inSlice = eyeDist @>= lf slice @&& eyeDist @<= lf (slice+1)
             inShadow = u @>= floatF 0.01 @&& u @<= floatF 0.99 @&& v @>= floatF 0.01 @&& v @<= floatF 0.99
             
             V4 tx ty tz tw = unpack' (lightViewPosVectors !! slice)
@@ -172,7 +176,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
             v = ty @/ tw @* floatF 0.5 @+ floatF 0.5
             d = texture' (shadowSampler (slice+1)) (pack' (V2 u v)) (floatF 0)
 
-            lf s = floatF (lightFrustumSlices !! s * lightFrustumSlices !! s)
+            lf s = floatF (lightFrustumSlices !! s)
         {-
         V4 tx ty tz tw = unpack' lightViewPos1
         u = tx @/ tw @* floatF 0.5 @+ floatF 0.5
@@ -406,7 +410,7 @@ lightProjection nearDepth farDepth fieldOfView aspectRatio worldViewMat =
     Vec4 xmax ymax zmax _ = foldl1' (onVec4 max) lightCameraFrustum
     (xscale, xtrans) = linearTransform xmin (-1) xmax 1
     (yscale, ytrans) = linearTransform ymin (-1) ymax 1
-    (zscale, ztrans) = linearTransform zmin 0.8 zmax 1
+    (zscale, ztrans) = linearTransform (min (zmin-0.2*(zmax-zmin)) (zmax-maxCasterDistance)) 0 zmax 1
                 
     onVec4 f (Vec4 x1 y1 z1 w1) (Vec4 x2 y2 z2 w2) = Vec4 (f x1 x2) (f y1 y2) (f z1 z2) (f w1 w2)
     linearTransform x0 y0 x1 y1 = (a, b)
