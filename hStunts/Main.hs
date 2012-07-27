@@ -182,7 +182,8 @@ scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSiz
             worldViewSetter $! mat4ToM44F $! fromProjective worldViewMat
             positionSetter $! mat4ToM44F $! idmtx
             projectionSetter $! mat4ToM44F $! projection 0.1 50000
-            forM_ (zip3 lightFrustumSlices (tail lightFrustumSlices) [1..]) $ \(near, far, slice) ->
+            forM_ (zip3 lightFrustumSlices (tail lightFrustumSlices) [1..]) $ \(near, far, slice) -> do
+                uniformFloat (SB.pack ("gridThickness" ++ show slice)) uniforms $! gridThickness slice
                 uniformM44F (SB.pack ("lightViewProj" ++ show slice)) uniforms $! mat4ToM44F $! fromProjective (lightProjection near far fieldOfView aspectRatio worldViewMat)
             forM_ carPositionMats $ \s -> s $! mat4ToM44F $! fromProjective carMat 
             forM_ carViewMats $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat

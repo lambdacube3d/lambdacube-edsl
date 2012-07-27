@@ -22,7 +22,10 @@ lightDirection :: Vec3
 lightDirection = Vec3 250 (-600) 400
 
 lightFrustumSlices :: [Float]
-lightFrustumSlices = [0.1, 10, 40, 200, 1000]
+lightFrustumSlices = [0.1, 10, 35, 150, 700]
+
+gridThicknesses :: [Float]
+gridThicknesses = [0.2, 0.11, 0.1, 0.1]
 
 lightFrustumSliceCount = length lightFrustumSlices - 1
 
@@ -100,8 +103,8 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
     lightViewProjs = [Uni (IM44F (SB.pack ("lightViewProj" ++ show slice))) | slice <- [1..lightFrustumSliceCount]]
     camMat = worldView @.*. worldPosition
 
-    gridPattern :: Exp F V3F -> Exp F Int32 -> Exp F Bool
-    gridPattern pos pattern = (pattern @== int32F 1) @|| ((pattern @/= int32F 0) @&& isSolid)
+    gridPattern :: Exp F Float -> Exp F V3F -> Exp F Int32 -> Exp F Bool
+    gridPattern thickness pos pattern = (pattern @== int32F 1) @|| ((pattern @/= int32F 0) @&& isSolid)
       where
         isSolid = solid1 @|| solid2 @|| solid3
         -- TODO this should be done with a noise texture instead of such an expensive operation
@@ -112,13 +115,13 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         diff1 = fwidth' prod1
         diff2 = fwidth' prod2
         diff3 = fwidth' prod3
-        solid1 = fract' (prod1 @+ rand @* smoothen diff1) @< floatF 0.2
-        solid2 = fract' (prod2 @+ rand @* smoothen diff2) @< floatF 0.2
-        solid3 = fract' (prod3 @+ rand @* smoothen diff3) @< floatF 0.2
+        solid1 = fract' (prod1 @+ rand @* smoothen diff1) @< thickness
+        solid2 = fract' (prod2 @+ rand @* smoothen diff2) @< thickness
+        solid3 = fract' (prod3 @+ rand @* smoothen diff3) @< thickness
         smoothen x = x @* x
 
     vert :: Exp V (V3F,V3F,V4F,Int32,Float,Float) -> VertexOut (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float)
-    vert attr = VertexOut projPos (Const 1) (Smooth lightViewPos:.Flat colour:.Smooth pos:.Smooth eyePos:.Smooth normal:.Flat pattern:.Flat zBias:.Flat shiny:.ZT)
+    vert attr = VertexOut projPos (Const 1) (Smooth lightViewPos:.Flat colour:.Smooth pos:.Smooth eyePos:.Flat normal:.Flat pattern:.Flat zBias:.Flat shiny:.ZT)
       where
         viewPos = camMat @*. snoc pos 1
         projPos = projection @*. viewPos
@@ -133,7 +136,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         (pos,n,colour,pattern,zBias,shiny) = untup6 attr
     
     fragPassed :: Exp F (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> Exp F Bool
-    fragPassed attr = gridPattern pos pattern
+    fragPassed attr = gridPattern (floatF 0.2) pos pattern
       where
         (_lightViewPos,_colour,pos,_eyePos,_normal,pattern,_zBias,_shiny) = untup8 attr
 
@@ -142,7 +145,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
       where
         l = normalize' (trimV4 (worldView @*. snoc lightDirection 0))
         e = normalize' (neg' eyePos)
-        n = normal
+        n = Cond frontFacing normal (neg' normal)
         r = normalize' (reflect' l n)
         
         lambert = neg' l @. n
@@ -213,6 +216,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         input   = Fetch "streamSlot" Triangle (IV3F "position", IInt "pattern")
         worldPosition = Uni (IM44F "worldPosition")
         lightViewProj = Uni (IM44F (SB.pack ("lightViewProj" ++ show slice)))
+        gridThickness = Uni (IFloat (SB.pack ("gridThickness" ++ show slice)))
     
         vert :: Exp V (V3F, Int32) -> VertexOut (Float, V3F, Int32)
         vert attr = VertexOut v4 (floatV 1) (Smooth depth:.Smooth pos:.Flat pattern:.ZT)
@@ -222,7 +226,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
             (pos,pattern) = untup2 attr
     
         fragPassed :: Exp F (Float, V3F, Int32) -> Exp F Bool
-        fragPassed attr = gridPattern pos pattern
+        fragPassed attr = gridPattern gridThickness pos pattern
           where
             (_depth,pos,pattern) = untup3 attr
             
@@ -394,6 +398,8 @@ perspective n f fovy aspect = transpose $
     b = -t
     r = aspect*t
     l = -r
+
+gridThickness n = gridThicknesses !! (n-1)
 
 lightProjection nearDepth farDepth fieldOfView aspectRatio worldViewMat =
     lightSpaceOrientation .*. scaling (Vec3 xscale yscale zscale) .*. translation (Vec3 xtrans ytrans ztrans)
