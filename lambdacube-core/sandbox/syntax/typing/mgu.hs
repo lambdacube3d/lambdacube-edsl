@@ -22,6 +22,7 @@ testInfer m = runInfer m (TyEnv tyEnv) (PolyEnv mempty)
 foo = testInfer $ inferExpr $ case map2 of
     Match [pat] e -> ELam pat e
       -- inferDefs (Defs [[defMap]])
+-- foo = testInfer $ inferDefs $ Defs [[defMap]]
   where
     defMap = DefFun "map" [map1, map2]
 

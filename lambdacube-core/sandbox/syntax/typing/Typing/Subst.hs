@@ -11,22 +11,14 @@ module Typing.Subst
        ) where
 
 import Typing.Repr
-import Typing.Fresh
 
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-import qualified Data.Set as Set
-
 import Control.Applicative
-import Control.Monad hiding (mapM)
 import Data.Monoid
-import Data.Maybe (mapMaybe)
-import Prelude hiding (mapM)
-import Data.Traversable (mapM)
-
 import Control.Monad.Trans
-import Control.Monad.State hiding (mapM)
+import Control.Monad.State
 import Control.Monad.Identity
 
 newtype SubstT m a = SubstT{ unSubstT :: StateT (Map Tv Ty) m a }

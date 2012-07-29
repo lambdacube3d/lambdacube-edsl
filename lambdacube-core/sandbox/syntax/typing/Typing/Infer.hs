@@ -11,6 +11,7 @@ module Typing.Infer
 import Typing.Repr
 import Typing.Fresh
 import Typing.Unify
+import Typing.Instantiate
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -52,6 +53,12 @@ runInfer m tyEnv polyEnv = runFresh_ $ runReaderT (unInfer m) (tyEnv, polyEnv)
 instance MonadFresh Tv Infer where
     fresh = Infer . lift $ fresh
 
+instantiateTy :: Ty -> Infer Ty
+instantiateTy = Infer . lift . instantiate
+
+-- instantiateTyping :: Typing -> Infer Typing
+-- instantiateTyping =
+
 lookupCon :: Con -> Infer Ty
 lookupCon con = do
     mτ <- Infer . asks $ Map.lookup con . tyEnvCons . fst
@@ -86,7 +93,7 @@ inferExpr e = case e of
                 return (monoVar x α, α)
             Just typing -> return typing
     ECon c -> do
-        τ <- lookupCon c
+        τ <- instantiateTy =<< lookupCon c
         return (mempty, τ)
     EApp f e -> do
         (m1, τ1) <- inferExpr f
@@ -105,7 +112,7 @@ inferPat pat = case pat of
         α <- TyVar <$> fresh
         return (mempty, α)
     PCon con pats -> do
-        τ0 <- lookupCon con
+        τ0 <- instantiateTy =<< lookupCon con
         (m, τs) <- inferPats pats
         α <- TyVar <$> fresh
         (m', τ) <- un $ unify [m] [τ0, foldr (~>) α τs]
