@@ -37,8 +37,8 @@ tyFunResult :: Ty -> Ty
 tyFunResult (TyApp (TyApp TyFun _) t) = tyFunResult t
 tyFunResult t = t
 
-tyVarsOf :: Ty -> Set Tv
-tyVarsOf = execWriter . go
+tvs :: Ty -> Set Tv
+tvs = execWriter . go
   where
     collect = tell . Set.singleton
 
@@ -48,7 +48,7 @@ tyVarsOf = execWriter . go
         _ -> return ()
 
 occurs :: Tv -> Ty -> Bool
-occurs x ty = x ∈ tyVarsOf ty
+occurs x ty = x ∈ tvs ty
 
 infixr ~>
 (~>) :: Ty -> Ty -> Ty
