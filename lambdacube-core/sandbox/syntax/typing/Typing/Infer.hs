@@ -11,7 +11,8 @@ module Typing.Infer
 import Typing.Repr
 import Typing.Fresh
 import Typing.Unify
-import Typing.Instantiate
+import Typing.Subst
+import Typing.MonoEnv
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -21,15 +22,15 @@ import qualified Data.Set as Set
 import Data.Set.Unicode
 
 import Control.Applicative
-import Control.Monad hiding (mapM, forM_)
+import Control.Monad hiding (mapM, mapM_, forM_)
 import Data.Monoid
-import Prelude hiding (mapM)
+import Prelude hiding (mapM, mapM_)
 import Data.Traversable (mapM)
-import Data.Foldable (forM_)
+import Data.Foldable (mapM_, forM_)
 import qualified Data.Stream as Stream
 
 import Control.Monad.Trans
-import Control.Monad.Reader hiding (mapM, forM_)
+import Control.Monad.Reader hiding (mapM, mapM_, forM_)
 import Control.Arrow
 
 runFresh_ :: Fresh Tv a -> a
@@ -53,11 +54,20 @@ runInfer m tyEnv polyEnv = runFresh_ $ runReaderT (unInfer m) (tyEnv, polyEnv)
 instance MonadFresh Tv Infer where
     fresh = Infer . lift $ fresh
 
-instantiateTy :: Ty -> Infer Ty
-instantiateTy = Infer . lift . instantiate
+generalize :: Set Tv -> SubstT (Fresh Tv) ()
+generalize = mapM_ $ \α -> do
+    β <- TyVar <$> lift fresh
+    addSubst α β
 
--- instantiateTyping :: Typing -> Infer Typing
--- instantiateTyping =
+instantiateTy :: Ty -> Infer Ty
+instantiateTy τ = Infer . lift . runSubstT $ do
+    generalize (tvs τ)
+    subst τ
+
+instantiateTyping :: Typing -> Infer Typing
+instantiateTyping (m, τ) = Infer . lift . runSubstT $ do
+    generalize (tvs τ)
+    (,) <$> mapMono subst m <*> subst τ
 
 lookupCon :: Con -> Infer Ty
 lookupCon con = do
@@ -91,7 +101,7 @@ inferExpr e = case e of
             Nothing -> do
                 α <- TyVar <$> fresh
                 return (monoVar x α, α)
-            Just typing -> return typing
+            Just typing -> instantiateTyping typing
     ECon c -> do
         τ <- instantiateTy =<< lookupCon c
         return (mempty, τ)
@@ -125,7 +135,7 @@ inferPats pats = do
     return (mconcat ms, τs)
 
 inferDefs :: Defs -> Infer (Map Var Typing)
-inferDefs (Defs defs) = foldM inferGroup mempty defs
+inferDefs (Defs defss) = foldM inferGroup mempty defss
   where
     inferGroup :: Map Var Typing -> [Def] -> Infer (Map Var Typing)
     inferGroup varMap defs = do
@@ -149,6 +159,7 @@ inferMatch :: Match -> Infer Typing
 inferMatch (Match pats body) = do
     (mPats, τPats) <- inferPats pats
     (mBody, τBody) <- shadow mPats $ inferExpr body
+    let τ0 = foldr (~>) τBody τPats
     (m, τ) <- un $ unify [mBody, mPats] [foldr (~>) τBody τPats]
     let m' = removeMonoVars (monoVars mPats) m
     return (m', τ)
