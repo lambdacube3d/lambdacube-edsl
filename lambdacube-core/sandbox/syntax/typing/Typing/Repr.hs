@@ -60,17 +60,22 @@ type Con = Id
 
 data Def = DefVar Var Expr
          | DefFun Var [Match]
+         deriving Show
 
 data Match = Match [Pat] Expr
+           deriving Show
 
 data Pat = PVar Var
          | PCon Con [Pat]
          | PWildcard
+         deriving Show
 
 data Expr = EVar Var
           | ECon Con
           | ELam Pat Expr
           | EApp Expr Expr
           | ELet Defs Expr
+          deriving Show
 
 data Defs = Defs [[Def]] -- NOTE: this assumes the defs are already grouped into SCC's
+          deriving Show
