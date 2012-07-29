@@ -15,6 +15,7 @@ module Typing.Unify
 import Typing.Repr
 import Typing.Fresh
 import Typing.MonoEnv
+import Typing.Subst
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -49,34 +50,13 @@ unify1 tyEq = case tyEq of
     TyCon c     :~: TyCon c' | c == c' -> Skip
     _ -> Incongruent
 
-newtype Unify a = Unify{ unUnify :: StateT Subst (Fresh Tv) a }
-                deriving (Functor, Applicative, Monad)
+type Unify = SubstT (Fresh Tv)
 
 runUnify :: Unify a -> Fresh Tv a
-runUnify u = evalStateT (unUnify u) mempty
+runUnify = runSubstT
 
 instance MonadFresh Tv Unify where
-    fresh = Unify $ lift fresh
-
-type Subst = Map Tv Ty
-
-substTv :: Tv -> Unify Ty
-substTv x = do
-    mt <- Unify $ gets $ Map.lookup x
-    case mt of
-        Nothing -> return $ TyVar x
-        Just t -> subst t
-
-subst :: Ty -> Unify Ty
-subst t = case t of
-    TyVar x -> substTv x
-    TyApp t u -> TyApp <$> subst t <*> subst u
-    _ -> return t
-
-addSubst :: Tv -> Ty -> Unify ()
-addSubst x (TyVar y) | x == y = return ()
-addSubst x t | occurs x t = fail $ unwords ["infinite type:", show x, "=", show t]
-             | otherwise = Unify $ modify $ Map.insert x t
+    fresh = lift fresh
 
 unifyEqs :: [TyEq] -> Unify ()
 unifyEqs tyEqs = case tyEqs of
