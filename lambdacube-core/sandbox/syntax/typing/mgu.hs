@@ -16,20 +16,14 @@ testInfer m = runInfer m (TyEnv tyEnv) (PolyEnv mempty)
     tyList t = TyApp (TyCon "[]") t
     a = TyVar "a"
 
--- (inactivate-input-method)
--- (activate-input-method "Agda")
-
-foo = testInfer $ inferExpr $ case map2 of
-    Match [pat] e -> ELam pat e
-      -- inferDefs (Defs [[defMap]])
--- foo = testInfer $ inferDefs $ Defs [[defMap]]
+foo = testInfer $ inferDefs $ Defs [[defMap]]
   where
     defMap = DefFun "map" [map1, map2]
 
     -- Con x xs -> Con (f x) (map f xs)
-    map1 = Match [PCon "Con" [PVar "x", PVar "xs"]] $
+    map1 = Match [PVar "f", PCon "Con" [PVar "x", PVar "xs"]] $
            EApp (EApp (ECon "Con") (EApp (EVar "f") (EVar "x")))
                 (EApp (EApp (EVar "map") (EVar "f")) (EVar "xs"))
     -- Nil -> Nil
-    map2 = Match [PCon "Nil" []] $
+    map2 = Match [PVar "f", PCon "Nil" []] $
            ECon "Nil"
