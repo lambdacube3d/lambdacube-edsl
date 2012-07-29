@@ -7,19 +7,19 @@ module Typing.Unify
        , monoVar
        , monoVars
        , removeMonoVars
-       , Unify(..)
+       , Unify
+       , runUnify
        , unify
        ) where
 
 import Typing.Repr
 import Typing.Fresh
+import Typing.MonoEnv
 
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Set.Unicode
 
 import Control.Applicative
 import Control.Monad hiding (mapM)
@@ -56,6 +56,9 @@ occurs x _ = False
 
 newtype Unify a = Unify{ unUnify :: StateT Subst (Fresh Tv) a }
                 deriving (Functor, Applicative, Monad)
+
+runUnify :: Unify a -> Fresh Tv a
+runUnify u = evalStateT (unUnify u) mempty
 
 instance MonadFresh Tv Unify where
     fresh = Unify $ lift fresh
@@ -94,24 +97,6 @@ unifyEqs tyEqs = case tyEqs of
         Incongruent -> fail $ unwords ["cannot unify", show e]
   where
     flip (t :~: t') = t' :~: t
-
-data MonoEnv = MonoEnv{ monoVarMap :: Map Var Ty }
-             deriving Show
-
-instance Monoid MonoEnv where
-    mempty = MonoEnv{ monoVarMap = mempty }
-    MonoEnv{ monoVarMap = mvs } `mappend` MonoEnv{ monoVarMap = mvs' } = MonoEnv{ monoVarMap = mvs <> mvs' }
-
-monoVar :: Var -> Ty -> MonoEnv
-monoVar x τ = MonoEnv $ Map.singleton x τ
-
-monoVars :: MonoEnv -> Set Var
-monoVars = Map.keysSet . monoVarMap
-
-removeMonoVars :: Set Var -> MonoEnv -> MonoEnv
-removeMonoVars vars m@MonoEnv{..} = m{ monoVarMap = removeFrom monoVarMap }
-  where
-    removeFrom = Map.filterWithKey (\var _ -> var ∉ vars)
 
 substMonoEnv :: MonoEnv -> Unify MonoEnv
 substMonoEnv m = do
