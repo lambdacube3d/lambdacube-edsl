@@ -97,3 +97,12 @@ simpleRendering = accumulate accumContext True frag fragStream clearBuffer
         (*) :: (Linear a) => a@p -> a@p -> a@p
         vertexOut :: Float[4]@V -> Float@V -> Interp a@V -> a@V*
         smooth :: (Continuous a) => a@p -> Interp a@p
+
+
+
+instance (Depth d, Color c) => FrameBuffer (BufferDepth d c)
+instance (Color c) => FrameBuffer (BufferFlat c)
+
+instance Prim Point
+instance Prim Line
+instance Prim Triangle
