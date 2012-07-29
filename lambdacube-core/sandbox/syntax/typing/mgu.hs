@@ -2,22 +2,31 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RecordWildCards #-}
+
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Set.Unicode
+
+import Data.Graph
+
 import Control.Applicative
-import Control.Monad hiding (mapM)
+import Control.Monad hiding (mapM, forM_)
 import Data.Monoid
 import Data.List (nub)
 import Data.Maybe (mapMaybe)
 import Prelude hiding (mapM)
 import Data.Traversable (mapM)
+import Data.Foldable (forM_)
 import Data.Stream (Stream(..))
 import qualified Data.Stream as Stream
 
 import Control.Monad.Trans
-import Control.Monad.State hiding (mapM)
-import Control.Monad.Reader hiding (mapM)
+import Control.Monad.State hiding (mapM, forM_)
+import Control.Monad.Reader hiding (mapM, forM_)
+import Control.Monad.Trans.Writer
 import Control.Arrow
 
 type Id = String
@@ -29,7 +38,17 @@ data Ty = TyCon TyCon
         | TyVar Tv
         | TyApp Ty Ty
         | TyFun
-        deriving Show
+
+instance Show Ty where
+    showsPrec prec ty = case ty of
+        TyApp (TyCon "[]") t -> showString "[" . showsPrec 0 t . showString "]"
+        TyCon con -> showString con
+        TyVar α -> showString α
+        TyApp (TyApp TyFun t) u -> paren $ showsPrec 10 t . showString " -> " . showsPrec 0 u
+        TyApp t u -> paren $ showsPrec 0 t . showString " " . showsPrec 10 u
+      where
+        paren = showParen (prec >= 10)
+
 
 tyFunResult :: Ty -> Ty
 tyFunResult (TyApp (TyApp TyFun _) t) = tyFunResult t
@@ -119,13 +138,15 @@ data MonoEnv = MonoEnv{ monoVarMap :: Map Var Ty }
 
 instance Monoid MonoEnv where
     mempty = MonoEnv{ monoVarMap = mempty }
-    MonoEnv{ monoVarMap = mvs } `mappend` MonoEnv{ monoVarMap = mvs' } = MonoEnv{ monoVarMap = mvs `mappend` mvs' }
+    MonoEnv{ monoVarMap = mvs } `mappend` MonoEnv{ monoVarMap = mvs' } = MonoEnv{ monoVarMap = mvs <> mvs' }
 
-monoVars :: MonoEnv -> [Var]
-monoVars = Map.keys . monoVarMap
+monoVars :: MonoEnv -> Set Var
+monoVars = Map.keysSet . monoVarMap
 
-removeMonoVars :: [Var] -> MonoEnv -> MonoEnv
-removeMonoVars vars m@MonoEnv{..} = m{ monoVarMap = foldr Map.delete monoVarMap vars }
+removeMonoVars :: Set Var -> MonoEnv -> MonoEnv
+removeMonoVars vars m@MonoEnv{..} = m{ monoVarMap = removeFrom monoVarMap }
+  where
+    removeFrom = Map.filterWithKey (\var _ -> var ∉ vars)
 
 substMonoEnv :: MonoEnv -> Unify MonoEnv
 substMonoEnv m = do
@@ -136,30 +157,16 @@ unify :: [MonoEnv] -> [Ty] -> Unify (MonoEnv, Ty)
 unify ms τs = do
     α <- fresh
     let eqs = map (TyVar α :~:) τs
-        eqs' = concatMap toEqs vars
+        eqs' = concatMap toEqs . Set.toList $ vars
     unifyEqs $ eqs ++ eqs'
     ms' <- mapM substMonoEnv ms
     τ <- substTv α
     return (mconcat ms', τ)
   where
-    vars = nub $ concatMap monoVars ms
+    vars = Set.unions $ map monoVars ms
     toEqs v = case mapMaybe (Map.lookup v . monoVarMap) ms of
         [] -> []
         t:ts -> map (t :~:) ts
-
-test = testInfer $ runUnify (unify ms ts)
-  where
-    ms = [ MonoEnv $ Map.fromList [ ("f", c) ]
-         , MonoEnv $ Map.fromList [ ("f", a ~> b), ("x", a), ("xs", tyList a) ]
-         , MonoEnv $ Map.fromList [ ("f", TyCon "Int" ~> tyList (TyCon "Bool")) ]
-         ]
-    ts = [ tyList c ]
-
-    tyList t = TyApp (TyCon "[]") t
-    a = TyVar "a"
-    b = TyVar "b"
-    c = TyVar "c"
-    d = TyVar "d"
 
 infixr ~>
 t ~> u = TyApp (TyApp TyFun t) u
@@ -181,7 +188,9 @@ data Expr = EVar Var
           | ECon Con
           | ELam Pat Expr
           | EApp Expr Expr
-          | ELet [Def] Expr
+          | ELet Defs Expr
+
+data Defs = Defs [[Def]] -- NOTE: this assumes the defs are already grouped into SCC's
 
 newtype TyEnv = TyEnv{ tyEnvCons :: Map Con Ty }
 type Typing = (MonoEnv, Ty)
@@ -209,8 +218,13 @@ lookupPolyVar x = Infer . asks $ Map.lookup x . polyEnvMap . snd
 shadow :: MonoEnv -> Infer a -> Infer a
 shadow m = Infer . local (second fixup) . unInfer
   where
-    fixup env@PolyEnv{..} = env{ polyEnvMap = foldr Map.delete polyEnvMap vars }
+    fixup env@PolyEnv{..} = env{ polyEnvMap = foldr Map.delete polyEnvMap . Set.toList $ vars }
     vars = monoVars m
+
+withPolyVars :: Map Var Typing -> Infer a -> Infer a
+withPolyVars vars = Infer . local (second fixup) . unInfer
+  where
+    fixup env@PolyEnv{..} = env{ polyEnvMap = vars <> polyEnvMap }
 
 runUnify :: Unify a -> Infer a
 runUnify u = Infer . lift $ evalStateT (unUnify u) mempty
@@ -233,12 +247,7 @@ inferExpr e = case e of
         α <- TyVar <$> fresh
         (m, TyApp (TyApp TyFun _) τ) <- runUnify $ unify [m1, m2] [τ1, TyApp (TyApp TyFun τ2) α]
         return (m, τ)
-    ELam pat e -> do
-        (mPat, τPat) <- inferPat pat
-        (mBody, τBody) <- shadow mPat $ inferExpr e
-        (m, τ) <- runUnify $ unify [mPat, mBody] [τPat ~> τBody]
-        let m' = removeMonoVars (monoVars mPat) m
-        return (m', τ)
+    ELam pat e -> inferMatch $ Match [pat] e
 
 inferPat :: Pat -> Infer Typing
 inferPat pat = case pat of
@@ -258,8 +267,47 @@ inferPat pat = case pat of
 inferPats :: [Pat] -> Infer Typings
 inferPats pats = do
     (ms, τs) <- unzip <$> mapM inferPat pats
-    -- TODO: check that the vars of each m are pairwise disjunct
+    checkConflicts . map monoVars $ ms
     return (mconcat ms, τs)
+
+inferDefs :: Defs -> Infer (Map Var Typing)
+inferDefs (Defs defs) = foldM inferGroup mempty defs
+  where
+    inferGroup :: Map Var Typing -> [Def] -> Infer (Map Var Typing)
+    inferGroup varMap defs = do
+        varMap' <- Map.fromList <$> (withPolyVars varMap $ mapM inferDef defs)
+        let newVars = Map.keysSet varMap'
+            generalize (m, τ) = (removeMonoVars newVars m, τ)
+            varMap'' = fmap generalize varMap'
+        return varMap''
+
+    inferDef :: Def -> Infer (Var, Typing)
+    inferDef def = case def of
+        DefVar x e -> do
+            (m, τ) <- inferExpr e
+            return (x, (m, τ))
+        DefFun f matches -> do
+            (ms, τs) <- unzip <$> mapM inferMatch matches
+            (m, τ) <- runUnify $ unify ms τs
+            return (f, (m, τ))
+
+inferMatch :: Match -> Infer Typing
+inferMatch (Match pats body) = do
+    (mPats, τPats) <- inferPats pats
+    (mBody, τBody) <- shadow mPats $ inferExpr body
+    (m, τ) <- runUnify $ unify [mBody, mPats] [foldr (~>) τBody τPats]
+    let m' = removeMonoVars (monoVars mPats) m
+    return (m', τ)
+
+checkConflicts :: [Set Var] -> Infer ()
+checkConflicts = foldM_ check mempty
+  where
+    check :: Set Var -> Set Var -> Infer (Set Var)
+    check vars vars' = do
+        forM_ vars' $ \x -> do
+            unless (x ∉ vars) $
+              fail $ unwords ["Conflicting variable name", show x]
+        return $ vars ∪ vars'
 
 testInfer m = runFresh $ runInfer m (TyEnv tyEnv) (PolyEnv mempty)
   where
@@ -273,6 +321,16 @@ testInfer m = runFresh $ runInfer m (TyEnv tyEnv) (PolyEnv mempty)
 -- (inactivate-input-method)
 -- (activate-input-method "Agda")
 
-foo = testInfer $ inferExpr $
-      ELam (PCon "Con" [PVar "x", PVar "xs"]) $
-      EApp (EApp (ECon "Con") (EApp (EVar "f") (EVar "x"))) (EVar "xs")
+foo = testInfer $ inferExpr $ case map2 of
+    Match [pat] e -> ELam pat e
+      -- inferDefs (Defs [[defMap]])
+  where
+    defMap = DefFun "map" [map1, map2]
+
+    -- Con x xs -> Con (f x) (map f xs)
+    map1 = Match [PCon "Con" [PVar "x", PVar "xs"]] $
+           EApp (EApp (ECon "Con") (EApp (EVar "f") (EVar "x")))
+                (EApp (EApp (EVar "map") (EVar "f")) (EVar "xs"))
+    -- Nil -> Nil
+    map2 = Match [PCon "Nil" []] $
+           ECon "Nil"
