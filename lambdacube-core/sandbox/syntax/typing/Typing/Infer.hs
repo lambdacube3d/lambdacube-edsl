@@ -2,7 +2,11 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RecordWildCards #-}
-module Typing.Infer where
+module Typing.Infer
+       ( inferDefs, inferExpr
+       , runInfer -- XXX
+       , TyEnv(..), PolyEnv(..) -- XXX
+       ) where
 
 import Typing.Repr
 import Typing.Fresh
@@ -24,7 +28,6 @@ import Data.Foldable (forM_)
 import qualified Data.Stream as Stream
 
 import Control.Monad.Trans
-import Control.Monad.State hiding (mapM, forM_)
 import Control.Monad.Reader hiding (mapM, forM_)
 import Control.Arrow
 
@@ -32,9 +35,14 @@ runFresh_ :: Fresh Tv a -> a
 runFresh_ m = runFresh m $ Stream.map (('v':) . show) $ Stream.iterate succ 0
 
 newtype TyEnv = TyEnv{ tyEnvCons :: Map Con Ty }
+              deriving Monoid
+
 type Typing = (MonoEnv, Ty)
+
 type Typings = (MonoEnv, [Ty])
+
 newtype PolyEnv = PolyEnv{ polyEnvMap :: Map Var Typing }
+                deriving Monoid
 
 newtype Infer a = Infer{ unInfer :: ReaderT (TyEnv, PolyEnv) (Fresh Tv) a }
                 deriving (Functor, Applicative, Monad)

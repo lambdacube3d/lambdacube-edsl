@@ -49,11 +49,6 @@ unify1 tyEq = case tyEq of
     TyCon c     :~: TyCon c' | c == c' -> Skip
     _ -> Incongruent
 
-occurs :: Tv -> Ty -> Bool
-occurs x (TyVar y) = x == y
-occurs x (TyApp t u) = occurs x t || occurs x u
-occurs x _ = False
-
 newtype Unify a = Unify{ unUnify :: StateT Subst (Fresh Tv) a }
                 deriving (Functor, Applicative, Monad)
 

@@ -1,5 +1,10 @@
 module Typing.Repr where
 
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Set.Unicode
+
+import Control.Monad.Writer
 import Text.PrettyPrint.Leijen
 
 type Id = String
@@ -31,6 +36,19 @@ instance Pretty Ty where
 tyFunResult :: Ty -> Ty
 tyFunResult (TyApp (TyApp TyFun _) t) = tyFunResult t
 tyFunResult t = t
+
+tyVarsOf :: Ty -> Set Tv
+tyVarsOf = execWriter . go
+  where
+    collect = tell . Set.singleton
+
+    go ty = case ty of
+        TyVar t -> collect t
+        TyApp t u -> go t >> go u
+        _ -> return ()
+
+occurs :: Tv -> Ty -> Bool
+occurs x ty = x ∈ tyVarsOf ty
 
 infixr ~>
 (~>) :: Ty -> Ty -> Ty
