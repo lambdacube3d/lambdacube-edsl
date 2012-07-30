@@ -3,6 +3,7 @@ import Typing.Infer
 
 import Text.PrettyPrint.Leijen
 
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid
 import Prelude hiding (mapM)
@@ -15,6 +16,14 @@ testInfer m = runInfer m (TyEnv tyEnv) (PolyEnv mempty)
 
     tyList t = TyApp (TyCon "[]") t
     a = TyVar "a"
+
+prettyVarMap :: Map Var Typing -> Doc
+prettyVarMap = vcat . map (uncurry prettyVar) . Map.toList
+  where
+    prettyTyping (m, τ) = pretty m <+> text "⊢" <+> pretty τ
+    prettyVar x typing = text x <+> text "∷" <+> prettyTyping typing
+
+main = print . prettyVarMap $ foo
 
 foo = testInfer $ inferDefs $ Defs [[defMap]]
   where

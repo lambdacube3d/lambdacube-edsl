@@ -14,7 +14,8 @@ import qualified Data.Map as Map
 
 import Data.Set (Set)
 import Data.Set.Unicode
-import Data.Monoid
+import Data.Monoid hiding ((<>))
+import Text.PrettyPrint.Leijen
 
 import Prelude hiding (mapM)
 import Data.Traversable (mapM)
@@ -24,7 +25,10 @@ data MonoEnv = MonoEnv{ monoVarMap :: Map Var Ty }
 
 instance Monoid MonoEnv where
     mempty = MonoEnv{ monoVarMap = mempty }
-    MonoEnv{ monoVarMap = mvs } `mappend` MonoEnv{ monoVarMap = mvs' } = MonoEnv{ monoVarMap = mvs <> mvs' }
+    MonoEnv{ monoVarMap = mvs } `mappend` MonoEnv{ monoVarMap = mvs' } = MonoEnv{ monoVarMap = mvs `mappend` mvs' }
+
+instance Pretty MonoEnv where
+    pretty MonoEnv{..} = encloseSep lbrace rbrace (comma <> space) . map (\(x, τ) -> text x <+> text "∷" <+> pretty τ) $ Map.toList monoVarMap
 
 monoVar :: Var -> Ty -> MonoEnv
 monoVar x τ = MonoEnv $ Map.singleton x τ

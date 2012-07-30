@@ -6,6 +6,7 @@ module Typing.Infer
        ( inferDefs, inferExpr
        , runInfer -- XXX
        , TyEnv(..), PolyEnv(..) -- XXX
+       , Typing
        ) where
 
 import Typing.Repr
