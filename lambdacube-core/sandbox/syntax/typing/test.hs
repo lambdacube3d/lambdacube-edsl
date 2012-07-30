@@ -25,14 +25,17 @@ prettyVarMap = vcat . map (uncurry prettyVar) . Map.toList
 
 main = print . prettyVarMap $ foo
 
-foo = testInfer $ inferDefs $ Defs [[defMap], [defIdFun], [defIdLam], [defConst]]
+foo = testInfer $ inferDefs $ Defs [[defMap, defMup], [defIdFun], [defIdLam], [defConst]]
   where
-    defMap = DefFun "map" [map1, map2]
+    defMap = DefFun "map" [map1 True, map2]
+    defMup = DefFun "mup" [map1 False, map2]
 
     -- Con x xs -> Con (f x) (map f xs)
-    map1 = Match [PVar "f", PCon "Con" [PVar "x", PVar "xs"]] $
-           EApp (EApp (ECon "Con") (EApp (EVar "f") (EVar "x")))
-                (EApp (EApp (EVar "map") (EVar "f")) (EVar "xs"))
+    map1 mup = Match [PVar "f", PCon "Con" [PVar "x", PVar "xs"]] $
+               EApp (EApp (ECon "Con") (EApp (EVar "f") (EVar "x")))
+                    (EApp (EApp (EVar recurse) (EVar "f")) (EVar "xs"))
+      where
+        recurse = if mup then "mup" else "map"
     -- Nil -> Nil
     map2 = Match [PVar "f", PCon "Nil" []] $
            ECon "Nil"
