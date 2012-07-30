@@ -144,7 +144,7 @@ inferDefs (Defs defss) = foldM inferGroup mempty defss
         let newVars = Map.keysSet varMap'
             generalize (m, τ) = (removeMonoVars newVars m, τ)
             varMap'' = fmap generalize varMap'
-        return varMap''
+        return $ varMap'' <> varMap
 
     inferDef :: Def -> Infer (Var, Typing)
     inferDef def = case def of
