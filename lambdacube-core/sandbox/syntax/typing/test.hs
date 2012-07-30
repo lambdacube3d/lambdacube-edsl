@@ -25,7 +25,12 @@ prettyVarMap = vcat . map (uncurry prettyVar) . Map.toList
 
 main = print . prettyVarMap $ foo
 
-foo = testInfer $ inferDefs $ Defs [[defMap, defMup], [defIdFun], [defIdLam], [defConst]]
+foo = testInfer $ inferDefs $ Defs [ [defMap, defMup]
+                                   , [defIdFun]
+                                   , [defIdLam]
+                                   , [defConst]
+                                   , [defMapConst]
+                                   ]
   where
     defMap = DefFun "map" [map1 True, map2]
     defMup = DefFun "mup" [map1 False, map2]
@@ -44,3 +49,5 @@ foo = testInfer $ inferDefs $ Defs [[defMap, defMup], [defIdFun], [defIdLam], [d
     defIdLam = DefVar "id′" $ EApp (EVar "id") $ ELam (PVar "x") $ EVar "x"
 
     defConst = DefFun "const" [Match [PVar "x", PWildcard] $ EApp (EVar "id") (EVar "x")]
+
+    defMapConst = DefVar "mapConst" $ EApp (EVar "map") (EVar "const")
