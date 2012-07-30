@@ -25,7 +25,7 @@ prettyVarMap = vcat . map (uncurry prettyVar) . Map.toList
 
 main = print . prettyVarMap $ foo
 
-foo = testInfer $ inferDefs $ Defs [[defMap]]
+foo = testInfer $ inferDefs $ Defs [[defMap], [defIdFun], [defIdLam]]
   where
     defMap = DefFun "map" [map1, map2]
 
@@ -36,3 +36,6 @@ foo = testInfer $ inferDefs $ Defs [[defMap]]
     -- Nil -> Nil
     map2 = Match [PVar "f", PCon "Nil" []] $
            ECon "Nil"
+
+    defIdFun = DefFun "id" [Match [PVar "x"] $ EVar "x"]
+    defIdLam = DefVar "id′" $ ELam (PVar "x") $ EVar "x"
