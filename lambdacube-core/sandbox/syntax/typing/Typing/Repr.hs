@@ -27,9 +27,9 @@ instance Pretty Ty where
             TyApp (TyCon "[]") t -> brackets (go False t)
             TyCon con -> text con
             TyVar α -> text α
-            TyApp (TyApp TyFun t) u -> paren $ go True t <+> text "->" <+> go False u
+            TyApp (TyApp TyFun t) u -> paren $ go True t <+> text "→" <+> go False u
             TyApp t u -> paren $ go False t <+> go True u
-            TyFun -> text "(->)"
+            TyFun -> text "(→)"
           where
             paren = if prec then parens else id
 
