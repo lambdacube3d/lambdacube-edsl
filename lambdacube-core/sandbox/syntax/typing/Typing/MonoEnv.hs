@@ -4,6 +4,7 @@ module Typing.MonoEnv
        , monoVar
        , monoVars
        , removeMonoVars
+       , restrictMonoVars
        , mapMono
        ) where
 
@@ -39,7 +40,12 @@ monoVars = Map.keysSet . monoVarMap
 removeMonoVars :: Set Var -> MonoEnv -> MonoEnv
 removeMonoVars vars m@MonoEnv{..} = m{ monoVarMap = removeFrom monoVarMap }
   where
-    removeFrom = Map.filterWithKey (\var _ -> var ∉ vars)
+    removeFrom = Map.filterWithKey (\ var _ -> var ∉ vars)
+
+restrictMonoVars :: Set Var -> MonoEnv -> MonoEnv
+restrictMonoVars vars m@MonoEnv{..} = m{ monoVarMap = restrict monoVarMap }
+  where
+    restrict = Map.filterWithKey (\ var _ -> var ∈ vars)
 
 mapMono :: (Monad m) => (Ty -> m Ty) -> MonoEnv -> m MonoEnv
 mapMono f m@MonoEnv{..} = do
