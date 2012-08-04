@@ -77,5 +77,9 @@ data Expr = EVar Var
           | ELet Defs Expr
           deriving Show
 
+infixl @@
+(@@) :: Expr -> Expr -> Expr
+(@@) = EApp
+
 data Defs = Defs [[Def]] -- NOTE: this assumes the defs are already grouped into SCC's
           deriving Show
