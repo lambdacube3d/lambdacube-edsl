@@ -112,7 +112,10 @@ inferExpr e = case e of
         α <- TyVar <$> fresh
         (m, TyApp (TyApp TyFun _) τ) <- un $ unify [m1, m2] [τ1, TyApp (TyApp TyFun τ2) α]
         return (m, τ)
-    ELam pat e -> inferMatch $ Match [pat] e
+    ELam pat e -> inferMatch $ Match [pat] (Defs []) e
+    ELet defs e -> do
+        locals <- inferDefs defs
+        withPolyVars locals $ inferExpr e
 
 inferPat :: Pat -> Infer Typing
 inferPat pat = case pat of
@@ -148,18 +151,22 @@ inferDefs (Defs defss) = foldM inferGroup mempty defss
 
     inferDef :: Def -> Infer (Var, Typing)
     inferDef def = case def of
-        DefVar x e -> do
-            (m, τ) <- inferExpr e
-            return (x, (m, τ))
+        DefVar x defs e -> do
+            locals <- inferDefs defs
+            withPolyVars locals $ do
+                (m, τ) <- inferExpr e
+                return (x, (m, τ))
         DefFun f matches -> do
             (ms, τs) <- unzip <$> mapM inferMatch matches
             (m, τ) <- un $ unify ms τs
             return (f, (m, τ))
 
 inferMatch :: Match -> Infer Typing
-inferMatch (Match pats body) = do
+inferMatch (Match pats defs body) = do
     (mPats, τPats) <- inferPats pats
-    (mBody, τBody) <- shadow mPats $ inferExpr body
+    (mBody, τBody) <- shadow mPats $ do
+        locals <- inferDefs defs
+        withPolyVars locals $ inferExpr body
     let τ0 = foldr (~>) τBody τPats
     (m, τ) <- un $ unify [mBody, mPats] [foldr (~>) τBody τPats]
     let m' = removeMonoVars (monoVars mPats) m

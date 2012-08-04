@@ -58,11 +58,11 @@ type Var = Id
 
 type Con = Id
 
-data Def = DefVar Var Expr
+data Def = DefVar Var Defs Expr
          | DefFun Var [Match]
          deriving Show
 
-data Match = Match [Pat] Expr
+data Match = Match [Pat] Defs Expr
            deriving Show
 
 data Pat = PVar Var
