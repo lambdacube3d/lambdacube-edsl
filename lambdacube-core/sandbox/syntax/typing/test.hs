@@ -14,6 +14,8 @@ testInfer m = runInfer m (TyEnv tyEnv) (PolyEnv polyEnv)
     tyEnv = Map.fromList [ ("Nil", tyList a)
                          , ("Con", a ~> tyList a ~> tyList a)
                          , ("Tuple4", a ~> b ~> c ~> d ~> (foldl TyApp (TyCon "Tuple") [a, b, c, d]))
+                         , ("True", TyCon "Bool")
+                         , ("False", TyCon "Bool")
                          ]
     polyEnv = Map.fromList [ ("not", (MonoEnv mempty, TyCon "Bool" ~> TyCon "Bool"))
                            , ("succ", (MonoEnv mempty, TyCon "Int" ~> TyCon "Int"))
@@ -30,7 +32,7 @@ prettyVarMap = vcat . map (uncurry prettyVar) . Map.toList
 
 main = print . prettyVarMap $ foo
 
-foo = testInfer $ inferDefs $ defs' -- Defs [ [DefVar "test" defs e ] ]
+foo = testInfer $ inferDefs $ defs'
   where
     defs = Defs [ [defMap, defMup]
                 , [defIdFun]
@@ -40,7 +42,8 @@ foo = testInfer $ inferDefs $ defs' -- Defs [ [DefVar "test" defs e ] ]
                 ]
 
     defs' = Defs [ [DefFun "foo"
-                    [ Match [PVar "x"] (Defs [[localDef]]) $ EVar "not" @@ EVar "x"
+                    [ Match [PVar "x"] (Defs [[localDef]]) $
+                      EVar "not" @@ EVar "x"
                     ]
                    ]
                  ]
