@@ -151,11 +151,7 @@ inferDefs (Defs defss) = foldM inferGroup mempty defss
 
     inferDef :: Def -> Infer (Var, Typing)
     inferDef def = case def of
-        DefVar x defs e -> do
-            locals <- inferDefs defs
-            withPolyVars locals $ do
-                (m, τ) <- inferExpr e
-                return (x, (m, τ))
+        DefVar x defs e -> inferDef (DefFun x [Match [] defs e])
         DefFun f matches -> do
             (ms, τs) <- unzip <$> mapM inferMatch matches
             (m, τ) <- un $ unify ms τs
@@ -164,11 +160,14 @@ inferDefs (Defs defss) = foldM inferGroup mempty defss
 inferMatch :: Match -> Infer Typing
 inferMatch (Match pats defs body) = do
     (mPats, τPats) <- inferPats pats
-    (mBody, τBody) <- shadow mPats $ do
+    (mLocals, mBody, τBody) <- shadow mPats $ do
         locals <- inferDefs defs
-        withPolyVars locals $ inferExpr body
+        let mLocals = map fst . Map.elems $ locals
+        (mBody, τBody) <- withPolyVars locals $ inferExpr body
+        return (mLocals, mBody, τBody)
+    let mLocals' = map (restrictMonoVars (monoVars mPats)) mLocals
     let τ0 = foldr (~>) τBody τPats
-    (m, τ) <- un $ unify [mBody, mPats] [foldr (~>) τBody τPats]
+    (m, τ) <- un $ unify (mBody:mPats:mLocals') [foldr (~>) τBody τPats]
     let m' = removeMonoVars (monoVars mPats) m
     return (m', τ)
 
