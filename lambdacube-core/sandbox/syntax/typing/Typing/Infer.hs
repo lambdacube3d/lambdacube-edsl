@@ -11,6 +11,7 @@ module Typing.Infer
 
 import Typing.Repr
 import Typing.Fresh
+import Typing.TC
 import Typing.Unify
 import Typing.Subst
 import Typing.MonoEnv
@@ -34,9 +35,6 @@ import Control.Monad.Trans
 import Control.Monad.Reader hiding (mapM, mapM_, forM_)
 import Control.Arrow
 
-runFresh_ :: Fresh Tv a -> a
-runFresh_ m = runFresh m $ Stream.map (('v':) . show) $ Stream.iterate succ 0
-
 newtype TyEnv = TyEnv{ tyEnvCons :: Map Con Ty }
               deriving Monoid
 
@@ -47,15 +45,15 @@ type Typings = (MonoEnv, [Ty])
 newtype PolyEnv = PolyEnv{ polyEnvMap :: Map Var Typing }
                 deriving Monoid
 
-newtype Infer a = Infer{ unInfer :: ReaderT (TyEnv, PolyEnv) (Fresh Tv) a }
+newtype Infer a = Infer{ unInfer :: ReaderT (TyEnv, PolyEnv) TC a }
                 deriving (Functor, Applicative, Monad)
 
-runInfer m tyEnv polyEnv = runFresh_ $ runReaderT (unInfer m) (tyEnv, polyEnv)
+runInfer m tyEnv polyEnv = runTC $ runReaderT (unInfer m) (tyEnv, polyEnv)
 
 instance MonadFresh Tv Infer where
     fresh = Infer . lift $ fresh
 
-generalize :: Set Tv -> SubstT (Fresh Tv) ()
+generalize :: Set Tv -> SubstT TC ()
 generalize = mapM_ $ \α -> do
     β <- TyVar <$> lift fresh
     addSubst α β

@@ -14,6 +14,7 @@ module Typing.Unify
 
 import Typing.Repr
 import Typing.Fresh
+import Typing.TC
 import Typing.MonoEnv
 import Typing.Subst
 
@@ -50,9 +51,9 @@ unify1 tyEq = case tyEq of
     TyCon c     :~: TyCon c' | c == c' -> Skip
     _ -> Incongruent
 
-type Unify = SubstT (Fresh Tv)
+type Unify = SubstT TC
 
-runUnify :: Unify a -> Fresh Tv a
+runUnify :: Unify a -> TC a
 runUnify = runSubstT
 
 instance MonadFresh Tv Unify where
