@@ -58,12 +58,12 @@ generalize = mapM_ $ \α -> do
     addSubst α β
 
 instantiateTy :: Ty -> Infer Ty
-instantiateTy τ = Infer . lift . runSubst $ do
+instantiateTy τ = Infer . lift . runSubst (error "TECtx") $ do
     generalize (tvs τ)
     subst τ
 
 instantiateTyping :: Typing -> Infer Typing
-instantiateTyping (m, τ) = Infer . lift . runSubst $ do
+instantiateTyping (m, τ) = Infer . lift . runSubst (error "TECtx") $ do
     generalize (tvs τ)
     (,) <$> mapMono subst m <*> subst τ
 
@@ -71,7 +71,7 @@ lookupCon :: Con -> Infer Ty
 lookupCon con = do
     mτ <- Infer . asks $ Map.lookup con . tyEnvCons . fst
     case mτ of
-        Nothing -> fail $ unwords ["Undefined constructor", show con]
+        Nothing -> Infer . lift $ throwTC . ScopeError $ SEUnresolvedCon con
         Just τ -> return τ
 
 lookupPolyVar :: Var -> Infer (Maybe Typing)
@@ -88,8 +88,10 @@ withPolyVars vars = Infer . local (second fixup) . unInfer
   where
     fixup env@PolyEnv{..} = env{ polyEnvMap = vars <> polyEnvMap }
 
-un :: Unify (MonoEnv, Ty) -> Infer (MonoEnv, Ty)
-un u = Infer . lift $ runUnify u
+inferUnify :: [MonoEnv] -> [Ty] -> Infer (MonoEnv, Ty)
+inferUnify ms τs = Infer . lift $ runUnify ctx $ unify ms τs
+  where
+    ctx = TECtx ms τs Nothing
 
 inferExpr :: Expr -> Infer Typing
 inferExpr e = case e of
@@ -107,7 +109,7 @@ inferExpr e = case e of
         (m1, τ1) <- inferExpr f
         (m2, τ2) <- inferExpr e
         α <- TyVar <$> fresh
-        (m, TyApp (TyApp TyFun _) τ) <- un $ unify [m1, m2] [τ1, TyApp (TyApp TyFun τ2) α]
+        (m, TyApp (TyApp TyFun _) τ) <- inferUnify [m1, m2] [τ1, TyApp (TyApp TyFun τ2) α]
         return (m, τ)
     ELam pat e -> inferMatch $ Match [pat] (Defs []) e
     ELet defs e -> do
@@ -126,7 +128,7 @@ inferPat pat = case pat of
         τ0 <- instantiateTy =<< lookupCon con
         (m, τs) <- inferPats pats
         α <- TyVar <$> fresh
-        (m', τ) <- un $ unify [m] [τ0, foldr (~>) α τs]
+        (m', τ) <- inferUnify [m] [τ0, foldr (~>) α τs]
         return (m', tyFunResult τ)
 
 inferPats :: [Pat] -> Infer Typings
@@ -151,7 +153,7 @@ inferDefs (Defs defss) = foldM inferGroup mempty defss
         DefVar x defs e -> inferDef (DefFun x [Match [] defs e])
         DefFun f matches -> do
             (ms, τs) <- unzip <$> mapM inferMatch matches
-            (m, τ) <- un $ unify ms τs
+            (m, τ) <- inferUnify ms τs
             return (f, (m, τ))
 
 inferMatch :: Match -> Infer Typing
@@ -164,7 +166,7 @@ inferMatch (Match pats defs body) = do
         return (mLocals, mBody, τBody)
     let mLocals' = map (restrictMonoVars (monoVars mPats)) mLocals
     let τ0 = foldr (~>) τBody τPats
-    (m, τ) <- un $ unify (mBody:mPats:mLocals') [foldr (~>) τBody τPats]
+    (m, τ) <- inferUnify (mBody:mPats:mLocals') [foldr (~>) τBody τPats]
     let m' = removeMonoVars (monoVars mPats) m
     return (m', τ)
 
@@ -175,5 +177,5 @@ checkConflicts = foldM_ check mempty
     check vars vars' = do
         forM_ vars' $ \x -> do
             unless (x ∉ vars) $
-              fail $ unwords ["Conflicting variable name", show x]
+              Infer . lift $ throwTC . ScopeError $ SEPatternConflict x
         return $ vars ∪ vars'

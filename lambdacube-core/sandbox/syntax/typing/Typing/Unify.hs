@@ -33,9 +33,6 @@ import Data.Traversable (mapM)
 import Control.Monad.Trans
 import Control.Monad.State hiding (mapM)
 
-data TyEq = Ty :~: Ty
-          deriving Show
-
 data Unification = Skip
                  | Substitute Tv Ty
                  | Recurse [TyEq]
@@ -53,7 +50,7 @@ unify1 tyEq = case tyEq of
 
 type Unify = Subst
 
-runUnify :: Unify a -> TC a
+runUnify :: TypeErrorCtx -> Unify a -> TC a
 runUnify = runSubst
 
 unifyEqs :: [TyEq] -> Unify ()
@@ -67,7 +64,7 @@ unifyEqs tyEqs = case tyEqs of
             unifyEqs es'
         Recurse es' -> unifyEqs $ es' ++ es
         Flip -> unifyEqs $ (flip e):es
-        Incongruent -> fail $ unwords ["cannot unify", show e]
+        Incongruent -> throwTypeError $ TEIncongruent e
   where
     flip (t :~: t') = t' :~: t
 

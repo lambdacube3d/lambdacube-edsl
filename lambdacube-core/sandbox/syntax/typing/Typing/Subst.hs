@@ -7,6 +7,7 @@ module Typing.Subst
        , addSubst
        , substTv
        , subst
+       , throwTypeError
        ) where
 
 import Typing.Repr
@@ -21,15 +22,21 @@ import Data.Monoid
 import Control.Monad.Trans
 import Control.Monad.State
 import Control.Monad.Identity
+import Control.Monad.Reader
 
-newtype Subst a = Subst{ unSubst :: StateT (Map Tv Ty) TC a }
+newtype Subst a = Subst{ unSubst :: ReaderT TypeErrorCtx (StateT (Map Tv Ty) TC) a }
                 deriving (Functor, Applicative, Monad)
 
 instance MonadFresh Tv Subst where
-    fresh = Subst . lift $ fresh
+    fresh = Subst . lift . lift $ fresh
 
-runSubst :: Subst a -> TC a
-runSubst m = evalStateT (unSubst m) mempty
+runSubst :: TypeErrorCtx -> Subst a -> TC a
+runSubst ctx m = evalStateT (runReaderT (unSubst m) ctx) mempty
+
+throwTypeError :: TypeError -> Subst a
+throwTypeError err = Subst $ do
+    tec <- ask
+    lift . lift $ throwTC (TypeError tec err)
 
 substTv :: Tv -> Subst Ty
 substTv x = do
@@ -46,6 +53,6 @@ subst t = case t of
 
 addSubst :: Tv -> Ty -> Subst ()
 addSubst x (TyVar y) | x == y = return ()
-addSubst x t | occurs x t = fail $ unwords ["infinite type:", show x, "=", show t]
+addSubst x t | occurs x t = throwTypeError $ TEOccurs x t
              | otherwise = Subst $ modify $ Map.insert x t
 
