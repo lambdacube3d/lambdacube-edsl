@@ -51,13 +51,10 @@ unify1 tyEq = case tyEq of
     TyCon c     :~: TyCon c' | c == c' -> Skip
     _ -> Incongruent
 
-type Unify = SubstT TC
+type Unify = Subst
 
 runUnify :: Unify a -> TC a
-runUnify = runSubstT
-
-instance MonadFresh Tv Unify where
-    fresh = lift fresh
+runUnify = runSubst
 
 unifyEqs :: [TyEq] -> Unify ()
 unifyEqs tyEqs = case tyEqs of

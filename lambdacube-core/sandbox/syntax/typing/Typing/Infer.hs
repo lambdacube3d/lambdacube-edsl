@@ -1,6 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 module Typing.Infer
        ( inferDefs, inferExpr
@@ -53,18 +52,18 @@ runInfer m tyEnv polyEnv = runTC $ runReaderT (unInfer m) (tyEnv, polyEnv)
 instance MonadFresh Tv Infer where
     fresh = Infer . lift $ fresh
 
-generalize :: Set Tv -> SubstT TC ()
+generalize :: Set Tv -> Subst ()
 generalize = mapM_ $ \α -> do
-    β <- TyVar <$> lift fresh
+    β <- TyVar <$> fresh
     addSubst α β
 
 instantiateTy :: Ty -> Infer Ty
-instantiateTy τ = Infer . lift . runSubstT $ do
+instantiateTy τ = Infer . lift . runSubst $ do
     generalize (tvs τ)
     subst τ
 
 instantiateTyping :: Typing -> Infer Typing
-instantiateTyping (m, τ) = Infer . lift . runSubstT $ do
+instantiateTyping (m, τ) = Infer . lift . runSubst $ do
     generalize (tvs τ)
     (,) <$> mapMono subst m <*> subst τ
 
