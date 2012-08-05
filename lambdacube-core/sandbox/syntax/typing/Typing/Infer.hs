@@ -89,7 +89,7 @@ withPolyVars vars = Infer . local (second fixup) . unInfer
   where
     fixup env@PolyEnv{..} = env{ polyEnvMap = vars <> polyEnvMap }
 
-un :: Unify a -> Infer a
+un :: Unify (MonoEnv, Ty) -> Infer (MonoEnv, Ty)
 un u = Infer . lift $ runUnify u
 
 inferExpr :: Expr -> Infer Typing

@@ -4,7 +4,6 @@
 {-# LANGUAGE RecordWildCards #-}
 module Typing.Subst
        ( SubstT, runSubstT
-       , Subst, runSubst
        , addSubst
        , substTv
        , subst
@@ -24,13 +23,8 @@ import Control.Monad.Identity
 newtype SubstT m a = SubstT{ unSubstT :: StateT (Map Tv Ty) m a }
                    deriving (Functor, Applicative, Monad, MonadTrans)
 
-type Subst = SubstT Identity
-
 runSubstT :: (Monad m) => SubstT m a -> m a
 runSubstT m = evalStateT (unSubstT m) mempty
-
-runSubst :: Subst a -> a
-runSubst m = evalState (unSubstT m) mempty
 
 substTv :: (Monad m) => Tv -> SubstT m Ty
 substTv x = do
