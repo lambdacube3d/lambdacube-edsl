@@ -261,8 +261,8 @@ codeGenPrim PrimTextureSize             ty argTy [a,b]        = [functionCall "t
 codeGenPrim PrimTexture                 ty argTy [a,b]        = [functionCall "texture"               [a,b]]
 codeGenPrim PrimTexture                 ty argTy [a,b,c]      = [functionCall "texture"               [a,b,c]]
 -}
-codeGenPrim PrimTexture                 ty argTy [a,b]        = swizzleV4 ty $ functionCall "texture2D"               [a,b]
-codeGenPrim PrimTexture                 ty argTy [a,b,c]      = swizzleV4 ty $ functionCall "texture2D"               [a,b,c]
+codeGenPrim PrimTexture                 ty argTy [a,b]        = [swizzleV4 ty $ functionCall "texture2D"    [a,b]]
+codeGenPrim PrimTexture                 ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "texture2D"    [a,b,c]]
 
 codeGenPrim PrimTextureProj             ty argTy [a,b]        = [functionCall "textureProj"           [a,b]]
 codeGenPrim PrimTextureProj             ty argTy [a,b,c]      = [functionCall "textureProj"           [a,b,c]]
@@ -291,18 +291,12 @@ codeGenPrim prim ty argTy params = throw $ userError $ unlines $
     , "  parameter values: " ++ show params
     ]
 
-swizzleV4 :: [InputType] -> Expr -> [Expr]
+swizzleV4 :: [InputType] -> Expr -> Expr
 swizzleV4 [ty] a
-    | elem ty  [V4F, V4I, V4U]      = [a]
-    | elem ty  [V3F, V3I, V3U]      = [ FieldSelection a "r"
-                                      , FieldSelection a "g"
-                                      , FieldSelection a "b"
-                                      ]
-    | elem ty  [V2F, V2I, V2U]      = [ FieldSelection a "r"
-                                      , FieldSelection a "g"
-                                      ]
-    | elem ty  [Float, Int, Word]   = [ FieldSelection a "r"
-                                      ]
+    | elem ty  [V4F, V4I, V4U]      = a
+    | elem ty  [V3F, V3I, V3U]      = FieldSelection a "rgb"
+    | elem ty  [V2F, V2I, V2U]      = FieldSelection a "rg"
+    | elem ty  [Float, Int, Word]   = FieldSelection a "r"
     | otherwise                     = error $ "swizzleV4 - illegal type: " ++ show ty
 
 -- glsl ast utility
