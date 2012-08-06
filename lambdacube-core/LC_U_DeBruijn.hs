@@ -35,7 +35,7 @@ hashcons !t !e = do
     Nothing -> let (!k,!m') = insert e m
                    !tm'    = IM.insert k t tm
                in put (DAG m' tm') >> return k
-    Just !k  -> trace ("sharing : " ++ show k ++ " :: " ++ show (tm IM.! k)) $ return k
+    Just !k  -> {-trace ("sharing : " ++ show k ++ " :: " ++ show (tm IM.! k)) $ -} return k
 
 --hashcons = dontShare
 dontShare :: Ty -> Exp -> State DAG ExpId

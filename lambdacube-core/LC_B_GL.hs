@@ -301,9 +301,9 @@ compileRenderer dag (ScreenOut img) = do
         , slotStream            = slotStreamTrie
         , uniformSetter         = uniformSetterTrie
         , render                = do
-                                    print " * Frame Started"
+                                    --print " * Frame Started"
                                     sequence_ passRender
-                                    print " * Frame Ended"
+                                    --print " * Frame Ended"
         , dispose               = renderTexDispose >> sequence_ passDispose
         , setScreenSize         = \w h -> writeIORef screenSizeIORef (w,h)
 

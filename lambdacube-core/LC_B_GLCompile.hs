@@ -511,7 +511,7 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
         renderFun = do
             ObjectSet drawObjs objsMap <- readIORef objsIORef
             unless (Map.null objsMap) $ do
-                putStrLn $ "Slot: " ++ show slotName ++ "  object count: " ++ show (Map.size objsMap)
+                --putStrLn $ "Slot: " ++ show slotName ++ "  object count: " ++ show (Map.size objsMap)
                 setupRasterContext rCtx
                 setupAccumulationContext aCtx
                 glUseProgram po

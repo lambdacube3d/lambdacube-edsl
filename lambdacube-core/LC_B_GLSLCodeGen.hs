@@ -386,7 +386,7 @@ store dag expId exp = do
     let name    = "val" ++ show expId
         newVar  = Variable name
         t       = codeGenType $ expIdType dag expId
-        [ty]    = trace (show expId ++ " [ty]    = " ++ show t) t
+        [ty]    = {-trace (show expId ++ " [ty]    = " ++ show t)-} t
         newStmt = varStmt name (toGLSLType ty) exp
     (stmt,varMap) <- get
     put (newStmt:stmt,IntMap.insert expId [newVar] varMap)
@@ -474,7 +474,7 @@ codeGenVertexShader dag smpName inVars = cvt
         genSrc = do
             --[posE']      <- genExp pos
             a <- genExp pos
-            let [posE'] = trace ("let [posE'] = " ++ show a) a
+            let [posE'] = {-trace ("let [posE'] = " ++ show a)-} a
             [sizeE']     <- genExp size
             (oQ',oE',oT')  <- unzip3 <$> mapM genIExp (map (toExp dag) outs)
             return (posE',sizeE',oQ',oE',oT')
