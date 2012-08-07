@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TupleSections #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TupleSections, CPP #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -48,8 +48,12 @@ import Zip
 import Items
 import qualified MD3 as MD3
 
+#ifdef CAPTURE
 import Codec.Image.DevIL
+import Text.Printf
 import Foreign
+#endif
+
 
 -- Utility code
 tableTexture :: [Float] -> ByteString -> Trie InputSetter -> IO ()
@@ -92,15 +96,22 @@ quad = Mesh
     a = -1
     b = 1
 
+#ifdef CAPTURE
 -- framebuffer capture function
 withFrameBuffer :: Int -> Int -> Int -> Int -> (Ptr Word8 -> IO ()) -> IO ()
 withFrameBuffer x y w h fn = allocaBytes (w*h*4) $ \p -> do
     glReadPixels (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h) gl_RGBA gl_UNSIGNED_BYTE $ castPtr p
     fn p
+#endif
+
+captureRate :: Double
+captureRate = 30
 
 main :: IO ()
 main = do
+#ifdef CAPTURE
     ilInit
+#endif
     ar <- loadArchive
 
     let imageShader txName = defaultCommonAttrs {caStages = sa:saLM:[]}
@@ -169,7 +180,7 @@ main = do
     --addMesh renderer "postSlot" compiledQuad []
 
     let slotU           = uniformSetter renderer
-        draw _          = render renderer >> swapBuffers
+        draw captureA   = render renderer >> captureA >> swapBuffers
         entityRGB       = uniformV3F "entityRGB" slotU
         entityAlpha     = uniformFloat "entityAlpha" slotU
         identityLight   = uniformFloat "identityLight" slotU
@@ -271,14 +282,15 @@ readMD3 :: LB.ByteString -> MD3Model
 
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
+    (capturePress,capturePressSink) <- external False
 
-
+    capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
         anim <- animateMaps animTex
-        u <- scene bsp objs (setScreenSize renderer) p0 slotU windowSize mousePosition fblrPress anim
+        u <- scene bsp objs (setScreenSize renderer) p0 slotU windowSize mousePosition fblrPress anim capturePress capRef
         return $ draw <$> u
-    driveNetwork sc (readInput s mousePositionSink fblrPressSink)
+    driveNetwork sc (readInput s mousePositionSink fblrPressSink capturePressSink capRef)
 
     dispose renderer
     print "renderer destroyed"
@@ -303,18 +315,25 @@ scene :: BSPLevel
       -> Signal (Float, Float)
       -> Signal (Bool, Bool, Bool, Bool, Bool)
       -> Signal [(Float, [(SetterFun TextureData, TextureData)])]
-      -> SignalGen Float (Signal ())
-scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim = do
+      -> Signal Bool
+      -> IORef Bool
+      -> SignalGen Float (Signal (IO ()))
+scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim capturePress capRef = do
     time <- stateful 0 (+)
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
     cam <- userCamera p0 mouseMove fblrPress
+
+    frameCount <- stateful (0 :: Int) (\_ c -> c + 1)
+    capturePress' <- delay False capturePress
+    capture <- transfer2 False (\_ cp cp' cap -> cap /= (cp && not cp')) capturePress capturePress'
+
     let matSetter   = uniformM44F "viewProj" slotU
         viewOrigin  = uniformV3F "viewOrigin" slotU
         orientation = uniformM44F "orientation" slotU
         viewMat     = uniformM44F "viewMat" slotU
         timeSetter  = uniformFloat "time" slotU
-        setupGFX (w,h) (cam,dir,up,_) time anim = do
+        setupGFX (w,h) (cam,dir,up,_) time (anim,capturing,frameCount) = do
             let cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.01 15 (pi/2) (fromIntegral w / fromIntegral h)
                 sm = fromProjective (scaling $ Vec3 s s s)
@@ -334,7 +353,15 @@ scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim = do
             forM_ anim $ \(_,a) -> let (s,t) = head a in s t
             setSize (fromIntegral w) (fromIntegral h)
             cullSurfaces bsp cam frust objs
-    r <- effectful4 setupGFX windowSize cam time anim
+            return $ do
+#ifdef CAPTURE
+                when capturing $ do
+                    glFinish
+                    withFrameBuffer 0 0 w h $ \p -> writeImageFromPtr (printf "frame%08d.png" frameCount) (h,w) p
+                writeIORef capRef capturing
+#endif
+                return ()
+    r <- effectful4 setupGFX windowSize cam time ((,,) <$> anim <*> capture <*> frameCount)
     return r
 
 vec4ToV4F :: Vec4 -> V4F
@@ -346,8 +373,10 @@ mat4ToM44F (Mat4 a b c d) = V4 (vec4ToV4F a) (vec4ToV4F b) (vec4ToV4F c) (vec4To
 readInput :: State
           -> ((Float, Float) -> IO a)
           -> ((Bool, Bool, Bool, Bool, Bool) -> IO c)
+          -> (Bool -> IO d)
+          -> IORef Bool
           -> IO (Maybe Float)
-readInput s mousePos fblrPress = do
+readInput s mousePos fblrPress capturePress capRef = do
     t <- getTime
     resetTime
 
@@ -355,10 +384,14 @@ readInput s mousePos fblrPress = do
     mousePos (fromIntegral x,fromIntegral y)
 
     fblrPress =<< ((,,,,) <$> keyIsPressed KeyLeft <*> keyIsPressed KeyUp <*> keyIsPressed KeyDown <*> keyIsPressed KeyRight <*> keyIsPressed KeyRightShift)
+    capturePress =<< keyIsPressed (CharKey 'P')
 
-    updateFPS s t
+    isCapturing <- readIORef capRef
+    let dt = if isCapturing then recip captureRate else realToFrac t
+
+    updateFPS s dt
     k <- keyIsPressed KeyEsc
-    return $ if k then Nothing else Just (realToFrac t)
+    return $ if k then Nothing else Just (realToFrac dt)
 
 -- FRP boilerplate
 driveNetwork :: (p -> IO (IO a)) -> IO (Maybe p) -> IO ()

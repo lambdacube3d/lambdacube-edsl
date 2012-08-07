@@ -26,6 +26,10 @@ Extra-Source-Files:
   ShaderParser.hs
   Zip.hs
 
+Flag Capture
+  Description:    Enable the continuous screen capture functionality.
+  Default:        False
+
 Executable q3demo
   HS-Source-Dirs: .
   Main-IS:        Main.hs
@@ -51,5 +55,8 @@ Executable q3demo
                   stb-image,
                   type-level-numbers,
                   vect,
-                  zlib,
-                  Codec-Image-DevIL
+                  zlib
+
+  if flag(Capture)
+    Build-Depends:  Codec-Image-DevIL
+    CPP-Options:    -DCAPTURE
