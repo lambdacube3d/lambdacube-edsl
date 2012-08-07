@@ -22,7 +22,7 @@ lightDirection :: Vec3
 lightDirection = Vec3 250 (-600) 400
 
 lightFrustumSlices :: [Float]
-lightFrustumSlices = [0.1, 10, 35, 150, 700]
+lightFrustumSlices = [0.3, 10, 35, 150, 700]
 
 gridThicknesses :: [Float]
 gridThicknesses = [0.2, 0.11, 0.1, 0.1]
@@ -101,6 +101,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
     projection = Uni (IM44F "projection")
     lightDirection = Uni (IV3F "lightDirection")
     lightViewProjs = [Uni (IM44F (SB.pack ("lightViewProj" ++ show slice))) | slice <- [1..lightFrustumSliceCount]]
+    lightViewScales = [Uni (IV3F (SB.pack ("lightViewScale" ++ show slice))) | slice <- [1..lightFrustumSliceCount]]
     camMat = worldView @.*. worldPosition
 
     gridPattern :: Exp F Float -> Exp F V3F -> Exp F Int32 -> Exp F Bool
@@ -169,14 +170,21 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         V3 _ _ eyeDist = unpack' (neg' eyePos)
         lightSlice slice = Cond (inSlice @&& inShadow) lightLevel (floatF 1)
           where
-            --lightLevel = min' (floatF 1) (exp' (floatF 10 @* (d @- tz)))
+            V3 hScale vScale depthScale = unpack' (lightViewScales !! slice :: Exp F V3F)
+            --lightLevel = clamp' ({-exp'-} (floatF 1 @+ floatF 5 @* (d @- tz) @/ depthScale)) (floatF 0) (floatF 1) 
             lightLevel = Cond (d @< tz) (floatF 0) (floatF 1)
             inSlice = eyeDist @>= lf slice @&& eyeDist @<= lf (slice+1)
             inShadow = u @>= floatF 0.01 @&& u @<= floatF 0.99 @&& v @>= floatF 0.01 @&& v @<= floatF 0.99
             
             V4 tx ty tz tw = unpack' (lightViewPosVectors !! slice)
-            u = tx @/ tw @* floatF 0.5 @+ floatF 0.5
-            v = ty @/ tw @* floatF 0.5 @+ floatF 0.5
+            ditherAngle = dot' fragCoord (Const (V4 (pi/2*1.7) (pi*1.3) 0 0) :: Exp F V4F)
+            ditherFactor = floatF 3 @/ floatF shadowMapSize
+            u = tx @/ tw @* floatF 0.5 @+ floatF 0.5 @+ sin' ditherAngle @* ditherFactor @* sqrt' hScale
+            v = ty @/ tw @* floatF 0.5 @+ floatF 0.5 @+ cos' ditherAngle @* ditherFactor @* sqrt' vScale
+            --u' = tx @/ tw @* floatF 0.5 @+ floatF 0.5
+            --v' = ty @/ tw @* floatF 0.5 @+ floatF 0.5
+            --u = u' @+ sin' ditherAngle @* fwidth' u' @* floatF 0.5
+            --v = v' @+ cos' ditherAngle @* fwidth' v' @* floatF 0.5
             d = texture' (shadowSampler (slice+1)) (pack' (V2 u v)) (floatF 0)
 
             lf s = floatF (lightFrustumSlices !! s)
@@ -199,10 +207,13 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
     
     shadowMap :: Int -> Texture GP DIM2 SingleTex (Regular Float) Red
     shadowMap slice = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 (moments slice)]
+
+    shadowMapBlur :: Int -> Texture GP DIM2 SingleTex (Regular Float) Red
+    shadowMapBlur slice = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurDepth slice $ PrjFrameBuffer "blur" tix0 (moments slice)]
     
     --shadowMapEnvelope :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     --shadowMapEnvelope = Texture (Texture2D (Float RGBA) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
-    --
+
     --shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
     --shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
 
@@ -346,6 +357,40 @@ blurVH img = blur' $ frag uvH $ PrjFrameBuffer "" tix0 $ blur' $ frag uvV img
         smp = Sampler LinearFilter Clamp tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]
 
+blurDepth :: Int -> GP (Image N1 Float) -> GP (FrameBuffer N1 (Float,Float))
+blurDepth slice img = blur $ frag uvH $ PrjFrameBuffer "" tix0 $ blur $ frag uvV img 
+  where
+    sizeT = shadowMapSize
+    sizeI = floor sizeT
+    blurFactor = 5
+    uvH v = (Const (V2 (blurFactor*v/sizeT) 0) :: Exp F V2F) @* xScale
+    uvV v = (Const (V2 0 (blurFactor*v/sizeT)) :: Exp F V2F) @* yScale
+    lightViewScale = Uni (IV3F (SB.pack ("lightViewScale" ++ show slice))) :: Exp F V3F
+    V3 xScale yScale _ = unpack' lightViewScale
+    
+    frag dFn img uv = FragmentOutRastDepth $ wsum gaussFilter5 :. ZT
+      where
+        wsum ((o,c):[])  = texture' smp (uv @+ dFn o) (Const 0) @* floatF c
+        wsum ((o,c):xs)  = (texture' smp (uv @+ dFn o) (Const 0) @* floatF c) @+ wsum xs
+        smp = Sampler LinearFilter Clamp tex
+        tex = Texture (Texture2D (Float Red) n1) (V2 sizeI sizeI) NoMip [img]
+
+    blur :: (Exp F V2F -> FragmentOut (Depth Float :+: Color Float :+: ZZ)) -> GP (FrameBuffer N1 (Float,Float))
+    blur frag = Accumulate fragCtx PassAll frag rast clear
+      where
+        fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: Bool):.ZT
+        clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 0:.ZT)
+        rast    = Rasterize triangleCtx prims
+        prims   = Transform vert input
+        input   = Fetch "postSlot" Triangle (IV2F "position")
+
+        vert :: Exp V V2F -> VertexOut V2F
+        vert uv = VertexOut v4 (Const 1) (NoPerspective uv':.ZT)
+          where
+            v4      = pack' $ V4 u v (floatV 1) (floatV 1)
+            V2 u v  = unpack' uv
+            uv'     = uv @* floatV 0.5 @+ floatV 0.5
+        
 {-
 debugShader :: GP (FrameBuffer N1 (Float,V4F))
 debugShader = Accumulate fragCtx PassAll frag rast stuntsGFX
@@ -402,9 +447,8 @@ perspective n f fovy aspect = transpose $
 gridThickness n = gridThicknesses !! (n-1)
 
 lightProjection nearDepth farDepth fieldOfView aspectRatio worldViewMat =
-    lightSpaceOrientation .*. scaling (Vec3 xscale yscale zscale) .*. translation (Vec3 xtrans ytrans ztrans)
+    (lightSpaceOrientation .*. scaling scale .*. translation (Vec3 xtrans ytrans ztrans), scale)
   where
-    projection = perspective nearDepth farDepth fieldOfView aspectRatio
     localFrustum = [Vec4 (x*z) (y*z) (-z) 1 | x <- [-extentX, extentX], y <- [-extentY, extentY], z <- [nearDepth, farDepth]]
       where
         extentY = tan (fieldOfView/2)
@@ -415,8 +459,9 @@ lightProjection nearDepth farDepth fieldOfView aspectRatio worldViewMat =
     Vec4 xmin ymin zmin _ = foldl1' (onVec4 min) lightCameraFrustum
     Vec4 xmax ymax zmax _ = foldl1' (onVec4 max) lightCameraFrustum
     (xscale, xtrans) = linearTransform xmin (-1) xmax 1
-    (yscale, ytrans) = linearTransform ymin (-1) ymax 1
+    (yscale, ytrans) = linearTransform ymin 0.001 ymax 1
     (zscale, ztrans) = linearTransform (min (zmin-0.2*(zmax-zmin)) (zmax-maxCasterDistance)) 0 zmax 1
+    scale = Vec3 xscale yscale zscale
                 
     onVec4 f (Vec4 x1 y1 z1 w1) (Vec4 x2 y2 z2 w2) = Vec4 (f x1 x2) (f y1 y2) (f z1 z2) (f w1 w2)
     linearTransform x0 y0 x1 y1 = (a, b)
