@@ -39,6 +39,7 @@ import LC_Mesh
 import Effect
 
 import BSP
+import Camera
 import Graphics
 import Material
 import Render
@@ -54,6 +55,7 @@ import Text.Printf
 import Foreign
 #endif
 
+type Sink a = a -> IO ()
 
 -- Utility code
 tableTexture :: [Float] -> ByteString -> Trie InputSetter -> IO ()
@@ -283,14 +285,15 @@ readMD3 :: LB.ByteString -> MD3Model
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
     (capturePress,capturePressSink) <- external False
+    (waypointPress,waypointPressSink) <- external []
 
     capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
         anim <- animateMaps animTex
-        u <- scene bsp objs (setScreenSize renderer) p0 slotU windowSize mousePosition fblrPress anim capturePress capRef
+        u <- scene bsp objs (setScreenSize renderer) p0 slotU windowSize mousePosition fblrPress anim capturePress waypointPress capRef
         return $ draw <$> u
-    driveNetwork sc (readInput s mousePositionSink fblrPressSink capturePressSink capRef)
+    driveNetwork sc (readInput s mousePositionSink fblrPressSink capturePressSink waypointPressSink capRef)
 
     dispose renderer
     print "renderer destroyed"
@@ -306,6 +309,9 @@ animateMaps l0 = stateful l0 $ \dt l -> zipWith (f $ dt * timeScale) l timing
         | t - dt <= 0   = (t-dt+t0,tail a)
         | otherwise     = (t-dt,a)
 
+edge :: Signal Bool -> SignalGen p (Signal Bool)
+edge s = transfer2 False (\_ cur prev _ -> cur && not prev) s =<< delay False s
+
 scene :: BSPLevel
       -> V.Vector Object
       -> (Word -> Word -> IO ())
@@ -316,52 +322,65 @@ scene :: BSPLevel
       -> Signal (Bool, Bool, Bool, Bool, Bool)
       -> Signal [(Float, [(SetterFun TextureData, TextureData)])]
       -> Signal Bool
+      -> Signal [Bool]
       -> IORef Bool
       -> SignalGen Float (Signal (IO ()))
-scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim capturePress capRef = do
+scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim capturePress waypointPress capRef = do
     time <- stateful 0 (+)
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
-    cam <- userCamera p0 mouseMove fblrPress
+    controlledCamera <- userCamera p0 mouseMove fblrPress
 
     frameCount <- stateful (0 :: Int) (\_ c -> c + 1)
-    capturePress' <- delay False capturePress
-    capture <- transfer2 False (\_ cp cp' cap -> cap /= (cp && not cp')) capturePress capturePress'
+    capture <- transfer2 False (\_ cap cap' on -> on /= (cap && not cap')) capturePress =<< delay False capturePress
+    
+    [clearWaypoints, setWaypoint, stopPlayback, startPlayback, incPlaybackSpeed, decPlaybackSpeed] <-
+        forM [0..5] $ \i -> edge (fmap (!!i) waypointPress)
+
+    waypoints <- recordSignalSamples setWaypoint clearWaypoints ((\(camPos, targetPos, _) -> (camPos, targetPos)) <$> controlledCamera)
+    playbackSpeed <- transfer2 100 (\dt inc dec speed -> speed + 10*dt*(if inc then 1 else if dec then -1 else 0)) incPlaybackSpeed decPlaybackSpeed
+    splineCamera <- playbackCamera startPlayback stopPlayback playbackSpeed waypoints
+    
+    let activeCamera = do
+            camData <- splineCamera
+            case camData of
+                Nothing -> controlledCamera
+                Just camData -> return camData
 
     let matSetter   = uniformM44F "viewProj" slotU
         viewOrigin  = uniformV3F "viewOrigin" slotU
         orientation = uniformM44F "orientation" slotU
         viewMat     = uniformM44F "viewMat" slotU
         timeSetter  = uniformFloat "time" slotU
-        setupGFX (w,h) (cam,dir,up,_) time (anim,capturing,frameCount) = do
-            let cm = fromProjective (lookat cam (cam + dir) up)
+        setupGFX (w,h) (camPos,camTarget,camUp) time (anim,capturing,frameCount) = do
+            let cm = fromProjective (lookat camPos camTarget camUp)
                 pm = perspective 0.01 15 (pi/2) (fromIntegral w / fromIntegral h)
                 sm = fromProjective (scaling $ Vec3 s s s)
                 s  = 0.005
                 V4 orientA orientB orientC _ = mat4ToM44F $! cm .*. sm
-                Vec3 cx cy cz = cam
+                Vec3 cx cy cz = camPos
                 near = 0.01/s
                 far  = 15/s
                 fovDeg = 90
-                frust = frustum fovDeg (fromIntegral w / fromIntegral h) (near) (far) cam (cam+dir) up
+                frust = frustum fovDeg (fromIntegral w / fromIntegral h) near far camPos camTarget camUp
             timeSetter $ time / 1
-            putStrLn $ "time: " ++ show time
+            --putStrLn $ "time: " ++ show time ++ " " ++ show capturing
             viewOrigin $ V3 cx cy cz
             viewMat $ mat4ToM44F cm
             --orientation $ V4 orientA orientB orientC $ V4 0 0 0 1
             matSetter $! mat4ToM44F $! cm .*. sm .*. pm
             forM_ anim $ \(_,a) -> let (s,t) = head a in s t
             setSize (fromIntegral w) (fromIntegral h)
-            cullSurfaces bsp cam frust objs
+            cullSurfaces bsp camPos frust objs
             return $ do
 #ifdef CAPTURE
                 when capturing $ do
                     glFinish
-                    withFrameBuffer 0 0 w h $ \p -> writeImageFromPtr (printf "frame%08d.png" frameCount) (h,w) p
+                    withFrameBuffer 0 0 w h $ \p -> writeImageFromPtr (printf "frame%08d.jpg" frameCount) (h,w) p
                 writeIORef capRef capturing
 #endif
                 return ()
-    r <- effectful4 setupGFX windowSize cam time ((,,) <$> anim <*> capture <*> frameCount)
+    r <- effectful4 setupGFX windowSize activeCamera time ((,,) <$> anim <*> capture <*> frameCount)
     return r
 
 vec4ToV4F :: Vec4 -> V4F
@@ -371,12 +390,13 @@ mat4ToM44F :: Mat4 -> M44F
 mat4ToM44F (Mat4 a b c d) = V4 (vec4ToV4F a) (vec4ToV4F b) (vec4ToV4F c) (vec4ToV4F d)
 
 readInput :: State
-          -> ((Float, Float) -> IO a)
-          -> ((Bool, Bool, Bool, Bool, Bool) -> IO c)
-          -> (Bool -> IO d)
+          -> Sink (Float, Float)
+          -> Sink (Bool, Bool, Bool, Bool, Bool)
+          -> Sink Bool
+          -> Sink [Bool]
           -> IORef Bool
           -> IO (Maybe Float)
-readInput s mousePos fblrPress capturePress capRef = do
+readInput s mousePos fblrPress capturePress waypointPress capRef = do
     t <- getTime
     resetTime
 
@@ -385,6 +405,7 @@ readInput s mousePos fblrPress capturePress capRef = do
 
     fblrPress =<< ((,,,,) <$> keyIsPressed KeyLeft <*> keyIsPressed KeyUp <*> keyIsPressed KeyDown <*> keyIsPressed KeyRight <*> keyIsPressed KeyRightShift)
     capturePress =<< keyIsPressed (CharKey 'P')
+    waypointPress =<< mapM (keyIsPressed . CharKey) "RE12FG"
 
     isCapturing <- readIORef capRef
     let dt = if isCapturing then recip captureRate else realToFrac t
@@ -415,8 +436,8 @@ initCommon title = do
         , displayOptions_numAlphaBits       = 8
         , displayOptions_numDepthBits       = 24
         , displayOptions_windowIsResizable  = True
---        , displayOptions_width              = 1280
---        , displayOptions_height             = 800
+        , displayOptions_width              = 1280
+        , displayOptions_height             = 720
 --        , displayOptions_displayMode    = Fullscreen
         }
     setWindowTitle title
@@ -452,14 +473,15 @@ updateFPS state t1 = do
     writeIORef tR 0
     writeIORef fR 0
 
+{-
 -- Continuous camera state (rotated with mouse, moved with arrows)
 userCamera :: Real p => Vec3 -> Signal (Float, Float) -> Signal (Bool, Bool, Bool, Bool, Bool)
-           -> SignalGen p (Signal (Vec3, Vec3, Vec3, (Float, Float)))
-userCamera p mposs keyss = transfer2 (p,zero,zero,(0,0)) calcCam mposs keyss
+           -> SignalGen p (Signal (Vec3, Vec3, Vec3))
+userCamera p mposs keyss = fmap (\(pos,target,up,_) -> (pos,target,up)) <$> transfer2 (p,zero,zero,(0,0)) calcCam mposs keyss
   where
     d0 = Vec4 0 (-1) 0 1
     u0 = Vec4 0 0 (-1) 1
-    calcCam dt (dmx,dmy) (ka,kw,ks,kd,turbo) (p0,_,_,(mx,my)) = (p',d,u,(mx',my'))
+    calcCam dt (dmx,dmy) (ka,kw,ks,kd,turbo) (p0,_,_,(mx,my)) = (p',p'+d,u,(mx',my'))
       where
         f0 c n = if c then (&+ n) else id
         p'  = foldr1 (.) [f0 ka (v &* (-t)),f0 kw (d &* t),f0 ks (d &* (-t)),f0 kd (v &* t)] p0
@@ -471,6 +493,7 @@ userCamera p mposs keyss = transfer2 (p,zero,zero,(0,0)) calcCam mposs keyss
         d   = trim $ rm *. d0 :: Vec3
         u   = trim $ rm *. u0 :: Vec3
         v   = normalize $ d &^ u
+-}
 
 -- | Perspective transformation matrix in row major order.
 perspective :: Float  -- ^ Near plane clipping distance (always positive).
