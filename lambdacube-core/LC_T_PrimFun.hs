@@ -5,6 +5,7 @@ import Data.Word
 
 import LC_G_Type
 import LC_T_Sampler
+import LC_T_APIType
 
 data PrimFun stage sig where
 
@@ -150,13 +151,17 @@ data PrimFun stage sig where
 
     -- Texture Lookup Functions
     PrimTextureSize             :: IsTextureSize sampler lod size                           => PrimFun stage ((sampler,lod)                       -> size)
-    PrimTexture                 :: IsTexture sampler coord bias                             => PrimFun stage ((sampler,coord,bias)                -> TexelRepr sampler)
-    PrimTextureProj             :: IsTextureProj sampler coord bias                         => PrimFun stage ((sampler,coord,bias)                -> TexelRepr sampler)
+    PrimTexture                 :: IsTexture sampler coord bias                             => PrimFun stage ((sampler,coord)                     -> TexelRepr sampler)
+    PrimTextureB                :: IsTexture sampler coord bias                             => PrimFun F     ((sampler,coord,bias)                -> TexelRepr sampler)
+    PrimTextureProj             :: IsTextureProj sampler coord bias                         => PrimFun stage ((sampler,coord)                     -> TexelRepr sampler)
+    PrimTextureProjB            :: IsTextureProj sampler coord bias                         => PrimFun F     ((sampler,coord,bias)                -> TexelRepr sampler)
     PrimTextureLod              :: IsTextureLod sampler coord lod                           => PrimFun stage ((sampler,coord,lod)                 -> TexelRepr sampler)
-    PrimTextureOffset           :: IsTextureOffset sampler coord offset bias                => PrimFun stage ((sampler,coord,offset,bias)         -> TexelRepr sampler)
+    PrimTextureOffset           :: IsTextureOffset sampler coord offset bias                => PrimFun stage ((sampler,coord,offset)              -> TexelRepr sampler)
+    PrimTextureOffsetB          :: IsTextureOffset sampler coord offset bias                => PrimFun F     ((sampler,coord,offset,bias)         -> TexelRepr sampler)
     PrimTexelFetch              :: IsTexelFetch sampler coord lod                           => PrimFun stage ((sampler,coord,lod)                 -> TexelRepr sampler)
     PrimTexelFetchOffset        :: IsTexelFetchOffset sampler coord lod offset              => PrimFun stage ((sampler,coord,lod,offset)          -> TexelRepr sampler)
-    PrimTextureProjOffset       :: IsTextureProjOffset sampler coord offset bias            => PrimFun stage ((sampler,coord,offset,bias)         -> TexelRepr sampler)
+    PrimTextureProjOffset       :: IsTextureProjOffset sampler coord offset bias            => PrimFun stage ((sampler,coord,offset)              -> TexelRepr sampler)
+    PrimTextureProjOffsetB      :: IsTextureProjOffset sampler coord offset bias            => PrimFun F     ((sampler,coord,offset,bias)         -> TexelRepr sampler)
     PrimTextureLodOffset        :: IsTextureLodOffset sampler coord lod offset              => PrimFun stage ((sampler,coord,lod,offset)          -> TexelRepr sampler)
     PrimTextureProjLod          :: IsTextureProjLod sampler coord lod                       => PrimFun stage ((sampler,coord,lod)                 -> TexelRepr sampler)
     PrimTextureProjLodOffset    :: IsTextureProjLodOffset sampler coord lod offset          => PrimFun stage ((sampler,coord,lod,offset)          -> TexelRepr sampler)

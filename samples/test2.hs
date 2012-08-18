@@ -212,6 +212,8 @@ initCommon title = do
         , displayOptions_numDepthBits       = 24
 --        , displayOptions_width              = 1280
 --        , displayOptions_height             = 720
+        , displayOptions_openGLVersion      = (3,2)
+        , displayOptions_openGLProfile      = CoreProfile
         , displayOptions_windowIsResizable  = True
 --        , displayOptions_displayMode    = Fullscreen
         }

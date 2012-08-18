@@ -257,31 +257,26 @@ codeGenPrim PrimNoise4              ty argTy [a]          = [functionCall "noise
 -- Texture Lookup Functions
 codeGenPrim PrimTextureSize             ty argTy [a]          = [functionCall "textureSize"           [a]]
 codeGenPrim PrimTextureSize             ty argTy [a,b]        = [functionCall "textureSize"           [a,b]]
-{-
-codeGenPrim PrimTexture                 ty argTy [a,b]        = [functionCall "texture"               [a,b]]
-codeGenPrim PrimTexture                 ty argTy [a,b,c]      = [functionCall "texture"               [a,b,c]]
--}
-codeGenPrim PrimTexture                 ty argTy [a,b]        = [swizzleV4 ty $ functionCall "texture2D"    [a,b]]
-codeGenPrim PrimTexture                 ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "texture2D"    [a,b,c]]
-
-codeGenPrim PrimTextureProj             ty argTy [a,b]        = [functionCall "textureProj"           [a,b]]
-codeGenPrim PrimTextureProj             ty argTy [a,b,c]      = [functionCall "textureProj"           [a,b,c]]
-codeGenPrim PrimTextureLod              ty argTy [a,b,c]      = [functionCall "textureLod"            [a,b,c]]
-codeGenPrim PrimTextureOffset           ty argTy [a,b,c]      = [functionCall "textureOffset"         [a,b,c]]
-codeGenPrim PrimTextureOffset           ty argTy [a,b,c,d]    = [functionCall "textureOffset"         [a,b,c,d]]
-codeGenPrim PrimTexelFetch              ty argTy [a,b]        = [functionCall "texelFetch"            [a,b]]
-codeGenPrim PrimTexelFetch              ty argTy [a,b,c]      = [functionCall "texelFetch"            [a,b,c]]
-codeGenPrim PrimTexelFetchOffset        ty argTy [a,b,c]      = [functionCall "texelFetchOffset"      [a,b,c]]
-codeGenPrim PrimTexelFetchOffset        ty argTy [a,b,c,d]    = [functionCall "texelFetchOffset"      [a,b,c,d]]
-codeGenPrim PrimTextureProjOffset       ty argTy [a,b,c]      = [functionCall "textureProjOffset"     [a,b,c]]
-codeGenPrim PrimTextureProjOffset       ty argTy [a,b,c,d]    = [functionCall "textureProjOffset"     [a,b,c,d]]
-codeGenPrim PrimTextureLodOffset        ty argTy [a,b,c,d]    = [functionCall "textureLodOffset"      [a,b,c,d]]
-codeGenPrim PrimTextureProjLod          ty argTy [a,b,c]      = [functionCall "textureProjLod"        [a,b,c]]
-codeGenPrim PrimTextureProjLodOffset    ty argTy [a,b,c,d]    = [functionCall "textureProjLodOffset"  [a,b,c,d]]
-codeGenPrim PrimTextureGrad             ty argTy [a,b,c,d]    = [functionCall "textureGrad"           [a,b,c,d]]
-codeGenPrim PrimTextureGradOffset       ty argTy [a,b,c,d,e]  = [functionCall "textureGradOffset"     [a,b,c,d,e]]
-codeGenPrim PrimTextureProjGrad         ty argTy [a,b,c,d]    = [functionCall "textureProjGrad"       [a,b,c,d]]
-codeGenPrim PrimTextureProjGradOffset   ty argTy [a,b,c,d,e]  = [functionCall "textureProjGradOffset" [a,b,c,d,e]]
+codeGenPrim PrimTexture                 ty argTy [a,b]        = [swizzleV4 ty $ functionCall "texture"               [a,b]]
+codeGenPrim PrimTexture                 ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "texture"               [a,b,c]]
+codeGenPrim PrimTextureProj             ty argTy [a,b]        = [swizzleV4 ty $ functionCall "textureProj"           [a,b]]
+codeGenPrim PrimTextureProj             ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "textureProj"           [a,b,c]]
+codeGenPrim PrimTextureLod              ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "textureLod"            [a,b,c]]
+codeGenPrim PrimTextureOffset           ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "textureOffset"         [a,b,c]]
+codeGenPrim PrimTextureOffset           ty argTy [a,b,c,d]    = [swizzleV4 ty $ functionCall "textureOffset"         [a,b,c,d]]
+codeGenPrim PrimTexelFetch              ty argTy [a,b]        = [swizzleV4 ty $ functionCall "texelFetch"            [a,b]]
+codeGenPrim PrimTexelFetch              ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "texelFetch"            [a,b,c]]
+codeGenPrim PrimTexelFetchOffset        ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "texelFetchOffset"      [a,b,c]]
+codeGenPrim PrimTexelFetchOffset        ty argTy [a,b,c,d]    = [swizzleV4 ty $ functionCall "texelFetchOffset"      [a,b,c,d]]
+codeGenPrim PrimTextureProjOffset       ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "textureProjOffset"     [a,b,c]]
+codeGenPrim PrimTextureProjOffset       ty argTy [a,b,c,d]    = [swizzleV4 ty $ functionCall "textureProjOffset"     [a,b,c,d]]
+codeGenPrim PrimTextureLodOffset        ty argTy [a,b,c,d]    = [swizzleV4 ty $ functionCall "textureLodOffset"      [a,b,c,d]]
+codeGenPrim PrimTextureProjLod          ty argTy [a,b,c]      = [swizzleV4 ty $ functionCall "textureProjLod"        [a,b,c]]
+codeGenPrim PrimTextureProjLodOffset    ty argTy [a,b,c,d]    = [swizzleV4 ty $ functionCall "textureProjLodOffset"  [a,b,c,d]]
+codeGenPrim PrimTextureGrad             ty argTy [a,b,c,d]    = [swizzleV4 ty $ functionCall "textureGrad"           [a,b,c,d]]
+codeGenPrim PrimTextureGradOffset       ty argTy [a,b,c,d,e]  = [swizzleV4 ty $ functionCall "textureGradOffset"     [a,b,c,d,e]]
+codeGenPrim PrimTextureProjGrad         ty argTy [a,b,c,d]    = [swizzleV4 ty $ functionCall "textureProjGrad"       [a,b,c,d]]
+codeGenPrim PrimTextureProjGradOffset   ty argTy [a,b,c,d,e]  = [swizzleV4 ty $ functionCall "textureProjGradOffset" [a,b,c,d,e]]
 
 -- unmatched primitive function
 codeGenPrim prim ty argTy params = throw $ userError $ unlines $
@@ -455,12 +450,12 @@ codeGenVertexShader dag smpName inVars = cvt
     cvt :: Exp -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
     cvt (Lam lam) = cvt $ toExp dag lam
     cvt (Body bodyExp) = (SB.unlines $!
-        [ "#extension GL_EXT_gpu_shader4 : require"
+        [ "#version 150 core"
         -- , "#pragma optimize(off)"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
-        , pp [attribute (unpack n)    (toGLSLType t) | (n,t) <- inVars]
-        , pp [varyingIQ (unpack n) iq (toGLSLType t) | n <- oNames | iq <- oQ | [t] <- oT]
+        , pp [inVar     (unpack n)    (toGLSLType t) | (n,t) <- inVars]
+        , pp [outVarIQ  (unpack n) iq (toGLSLType t) | n <- oNames | iq <- oQ | [t] <- oT]
         , "void main ()"
         , ppE (posE:sizeE:concat oE) ("gl_Position":"gl_PointSize":oNames)
         ], [(n,q,t) | n <- oNames | q <- oQ | [t] <- oT])
@@ -515,11 +510,11 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
 
     src :: [ExpId] -> [(ByteString,ExpId)] -> (ByteString, [(ByteString,InputType)])
     src outs outs' = (SB.unlines $!
-        [ "#extension GL_EXT_gpu_shader4 : require"
+        [ "#version 150 core"
         -- , "#pragma optimize(off)"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
-        , pp [varyingIQ (unpack n) iq (toGLSLType t) | (n,iq,t) <- inVars]
+        , pp [inVarIQ   (unpack n) iq (toGLSLType t) | (n,iq,t) <- inVars]
         , pp [outVar    (unpack n)    (toGLSLType t) | n <- oNames | [t] <- oT]
         , "void main ()"
         , ppBody $ case ffilter of
@@ -637,9 +632,15 @@ uniform name ty = Declaration $ var name ty (Just $ TypeQualSto Uniform)
 inVar :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 inVar name ty = Declaration $ var name ty (Just $ TypeQualSto In)
 
+inVarIQ :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
+inVarIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just In)
+
 outVar :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 outVar name ty = Declaration $ var name ty (Just $ TypeQualSto Out)
 
+outVarIQ :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
+outVarIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just Out)
+{-
 attribute :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 attribute name ty = Declaration $ var name ty (Just $ TypeQualSto Attribute)
 
@@ -648,7 +649,7 @@ varying name ty = Declaration $ var name ty (Just $ TypeQualSto Varying)
 
 varyingIQ :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
 varyingIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just Varying)
-
+-}
 assign :: Expr -> Expr -> Statement
 assign l r = ExpressionStatement $ Just $ Equal l r
 

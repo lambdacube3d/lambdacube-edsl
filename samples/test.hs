@@ -55,7 +55,7 @@ simple objs = Accumulate fragCtx PassAll frag rast clear
     renderTex   = Texture (Texture2D (Float RGBA) n1) AutoMip (PrjFrameBuffer "" tix0 $ simple objs)
 
     frag' :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag' a = FragmentOutRastDepth $ snoc (texture' sampler (drop3 a) (Const 0)) 1 :. ZT
+    frag' a = FragmentOutRastDepth $ snoc (texture' sampler (drop3 a)) 1 :. ZT
 
 {-
 -- API overview

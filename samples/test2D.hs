@@ -57,7 +57,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
     frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
     frag uv' = FragmentOut $ color :. ZT
       where
-        color = texture' smp uv (Const 0)
+        color = texture' smp uv
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -164,6 +164,8 @@ initCommon title = do
         , displayOptions_width              = 512
         , displayOptions_height             = 512
         , displayOptions_windowIsResizable  = True
+        , displayOptions_openGLVersion      = (3,2)
+        , displayOptions_openGLProfile      = CoreProfile
 --        , displayOptions_displayMode    = Fullscreen
         }
     setWindowTitle title

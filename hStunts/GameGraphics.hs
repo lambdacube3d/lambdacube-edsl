@@ -185,14 +185,14 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
             --v' = ty @/ tw @* floatF 0.5 @+ floatF 0.5
             --u = u' @+ sin' ditherAngle @* fwidth' u' @* floatF 0.5
             --v = v' @+ cos' ditherAngle @* fwidth' v' @* floatF 0.5
-            d = texture' (shadowSampler (slice+1)) (pack' (V2 u v)) (floatF 0)
+            d = texture' (shadowSampler (slice+1)) (pack' (V2 u v))
 
             lf s = floatF (lightFrustumSlices !! s)
         {-
         V4 tx ty tz tw = unpack' lightViewPos1
         u = tx @/ tw @* floatF 0.5 @+ floatF 0.5
         v = ty @/ tw @* floatF 0.5 @+ floatF 0.5
-        V4 m1 m2 env _ = unpack' $ texture' sampler (pack' $ V2 u v) (floatF 0)
+        V4 m1 m2 env _ = unpack' $ texture' sampler (pack' $ V2 u v)
         inShadowTex = Cond (u @>= floatF 0.05 @&& u @<= floatF 0.95 @&& v @>= floatF 0.05 @&& v @<= floatF 0.95) (floatF 0) (floatF 1)
         variance = max' (floatF 0.002) ((m2 @- m1 @* m1) @/ (max' (floatF 1) (exp' (tz @- env))))
         d = max' (floatF 0) (tz @- m1)
@@ -277,11 +277,11 @@ shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
     frag uv' = FragmentOutRastDepth $ pack' (V4 moment1 moment2 envelope (floatF 1)) :. ZT
       where
         envelope = mkEnv [(x,y) | x <- [-1,0,1], y <- [-1,0,1], (x,y) /= (0,0)]
-        V4 moment1 moment2 moment1' _ = unpack' $ texture' smp uv (Const 0)
+        V4 moment1 moment2 moment1' _ = unpack' $ texture' smp uv
         mkEnv [] = moment1'
         mkEnv ((dh,dv):ds) = max' moment1' (mkEnv ds)
           where
-            V4 _ _ moment1' _ = unpack' $ texture' smp (uv @+ (Const (V2 (dh/sizeT) (dv/sizeT)) :: Exp F V2F)) (Const 0)
+            V4 _ _ moment1' _ = unpack' $ texture' smp (uv @+ (Const (V2 (dh/sizeT) (dv/sizeT)) :: Exp F V2F))
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -348,10 +348,10 @@ blurVH img = blur' $ frag uvH $ PrjFrameBuffer "" tix0 $ blur' $ frag uvV img
     
     frag dFn img uv = FragmentOutRastDepth $ pack' (V4 m1 m2 env (floatF 1)) :. ZT
       where
-        wsum ((o,c):[])  = texture' smp (uv @+ dFn o) (Const 0) @* floatF c
-        wsum ((o,c):xs)  = (texture' smp (uv @+ dFn o) (Const 0) @* floatF c) @+ wsum xs
-        mkEnv ((o,c):[])  = texture' smp (uv @+ dFn o) (Const 0)
-        mkEnv ((o,c):xs)  = max' (texture' smp (uv @+ dFn o) (Const 0)) (mkEnv xs)
+        wsum ((o,c):[])  = texture' smp (uv @+ dFn o) @* floatF c
+        wsum ((o,c):xs)  = (texture' smp (uv @+ dFn o) @* floatF c) @+ wsum xs
+        mkEnv ((o,c):[])  = texture' smp (uv @+ dFn o)
+        mkEnv ((o,c):xs)  = max' (texture' smp (uv @+ dFn o)) (mkEnv xs)
         V4 m1 m2 _ _ = unpack' $ wsum gaussFilter5
         V4 _ _ env _ = unpack' $ mkEnv gaussFilter5
         smp = Sampler LinearFilter Clamp tex
@@ -370,8 +370,8 @@ blurDepth slice img = blur $ frag uvH $ PrjFrameBuffer "" tix0 $ blur $ frag uvV
     
     frag dFn img uv = FragmentOutRastDepth $ wsum gaussFilter5 :. ZT
       where
-        wsum ((o,c):[])  = texture' smp (uv @+ dFn o) (Const 0) @* floatF c
-        wsum ((o,c):xs)  = (texture' smp (uv @+ dFn o) (Const 0) @* floatF c) @+ wsum xs
+        wsum ((o,c):[])  = texture' smp (uv @+ dFn o) @* floatF c
+        wsum ((o,c):xs)  = (texture' smp (uv @+ dFn o) @* floatF c) @+ wsum xs
         smp = Sampler LinearFilter Clamp tex
         tex = Texture (Texture2D (Float Red) n1) (V2 sizeI sizeI) NoMip [img]
 

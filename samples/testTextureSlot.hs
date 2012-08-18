@@ -67,7 +67,7 @@ simpleTexturing = Accumulate fragCtx PassAll frag rast clear
         c' = pack' $ V4 u v (floatF 0) (floatF 1)
 
         c :: Exp F V4F
-        c = texture' smp uv (Const 0)
+        c = texture' smp uv
 
         smp :: Exp F (Sampler DIM2 SingleTex (Regular Float) RGBA)
         smp = Sampler LinearFilter Clamp tex
@@ -193,6 +193,8 @@ initCommon title = do
         , displayOptions_width              = 512
         , displayOptions_height             = 512
         , displayOptions_windowIsResizable  = True
+        , displayOptions_openGLVersion      = (3,2)
+        , displayOptions_openGLProfile      = CoreProfile
 --        , displayOptions_displayMode    = Fullscreen
         }
     setWindowTitle title

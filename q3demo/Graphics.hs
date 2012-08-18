@@ -158,7 +158,7 @@ mkWave' off (Wave wFunc base amplitude phase freq) = floatV base @+ a @* floatV 
     time        = Uni (IFloat "time") :: Exp V Float
     u           = off @+ floatV phase @+ floatV freq @* time
     uv          = pack' $ V2 u (Const 0)
-    V4 v _ _ _  = unpack' $ texture' sampler uv (Const 0)
+    V4 v _ _ _  = unpack' $ texture' sampler uv
     a           = v @* floatV 2 @- floatV 1
     sampler     = Sampler LinearFilter Wrap $ TextureSlot name (Texture2D (Float RGBA) n1)
     name        = case wFunc of
@@ -280,7 +280,7 @@ mkFragmentShader sa uvrgba = FragmentOutRastDepth $ color :. ZT
         ST_Map {}       -> rgba @* texColor Wrap  stageTexN
         ST_ClampMap {}  -> rgba @* texColor Clamp stageTexN
         ST_AnimMap {}   -> rgba @* texColor Wrap  stageTexN
-    texColor em name = texture' sampler uv (Const 0)
+    texColor em name = texture' sampler uv
       where
         sampler     = Sampler LinearFilter em $ TextureSlot name (Texture2D (Float RGBA) n1)
 
@@ -299,7 +299,7 @@ mkFilterFunction sa = case saAlphaFunc sa of
                 ST_Map {}       -> rgba @* texColor Wrap  stageTexN
                 ST_ClampMap {}  -> rgba @* texColor Clamp stageTexN
                 ST_AnimMap {}   -> rgba @* texColor Wrap  stageTexN
-            texColor em name = texture' sampler uv (Const 0)
+            texColor em name = texture' sampler uv
               where
                 sampler     = Sampler LinearFilter em $ TextureSlot name (Texture2D (Float RGBA) n1)
         in case trace ("alpha filter: " ++ show f) f of

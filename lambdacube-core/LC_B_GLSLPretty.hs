@@ -117,7 +117,7 @@ instance Pretty StorageQualifier where
     Varying -> text "varying"
     CentroidVarying -> text "centroid varying"
     In -> text "in"
-    Out -> text "varying out"
+    Out -> text "out"
     CentroidIn -> text "centroid in"
     CentroidOut -> text "centroid out"
     Uniform -> text "uniform"
@@ -132,7 +132,7 @@ instance Pretty LayoutQualifierId where
 
 instance Pretty InterpolationQualifier where
   pPrint q = case q of
-    Smooth -> text ""
+    Smooth -> text "smooth"
     Flat -> text "flat"
     NoPerspective -> text "noperspective"
 

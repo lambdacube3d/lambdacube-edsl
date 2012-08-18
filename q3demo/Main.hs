@@ -438,6 +438,8 @@ initCommon title = do
         , displayOptions_windowIsResizable  = True
         , displayOptions_width              = 1280
         , displayOptions_height             = 720
+        , displayOptions_openGLVersion      = (3,2)
+        , displayOptions_openGLProfile      = CoreProfile
 --        , displayOptions_displayMode    = Fullscreen
         }
     setWindowTitle title

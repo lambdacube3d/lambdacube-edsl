@@ -83,8 +83,8 @@ blurVH img = blur' fragH
     fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V2F :+: ZZ)
     fragH uv' = FragmentOutRastDepth $ (sampleH gaussFilter9) :. ZT
       where
-        sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) (Const 0) @* floatF c
-        sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) (Const 0) @* floatF c) @+ sampleH xs
+        sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) @* floatF c
+        sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) @* floatF c) @+ sampleH xs
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -93,8 +93,8 @@ blurVH img = blur' fragH
     fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V2F :+: ZZ)
     fragV uv' = FragmentOutRastDepth $ (sampleV gaussFilter9) :. ZT
       where
-        sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) (Const 0) @* floatF c
-        sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) (Const 0) @* floatF c) @+ sampleV xs
+        sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) @* floatF c
+        sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) @* floatF c) @+ sampleV xs
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -165,7 +165,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
         scale x = x @* floatF 0.5 @+ floatF 0.5
         u = clampUV (scale (tx @/ tw)) @* (scaleU :: Exp F Float)
         v = clampUV (scale (ty @/ tw)) @* (scaleV :: Exp F Float)
-        V2 m1 m2 = unpack' $ texture' sampler (pack' $ V2 u v) (floatF 0)
+        V2 m1 m2 = unpack' $ texture' sampler (pack' $ V2 u v)
         variance = max' (floatF 0.002) (m2 @- m1 @* m1)
         d = max' (floatF 0) (tz @- m1)
         u' = u @- floatF 0.5

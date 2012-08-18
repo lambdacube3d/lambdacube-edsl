@@ -41,6 +41,8 @@ initCommon title = do
         , displayOptions_numDepthBits   = 24
         , displayOptions_width          = 800
         , displayOptions_height         = 600
+        , displayOptions_openGLVersion      = (3,2)
+        , displayOptions_openGLProfile      = CoreProfile
 --        , displayOptions_displayMode    = Fullscreen
         }
     setWindowTitle title

@@ -147,18 +147,21 @@ convertPrimFun a = case a of
 
     -- Texture Lookup Functions
     T.PrimTextureSize               -> PrimTextureSize
-    T.PrimTexture                   -> PrimTexture               
-    T.PrimTextureProj               -> PrimTextureProj           
-    T.PrimTextureLod                -> PrimTextureLod            
-    T.PrimTextureOffset             -> PrimTextureOffset         
-    T.PrimTexelFetch                -> PrimTexelFetch            
-    T.PrimTexelFetchOffset          -> PrimTexelFetchOffset      
-    T.PrimTextureProjOffset         -> PrimTextureProjOffset     
-    T.PrimTextureLodOffset          -> PrimTextureLodOffset      
-    T.PrimTextureProjLod            -> PrimTextureProjLod        
-    T.PrimTextureProjLodOffset      -> PrimTextureProjLodOffset  
-    T.PrimTextureGrad               -> PrimTextureGrad           
-    T.PrimTextureGradOffset         -> PrimTextureGradOffset     
-    T.PrimTextureProjGrad           -> PrimTextureProjGrad       
+    T.PrimTexture                   -> PrimTexture
+    T.PrimTextureB                  -> PrimTexture
+    T.PrimTextureProj               -> PrimTextureProj
+    T.PrimTextureProjB              -> PrimTextureProj
+    T.PrimTextureLod                -> PrimTextureLod
+    T.PrimTextureOffset             -> PrimTextureOffset
+    T.PrimTextureOffsetB            -> PrimTextureOffset
+    T.PrimTexelFetch                -> PrimTexelFetch
+    T.PrimTexelFetchOffset          -> PrimTexelFetchOffset
+    T.PrimTextureProjOffset         -> PrimTextureProjOffset
+    T.PrimTextureProjOffsetB        -> PrimTextureProjOffset
+    T.PrimTextureLodOffset          -> PrimTextureLodOffset
+    T.PrimTextureProjLod            -> PrimTextureProjLod
+    T.PrimTextureProjLodOffset      -> PrimTextureProjLodOffset
+    T.PrimTextureGrad               -> PrimTextureGrad
+    T.PrimTextureGradOffset         -> PrimTextureGradOffset
+    T.PrimTextureProjGrad           -> PrimTextureProjGrad
     T.PrimTextureProjGradOffset     -> PrimTextureProjGradOffset 
-

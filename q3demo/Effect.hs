@@ -81,8 +81,8 @@ blurVH img = blur' fragH
     fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     fragH uv' = FragmentOutRastDepth $ (sampleH gaussFilter7) :. ZT
       where
-        sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) (Const 0) @* floatF c
-        sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) (Const 0) @* floatF c) @+ sampleH xs
+        sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) @* floatF c
+        sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) @* floatF c) @+ sampleH xs
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -91,8 +91,8 @@ blurVH img = blur' fragH
     fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     fragV uv' = FragmentOutRastDepth $ (sampleV gaussFilter7) :. ZT
       where
-        sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) (Const 0) @* floatF c
-        sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) (Const 0) @* floatF c) @+ sampleV xs
+        sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) @* floatF c
+        sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) @* floatF c) @+ sampleV xs
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
@@ -118,7 +118,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
     frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
     frag uv' = FragmentOut $ color :. ZT
       where
-        color = texture' smp (pack' $ V2 u (floatF 1 @- v)) (Const 0)
+        color = texture' smp (pack' $ V2 u (floatF 1 @- v))
         V2 u v = unpack' $ uv' @* floatF 0.5 @+ floatF 0.5
         smp = Sampler LinearFilter Clamp tex
         tex = TextureSlot "ScreenQuad" $ Texture2D (Float RGBA) n1
@@ -147,7 +147,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
         color = Const one'
 -}
 {-
-        color = texture' smp uv (Const 0)
+        color = texture' smp uv
         smp = Sampler LinearFilter Clamp tex
         tex = TextureSlot "ScreenQuad" $ Texture2D (Float RGBA) n1
 -}
