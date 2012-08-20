@@ -139,12 +139,12 @@ data PrimFun stage sig where
     PrimNotEqual            :: IsMatVecScalar a t                             => PrimFun stage ((a,a) -> Bool)
 
     -- Fragment Processing Functions
-    PrimDFdx                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
-    PrimDFdy                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
-    PrimFWidth              :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimDFdx                :: IsVecScalar d a Float                          => PrimFun F (a -> a)
+    PrimDFdy                :: IsVecScalar d a Float                          => PrimFun F (a -> a)
+    PrimFWidth              :: IsVecScalar d a Float                          => PrimFun F (a -> a)
 
     -- Noise Functions
-    PrimNoise1              :: IsVecScalar d a Float                          => PrimFun stage (a -> Float)
+    PrimNoise1              :: IsVecScalar d a Float                                => PrimFun stage (a -> Float)
     PrimNoise2              :: (IsVecScalar d a Float, IsVecScalar DIM2 b Float)    => PrimFun stage (a -> b)
     PrimNoise3              :: (IsVecScalar d a Float, IsVecScalar DIM3 b Float)    => PrimFun stage (a -> b)
     PrimNoise4              :: (IsVecScalar d a Float, IsVecScalar DIM4 b Float)    => PrimFun stage (a -> b)
