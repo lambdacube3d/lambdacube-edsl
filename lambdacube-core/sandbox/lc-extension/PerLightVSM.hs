@@ -2,6 +2,7 @@
 module PerLightVSM where
 
 import Data.ByteString.Char8 (ByteString)
+import Data.Typeable
 
 import LC_API
 --import LCLanguage
@@ -36,21 +37,26 @@ intF = Const
 -- VSM ---
 ----------
 lights :: Exp Obj (DataArray M44F)
-lights = userInputSet "lightSlot"
+lights = userInput "lightSlot"
 
-momentsTop :: Exp Obj (FrameBuffer N1 (Float,V2F))
-momentsTop = arrayAccumulate moments clear slot
+momentsTop :: Exp Obj (DataArray (M44F,Sampler DIM2 SingleTex (Regular Float) RG))
+momentsTop = arrayMap mkSM lights
   where
     clear   = frameBuffer (DepthImage n1 1000:.ColorImage n1 (V2 0 0):.ZT)
-    slot    = userInputSet "streamSlot" :: Exp Obj (DataArray (M44F,PrimitiveBuffer Triangle V3F))
+    slot    = userInput "3D objects" :: Exp Obj (DataArray (PrimitiveBuffer Triangle V3F))
+    mkSM l  = tup2' (l,samplerExp LinearFilter Clamp tex)
+      where
+        fb  = arrayAccumulate (moments l) clear slot
+        tex :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RG
+        tex = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [prjFrameBuffer "shadowMap" tix0 fb]
 
-moments :: Exp Obj (FrameBuffer N1 (Float,V2F)) -> Exp Obj (M44F,PrimitiveBuffer Triangle V3F) -> Exp Obj (FrameBuffer N1 (Float,V2F))
-moments fb args = accumulate fragCtx PassAll storeDepth rast fb
+moments :: Exp Obj M44F -> Exp Obj (FrameBuffer N1 (Float,V2F)) -> Exp Obj (PrimitiveBuffer Triangle V3F) -> Exp Obj (FrameBuffer N1 (Float,V2F))
+moments lightViewProj' fb buf = accumulate fragCtx PassAll storeDepth rast fb
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V2B):.ZT
     rast    = rasterize triangleCtx prims
     prims   = transform vert input
-    (lightViewProj',buf) = untup2' args
+    --(lightViewProj',buf) = untup2' args
     lightViewProj = use lightViewProj'
     input   = fetch buf
 
@@ -69,24 +75,25 @@ moments fb args = accumulate fragCtx PassAll storeDepth rast fb
         moment1 = depth
         moment2 = depth @* depth @+ floatF 0.25 @* (dx @* dx @+ dy @* dy)
 
-vsmTop :: Exp Obj (M44F,M44F,Float,Float,PrimitiveBuffer Triangle (V3F,V3F)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
-vsmTop args = arrayAccumulate vsm clear slot
+vsmTop :: Exp Obj (FrameBuffer N1 (Float,V4F))
+vsmTop = arrayAccumulate vsm clear slot
   where
     clear   = frameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
-    slot    = userInputSet "streamSlot" :: Exp Obj (DataArray (M44F,M44F,Float,Float,PrimitiveBuffer Triangle (V3F,V3F)))
+    slot    = userInput "3D objects" :: Exp Obj (DataArray (PrimitiveBuffer Triangle (V3F,V3F)))
 
-vsm :: Exp Obj (FrameBuffer N1 (Float,V4F)) -> Exp Obj (M44F,M44F,Float,Float,PrimitiveBuffer Triangle (V3F,V3F)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
-vsm fb args = accumulate fragCtx PassAll calcLuminance rast fb
+vsm :: Exp Obj (FrameBuffer N1 (Float,V4F)) -> Exp Obj (PrimitiveBuffer Triangle (V3F,V3F)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+vsm fb buf = accumulate fragCtx PassAll calcLuminance rast fb
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     rast    = rasterize triangleCtx prims
     prims   = transform vert input
     input   = fetch buf
-    (worldViewProj',lightViewProj',scaleU',scaleV',buf) = untup5' args
+    (worldViewProj',scaleU',scaleV') = untup3' $ (userInput "global settings" :: Exp Obj (M44F,Float,Float))
     worldViewProj = use worldViewProj'
-    lightViewProj = use lightViewProj'
     scaleU = use scaleU'
     scaleV = use scaleV'
+    lightViewProjs  = use $ arrayMap (\a -> let (f,_) = untup2' a in f) momentsTop
+    shadowMaps      = use $ arrayMap (\a -> let (_,s) = untup2' a in s) momentsTop
 
     trimV4 :: Exp s V4F -> Exp s V3F
     trimV4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
@@ -94,54 +101,57 @@ vsm fb args = accumulate fragCtx PassAll calcLuminance rast fb
     trimM4 :: Exp s M44F -> Exp s M33F
     trimM4 v = let V4 i j k _ = unpack' v in pack' $ V3 (trimV4 i) (trimV4 j) (trimV4 k)
     
-    vert :: Exp V (V3F, V3F) -> VertexOut (V4F, V3F)
+    vert :: Exp V (V3F, V3F) -> VertexOut (DataArray V4F, V3F)
     vert attr = VertexOut v4 (floatV 1) (Smooth v4l:.Smooth n:.ZT)
       where
         v4 = worldViewProj @*. snoc p 1
-        v4l = lightViewProj @*. snoc p 1
+        v4l = arrayMap (\lightViewProj -> lightViewProj @*. snoc p 1) lightViewProjs
         n3 = normalize' (trimM4 worldViewProj @*. n)
         (p,n) = untup2 attr
 
-    calcLuminance :: Exp F (V4F, V3F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    calcLuminance attr = FragmentOutRastDepth $ (p_max):. ZT
+    calcLuminance :: Exp F (DataArray V4F, V3F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    calcLuminance attr = FragmentOutRastDepth $ (arrayAccumulate min' (Const $ one') $ arrayZipWith p_max ls shadowMaps):. ZT
       where
+        (ls,n) = untup2' attr
         amb :: Exp F V4F
         amb = Const $ V4 0.1 0.1 0.3 1
-        V4 tx ty tz tw = unpack' l
-        clampUV x = clamp' x (floatF 0) (floatF 1)
-        scale x = x @* floatF 0.5 @+ floatF 0.5
-        u = clampUV (scale (tx @/ tw)) @* (scaleU :: Exp F Float)
-        v = clampUV (scale (ty @/ tw)) @* (scaleV :: Exp F Float)
-        V2 m1 m2 = unpack' $ texture' sampler (pack' $ V2 u v)
-        variance = max' (floatF 0.002) (m2 @- m1 @* m1)
-        d = max' (floatF 0) (tz @- m1)
-        u' = u @- floatF 0.5
-        v' = v @- floatF 0.5
-        -- assuming light direction of (0 0 -1)
-        V3 _ _ nz = unpack' n
-        nz' = max' (floatF 0) nz
-        intensity = max' (floatF 0) ((floatF 1 @- sqrt' (u' @* u' @+ v' @* v') @* floatF 4) @* nz')
-        ltr = (round' (u' @* floatF 10) @* floatF 0.5 @+ floatF 0.5) @* intensity
-        ltg = (round' (v' @* floatF 10) @* floatF 0.5 @+ floatF 0.5) @* intensity
-        p_max = pack' (V4 ltr ltg intensity (floatF 1)) @* (variance @/ (variance @+ d @* d))
-        (l,n) = untup2 attr
-
-    sampler = samplerExp LinearFilter Clamp shadowMap
-    --Texture gp dim arr t ar
-    shadowMap :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RG
-    shadowMap = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [prjFrameBuffer "shadowMap" tix0 momentsTop]
-
+        p_max l sampler = pack' (V4 ltr ltg intensity (floatF 1)) @* (variance @/ (variance @+ d @* d))
+          where
+            V4 tx ty tz tw = unpack' l
+            clampUV x = clamp' x (floatF 0) (floatF 1)
+            scale x = x @* floatF 0.5 @+ floatF 0.5
+            u = clampUV (scale (tx @/ tw)) @* (scaleU :: Exp F Float)
+            v = clampUV (scale (ty @/ tw)) @* (scaleV :: Exp F Float)
+            V2 m1 m2 = unpack' $ texture' sampler (pack' $ V2 u v)
+            variance = max' (floatF 0.002) (m2 @- m1 @* m1)
+            d = max' (floatF 0) (tz @- m1)
+            u' = u @- floatF 0.5
+            v' = v @- floatF 0.5
+            -- assuming light direction of (0 0 -1)
+            V3 _ _ nz = unpack' n
+            nz' = max' (floatF 0) nz
+            intensity = max' (floatF 0) ((floatF 1 @- sqrt' (u' @* u' @+ v' @* v') @* floatF 4) @* nz')
+            ltr = (round' (u' @* floatF 10) @* floatF 0.5 @+ floatF 0.5) @* intensity
+            ltg = (round' (v' @* floatF 10) @* floatF 0.5 @+ floatF 0.5) @* intensity
 
 -- NEW stuff
 data Obj
 data PrimitiveBuffer prim a
-data DataArray a
+data DataArray a = DataArray deriving (Show, Typeable)
+
+instance IsFloating (DataArray V4F)
+instance GPU (DataArray V4F)
+type instance EltRepr (DataArray V4F) = ((), DataArray V4F)
+type instance EltRepr' (DataArray V4F) = (DataArray V4F)
+
+tup2' :: (Exp stage a, Exp stage b) -> Exp stage (a,b)
+tup2' = undefined
 
 untup2' :: Exp stage (a,b) -> (Exp stage a, Exp stage b)
 untup2' = undefined
 
-untup5' :: Exp stage (a,b,c,d,e) -> (Exp stage a, Exp stage b, Exp stage c, Exp stage d, Exp stage e)
-untup5' = undefined
+untup3' :: Exp stage (a,b,c) -> (Exp stage a, Exp stage b, Exp stage c)
+untup3' = undefined
 
 class FrequencyOrder stage where
     use :: Exp Obj a -> Exp stage a
@@ -153,11 +163,15 @@ instance FrequencyOrder G where
 instance FrequencyOrder F where
     use = undefined
 
-
-{- TODO:
-    replace uniforms with explicit parameter passing
-    introduce buffers and fetch from buffer
+{-
+  Summary of changes:
+    - introduction of DataArray in all levels (Obj,V,G,F),
+        however only from GPU types can by used in V,G,F levels,
+        'use' function should check this porperty
+    - merge GP and Exp, this let us to express computations in Obj level
+    - merge Uniform and ObjectSlot handling, now we call it userInput
 -}
+
 -- New operations
 samplerExp :: GPU (Sampler dim arr t ar)
         => Filter
@@ -170,13 +184,17 @@ fetch           :: Exp Obj (PrimitiveBuffer prim a)
                 -> Exp Obj (VertexStream prim a)
 fetch           = undefined
 
-userInputSet    :: ByteString -> Exp Obj (DataArray a)
-userInputSet    = undefined
+-- scalar or array
+userInput       :: ByteString -> Exp Obj a
+userInput       = undefined
 
 arrayMap        :: (Exp stage a -> Exp stage b) -> Exp stage (DataArray a) -> Exp stage (DataArray b)
 arrayMap        = undefined
 
-arrayAccumulate :: (Exp stage a -> Exp stage b -> Exp stage a) -> Exp stage a -> Exp stage (DataArray b) -> Exp Obj a
+arrayZipWith    :: (Exp stage a -> Exp stage b -> Exp stage c) -> Exp stage (DataArray a) -> Exp stage (DataArray b) -> Exp stage (DataArray c)
+arrayZipWith    = undefined
+
+arrayAccumulate :: (Exp stage a -> Exp stage b -> Exp stage a) -> Exp stage a -> Exp stage (DataArray b) -> Exp stage a
 arrayAccumulate = undefined
 
 -- Old operations
