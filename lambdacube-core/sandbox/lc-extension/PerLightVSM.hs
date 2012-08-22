@@ -44,7 +44,7 @@ momentsTop = arrayMap mkSM lights
   where
     clear   = frameBuffer (DepthImage n1 1000:.ColorImage n1 (V2 0 0):.ZT)
     slot    = userInput "3D objects" :: Exp Obj (DataArray (PrimitiveBuffer Triangle V3F))
-    mkSM l  = tup2' (l,samplerExp LinearFilter Clamp tex)
+    mkSM l  = tup2 (l,samplerExp LinearFilter Clamp tex)
       where
         fb  = arrayAccumulate (moments l) clear slot
         tex :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RG
@@ -56,7 +56,6 @@ moments lightViewProj' fb buf = accumulate fragCtx PassAll storeDepth rast fb
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V2B):.ZT
     rast    = rasterize triangleCtx prims
     prims   = transform vert input
-    --(lightViewProj',buf) = untup2' args
     lightViewProj = use lightViewProj'
     input   = fetch buf
 
@@ -88,12 +87,12 @@ vsm fb buf = accumulate fragCtx PassAll calcLuminance rast fb
     rast    = rasterize triangleCtx prims
     prims   = transform vert input
     input   = fetch buf
-    (worldViewProj',scaleU',scaleV') = untup3' $ (userInput "global settings" :: Exp Obj (M44F,Float,Float))
+    (worldViewProj',scaleU',scaleV') = untup3 $ (userInput "global settings" :: Exp Obj (M44F,Float,Float))
     worldViewProj = use worldViewProj'
     scaleU = use scaleU'
     scaleV = use scaleV'
-    lightViewProjs  = use $ arrayMap (\a -> let (f,_) = untup2' a in f) momentsTop
-    shadowMaps      = use $ arrayMap (\a -> let (_,s) = untup2' a in s) momentsTop
+    lightViewProjs  = use $ arrayMap (\a -> let (f,_) = untup2 a in f) momentsTop
+    shadowMaps      = use $ arrayMap (\a -> let (_,s) = untup2 a in s) momentsTop
 
     trimV4 :: Exp s V4F -> Exp s V3F
     trimV4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
@@ -112,7 +111,7 @@ vsm fb buf = accumulate fragCtx PassAll calcLuminance rast fb
     calcLuminance :: Exp F (DataArray V4F, V3F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     calcLuminance attr = FragmentOutRastDepth $ (arrayAccumulate min' (Const $ one') $ arrayZipWith p_max ls shadowMaps):. ZT
       where
-        (ls,n) = untup2' attr
+        (ls,n) = untup2 attr
         amb :: Exp F V4F
         amb = Const $ V4 0.1 0.1 0.3 1
         p_max l sampler = pack' (V4 ltr ltg intensity (floatF 1)) @* (variance @/ (variance @+ d @* d))
@@ -143,15 +142,6 @@ instance IsFloating (DataArray V4F)
 instance GPU (DataArray V4F)
 type instance EltRepr (DataArray V4F) = ((), DataArray V4F)
 type instance EltRepr' (DataArray V4F) = (DataArray V4F)
-
-tup2' :: (Exp stage a, Exp stage b) -> Exp stage (a,b)
-tup2' = undefined
-
-untup2' :: Exp stage (a,b) -> (Exp stage a, Exp stage b)
-untup2' = undefined
-
-untup3' :: Exp stage (a,b,c) -> (Exp stage a, Exp stage b, Exp stage c)
-untup3' = undefined
 
 class FrequencyOrder stage where
     use :: Exp Obj a -> Exp stage a
