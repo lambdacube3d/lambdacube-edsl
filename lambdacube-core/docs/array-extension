@@ -1,0 +1,35 @@
+expression stages/frequencies:
+    Obj - object batch
+    V   - vertex
+    G   - geometry
+    F   - fragment
+
+supported types on GPU side (V,G,F):
+    scalar: Float, Int, Word, Bool
+    vector: Vector (2-4 dim) of scalars
+    matrix: matrix (2-4 dim) x (2-4 dim) of Floats
+    sampler
+    array of {scalar,vector,matrix,sampler} -- only one-dimensional arrays are supported on GPU side.
+    tuples of {scalar,vector,matrix,sampler,array}
+
+supported types on CPU side (Obj):
+    all GPU types
+    multidimensional arrays
+
+    framebuffer
+    image
+    primitive buffer / vertex stream
+
+array operations:
+    generate
+    replicate
+    map
+    zipWith
+    fold
+    scan
+    -- question: do we allow iterions only or indexing also?
+                 is the array ordered?
+    index ??
+    permute ??
+    backpermute ??
+
