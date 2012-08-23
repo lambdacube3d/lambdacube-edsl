@@ -81,21 +81,45 @@ shader = (\n _ l _ -> (bsToLower n,finishShader $ foldl' (\s f -> f s) defaultCo
 shaderAttrs :: Parser (CommonAttrs -> CommonAttrs)
 shaderAttrs = option id (choice [general, q3map, stage]) <* skipRest
 
-data StageInfo
-    = StageInfo
-    { siWasDepthMask    :: Bool
-    , siWasRGBGen       :: Bool
-    , siWasTCGen        :: Bool
-    }
-
 finishShader :: CommonAttrs -> CommonAttrs
 finishShader ca = ca
-    { caDeformVertexes = reverse $ caDeformVertexes ca
-    , caStages = reverse $ map fixStage $ caStages ca
+    { caDeformVertexes  = reverse $ caDeformVertexes ca
+    , caStages          = fixedStages
+    , caSort            = fixedSort
     }
   where
-    fixStage sa = sa {saTCMod = reverse $ saTCMod sa, saTCGen = tcGen}
+    -- fix sort value
+    srt0        = caSort ca
+    srt1        = if caIsSky ca then 2 else srt0
+    srt2        = if caPolygonOffset ca && srt1 == 0 then 4 else srt1
+    srt3        = snd $ foldl' fixBlendSort (True,srt2) fixedStages
       where
+        fixBlendSort (False,s) _ = (False,s)
+        fixBlendSort (True,s) sa = case saBlend sa of
+            Nothing -> (False,s)
+            _       -> let s1 = if s /= 0 then s else if saDepthWrite sa then 5 else 9 in (True,s1)
+
+    srt4        = if srt3 == 0 then 3 else srt3
+    fixedSort   = if null fixedStages then 7 else srt4
+
+    fixedStages = reverse $ map fixStage $ caStages ca
+    fixStage sa = sa
+        { saTCMod       = reverse $ saTCMod sa
+        , saTCGen       = tcGen
+        , saRGBGen      = rgbGen
+        , saBlend       = blend
+        , saDepthWrite  = depthWr
+        }
+      where
+        (depthWr,blend) = case saBlend sa of
+            Just (B_One,B_Zero) -> (True,Nothing)
+            a                   -> (saDepthWrite sa,a)
+        rgbGen = case saRGBGen sa of
+            RGB_Undefined   -> case saBlend sa of
+                Nothing                 -> RGB_IdentityLighting
+                Just (B_One,B_SrcAlpha) -> RGB_IdentityLighting
+                _                       -> RGB_Identity
+            a               -> a
         tcGen = case saTCGen sa of
             TG_Undefined    -> case saTexture sa of
                 ST_Lightmap -> TG_Lightmap
@@ -171,7 +195,7 @@ skyParms <farbox> <cloudheight> <nearbox>
     “-“ - ignore (This has not been tested in a long time)
 -}
 
-skyParms = pass <$> kw "skyparms" <* (kw "-" <|> (const () <$> word)) <* (kw "-" <|> (const () <$> word)) <* kw "-"
+skyParms = (\_ ca -> ca {caIsSky = True}) <$> kw "skyparms" <* (kw "-" <|> (const () <$> word)) <* (kw "-" <|> (const () <$> word)) <* kw "-"
 
 cull = (\_ a ca -> ca {caCull = a}) <$> kw "cull" <*> (
     val CT_FrontSided "front"   <|>
@@ -207,17 +231,19 @@ nopicmip = pass <$> kw "nopicmip"
 nomipmaps = (\_ ca -> ca {caNoMipMaps = True}) <$> kw "nomipmaps"
 entityMergable = pass <$> kw "entitymergable"
 polygonOffset = (\_ ca -> ca {caPolygonOffset = True}) <$> kw "polygonoffset"
-portal = pass <$> kw "portal"
+portal = (\_ ca -> ca {caSort = 1}) <$> kw "portal"
 
 -- sort portal|sky|opaque|banner|underwater|additive|nearest|[number]
 sort = (\_ i ca -> ca {caSort = i}) <$> kw "sort" <*> (
-    val 1 "portal"     <|>
-    val 2 "sky"        <|>
-    val 3 "opaque"     <|>
-    val 6 "banner"     <|>
-    val 8 "underwater" <|>
-    val 9 "additive"   <|>
-    val 16 "nearest"   <|>
+    val 1  "portal"     <|>
+    val 2  "sky"        <|>
+    val 3  "opaque"     <|>
+    val 4  "decal"      <|>
+    val 5  "seethrough" <|>
+    val 6  "banner"     <|>
+    val 10 "additive"   <|>
+    val 16 "nearest"    <|>
+    val 8  "underwater" <|>
     int)
 
 --
@@ -267,9 +293,11 @@ dstBlend = val B_One "gl_one"
        <|> val B_SrcColor "gl_src_color"
        <|> val B_OneMinusSrcColor "gl_one_minus_src_color"
 
-blendFunc = (\_ b sa -> sa {saBlend = Just b, saDepthWrite = b == (B_One,B_Zero)}) <$> kw "blendfunc" <*> choice [blendFuncFunc, (,) <$> srcBlend <*> dstBlend]
+blendFunc = (\_ b sa -> sa {saBlend = Just b, saDepthWrite = dpWr sa}) <$> kw "blendfunc" <*> choice [blendFuncFunc, (,) <$> srcBlend <*> dstBlend]
+  where
+    dpWr sa = if saDepthMaskExplicit sa then saDepthWrite sa else False
 
-rgbGen = (\_ v sa -> sa {saRGBGen = v}) <$> kw "rgbgen" <*> (
+rgbGen = (\_ v sa -> sa {saRGBGen = v, saAlphaGen = alpha sa v}) <$> kw "rgbgen" <*> (
     RGB_Wave <$ kw "wave" <*> wave <|>
     RGB_Const <$ kw "const" <* kw "(" <*> float <*> float <*> float <* kw ")" <|>
     val RGB_Identity "identity" <|> 
@@ -281,6 +309,12 @@ rgbGen = (\_ v sa -> sa {saRGBGen = v}) <$> kw "rgbgen" <*> (
     val RGB_LightingDiffuse "lightingdiffuse" <|>
     val RGB_OneMinusVertex "oneminusvertex"
     )
+  where
+    alpha sa v = case v of
+        RGB_Vertex  -> case saAlphaGen sa of
+            A_Identity  -> A_Vertex
+            _           -> saAlphaGen sa
+        _           -> saAlphaGen sa
 
 alphaGen = (\_ v sa -> sa {saAlphaGen = v}) <$> kw "alphagen" <*> (
     A_Wave <$ kw "wave" <*> wave <|>
@@ -314,7 +348,7 @@ tcMod = (\_ v sa -> sa {saTCMod = v:saTCMod sa}) <$> kw "tcmod" <*> (
     )
 
 depthFunc = (\_ v sa -> sa {saDepthFunc = v}) <$> kw "depthfunc" <*> (val D_Lequal "lequal" <|> val D_Equal "equal")
-depthWrite = (\_ sa -> sa {saDepthWrite = True}) <$> kw "depthwrite"
+depthWrite = (\_ sa -> sa {saDepthWrite = True, saDepthMaskExplicit = True}) <$> kw "depthwrite"
 detail = pass <$> kw "detail"
 alphaFunc = (\_ v sa -> sa {saAlphaFunc = Just v}) <$> kw "alphafunc" <*> (val A_Gt0 "gt0" <|> val A_Lt128 "lt128" <|> val A_Ge128 "ge128")
 

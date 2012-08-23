@@ -62,6 +62,9 @@ data CommonAttrs
     , caNoMipMaps       :: !Bool
     , caPolygonOffset   :: !Bool
     , caStages          :: ![StageAttrs]
+
+    -- parser internals
+    , caIsSky           :: Bool
     }
     deriving Show
 
@@ -70,7 +73,7 @@ defaultCommonAttrs = CommonAttrs
     { caSkyParms        = ()
     , caFogParms        = ()
     , caPortal          = False
-    , caSort            = 3
+    , caSort            = 0
     , caEntityMergable  = False
     , caFogOnly         = False
     , caCull            = CT_FrontSided
@@ -78,6 +81,7 @@ defaultCommonAttrs = CommonAttrs
     , caNoMipMaps       = False
     , caPolygonOffset   = False
     , caStages          = []
+    , caIsSky           = False
     }
 
 data RGBGen
@@ -91,6 +95,7 @@ data RGBGen
     | RGB_Vertex
     | RGB_LightingDiffuse
     | RGB_OneMinusVertex
+    | RGB_Undefined
     deriving Show
 
 data AlphaGen
@@ -167,20 +172,24 @@ data StageAttrs
     , saDepthWrite  :: !Bool
     , saDepthFunc   :: !DepthFunction
     , saAlphaFunc   :: !(Maybe AlphaFunction)
+
+    -- parser internals
+    , saDepthMaskExplicit   :: Bool
     }
     deriving Show
 
 defaultStageAttrs :: StageAttrs
 defaultStageAttrs = StageAttrs
     { saBlend       = Nothing
-    , saRGBGen      = RGB_IdentityLighting
+    , saRGBGen      = RGB_Undefined
     , saAlphaGen    = A_Identity
     , saTCGen       = TG_Undefined
     , saTCMod       = []
     , saTexture     = ST_WhiteImage
-    , saDepthWrite  = True--False
+    , saDepthWrite  = True
     , saDepthFunc   = D_Lequal
     , saAlphaFunc   = Nothing
+    , saDepthMaskExplicit   = False
     }
 
 {-
