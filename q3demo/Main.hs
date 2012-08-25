@@ -163,8 +163,10 @@ main = do
         -- extract spawn points
         ents = parseEntities (SB.unpack bspName) $ blEntities bsp
         spawn e = case T.lookup "classname" e of
-            Just "info_player_deathmatch" -> True
-            _ -> False
+            Just "info_player_deathmatch"   -> True
+            Just "info_player_start"        -> True
+            Just "info_player_intermission" -> True
+            _                               -> False
         Just sp0 = T.lookup "origin" $ head $ filter spawn ents
         [x0,y0,z0] = map read $ words $ SB.unpack sp0
         p0 = Vec3 x0 y0 z0

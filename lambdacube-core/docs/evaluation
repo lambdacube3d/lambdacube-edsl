@@ -1,0 +1,25 @@
+optimal execution:
+
+Shader program parameters:
+    - vertex stream
+    - uniforms
+    - textures
+
+parameter frequency:
+    - per batch     (PB)
+    - per object    (PO)
+
+optimization overview:
+    
+    texture batching: use all available samplers and select sampler according instanceID
+
+    vertex stream   uniforms    textures    | render methods
+        PB              PB          PB      |   instancing
+        PB              PB          PO      |   multiple draw calls (texture batching)
+        PB              PO          PB      |   instancing
+        PB              PO          PO      |   instancing + texture batching
+        PO              PB          PB      |   draw-multi gl functions or primitive restart
+        PO              PB          PO      |   multiple draw calls
+        PO              PO          PB      |   multiple draw calls
+        PO              PO          PO      |   multiple draw calls
+

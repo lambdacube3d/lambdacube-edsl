@@ -27,6 +27,7 @@ array operations:
     zipWith
     fold
     scan
+    sortBy
     -- question: do we allow iterions only or indexing also?
                  is the array ordered?
     index ??
