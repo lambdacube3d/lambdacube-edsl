@@ -33,6 +33,13 @@ import GameGraphics
 import Utils
 import MeshUtil
 
+#ifdef CAPTURE
+import Graphics.Rendering.OpenGL.Raw.Core32
+import Codec.Image.DevIL
+import Text.Printf
+import Foreign
+#endif
+
 type Sink a = a -> IO ()
 
 data CameraMode = FollowNear | FollowFar | UserControl
@@ -40,8 +47,23 @@ data CameraMode = FollowNear | FollowFar | UserControl
 lightPosition :: Vec3
 lightPosition = Vec3 400 800 400
 
+#ifdef CAPTURE
+-- framebuffer capture function
+withFrameBuffer :: Int -> Int -> Int -> Int -> (Ptr Word8 -> IO ()) -> IO ()
+withFrameBuffer x y w h fn = allocaBytes (w*h*4) $ \p -> do
+    glReadPixels (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h) gl_RGBA gl_UNSIGNED_BYTE $ castPtr p
+    fn p
+#endif
+
+captureRate :: Float
+captureRate = 30
+
 main :: IO ()
 main = do
+#ifdef CAPTURE
+    ilInit
+#endif
+    
     let mediaPath = "."
 
     gameOk <- doesFileExist (mediaPath ++ "/STUNTS11.ZIP")
@@ -70,7 +92,7 @@ main = do
 
     let gfxNet = PrjFrameBuffer "outFB" tix0 stuntsGFX
     renderer <- compileRenderer $ ScreenOut gfxNet
-    let draw _ = render renderer >> swapBuffers
+    let draw captureA = render renderer >> captureA >> swapBuffers
 
         quad :: Mesh
         quad = Mesh
@@ -113,17 +135,19 @@ main = do
     (debugPress,debugPressSink) <- external False
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
     (cameraPress,cameraPressSink) <- external (False,False,False)
+    (capturePress,capturePressSink) <- external False
     (carPos,carPosSink) <- external idmtx
     (wheelPos,wheelPosSink) <- external []
 
+    capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
-        u <- scene (setScreenSize renderer) carUnis wheelsUnis (uniformSetter renderer) physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress debugPress
+        u <- scene (setScreenSize renderer) carUnis wheelsUnis (uniformSetter renderer) physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress capturePress debugPress capRef
         return $ draw <$> u
 
     driveNetwork sc (readInput physicsWorld car s carPosSink wheelPosSink
         mousePositionSink mousePressSink fblrPressSink
-        cameraPressSink debugPressSink)
+        cameraPressSink capturePressSink debugPressSink capRef)
 
     dispose renderer
     closeWindow
@@ -142,10 +166,14 @@ scene :: BtDynamicsWorldClass bc
       -> Signal (Bool, Bool, Bool, Bool, Bool)
       -> Signal (Bool, Bool, Bool)
       -> Signal Bool
-      -> SignalGen Float (Signal ())
-scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress debugPress = do
+      -> Signal Bool
+      -> IORef Bool
+      -> SignalGen Float (Signal (IO ()))
+scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress capturePress debugPress capRef = do
     time <- stateful 0 (+)
     frameCount <- stateful (0 :: Int) (\_ c -> c + 1)
+
+    capture <- transfer2 False (\_ cap cap' on -> on /= (cap && not cap')) capturePress =<< delay False capturePress
 
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
@@ -173,7 +201,7 @@ scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSiz
         carViewMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldView" u]
         wheelsPositionU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldPosition" u] | wu <- wheelsUnis]
         wheelsViewU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis]
-        setupGFX (w,h) worldViewMat carMat wheelsMats = do
+        setupGFX ((w, h), capturing, frameCount) worldViewMat carMat wheelsMats = do
             let fieldOfView = pi/2
                 aspectRatio = fromIntegral w / fromIntegral h
                 projection nearDepth farDepth = perspective nearDepth farDepth fieldOfView aspectRatio
@@ -193,7 +221,16 @@ scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSiz
             forM_ (zip wheelsViewU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
             setSize (fromIntegral w) (fromIntegral h)
     
-    effectful4 setupGFX windowSize camera carPos wheelPos
+            return $ do
+#ifdef CAPTURE
+                when capturing $ do
+                    glFinish
+                    withFrameBuffer 0 0 w h $ \p -> writeImageFromPtr (printf "frame%08d.jpg" frameCount) (h,w) p
+                writeIORef capRef capturing
+#endif
+                return ()
+    
+    effectful4 setupGFX ((,,) <$> windowSize <*> capture <*> frameCount) camera carPos wheelPos
 
 vec3ToV3F :: Vec3 -> V3F
 vec3ToV3F (Vec3 x y z) = V3 x y z
@@ -215,8 +252,10 @@ readInput :: (BtDynamicsWorldClass dw, BtRaycastVehicleClass v)
           -> Sink (Bool, Bool, Bool, Bool, Bool)
           -> Sink (Bool, Bool, Bool)
           -> Sink Bool
+          -> Sink Bool
+          -> IORef Bool
           -> IO (Maybe Float)
-readInput physicsWorld car s carPos wheelPos mousePos mouseBut fblrPress cameraPress debugPress = do
+readInput physicsWorld car s carPos wheelPos mousePos mouseBut fblrPress cameraPress capturePress debugPress capRef = do
     t <- getTime
     resetTime
 
@@ -227,10 +266,13 @@ readInput physicsWorld car s carPos wheelPos mousePos mouseBut fblrPress cameraP
     fblrPress =<< (,,,,) <$> keyIsPressed KeyLeft <*> keyIsPressed KeyUp <*> keyIsPressed KeyDown <*> keyIsPressed KeyRight <*> keyIsPressed KeyRightShift
     cameraPress =<< (,,) <$> keyIsPressed (CharKey '1') <*> keyIsPressed (CharKey '2') <*> keyIsPressed (CharKey '3')
     debugPress =<< keyIsPressed KeySpace
+    capturePress =<< keyIsPressed (CharKey 'P')
     k <- keyIsPressed KeyEsc
 
     -- step physics
-    let dt = realToFrac t
+    isCapturing <- readIORef capRef
+    let dt = if isCapturing then recip captureRate else realToFrac t
+
     steerCar dt car =<< forM "AWSDR" (\c -> keyIsPressed (CharKey c))
     btDynamicsWorld_stepSimulation physicsWorld dt 10 (1 / 200)
     wheelPos =<< updateCar car
