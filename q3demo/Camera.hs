@@ -30,14 +30,18 @@ rotationEuler (Vec3 a b c) = orthogonal $ toOrthoUnsafe $ rotMatrixZ a .*. rotMa
 recordSignalSamples :: Signal Bool -> Signal Bool -> Signal a -> SignalGen p (Signal [a])
 recordSignalSamples = transfer3 [] record
   where
-    record _ _    True _ _  = [] 
-    record _ True _    x xs = x:xs 
-    record _ _    _    _ xs = xs 
+    record _ setWaypoint clearWaypoints input history
+        | clearWaypoints = [] 
+        | setWaypoint    = input:history 
+        | otherwise      = history
 
 playbackCamera :: Signal Bool -> Signal Bool -> Signal Float -> Signal [(Vec3, Vec3)] -> SignalGen Float (Signal (Maybe (Vec3, Vec3, Vec3)))
 playbackCamera play stop speed recording = do
     let noPath = (V.empty, V.empty)
-        trackPath _ play stop waypoints path = if stop then noPath else if play then mkPath waypoints else path
+        trackPath _ play stop waypoints path 
+            | stop      = noPath 
+            | play      = mkPath waypoints 
+            | otherwise = path
         mkPath waypoints = (camPath, targetPath)
           where
             waypoints' = reverse waypoints
@@ -48,7 +52,7 @@ playbackCamera play stop speed recording = do
             | V.length camPath < 4 = 0
             | otherwise            = if t' > tmax - 0.05 then t' - tmax else t'
           where
-            t' = proceedOnPath camPath 10 t (dtime * speed)
+            t' = proceedOnPath camPath 50 t (dtime * speed)
             tmax = fromIntegral (V.length camPath - 3)
     
     path <- transfer3 noPath trackPath play stop recording
@@ -64,12 +68,37 @@ extendPath ps = V.snoc (V.cons (2 *& ps V.! 0 &- ps V.! 1) ps) (2 *& ps V.! l &-
     l = V.length ps - 1
 
 proceedOnPath :: V.Vector Vec3 -> Int -> Float -> Float -> Float
-proceedOnPath ps prec t d = iterate step t !! prec
+proceedOnPath ps prec t d = go t (samplePath ps t) 0
+  where
+    go t p s
+        | s > d     = t
+        | otherwise = go t' p' (s + len (p' &- p))
+      where
+        t' = t + d / (len grad * fromIntegral prec)
+        p' = samplePath ps t'
+        (i, f) = properFraction t
+        grad = spline' (ps V.! i) (ps V.! (i+1)) (ps V.! (i+2)) (ps V.! (i+3)) f
+{-    
+    iterate step t !! prec
   where
     step t = t + d / (len s * fromIntegral prec)
       where
         (i, f) = properFraction t
         s = spline' (ps V.! i) (ps V.! (i+1)) (ps V.! (i+2)) (ps V.! (i+3)) f
+-}
+
+{-
+
+ f(t0) = p0
+ f(t0+t) = p0+d
+
+ t = ?
+
+ f'(t0) = p'0
+ f(t0+1) ~= p0+p'0 
+ f(t0+x) ~= p0+d/prec  ->  x = d/(prec*p'0)
+
+-}
 
 samplePath :: V.Vector Vec3 -> Float -> Vec3
 samplePath ps t = spline (ps V.! i) (ps V.! (i+1)) (ps V.! (i+2)) (ps V.! (i+3)) f

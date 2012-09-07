@@ -337,7 +337,7 @@ scene bsp objs setSize p0 slotU windowSize mousePosition fblrPress anim captureP
     capture <- transfer2 False (\_ cap cap' on -> on /= (cap && not cap')) capturePress =<< delay False capturePress
     
     [clearWaypoints, setWaypoint, stopPlayback, startPlayback, incPlaybackSpeed, decPlaybackSpeed] <-
-        forM [0..5] $ \i -> edge (fmap (!!i) waypointPress)
+        forM (zip [edge, edge, edge, edge, return, return] [0..]) $ \(process, i) -> process (fmap (!! i) waypointPress)
 
     waypoints <- recordSignalSamples setWaypoint clearWaypoints ((\(camPos, targetPos, _) -> (camPos, targetPos)) <$> controlledCamera)
     playbackSpeed <- transfer2 100 (\dt inc dec speed -> speed + 10*dt*(if inc then 1 else if dec then -1 else 0)) incPlaybackSpeed decPlaybackSpeed
