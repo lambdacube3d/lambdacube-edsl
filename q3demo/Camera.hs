@@ -70,8 +70,10 @@ extendPath ps = V.snoc (V.cons (2 *& ps V.! 0 &- ps V.! 1) ps) (2 *& ps V.! l &-
 proceedOnPath :: V.Vector Vec3 -> Int -> Float -> Float -> Float
 proceedOnPath ps prec t d = go t (samplePath ps t) 0
   where
+    tmax = fromIntegral (V.length ps - 3)
     go t p s
         | s > d     = t
+        | t' > tmax = t
         | otherwise = go t' p' (s + len (p' &- p))
       where
         t' = t + d / (len grad * fromIntegral prec)
