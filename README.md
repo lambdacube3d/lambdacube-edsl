@@ -22,9 +22,9 @@
 
 ##Stunts
   A revival of the classic racing game Stunts to serve as a non-toy-sized example for LambdaCube.
-  It depends on the Bullet physics engine haskell binding. It is available from svn repository only.    
-  *svn checkout http://lambdacube.googlecode.com/svn/trunk/bullet bullet-read-only*    
-  The bullet installation instructions can be found in *bullet-read-only/README*.
+  It depends on the Bullet physics engine haskell binding. It is available from git repository only.    
+  *git clone git://github.com/csabahruska/bullet.git*    
+  The bullet installation instructions can be found in *bullet/README*.
   In order to make the stunts demo work, you need to download the original game as per the instructions given by the program.
     
     Install:
