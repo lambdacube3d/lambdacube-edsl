@@ -1,3 +1,7 @@
+#LambdaCube 3D
+  LambdaCube 3D is a domain specific language and library that makes it possible to program GPUs in a purely functional style.  
+  You can find more info in the development blog. http://lambdacube3d.wordpress.com/
+
 ##Lambdacube-core
 
   Lambdacube-core contains the graphics EDSL and the OpenGL 3.2 backend.
