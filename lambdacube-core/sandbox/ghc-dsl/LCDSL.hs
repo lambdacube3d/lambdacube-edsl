@@ -281,13 +281,22 @@ data tail :+: head = !tail :+: !head deriving (Typeable, Show)
 
 -- used for tuple value description
 infixr 1 :.
-data FlatTuple c a t where
-    ZT      :: FlatTuple c a ZZ
+data T constraint a t where
+    ZT      :: T constraint a ZZ
 
-    (:.)    :: c t
+    (:.)    :: constraint t
             => a t
-            -> FlatTuple c a t'
-            -> FlatTuple c a (t :+: t')
+            -> T constraint a t'
+            -> T constraint a (t :+: t')
+
+infixr 1 :..
+data T2 constraint freq t where
+    ZTT      :: T2 constraint freq ZZ
+
+    (:..)    :: constraint t
+            => t :@ freq
+            -> T2 constraint freq t'
+            -> T2 constraint freq (t :+: t')
 
 -- vertex attribute interpolation
 data Interpolated e a where
@@ -328,11 +337,11 @@ data RasterContext t where
 triangleCtx :: RasterContext Triangle
 triangleCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
 
-type FrameBuffer layerCount t = FlatTuple Typeable (Image layerCount) t
+type FrameBuffer layerCount t = T Typeable (Image layerCount) t
 data AccumulationContext t
     = AccumulationContext
     { accViewportName   :: Maybe ByteString
-    , accOperations     :: FlatTuple Typeable FragmentOperation t
+    , accOperations     :: T Typeable FragmentOperation t
     }
 
 -- Fragment Operation
@@ -485,11 +494,11 @@ data TextureType dim mip arr layerCount t ar where -- hint: arr - single or arra
 
 
 -- defines a texture
-data Texture (gp :: * -> *) dim arr t ar where
+data Texture dim arr t ar where
     TextureSlot     :: (IsValidTextureSlot t)
                     => ByteString -- texture slot name
                     -> TextureType dim mip arr layerCount t ar
-                    -> Texture gp dim arr t ar
+                    -> Texture dim arr t ar
     -- TODO:
     --  add texture internal format specification
     Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip)
@@ -497,14 +506,14 @@ data Texture (gp :: * -> *) dim arr t ar where
                     -> TexSizeRepr dim
                     -> MipMap mip
 --                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
-                    -> [gp (Image layerCount (TexDataRepr ar t))]
-                    -> Texture gp dim arr t ar
+                    -> [Image layerCount (TexDataRepr ar t)]
+                    -> Texture dim arr t ar
 {-
     -- TODO:
     --  swizzling (arity conversion)
     --  integral -> floating casting (floating -> integral casting if possible)
-    ConvertTexture  :: Texture gp dim arr t ar
-                    -> Texture gp dim arr t' ar'
+    ConvertTexture  :: Texture dim arr t ar
+                    -> Texture dim arr t' ar'
 -}
 
 -- MipMap validation
@@ -528,138 +537,125 @@ type instance TexSizeRepr (DIM3) = V3U
 
 -- shader stage tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen
+data C
 data V
 data G
 data F
+data VertexOut
+data GeometryOut
+data FragmentOut
+data GeometryShader primIn primOut layerNum a b
 
-data Exp stage t where
-    -- constant value
-    Const   :: (GPU t,IsScalar t)
-            => t
-            -> Exp stage t
-{-
-    -- uniform value
-    Uni     :: GPU t
-            => Input t
-            -> Exp stage t
+data t :@ freq
 
-    PrimApp :: (GPU a, GPU r)
-            => PrimFun stage (a -> r)
-            -> Exp stage a
-            -> Exp stage r
+type InterpolatedFlatExp stage a = T GPU (Interpolated (Exp stage)) a
+--type FlatExp stage a = T GPU (Exp stage) a
+--type InterpolatedFlatExp stage a = T2 GPU (Interpolated stage) a
+type FlatExp stage a = T2 GPU stage a
 
--}
-    -- sampler support
-    Sampler :: GPU (Sampler dim arr t ar)
-            => Filter
-            -> EdgeMode
-            -> Texture GP dim arr t ar
-            -> Exp stage (Sampler dim arr t ar)
-
-    -- loop support
-    Loop    :: (GPU s, GPU a)
-            => (Exp stage s -> Exp stage s)     -- state transform function
-            -> (Exp stage s -> Exp stage Bool)  -- loop condition function
-            -> (Exp stage s -> Exp stage a)     -- state to result transform function
-            -> Exp stage s                      -- initial state
-            -> Exp stage a                      -- result
-
-type InterpolatedFlatExp stage a = FlatTuple GPU (Interpolated (Exp stage)) a
-type FlatExp stage a = FlatTuple GPU (Exp stage) a
-
-data VertexOut t where
-    VertexOut   :: Exp V V4F      -- position
-                -> Exp V Float    -- point size
-                -> InterpolatedFlatExp V a
-                -> VertexOut a
-
-data GeometryShader primIn primOut layerNum a b where
-    GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum)
+geometryShader          :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum)
                         => layerNum                                                 -- geometry shader:
                         -> primOut                                                  -- output primitive
                         -> Int                                                      -- max amount of generated vertices
-                        -> (Exp G (PrimitiveVertices primIn a) -> Exp G (i,Int32))  -- how many primitives?
-                        -> (Exp G i -> Exp G (i,j,Int32))                           -- how many vertices?
-                        -> (Exp G j -> GeometryOut (j,b))                           -- generate vertices
+                        -> ((PrimitiveVertices primIn a) :@ G -> (i,Int32) :@ G )   -- how many primitives?
+                        -> (i :@ G -> (i,j,Int32) :@ G )                            -- how many vertices?
+                        -> (j :@ G -> (j,b) :@ GeometryOut)                         -- generate vertices
                         -> GeometryShader primIn primOut layerNum a b
 
-data GeometryOut t where
-    GeometryOut :: Exp G V4F      -- position
-                -> Exp G Float    -- point size
-                -> Exp G Int32    -- primitive ID
-                -> Exp G Int32    -- layer
-                -> Exp G j
-                -> InterpolatedFlatExp G a
-                -> GeometryOut (j,a)
+vertexOut               :: V4F :@ V
+                        -> Float :@ V
+                        -> InterpolatedFlatExp V a
+                        -> a :@ VertexOut
 
-data FragmentOut t where
-    FragmentOut             :: FlatExp F a
-                            -> FragmentOut (ColorRepr a)
+geometryOut             :: V4F :@ G     -- position
+                        -> Float :@ G   -- point size
+                        -> Int32 :@ G   -- primitive ID
+                        -> Int32 :@ G   -- layer
+                        -> j :@ G
+                        -> InterpolatedFlatExp G a
+                        -> (j,a) :@ GeometryOut
 
-    FragmentOutDepth        :: Exp F Float
-                            -> FlatExp F a
-                            -> FragmentOut (Depth Float :+: ColorRepr a)
+fragmentOut             :: FlatExp F a
+                        -> (ColorRepr a) :@ FragmentOut
 
-    FragmentOutRastDepth    :: FlatExp F a
-                            -> FragmentOut (Depth Float :+: ColorRepr a)
+fragmentOutDepth        :: Float :@ F
+                        -> FlatExp F a
+                        -> (Depth Float :+: ColorRepr a) :@ FragmentOut
+
+fragmentOutRastDepth    :: FlatExp F a
+                        -> (Depth Float :+: ColorRepr a) :@ FragmentOut
+
+geometryShader          = primop
+vertexOut               = primop
+geometryOut             = primop
+fragmentOut             = primop
+fragmentOutDepth        = primop
+fragmentOutRastDepth    = primop
 
 data FragmentFilter a where
     PassAll :: FragmentFilter a
 
-    Filter  :: (Exp F a -> Exp F Bool)
+    Filter  :: (a :@ F -> Bool :@ F)
             -> FragmentFilter a
 
-data GP t where
-    -- Needed for conversion to de Bruijn form
-    GPtag           :: Typeable a
-                    => Int
-                    -> GP a -- FIXME: restrict valid types to shareable types
-{-
-    Fetch           :: (InputTuple a, SGPU (InputTupleRepr a), IsPrimitive prim)
-                    => ByteString
-                    -> prim
-                    -> a
-                    -> GP (VertexStream prim (InputTupleRepr a))
--}
-    Transform       :: (GPU a, GPU b)
-                    => (Exp V a -> VertexOut b)                       -- vertex shader
-                    -> GP (VertexStream prim a)
-                    -> GP (PrimitiveStream prim N1 V b)
+data Exp stage t
 
-    Reassemble      :: GeometryShader primIn primOut layerCount a b
-                    -> GP (PrimitiveStream primIn N1 V a)
-                    -> GP (PrimitiveStream primOut layerCount G b)
+sampler             :: GPU (Sampler dim arr t ar)
+                    => Filter
+                    -> EdgeMode
+                    -> Texture dim arr t ar
+                    -> (Sampler dim arr t ar) :@ freq
 
-    Rasterize       :: RasterContext prim
-                    -> GP (PrimitiveStream prim layerCount stage a)
-                    -> GP (FragmentStream layerCount a)
+input               :: (GPU t, IsScalar t)
+                    => t
+                    -> t :@ freq
 
-    FrameBuffer     :: FrameBuffer layerCount t
-                    -> GP (FrameBuffer layerCount (DropSemantic t))
+transform           :: (GPU a, GPU b)
+                    => (a :@ V -> b :@ VertexOut)                       -- vertex shader
+                    -> VertexStream prim a :@ C
+                    -> PrimitiveStream prim N1 V b :@ C
 
-    Accumulate      :: (GPU a, GPU (DropSemantic b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
+reassemble          :: GeometryShader primIn primOut layerCount a b
+                    -> PrimitiveStream primIn N1 V a :@ C
+                    -> PrimitiveStream primOut layerCount G b :@ C
+
+rasterize           :: RasterContext prim
+                    -> PrimitiveStream prim layerCount stage a :@ C
+                    -> FragmentStream layerCount a :@ C
+
+accumulate          :: (GPU a, GPU (DropSemantic b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
                     => AccumulationContext b
                     -> FragmentFilter a
-                    -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
-                    -> GP (FragmentStream layerCount a)
-                    -> GP (FrameBuffer layerCount (DropSemantic b))
-                    -> GP (FrameBuffer layerCount (DropSemantic b))
+                    -> (a :@ F -> (NoStencilRepr b) :@ FragmentOut)     -- fragment shader
+                    -> FragmentStream layerCount a :@ C
+                    -> FrameBuffer layerCount (DropSemantic b) :@ C
+                    -> FrameBuffer layerCount (DropSemantic b) :@ C
 
-    -- dynamic extension support
-    AccumulateSet   :: GPU a
-                    => ByteString
-                    -> GP (FrameBuffer layerCount a)
-                    -> GP (FrameBuffer layerCount a)
+accumulateSet       :: GPU a
+                    => FrameBuffer layerCount a :@ C
+                    -> FrameBuffer layerCount a :@ C
 
+sampler             = primop
+input               = primop
+transform           = primop
+reassemble          = primop
+rasterize           = primop
+accumulate          = primop
+accumulateSet       = primop
 
-data GPOutput where
-    ImageOut    :: ByteString
-                -> GP (Image layerCount t)
-                -> GPOutput
+primop :: a
+primop = undefined
 
-    ScreenOut   :: GP (Image N1 t)
-                -> GPOutput
+data Output
 
+imageOut            :: Image layerCount t
+                    -> Output
+
+screenOut           :: Image N1 t
+                    -> Output
+
+imageOut            = primop
+screenOut           = primop
 
 type family DropSemantic a :: *
 type instance DropSemantic ZZ = ZZ
