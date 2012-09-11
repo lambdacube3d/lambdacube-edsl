@@ -42,10 +42,10 @@ type instance Untag (Interpolated a :. b)   = a :. (Untag b)
 -- shader stage tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen
 
-data C
+--data C
 data V
 data G
-data F
+--data F
 
 data VertexOut t
 data GeometryOut t
@@ -62,8 +62,8 @@ data GeometryShader primIn primOut layerNum a b where
                         -> primOut                                                  -- output primitive
                         -> Int                                                      -- max amount of generated vertices
                         -> ((PrimitiveVertices primIn a) -> (i,Int) )   -- how many primitives?
-                        -> (i  -> (i,j,Int)  )                            -- how many vertices?
-                        -> (j  -> GeometryOut (j,b) )                         -- generate vertices
+                        -> (i -> (i,j,Int))                             -- how many vertices?
+                        -> (j -> GeometryOut (j,b))                     -- generate vertices
                         -> GeometryShader primIn primOut layerNum a b
 
 vertexOut               :: ( CheckInterpolated a ~ OK
@@ -109,7 +109,6 @@ sampler             :: Filter
                     -> Sampler dim arr t ar
 
 input               :: t
-                    -> t
 
 transform           :: (a -> VertexOut b)                       -- vertex shader
                     -> VertexStream prim a

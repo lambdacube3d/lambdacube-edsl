@@ -40,7 +40,10 @@ data Triangle   = Triangle
 data Line       = Line
 data Point      = Point
 
-class Show p => IsPrimitive p where
+class IsPrimitive p
+instance IsPrimitive Triangle
+instance IsPrimitive Line
+instance IsPrimitive Point
 
 -- needed to describe geometry shader input 
 type family PrimitiveVertices prim a
