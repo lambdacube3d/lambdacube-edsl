@@ -13,6 +13,14 @@ import LCDSLContext
 infixl 1 :.
 data head :. tail = head :. tail
 
+infixl 9 :@
+data t :@ freq
+
+type family Freq t :: *
+type instance Freq (a :@ f) = f
+type instance Freq (a :@ f :. b :@ f) = f
+type instance Freq (a :@ f :. b :@ f :. c) = Freq (b :@ f :. c)
+
 -- vertex attribute interpolation
 data Interpolated a
 
@@ -61,7 +69,7 @@ data GeometryShader primIn primOut layerNum a b where
                         => layerNum                                                 -- geometry shader:
                         -> primOut                                                  -- output primitive
                         -> Int                                                      -- max amount of generated vertices
-                        -> ((PrimitiveVertices primIn a) -> (i,Int) )   -- how many primitives?
+                        -> ((PrimitiveVertices primIn a) -> (i,Int))    -- how many primitives?
                         -> (i -> (i,j,Int))                             -- how many vertices?
                         -> (j -> GeometryOut (j,b))                     -- generate vertices
                         -> GeometryShader primIn primOut layerNum a b
@@ -205,6 +213,21 @@ imageOut            :: Image layerCount t
 screenOut           :: Image N1 t
                     -> Output
 
+data Array a
+
+arrayMap            :: (a -> b)
+                    -> Array a
+                    -> Array b
+
+arrayZipWith        :: (a -> b -> c)
+                    -> Array a
+                    -> Array b
+                    -> Array c
+
+arrayAccumulate     :: (a -> b -> a)
+                    -> a
+                    -> Array b
+                    -> a
 
 data OK
 
@@ -237,3 +260,7 @@ accumulateSet           = primop
 
 imageOut                = primop
 screenOut               = primop
+
+arrayAccumulate         = undefined
+arrayMap                = undefined
+arrayZipWith            = undefined
