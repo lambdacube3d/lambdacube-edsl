@@ -35,7 +35,7 @@ quad = Mesh
     a = -1
     b = 1
 
-post :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
+post :: Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 (Float,V4F))
 post img = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
@@ -67,7 +67,7 @@ post img = Accumulate fragCtx PassAll frag rast clear
 
 main :: IO ()
 main = do
-    let lcnet :: GP (Image N1 V4F)
+    let lcnet :: Exp Obj (Image N1 V4F)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ moments
         lcnet = PrjFrameBuffer "outFB" tix0 vsm
         --lcnet = PrjFrameBuffer "outFB" tix0 $ post $ PrjFrameBuffer "post" tix0 vsm

@@ -454,6 +454,7 @@ type instance TexRepr DIM3 Mip     gp layerCount t = [[gp (Image layerCount t)]]
 
 -- shader stage tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen
+data Obj
 data V
 data G
 data F

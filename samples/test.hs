@@ -31,7 +31,7 @@ drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 drop3 :: Exp s V3F -> Exp s V2F
 drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
 
-simple :: GP (VertexStream Triangle (V3F,V3F)) -> GP (FrameBuffer N1 V4F)
+simple :: Exp Obj (VertexStream Triangle (V3F,V3F)) -> Exp Obj (FrameBuffer N1 V4F)
 simple objs = Accumulate fragCtx PassAll frag rast clear
   where
     worldViewProj = Uni (IM44F "worldViewProj")
@@ -61,7 +61,7 @@ simple objs = Accumulate fragCtx PassAll frag rast clear
 -- API overview
   -- low level
   compileBuffer   :: [Array] -> IO Buffer
-  compileRenderer :: GP (FrameBuffer c d s) -> IO Renderer
+  compileRenderer :: Exp Obj (FrameBuffer c d s) -> IO Renderer
 
   -- high level
   addObject       :: Renderer -> ByteString -> Maybe IndexStream -> Trie Stream -> [ByteString] -> IO Object
@@ -86,8 +86,8 @@ initGL title = do
 -- simple use case
 main :: IO ()
 main = do
-    let --lcnet :: GP (FrameBuffer Z (Color :+: Z) (V4F :+: Z))
-        lcnet :: GP (Image N1 V4F)
+    let --lcnet :: Exp Obj (FrameBuffer Z (Color :+: Z) (V4F :+: Z))
+        lcnet :: Exp Obj (Image N1 V4F)
         lcnet  = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
         --lcnet' = convertGP lcnet
 {-

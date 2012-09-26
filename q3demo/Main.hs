@@ -155,9 +155,9 @@ main = do
             - shader descriptor
             - image file: tga or jpg
         -}
-        lcnet :: GP (Image N1 V4F)
+        lcnet :: Exp Obj (Image N1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 $ q3GFX $ T.toList shMap
-        lcnetMenu :: GP (Image N1 V4F)
+        lcnetMenu :: Exp Obj (Image N1 V4F)
         lcnetMenu = PrjFrameBuffer "outFB" tix0 screenQuad
 
         -- extract spawn points

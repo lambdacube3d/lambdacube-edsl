@@ -32,7 +32,7 @@ intF = Const
 
 -- blur
 
-blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> GP (FrameBuffer N1 (Float,V4F))
+blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
 blur' frag = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
@@ -71,7 +71,7 @@ gaussFilter9 =
     , (4.0,    0.05)
     ]
 
-blurVH :: GP (Image N1 V4F) -> GP (FrameBuffer N1 (Float,V4F))
+blurVH :: Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 (Float,V4F))
 blurVH img = blur' fragH
   where
     sizeT = 512
@@ -100,7 +100,7 @@ blurVH img = blur' fragH
 
 -- draw quad
 
-screenQuad :: GP (FrameBuffer N1 V4F)
+screenQuad :: Exp Obj (FrameBuffer N1 V4F)
 screenQuad = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
@@ -124,7 +124,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
         tex = TextureSlot "ScreenQuad" $ Texture2D (Float RGBA) n1
 
 {-
-screenQuad :: GP (FrameBuffer N1 (Float,V4F))
+screenQuad :: Exp Obj (FrameBuffer N1 (Float,V4F))
 screenQuad = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Lequal True:.ColorOp NoBlending (one' :: V4B):.ZT

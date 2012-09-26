@@ -28,7 +28,7 @@ import qualified Criterion.Measurement as C
 
 import VSM
 
-simpleTexturing :: GP (FrameBuffer N1 (Float,V4F))
+simpleTexturing :: Exp Obj (FrameBuffer N1 (Float,V4F))
 simpleTexturing = Accumulate fragCtx PassAll frag rast clear
   where
     rastCtx :: RasterContext Triangle
@@ -37,16 +37,16 @@ simpleTexturing = Accumulate fragCtx PassAll frag rast clear
     fragCtx :: AccumulationContext (Depth Float :+: Color V4F :+: ZZ)
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
 
-    clear :: GP (FrameBuffer N1 (Float,V4F))
+    clear :: Exp Obj (FrameBuffer N1 (Float,V4F))
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
 
-    rast :: GP (FragmentStream N1 V2F)
+    rast :: Exp Obj (FragmentStream N1 V2F)
     rast    = Rasterize rastCtx prims
 
-    prims :: GP (PrimitiveStream Triangle N1 V V2F)
+    prims :: Exp Obj (PrimitiveStream Triangle N1 V V2F)
     prims   = Transform vert input
 
-    input :: GP (VertexStream Triangle (V3F,V2F))
+    input :: Exp Obj (VertexStream Triangle (V3F,V2F))
     input   = Fetch "scene" Triangle (IV3F "position", IV2F "UVTex")
 
     worldViewProj :: Exp V M44F
@@ -72,12 +72,12 @@ simpleTexturing = Accumulate fragCtx PassAll frag rast clear
         smp :: Exp F (Sampler DIM2 SingleTex (Regular Float) RGBA)
         smp = Sampler LinearFilter Clamp tex
 
-        tex :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+        tex :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RGBA
         tex = TextureSlot "diffuse" (Texture2D (Float RGBA) n1)
 
 main :: IO ()
 main = do
-    let lcnet :: GP (Image N1 V4F)
+    let lcnet :: Exp Obj (Image N1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 simpleTexturing
 
     windowSize <- initCommon "LC DSL TextureSlot Demo"

@@ -69,7 +69,7 @@ data Exp stage t where
     Sampler :: GPU (Sampler dim arr t ar)
             => Filter
             -> EdgeMode
-            -> Texture GP dim arr t ar
+            -> Texture (Exp Obj) dim arr t ar
             -> Exp stage (Sampler dim arr t ar)
 
     -- loop support
@@ -79,6 +79,56 @@ data Exp stage t where
             -> (Exp stage s -> Exp stage a)     -- state to result transform function
             -> Exp stage s                      -- initial state
             -> Exp stage a                      -- result
+    -- GP
+    -- hint: GP stands for Graphics Pipeline
+    Fetch           :: (InputTuple a, SGPU (InputTupleRepr a), IsPrimitive prim)
+                    => ByteString
+                    -> prim
+                    -> a
+                    -> Exp Obj (VertexStream prim (InputTupleRepr a))
+
+    Transform       :: (GPU a, GPU b)
+                    => (Exp V a -> VertexOut b)                       -- vertex shader
+                    -> Exp Obj (VertexStream prim a)
+                    -> Exp Obj (PrimitiveStream prim N1 V b)
+
+    Reassemble      :: GeometryShader primIn primOut layerCount a b
+                    -> Exp Obj (PrimitiveStream primIn N1 V a)
+                    -> Exp Obj (PrimitiveStream primOut layerCount G b)
+
+    Rasterize       :: RasterContext prim
+                    -> Exp Obj (PrimitiveStream prim layerCount stage a)
+                    -> Exp Obj (FragmentStream layerCount a)
+
+    FrameBuffer     :: FrameBuffer layerCount t
+                    -> Exp Obj (FrameBuffer layerCount (FTRepr' t))
+
+    Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
+                    => AccumulationContext b
+                    -> FragmentFilter a
+                    -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
+                    -> Exp Obj (FragmentStream layerCount a)
+                    -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
+                    -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
+
+    PrjFrameBuffer  :: ByteString                       -- internal image output (can be allocated on request)
+                    -> TupleIdx (EltRepr b) t
+                    -> Exp Obj (FrameBuffer layerCount b)
+                    -> Exp Obj (Image layerCount t)
+
+    PrjImage        :: (Nat idx, LesserEq idx layerCount)
+                    => ByteString                       -- internal image output (can be allocated on request)
+                    -> idx
+                    -> Exp Obj (Image layerCount t)
+                    -> Exp Obj (Image N1 t)
+
+    -- dynamic extension support
+    AccumulateSet   :: GPU a
+                    => ByteString
+                    -> Exp Obj (FrameBuffer layerCount a)
+                    -> Exp Obj (FrameBuffer layerCount a)
+
+--deriving instance Typeable1 GP
 
 type InterpolatedFlatExp stage a = FlatTuple GPU (Interpolated (Exp stage)) a
 type FlatExp stage a = FlatTuple GPU (Exp stage) a
@@ -156,67 +206,11 @@ data FragmentFilter a where
     Filter  :: (Exp F a -> Exp F Bool)
             -> FragmentFilter a
 
--- hint: GP stands for Graphics Pipeline
--- GP AST
-data GP t where
-    -- Needed for conversion to de Bruijn form
-    GPtag           :: Typeable a
-                    => Int
-                    -> GP a -- FIXME: restrict valid types to shareable types
-
-    Fetch           :: (InputTuple a, SGPU (InputTupleRepr a), IsPrimitive prim)
-                    => ByteString
-                    -> prim
-                    -> a
-                    -> GP (VertexStream prim (InputTupleRepr a))
-
-    Transform       :: (GPU a, GPU b)
-                    => (Exp V a -> VertexOut b)                       -- vertex shader
-                    -> GP (VertexStream prim a)
-                    -> GP (PrimitiveStream prim N1 V b)
-
-    Reassemble      :: GeometryShader primIn primOut layerCount a b
-                    -> GP (PrimitiveStream primIn N1 V a)
-                    -> GP (PrimitiveStream primOut layerCount G b)
-
-    Rasterize       :: RasterContext prim
-                    -> GP (PrimitiveStream prim layerCount stage a)
-                    -> GP (FragmentStream layerCount a)
-
-    FrameBuffer     :: FrameBuffer layerCount t
-                    -> GP (FrameBuffer layerCount (FTRepr' t))
-
-    Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
-                    => AccumulationContext b
-                    -> FragmentFilter a
-                    -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
-                    -> GP (FragmentStream layerCount a)
-                    -> GP (FrameBuffer layerCount (FTRepr' b))
-                    -> GP (FrameBuffer layerCount (FTRepr' b))
-
-    PrjFrameBuffer  :: ByteString                       -- internal image output (can be allocated on request)
-                    -> TupleIdx (EltRepr b) t
-                    -> GP (FrameBuffer layerCount b)
-                    -> GP (Image layerCount t)
-
-    PrjImage        :: (Nat idx, LesserEq idx layerCount)
-                    => ByteString                       -- internal image output (can be allocated on request)
-                    -> idx
-                    -> GP (Image layerCount t)
-                    -> GP (Image N1 t)
-
-    -- dynamic extension support
-    AccumulateSet   :: GPU a
-                    => ByteString
-                    -> GP (FrameBuffer layerCount a)
-                    -> GP (FrameBuffer layerCount a)
-
-deriving instance Typeable1 GP
 
 data GPOutput where
     ImageOut    :: ByteString
-                -> GP (Image layerCount t)
+                -> Exp Obj (Image layerCount t)
                 -> GPOutput
 
-    ScreenOut   :: GP (Image N1 t)
+    ScreenOut   :: Exp Obj (Image N1 t)
                 -> GPOutput

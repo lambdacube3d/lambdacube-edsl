@@ -39,7 +39,7 @@ floatV = Const
 floatF :: Float -> Exp F Float
 floatF = Const
 
-screenQuad :: GP (FrameBuffer N1 V4F)
+screenQuad :: Exp Obj (FrameBuffer N1 V4F)
 screenQuad = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
@@ -65,7 +65,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
 
 main :: IO ()
 main = do
-    let lcnet :: GP (Image N1 V4F)
+    let lcnet :: Exp Obj (Image N1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 screenQuad
 
     windowSize <- initCommon "LC DSL 2D Demo"

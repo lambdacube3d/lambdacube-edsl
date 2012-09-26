@@ -40,14 +40,14 @@ convertGPOutput (H.ImageOut a b)    = imageOut a $ convertGP b
 convertGPOutput (H.ScreenOut a)   = screenOut $ convertGP a
 
 -- GP
-convertGP :: ExpC exp => H.GP t -> exp
+convertGP :: ExpC exp => H.Exp T.Obj t -> exp
 convertGP = convertOpenGP []
 
-convertOpenGP :: ExpC exp => Layout -> H.GP t -> exp
+convertOpenGP :: ExpC exp => Layout -> H.Exp T.Obj t -> exp
 convertOpenGP = cvt
   where
-    cvt :: ExpC exp => Layout -> H.GP t -> exp
-    cvt glyt (H.GPtag i)                    = error "GPtag is not implemented yet!"-- var (genTy (undefined :: t')) (prjIdx i glyt) <$> get
+    cvt :: ExpC exp => Layout -> H.Exp T.Obj t -> exp
+    --cvt glyt (H.GPtag i)                    = error "GPtag is not implemented yet!"-- var (genTy (undefined :: t')) (prjIdx i glyt) <$> get
     cvt glyt (H.Fetch n p i)                = fetch n (T.toPrimitive p) (T.toInputList i)
     cvt glyt (H.Transform vs ps)            = transform  (convertFun1Vert glyt vs) (cvt glyt ps)
     cvt glyt (H.Reassemble sh ps)           = reassemble (convertGeometryShader glyt sh) (cvt glyt ps)
@@ -227,7 +227,7 @@ convertTuple lyt  glyt (es `SnocTup` e) = convertTuple lyt glyt es ++ [convertOp
 -- data type conversion
 
 convertTexture :: ExpC exp
-               => T.Texture (H.GP) dim arr t ar
+               => T.Texture (H.Exp T.Obj) dim arr t ar
                -> exp
 convertTexture (T.TextureSlot n t) = textureSlot n (convertTextureType t)
 convertTexture (T.Texture t s m d) = texture (convertTextureType t) (T.toValue s) (convertMipMap m) (map convertGP d)

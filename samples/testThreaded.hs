@@ -54,13 +54,13 @@ vert pn = tup2 (v4, Const ())
 frag :: Exp () -> Exp V3F
 frag _ = Const (V3 1 0 0)
 
-simple :: GP (PrimitiveStream p (V3F,V3F,V2F)) -> GP (FrameBuffer (RGBFormat Float) DepthFormat ())
+simple :: Exp Obj (PrimitiveStream p (V3F,V3F,V2F)) -> Exp Obj (FrameBuffer (RGBFormat Float) DepthFormat ())
 simple objs = PaintColorRastDepth Less True NoBlending (RGBMask $ V3 True True True) frag (rast objs) clear
   where
     clear = NewFrameBufferColorDepth (RGB $ V3 0 0 1) 1000
     rast obj = RasterizeFront vert obj
 
-simpleInline :: GP (PrimitiveStream p (V3F,V3F,V2F)) -> GP (FrameBuffer (RGBFormat Float) DepthFormat ())
+simpleInline :: Exp Obj (PrimitiveStream p (V3F,V3F,V2F)) -> Exp Obj (FrameBuffer (RGBFormat Float) DepthFormat ())
 simpleInline objs = PaintColorRastDepth Less True NoBlending (RGBMask $ V3 True True True) manFrag (rast objs) clear
   where
     clear = NewFrameBufferColorDepth (RGB $ V3 0 0 1) 1000
@@ -68,7 +68,7 @@ simpleInline objs = PaintColorRastDepth Less True NoBlending (RGBMask $ V3 True 
 
 main :: IO ()
 main = do
-    let lcnet :: GP (FrameBuffer (RGBFormat Float) DepthFormat ())
+    let lcnet :: Exp Obj (FrameBuffer (RGBFormat Float) DepthFormat ())
         lcnet = simple $ GPUStream "streamSlot" Triangle (IV3F "position", IV3F "normal", IV2F "UVTex")
         --lcnet = simpleInline $ GPUStream "streamSlot" Triangle (IV3F "position", IV3F "normal", IV2F "UVTex")
 
