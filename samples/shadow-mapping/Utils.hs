@@ -2,6 +2,7 @@
 
 module Utils where
 
+import Control.Applicative
 import Control.Monad
 import Data.Time.Clock
 import "GLFW-b" Graphics.UI.GLFW as GLFW
@@ -24,8 +25,8 @@ initWindow title = do
         , displayOptions_numBlueBits        = 8
         , displayOptions_numAlphaBits       = 8
         , displayOptions_numDepthBits       = 24
-        , displayOptions_width              = 800
-        , displayOptions_height             = 600
+        , displayOptions_width              = 1280
+        , displayOptions_height             = 720
         , displayOptions_windowIsResizable  = True
         , displayOptions_openGLVersion      = (3,2)
         , displayOptions_openGLProfile      = CoreProfile
@@ -49,3 +50,11 @@ driveNetwork network driver = do
             join (network dt)
             driveNetwork network driver
         Nothing -> return ()
+
+risingEdge :: Signal Bool -> SignalGen p (Signal Bool)
+risingEdge signal = do
+    signal' <- delay True signal
+    memo $ liftA2 (&&) signal (not <$> signal') 
+
+toggle :: Signal Bool -> SignalGen p (Signal Bool)
+toggle = transfer False (const (/=))

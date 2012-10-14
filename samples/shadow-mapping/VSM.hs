@@ -65,7 +65,7 @@ blur coefficients img = filter1D dirH (PrjFrameBuffer "" tix0 (filter1D dirV img
             tex = Texture (Texture2D (Float RG) n1) (V2 shadowMapSize shadowMapSize) NoMip [img]
     
 
-moments :: Exp Obj (FrameBuffer N1 (Float,V2F))
+moments :: Exp Obj (FrameBuffer N1 (Float, V2F))
 moments = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V2B) :. ZT)
@@ -89,7 +89,26 @@ moments = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
         moment1 = depth
         moment2 = depth @* depth @+ floatF 0.25 @* (dx @* dx @+ dy @* dy)
 
-vsm :: Exp Obj (FrameBuffer N1 (Float,V4F))
+depth :: Exp Obj (FrameBuffer N1 (Float, Float))
+depth = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
+  where
+    accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending True :. ZT)
+    clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 0 :. ZT)
+    prims = Transform vert (Fetch "geometrySlot" Triangle (IV3F "position"))
+    
+    lightMatrix = Uni (IM44F "lightMatrix")
+    modelMatrix = Uni (IM44F "modelMatrix")
+
+    vert :: Exp V V3F -> VertexOut Float
+    vert pos = VertexOut lightPos (floatV 1) (Smooth depth :. ZT)
+      where
+        lightPos = lightMatrix @*. modelMatrix @*. v3v4 pos
+        V4 _ _ depth _ = unpack' lightPos
+
+    frag :: Exp F Float -> FragmentOut (Depth Float :+: Color Float :+: ZZ)
+    frag depth = FragmentOutRastDepth (depth :. ZT)
+
+vsm :: Exp Obj (FrameBuffer N1 (Float, V4F))
 vsm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
@@ -119,7 +138,7 @@ vsm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
         V2 moment1 moment2 = unpack' (texture' sampler uv)
         variance = max' (floatF 0.002) (moment2 @- moment1 @* moment1)
         distance = max' (floatF 0) (lightDepth @- moment1)
-        shadowProbMax = variance @/ (variance @+ distance @* distance)
+        lightProbMax = variance @/ (variance @+ distance @* distance)
         
         lambert = max' (floatF 0) (dot' worldNormal (normalize' (lightPosition @- worldPos)))
         
@@ -129,7 +148,7 @@ vsm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
         
         V2 spotR spotG = unpack' (scaleUV (round' (uv' @* floatF 10)) @* intensity)
         
-        luminance = pack' (V4 spotR spotG intensity (floatF 1)) @* pow' shadowProbMax (floatF 2)
+        luminance = pack' (V4 spotR spotG intensity (floatF 1)) @* pow' lightProbMax (floatF 2)
         
         clampUV x = clamp' x (floatF 0) (floatF 1)
         scaleUV x = x @* floatF 0.5 @+ floatF 0.5
@@ -139,9 +158,62 @@ vsm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
     sampler = Sampler LinearFilter Clamp shadowMapBlur
     
     shadowMap :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RG
-    shadowMap = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
+    shadowMap = Texture (Texture2D (Float RG) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
 
     shadowMapBlur :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RG
-    shadowMapBlur = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 blurredMoments]
+    shadowMapBlur = Texture (Texture2D (Float RG) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 blurredMoments]
       where
         blurredMoments = blur blurCoefficients (PrjFrameBuffer "blur" tix0 moments)
+
+sm :: Exp Obj (FrameBuffer N1 (Float, V4F))
+sm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
+  where
+    accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
+    clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 (V4 0.1 0.2 0.6 1) :. ZT)
+    prims = Transform vert (Fetch "geometrySlot" Triangle (IV3F "position", IV3F "normal"))
+
+    cameraMatrix = Uni (IM44F "cameraMatrix")
+    lightMatrix = Uni (IM44F "lightMatrix")
+    modelMatrix = Uni (IM44F "modelMatrix")
+    lightPosition = Uni (IV3F "lightPosition")
+
+    vert :: Exp V (V3F, V3F) -> VertexOut (V3F, V4F, V3F)
+    vert attr = VertexOut viewPos (floatV 1) (Smooth (v4v3 worldPos) :. Smooth lightPos :. Smooth worldNormal :. ZT)
+      where
+        worldPos = modelMatrix @*. v3v4 localPos
+        viewPos = cameraMatrix @*. worldPos
+        lightPos = lightMatrix @*. worldPos
+        worldNormal = normalize' (v4v3 (modelMatrix @*. n3v4 localNormal))
+        (localPos, localNormal) = untup2 attr
+
+    frag :: Exp F (V3F, V4F, V3F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    frag attr = FragmentOutRastDepth (luminance :. ZT)
+      where
+        V4 lightU lightV lightDepth lightW = unpack' lightPos
+        uv = clampUV (scaleUV (pack' (V2 lightU lightV) @/ lightW))
+        
+        surfaceDistance = texture' sampler uv
+        lightPortion = Cond (lightDepth @<= surfaceDistance @+ floatF 0.01) (floatF 1) (floatF 0)
+        
+        lambert = max' (floatF 0) (dot' worldNormal (normalize' (lightPosition @- worldPos)))
+        
+        --intensity = lambert @* lightPortion
+        --luminance = pack' (V4 intensity intensity intensity (floatF 1))
+        
+        uv' = uv @- floatF 0.5
+        spotShape = floatF 1 @- length' uv' @* floatF 4
+        intensity = max' (floatF 0) (spotShape @* lambert)
+        
+        V2 spotR spotG = unpack' (scaleUV (round' (uv' @* floatF 10)) @* intensity)
+        
+        luminance = pack' (V4 spotR spotG intensity (floatF 1)) @* lightPortion
+        
+        clampUV x = clamp' x (floatF 0) (floatF 1)
+        scaleUV x = x @* floatF 0.5 @+ floatF 0.5
+        
+        (worldPos, lightPos, worldNormal) = untup3 attr
+
+    sampler = Sampler PointFilter Clamp shadowMap
+    
+    shadowMap :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) Red
+    shadowMap = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 depth]
