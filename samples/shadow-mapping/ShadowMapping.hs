@@ -58,7 +58,7 @@ main = do
     quadMesh <- compileMesh quad
     addMesh renderer "postSlot" quadMesh []
 
-    cubeMesh <- compileMesh cube
+    cubeMesh <- compileMesh (cube 1)
     
     (duration, cubeObjects) <- measureDuration $ replicateM 6 $ addMesh renderer "geometrySlot" cubeMesh ["modelMatrix"]
     putStrLn $ "Cube meshes added - " ++ show duration
