@@ -60,13 +60,13 @@ box (Vec3 scaleX scaleY scaleZ) = addFlatNormals $ Mesh
         z = if testBit n 0 then scaleZ else -scaleZ
 
 capsule :: Float -> Float -> Int -> Mesh
-capsule height radius n = complexMesh
+capsule radius height n = complexMesh
                           [ (idmtx, cylinderLateralArea height' radius (n * 2))
                           , (translation (Vec3 0 (-height') 0), halfSphere radius n)
                           , (scaling (Vec3 (-1) (-1) 1) .*. translation (Vec3 0 height' 0), halfSphere radius n)
                           ]
   where
-    height' = height - radius * 2
+    height' = height / 2
 
 halfSphere :: Float -> Int -> Mesh
 halfSphere radius n = Mesh

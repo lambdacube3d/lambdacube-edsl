@@ -548,7 +548,7 @@ rayTarget (Vec2 windowW windowH) (CameraInfo cameraPos targetPos cameraUp) (Vec2
     rayCenter &- (horizontal &* (aspect*(0.5-windowX/windowW))) &+ (vertical &* (0.5-windowY/windowH))
   where
     aspect = windowW / windowH
-    tanFov = tan (fieldOfView / 2)
+    tanFov = tan (fieldOfView * sqrt 0.5)
 
     rayForward = normalize (targetPos &- cameraPos) &* farPlane
     horizontal = normalize (rayForward &^ cameraUp) &* (farPlane*tanFov)
