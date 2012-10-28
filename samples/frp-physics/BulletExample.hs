@@ -429,7 +429,7 @@ updateScene renderer updateTransforms stepPhysics ragdollBodies (Vec2 w h) brick
     let aspect = w / h
         cameraProjection = perspective 0.1 farPlane fieldOfView aspect
         cameraSetter = uniformM44F "cameraMatrix" (uniformSetter renderer) . fromMat4
-
+    setScreenSize renderer (floor w) (floor h)
     cameraSetter $ fromProjective (cameraView cameraInfo) .*. cameraProjection
 
     updateTransforms $
