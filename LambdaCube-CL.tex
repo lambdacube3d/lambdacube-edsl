@@ -4,29 +4,39 @@
 \status{experimental, active development}
 \makeheader
 
-LambdaCube is a 3D graphics library entirely written in Haskell.
+LambdaCube 3D is a domain specific language and library that makes it
+possible to program GPUs in a purely functional style.
 
-The main goal of this project is to provide a modern and feature rich
-graphical backend for various Haskell projects, and in the long run it
-is intended to be a practical solution even for serious purposes.
-With LambdaCube we can program the GPU in a purely functional manner,
-just like with GPipe, but LambdaCube provides much better runtime
-performance.
+Programming with LambdaCube constitutes of composing a pure data-flow
+description, which is compiled into an executable module and accessed
+through a high-level API.  The language provides a uniform way to
+define shaders and compositor chains by treating both streams and
+framebuffers as first-class values.
 
-Over the last few months, the library has been completely rewritten.
-The current API is a rudimentary EDSL that is not intended for direct
-use in the long run.  It is essentially the internal phase of a
-compiler backend exposed for testing purposes.  To exercise the library, we
-have created two small proof of concept examples: a port of the old
-LambdaCube Stunts example, and a Quake III level viewer.
+In its current state, LambdaCube is already functional, but still in
+its infancy.  The current API is a rudimentary EDSL that is not
+intended for direct use in the long run.  It is essentially the
+internal phase of a compiler backend exposed for testing purposes.  To
+exercise the library, we have created two small proof of concept
+examples: a port of the old LambdaCube Stunts example, and a Quake III
+level viewer.
 
-Our mid term plan is to define a standalone DSL, so the graphics
-pipeline could be dynamically reprogrammed during runtime.  Using our
-graphics language, we can implement arbitrary rendering techniques in
-a hardware independent and compositional way.  All resource handling
-and performance optimizations will be done by the graphics backend.
-Currently we are targeting OpenGL 3.3, but OpenGL ES support is
-also planned.
+Over the last few months, we extended the implementation with some
+essential major features:
+
+\begin{itemize}
+\item texture support
+\item multi-pass rendering
+\item sharing detection and CSE in the shaders (through hash-consing)
+\end{itemize}
+
+We also improved the existing examples and created new ones: a
+showcase for variance shadow mapping and another for integration with
+the Bullet physics engine.
+
+Last but not least, we finally started a new blog dedicated to
+LambdaCube.  The blog is intended to be the primary source of
+information and updates on the project from now on.
 
 Everyone is invited to contribute! You can help the project by playing
 around with the code, thinking about API design, finding bugs (well,
@@ -43,9 +53,9 @@ in your own projects.
 
 \FurtherReading
 \begin{compactitem}
+\item \url{https://lambdacube3d.wordpress.com/}
 \item \url{https://github.com/csabahruska/lc-dsl}
 \item \url{http://www.haskell.org/haskellwiki/LambdaCubeEngine}
-\item \url{http://hackage.haskell.org/package/stunts}
 \item \url{http://www.youtube.com/watch?v=kDu5aCGc8l4}
 \end{compactitem}
 \end{hcarentry}
