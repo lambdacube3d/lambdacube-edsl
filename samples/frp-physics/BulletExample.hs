@@ -52,9 +52,6 @@ data CameraInfo = CameraInfo
     , upwardDirection :: Vec3
     }
 
-hitHack :: IORef (Maybe Vec3)
-hitHack = unsafePerformIO $ newIORef Nothing
-
 cameraView (CameraInfo cameraPos targetPos upwardDir) = lookat cameraPos targetPos upwardDir
  
 cameraInfo = CameraInfo (Vec3 0 20 30) (Vec3 0 0 0) (Vec3 0 1 0)
@@ -410,10 +407,12 @@ main = do
             return brick
     
         brickTrans <- bodyTransformation brick
+        
+        (hitPosition, hitPositionSink) <- execute $ external Nothing
     
-        dummy <- pickConstraint dynamicsWorld windowSize (pure cameraInfo) mousePress mousePosition
+        dummy <- pickConstraint dynamicsWorld windowSize (pure cameraInfo) mousePress mousePosition hitPositionSink
 
-        return $ updateScene renderer updateTransforms stepPhysics ragdollBodies <$> windowSize <*> (const <$> brickTrans <*> dummy)
+        return $ updateScene renderer updateTransforms stepPhysics ragdollBodies <$> windowSize <*> hitPosition <*> (const <$> brickTrans <*> dummy)
   
     fix $ \loop -> do
         join smp
@@ -425,12 +424,11 @@ main = do
 
     closeWindow
 
-updateScene :: Renderer -> ([(String, Proj4)] -> IO ()) -> (Float -> IO Int) -> [(String, BtRigidBody)] -> Vec2 -> Proj4 -> IO ()
-updateScene renderer updateTransforms stepPhysics ragdollBodies (Vec2 w h) brickTrans = do
+updateScene :: Renderer -> ([(String, Proj4)] -> IO ()) -> (Float -> IO Int) -> [(String, BtRigidBody)] -> Vec2 -> Maybe Vec3 -> Proj4 -> IO ()
+updateScene renderer updateTransforms stepPhysics ragdollBodies (Vec2 w h) hitPosition brickTrans = do
     ragdollTransforms <- forM ragdollBodies $ \(name, body) -> do
         proj <- rigidBodyProj4 body
         return (name, proj)
-    hitPos <- readIORef hitHack
     
     let aspect = w / h
         cameraProjection = perspective 0.1 farPlane fieldOfView aspect
@@ -440,7 +438,7 @@ updateScene renderer updateTransforms stepPhysics ragdollBodies (Vec2 w h) brick
 
     updateTransforms $
         ("Brick", brickTrans) :
-        ("Hit", translation (fromMaybe (Vec3 0 10000 0) hitPos)) :
+        ("Hit", translation (fromMaybe (Vec3 0 10000 0) hitPosition)) :
         ragdollTransforms
     
     dt <- getTime
@@ -452,7 +450,7 @@ updateScene renderer updateTransforms stepPhysics ragdollBodies (Vec2 w h) brick
 
 -- Picking
 
-pickConstraint dynamicsWorld windowSize cameraInfo mouseButton mousePos = do
+pickConstraint dynamicsWorld windowSize cameraInfo mouseButton mousePos hitPositionSink = do
     press <- edge mouseButton
     release <- edge (not <$> mouseButton)
     pick <- generator $ makePick <$> press <*> windowSize <*> cameraInfo <*> mousePos
@@ -492,7 +490,7 @@ pickConstraint dynamicsWorld windowSize cameraInfo mouseButton mousePos = do
     makePick press windowSizeCur cameraInfoCur mousePosCur = case press of
         False -> return Nothing
         True -> do
-            pickInfo <- execute $ pickBody dynamicsWorld windowSizeCur cameraInfoCur mousePosCur
+            pickInfo <- execute $ pickBody dynamicsWorld windowSizeCur cameraInfoCur mousePosCur hitPositionSink
             case pickInfo of
                 Nothing -> return Nothing
                 Just (body, hitPosition, distance) -> do
@@ -500,21 +498,22 @@ pickConstraint dynamicsWorld windowSize cameraInfo mouseButton mousePos = do
                     return $ Just (constraint, body)
     
 -- body picked, ray hit position, and distance from the camera at the time of picking (to be kept while moving)
---pickBody :: BtCollisionWorldClass bc => bc -> Vec2 -> CameraInfo -> Vec2 -> IO (Maybe (BtRigidBody, Vec3, Float))
-pickBody dynamicsWorld windowSize cameraInfo mousePos = do
+--pickBody :: BtCollisionWorldClass bc => bc -> Vec2 -> CameraInfo -> Vec2-> (Maybe Vec3 -> IO ()) -> IO (Maybe (BtRigidBody, Vec3, Float))
+pickBody dynamicsWorld windowSize cameraInfo mousePos hitPositionSink = do
     let rayFrom = cameraPosition cameraInfo
         rayTo = rayTarget windowSize cameraInfo mousePos
     rayResult <- btCollisionWorld_ClosestRayResultCallback rayFrom rayTo
     btCollisionWorld_rayTest dynamicsWorld rayFrom rayTo rayResult
     hasHit <- btCollisionWorld_RayResultCallback_hasHit rayResult
-    writeIORef hitHack Nothing
     
     case hasHit of
-        False -> return Nothing
+        False -> do
+            hitPositionSink Nothing
+            return Nothing
         True -> do
             collisionObj <- btCollisionWorld_RayResultCallback_m_collisionObject_get rayResult
             isNotPickable <- btCollisionObject_isStaticOrKinematicObject collisionObj
-            writeIORef hitHack =<< Just <$> btCollisionWorld_ClosestRayResultCallback_m_hitPointWorld_get rayResult
+            hitPositionSink =<< Just <$> btCollisionWorld_ClosestRayResultCallback_m_hitPointWorld_get rayResult
             internalType <- btCollisionObject_getInternalType collisionObj
             case isNotPickable || internalType /= e_btCollisionObject_CollisionObjectTypes_CO_RIGID_BODY of
                 True -> return Nothing
