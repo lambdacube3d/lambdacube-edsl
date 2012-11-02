@@ -343,7 +343,7 @@ main = do
             involves b (b1,b2,_) = b == unsafeCoerce b1 || b == unsafeCoerce b2
 
     let pipeline :: Exp Obj (Image N1 V4F)
-        pipeline = PrjFrameBuffer "outFB" tix0 simpleShading
+        pipeline = PrjFrameBuffer "outFB" tix0 translucentShading --simpleShading
     
     (duration, renderer) <- measureDuration $ compileRenderer (ScreenOut pipeline)
     putStrLn $ "Renderer compiled - " ++ show duration
@@ -354,22 +354,28 @@ main = do
     lightPositionSetter (Vec3 10 10 10)
     
     let createObject name mesh colour = do
+            let (slotName, uniformName) = case colour of 
+                    Left _ -> ("solidGeometry", "solidColour")
+                    Right _ -> ("translucentGeometry", "alphaColour")
+
             compiledMesh <- compileMesh mesh
-            object <- addMesh renderer "geometrySlot" compiledMesh ["colour", "modelMatrix"]
+            object <- addMesh renderer slotName compiledMesh [uniformName, "modelMatrix"]
             let objectSetters = objectUniformSetter object
                 modelMatrixSetter = uniformM44F "modelMatrix" objectSetters . fromMat4
             
             modelMatrixSetter idmtx
-            uniformV3F "colour" objectSetters (fromVec3 colour)
+            case colour of
+                Left rgb -> uniformV3F uniformName objectSetters (fromVec3 rgb)
+                Right rgba -> uniformV4F uniformName objectSetters (fromVec4 rgba)
             return (name, modelMatrixSetter)
 
-    ghostSetter <- createObject "Ghost" (sphere 5 10) (Vec3 0.3 0.9 0.9)
-    floorSetter <- createObject "Floor" (box floorSize) (Vec3 0.7 0.7 0.7)
-    brickSetter <- createObject "Brick" (box brickSize) (Vec3 1.0 0.0 0.0)
-    hitSetter <- createObject "Hit" (sphere 0.5 5) (Vec3 1.0 1.0 1.0)
+    ghostSetter <- createObject "Ghost" (sphere 5 10) (Right (Vec4 0.3 0.9 0.9 0.7))
+    floorSetter <- createObject "Floor" (box floorSize) (Left (Vec3 0.7 0.7 0.7))
+    brickSetter <- createObject "Brick" (box brickSize) (Left (Vec3 1.0 0.0 0.0))
+    hitSetter <- createObject "Hit" (sphere 0.5 5) (Right (Vec4 1.0 1.0 1.0 0.7))
 
     ragdollSetters <- forM ragdollPartConfig $ \(name, (radius, height, trans)) -> do
-        ragdollSetter@(_, setTrans) <- createObject name (capsule radius height 10) (Vec3 1.0 0.9 0.6)
+        ragdollSetter@(_, setTrans) <- createObject name (capsule radius height 10) (Left (Vec3 1.0 0.9 0.6))
         setTrans (fromProjective (transformToProj4 trans))
         return ragdollSetter
 
@@ -561,12 +567,12 @@ simpleShading = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) cle
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
     clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 (V4 0 0 0 1) :. ZT)
-    prims = LC.Transform vert (Fetch "geometrySlot" Triangle (IV3F "position", IV3F "normal"))
+    prims = LC.Transform vert (Fetch "solidGeometry" Triangle (IV3F "position", IV3F "normal"))
     
     cameraMatrix = Uni (IM44F "cameraMatrix")
     modelMatrix = Uni (IM44F "modelMatrix")
     lightPosition = Uni (IV3F "lightPosition")
-    colour = Uni (IV3F "colour")
+    colour = Uni (IV3F "solidColour")
 
     vert :: Exp V (V3F, V3F) -> VertexOut (V3F, V3F)
     vert attr = VertexOut viewPos (floatV 1) (Smooth (v4v3 worldPos) :. Smooth worldNormal :. ZT)
@@ -579,7 +585,34 @@ simpleShading = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) cle
     frag :: Exp F (V3F, V3F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag attr = FragmentOutRastDepth (v3v4 (colour @* light) :. ZT)
       where
-        --light = floatF 1
+        light = max' (floatF 0) (dot' worldNormal (normalize' (lightPosition @- worldPos)))
+        (worldPos, worldNormal) = untup2 attr
+
+translucentShading :: Exp Obj (FrameBuffer N1 (Float, V4F))
+translucentShading = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) simpleShading
+  where
+    accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp blending (one' :: V4B) :. ZT)
+    blending = Blend (FuncAdd, FuncAdd) ((SrcAlpha, OneMinusSrcAlpha), (SrcAlpha, OneMinusSrcAlpha)) zero'
+    prims = LC.Transform vert (Fetch "translucentGeometry" Triangle (IV3F "position", IV3F "normal"))
+    
+    cameraMatrix = Uni (IM44F "cameraMatrix")
+    modelMatrix = Uni (IM44F "modelMatrix")
+    lightPosition = Uni (IV3F "lightPosition")
+    colour = Uni (IV4F "alphaColour")
+
+    vert :: Exp V (V3F, V3F) -> VertexOut (V3F, V3F)
+    vert attr = VertexOut viewPos (floatV 1) (Smooth (v4v3 worldPos) :. Smooth worldNormal :. ZT)
+      where
+        worldPos = modelMatrix @*. v3v4 localPos
+        viewPos = cameraMatrix @*. worldPos
+        worldNormal = normalize' (v4v3 (modelMatrix @*. n3v4 localNormal))
+        (localPos, localNormal) = untup2 attr
+        
+    frag :: Exp F (V3F, V3F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
+    frag attr = FragmentOutRastDepth (finalColour :. ZT)
+      where
+        V4 r g b a = unpack' colour
+        finalColour = pack' (V4 (r @* light) (g @* light) (b @* light) a)
         light = max' (floatF 0) (dot' worldNormal (normalize' (lightPosition @- worldPos)))
         (worldPos, worldNormal) = untup2 attr
 

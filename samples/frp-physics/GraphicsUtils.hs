@@ -175,6 +175,11 @@ fromVec4 (Vec4 x y z w) = V4 x y z w
 fromMat4 :: Mat4 -> M44F
 fromMat4 (Mat4 a b c d) = V4 (fromVec4 a) (fromVec4 b) (fromVec4 c) (fromVec4 d)
 
+snoc :: Exp s V3F -> Exp s Float -> Exp s V4F
+snoc v w = pack' (V4 x y z w)
+  where 
+    V3 x y z = unpack' v
+
 v3v4 :: Exp s V3F -> Exp s V4F
 v3v4 v = pack' (V4 x y z (Const 1))
   where 
