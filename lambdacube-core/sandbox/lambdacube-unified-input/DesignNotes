@@ -1,0 +1,7 @@
+to support:
+    image arrays on CPU
+    texture arrays/sampler array on CPU/GPU
+    framebuffer arrays on CPU
+
+utility:
+    slice arrays into chunks

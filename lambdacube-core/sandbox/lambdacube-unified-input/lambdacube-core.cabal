@@ -1,0 +1,80 @@
+Name:           lambdacube-core
+Version:        0.6.0
+Cabal-Version:  >= 1.6 && < 2
+Build-Type:     Simple
+License:        BSD3
+License-File:   LICENSE
+Author:         Csaba Hruska, Gergely Patai
+Maintainer:     csaba (dot) hruska (at) gmail (dot) com
+Stability:      experimental
+Homepage:       http://www.haskell.org/haskellwiki/LambdaCubeEngine
+Bug-Reports:    http://code.google.com/p/lambdacube/issues
+Category:       Graphics
+Tested-With:    GHC == 7.4.2
+Synopsis:       3D rendering engine written entirely in Haskell
+Description:
+    LambdaCube is a 3D rendering engine written entirely in Haskell.
+    It targets newer graphics hardware.The main goal of this project
+    is to provide a modern and feature rich graphical backend for
+    various Haskell projects (e.g. FRP libraries).
+
+Library
+  Build-Depends: 
+        base                == 4.5.*,
+        binary,
+        bytestring,
+        containers,
+        mtl,
+        vector,
+
+        bytestring-trie,
+        type-level-numbers,
+
+        OpenGLRaw,
+        bitmap
+
+  Exposed-modules:
+        LC_T_APIType
+        LC_T_DSLType
+        LC_T_HOAS
+        LC_T_PrimFun
+        LC_T_Sampler
+
+        LC_U_APIType
+        LC_G_APIType
+  GHC-options:
+--        -Werror
+        -Wall
+        -fno-warn-missing-signatures
+        -fno-warn-name-shadowing
+        -fno-warn-orphans
+        -fno-warn-unused-binds
+        -fno-warn-unused-do-bind
+        -fspec-constr-count=10
+        -funbox-strict-fields
+        -O2
+-- for profiling
+--        -auto-all
+--        -caf-all
+
+  Extensions:
+        BangPatterns
+        ConstraintKinds
+        DeriveDataTypeable
+        EmptyDataDecls
+        FlexibleContexts
+        FlexibleInstances
+        FunctionalDependencies
+        GADTs
+        ImpredicativeTypes
+        KindSignatures
+        MultiParamTypeClasses
+        OverloadedStrings
+        ParallelListComp
+        Rank2Types
+        ScopedTypeVariables
+        StandaloneDeriving
+        TupleSections
+        TypeFamilies
+        TypeOperators
+        TypeSynonymInstances

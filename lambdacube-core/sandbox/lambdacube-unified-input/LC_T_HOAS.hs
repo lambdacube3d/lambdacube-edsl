@@ -3,6 +3,7 @@ module LC_T_HOAS where
 import Data.ByteString.Char8
 import Data.Typeable
 import Data.Int
+import Data.Word
 
 import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
@@ -13,79 +14,166 @@ import LC_T_APIType
 import LC_T_DSLType
 import LC_T_PrimFun
 
+-- all LC supported types including all types of every computation frequency (Obj,V,G,F)
+class LCType a
+
+-- types supported on V,G,F
+class GPUType a
+
+{-
+User Input New Feature:
+    - support tuples
+    - support arrays
+-}
+data InputType a where
+    Bool    :: InputType Bool
+    V2B     :: InputType V2B
+    V3B     :: InputType V3B
+    V4B     :: InputType V4B
+    Word    :: InputType Word32
+    V2U     :: InputType V2U
+    V3U     :: InputType V3U
+    V4U     :: InputType V4U
+    Int     :: InputType Int32
+    V2I     :: InputType V2I
+    V3I     :: InputType V3I
+    V4I     :: InputType V4I
+    Float   :: InputType Float
+    V2F     :: InputType V2F
+    V3F     :: InputType V3F
+    V4F     :: InputType V4F
+    M22F    :: InputType M22F
+    M23F    :: InputType M23F
+    M24F    :: InputType M24F
+    M32F    :: InputType M32F
+    M33F    :: InputType M33F
+    M34F    :: InputType M34F
+    M42F    :: InputType M42F
+    M43F    :: InputType M43F
+    M44F    :: InputType M44F
+
+    Tuple   :: FlatTuple Typeable InputType t
+            -> InputType t -- TODO: accept only at least two long flat tuples
+
+    Array   :: ordering
+            -> InputType t
+            -> InputType (Array ordering t)
+
+    deriving Typeable
+
+
+--TODO: check whether we should distinct size limited arrays and arbitrary sized arrays.
+--          former is due to GLSL and GPU restrictions, latter are stored in CPU RAM
+
 -- Common Exp, describes shader functions
-data Exp stage t where
+data Exp freq t where
     -- Needed for conversion to de Bruijn form
-    Tag     :: GPU t
+    Tag     :: LCType t
             => Int
             -> TypeRep
-            -> Exp stage t
+            -> Exp freq t
                  -- environment size at defining occurrence
 
-    -- let support
-    Let     :: (GPU a, GPU b)
-            => Exp stage a
-            -> (Exp stage a -> Exp stage b)
-            -> Exp stage b
-
     -- constant value
-    Const   :: (GPU t,IsScalar t)
+    -- TODO: support constants for all LCTypes
+    Const   :: (LCType t,IsScalar t)
             => t
-            -> Exp stage t
+            -> Exp freq t
 
-    -- builtin variable
-    PrimVar :: GPU t
-            => Input t
-            -> Exp stage t
+    -- User input constant variable
+    Var     :: LCType t
+            => ByteString
+            -> InputType t
+            -> Exp freq t
 
-    -- uniform value
-    Uni     :: GPU t
-            => Input t
-            -> Exp stage t
+    -- Lift Obj expressions to higher frequencies
+    Use     :: Exp Obj t
+            -> Exp freq t
 
     -- conditional expression
-    Cond    :: GPU t
-            => Exp stage Bool
-            -> Exp stage t
-            -> Exp stage t
-            -> Exp stage t
+    Cond    :: LCType t
+            => Exp freq Bool
+            -> Exp freq t
+            -> Exp freq t
+            -> Exp freq t
 
-    PrimApp :: (GPU a, GPU r)
-            => PrimFun stage (a -> r)
-            -> Exp stage a
-            -> Exp stage r
+    PrimApp :: (LCType a, LCType r)
+            => PrimFun freq (a -> r)
+            -> Exp freq a
+            -> Exp freq r
 
     -- tuple support
-    Tup     :: (GPU t, IsTuple t)
-            => Tuple (Exp stage) (TupleRepr t)
-            -> Exp stage t
+    -- TODO: replace Tuple and TupleIdx with FlatTuple and Nat
+    Tup     :: (LCType t, IsTuple t)
+            => Tuple (Exp freq) (TupleRepr t)
+            -> Exp freq t
 
-    Prj     :: (GPU e, GPU t, IsTuple t)
+    Prj     :: (LCType e, LCType t, IsTuple t)
             => TupleIdx (TupleRepr t) e
-            -> Exp stage t
-            -> Exp stage e
+            -> Exp freq t
+            -> Exp freq e
 
     -- sampler support
-    Sampler :: GPU (Sampler dim arr t ar)
+    Sampler :: LCType (Sampler dim arr t ar)
             => Filter
             -> EdgeMode
             -> Texture (Exp Obj) dim arr t ar
-            -> Exp stage (Sampler dim arr t ar)
+            -> Exp freq (Sampler dim arr t ar)
 
     -- loop support
-    Loop    :: (GPU s, GPU a)
-            => (Exp stage s -> Exp stage s)     -- state transform function
-            -> (Exp stage s -> Exp stage Bool)  -- loop condition function
-            -> (Exp stage s -> Exp stage a)     -- state to result transform function
-            -> Exp stage s                      -- initial state
-            -> Exp stage a                      -- result
-    -- GP
-    -- hint: GP stands for Graphics Pipeline
-    Fetch           :: (InputTuple a, SGPU (InputTupleRepr a), IsPrimitive prim)
+    Loop    :: (LCType s, LCType a)
+            => (Exp freq s -> Exp freq s)     -- state transform function
+            -> (Exp freq s -> Exp freq Bool)  -- loop condition function
+            -> (Exp freq s -> Exp freq a)     -- state to result transform function
+            -> Exp freq s                      -- initial state
+            -> Exp freq a                      -- result
+
+    -- Array operations
+    -- Construction
+    ArrayReplicate  :: Exp Obj Int32
+                    -> Exp Obj a
+                    -> Exp Obj (Array order a)
+
+    ArrayGenerate   :: Exp Obj Int32
+                    -> (Exp Obj Int32 -> Exp Obj a)
+                    -> Exp Obj (Array order a)
+
+    ArrayIterateN   :: Exp Obj Int32
+                    -> (Exp Obj a -> Exp Obj a)
+                    -> Exp Obj a
+                    -> Exp Obj (Array order a)
+    -- Elementwise operations
+    ArrayIndex      :: Exp Obj Int32
+                    -> Exp Obj (Array order a)
+                    -> Exp Obj a
+
+    ArrayMap        :: (Exp freq a -> Exp freq b)
+                    -> Exp freq (Array order a)
+                    -> Exp freq (Array order b)
+
+    ArrayZipWith    :: (Exp freq a -> Exp freq b -> Exp freq c)
+                    -> Exp freq (Array order a)
+                    -> Exp freq (Array order b)
+                    -> Exp freq (Array order c)
+
+    ArrayAccumulate :: (Exp freq a -> Exp freq b -> Exp freq a)
+                    -> Exp freq a
+                    -> Exp freq (Array order b)
+                    -> Exp freq a
+
+    -- Graphics pipeline extensibility
+    -- dynamic extension support
+    AccumulateSet   :: GPU a
                     => ByteString
-                    -> prim
-                    -> a
-                    -> Exp Obj (VertexStream prim (InputTupleRepr a))
+                    -> Exp Obj (FrameBuffer layerCount a)
+                    -> Exp Obj (FrameBuffer layerCount a)
+
+    -- GPU pipeline model
+    Fetch           :: (SGPU a, IsPrimitive prim)
+                    => prim
+                    -> Exp Obj (Array order a)
+                    -> Maybe (Exp Obj (Array order Int32))
+                    -> Exp Obj (VertexStream prim a)
 
     Transform       :: (GPU a, GPU b)
                     => (Exp V a -> VertexOut b)                       -- vertex shader
@@ -97,7 +185,7 @@ data Exp stage t where
                     -> Exp Obj (PrimitiveStream primOut layerCount G b)
 
     Rasterize       :: RasterContext prim
-                    -> Exp Obj (PrimitiveStream prim layerCount stage a)
+                    -> Exp Obj (PrimitiveStream prim layerCount freq a)
                     -> Exp Obj (FragmentStream layerCount a)
 
     FrameBuffer     :: FrameBuffer layerCount t
@@ -111,6 +199,11 @@ data Exp stage t where
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
 
+    -- Transform feedback support
+    ArrayFromStream :: Exp Obj (PrimitiveStream prim layerCount freq a)
+                    -> Exp Obj (Array order a)
+
+    -- FrameBuffer and Image helpers
     PrjFrameBuffer  :: ByteString                       -- internal image output (can be allocated on request)
                     -> TupleIdx (EltRepr b) t
                     -> Exp Obj (FrameBuffer layerCount b)
@@ -122,15 +215,10 @@ data Exp stage t where
                     -> Exp Obj (Image layerCount t)
                     -> Exp Obj (Image N1 t)
 
-    -- dynamic extension support
-    AccumulateSet   :: GPU a
-                    => ByteString
-                    -> Exp Obj (FrameBuffer layerCount a)
-                    -> Exp Obj (FrameBuffer layerCount a)
 
 
-type InterpolatedFlatExp stage a = FlatTuple GPU (Interpolated (Exp stage)) a
-type FlatExp stage a = FlatTuple GPU (Exp stage) a
+type InterpolatedFlatExp freq a = FlatTuple GPU (Interpolated (Exp freq)) a
+type FlatExp freq a = FlatTuple GPU (Exp freq) a
 
 -- Vertex
 {-

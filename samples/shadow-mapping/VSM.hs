@@ -44,9 +44,11 @@ blur coefficients img = filter1D dirH (PrjFrameBuffer "" tix0 (filter1D dirV img
     dirV v = Const (V2 0 (v / shadowMapSize)) :: Exp F V2F
     
     filter1D :: (Float -> Exp F V2F) -> Exp Obj (Image N1 V2F) -> Exp Obj (FrameBuffer N1 V2F)
-    filter1D dir img = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
+    filter1D dir img = Accumulate accCtx PassAll frag
+                                 (Rasterize triangleCtx prims) clearBuf
       where
-        accCtx = AccumulationContext Nothing (ColorOp NoBlending (one' :: V2B) :. ZT)
+        accCtx = AccumulationContext Nothing
+                                    (ColorOp NoBlending (one' :: V2B) :. ZT)
         clearBuf = FrameBuffer (ColorImage n1 (V2 0 0) :. ZT)
         prims = Transform vert (Fetch "postSlot" Triangle (IV2F "position"))
 
@@ -60,9 +62,11 @@ blur coefficients img = filter1D dirH (PrjFrameBuffer "" tix0 (filter1D dirV img
         frag :: Exp F V2F -> FragmentOut (Color V2F :+: ZZ)
         frag uv = FragmentOut (sample :. ZT)
           where
-            sample = foldr1 (@+) [texture' smp (uv @+ dir ofs) @* floatF coeff | (ofs, coeff) <- coefficients]
+            sample = foldr1 (@+) [ texture' smp (uv @+ dir ofs) @* floatF coeff
+                                 | (ofs, coeff) <- coefficients]
             smp = Sampler LinearFilter Clamp tex
-            tex = Texture (Texture2D (Float RG) n1) (V2 shadowMapSize shadowMapSize) NoMip [img]
+            tex = Texture (Texture2D (Float RG) n1)
+                          (V2 shadowMapSize shadowMapSize) NoMip [img]
     
 
 moments :: Exp Obj (FrameBuffer N1 (Float, V2F))
@@ -111,8 +115,10 @@ depth = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
 vsm :: Exp Obj (FrameBuffer N1 (Float, V4F))
 vsm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
-    accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
-    clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 (V4 0.1 0.2 0.6 1) :. ZT)
+    accCtx = AccumulationContext Nothing
+                (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
+    clearBuf = FrameBuffer (  DepthImage n1 1000
+                           :. ColorImage n1 (V4 0.1 0.2 0.6 1) :. ZT)
     prims = Transform vert (Fetch "geometrySlot" Triangle (IV3F "position", IV3F "normal"))
 
     cameraMatrix = Uni (IM44F "cameraMatrix")
