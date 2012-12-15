@@ -147,6 +147,10 @@ data Exp freq t where
                     -> Exp Obj (Array order a)
                     -> Exp Obj a
 
+    ArrayFilter     :: (Exp freq a -> Exp freq Bool)
+                    -> Exp freq (Array order a)
+                    -> Exp freq (Array order a)
+
     ArrayMap        :: (Exp freq a -> Exp freq b)
                     -> Exp freq (Array order a)
                     -> Exp freq (Array order b)
