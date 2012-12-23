@@ -2,3 +2,7 @@ construction of images:
     - dimensions are of type V2U@C, i.e. they need to be constant during a pipeline execution, but can be otherwise configured
     - framebuffer constraint: all images must have the same dimensions (effectively the same node after hashconsing)
     - image constructor separate from semantics (only added when composing them into framebuffers), and containing contents instead of just a fill colour
+
+merging pipelines:
+    - motivation: allow separation of surface shaders and lighting systems
+    - merge :: Context -> Exp p (a -> b -> c) -> (Context -> Pipeline a) -> (Context -> Pipeline b) -> Pipeline C
