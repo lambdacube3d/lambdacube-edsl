@@ -24,6 +24,7 @@ class GPUType a
 User Input New Feature:
     - support tuples
     - support arrays
+    - support textures/samplers
 -}
 data InputType a where
     Bool    :: InputType Bool
@@ -58,6 +59,9 @@ data InputType a where
     Array   :: ordering
             -> InputType t
             -> InputType (Array ordering t)
+
+    Texture :: TextureType dim mip arr layerCount t ar
+            -> InputType (Texture (Exp Obj) dim arr t ar)
 
     deriving Typeable
 

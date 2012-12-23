@@ -2,6 +2,8 @@ to support:
     image arrays on CPU
     texture arrays/sampler array on CPU/GPU
     framebuffer arrays on CPU
+    create sampler/texture from image (runtime)
+    distinct arrays on CPU from GPU (buffer objects)
 
 utility:
     slice arrays into chunks

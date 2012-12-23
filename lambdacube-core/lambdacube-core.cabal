@@ -31,6 +31,7 @@ Library
         prettyclass,
         type-level-numbers,
         OpenGLRaw,
+        language-glsl,
         
         bitmap
 
@@ -41,8 +42,6 @@ Library
         LC_B_GLCompile
         LC_B_GLData
         LC_B_GLSLCodeGen
-        LC_B_GLSLPretty
-        LC_B_GLSLSyntax
         LC_B_GLType
         LC_B_GLUtil
         LC_B_Traversals

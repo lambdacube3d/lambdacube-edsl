@@ -28,10 +28,10 @@ import LC_U_APIType
 import LC_U_PrimFun
 import LC_U_DeBruijn hiding (ExpC(..))
 
-import LC_B_GLSLSyntax hiding (Const,InterpolationQualifier(..),TypeSpecifierNonArray(..))
-import LC_B_GLSLSyntax (TypeSpecifierNonArray)
-import qualified LC_B_GLSLSyntax as GLSL
-import LC_B_GLSLPretty
+import Language.GLSL.Syntax hiding (Const,InterpolationQualifier(..),TypeSpecifierNonArray(..))
+import Language.GLSL.Syntax (TypeSpecifierNonArray)
+import qualified Language.GLSL.Syntax as GLSL
+import Language.GLSL.Pretty
 import LC_B_Traversals
 
 codeGenPrim :: PrimFun -> [InputType] -> [InputType] -> [Expr] -> [Expr]
