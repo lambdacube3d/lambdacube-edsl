@@ -395,30 +395,6 @@ data TextureType dim mip arr layerCount t ar where -- hint: arr - single or arra
     TextureBuffer   :: TextureDataType (Regular t) ar
                     -> TextureType DIM1 NoMip SingleTex N1 (Buffer t) ar
 
-
--- defines a texture
-data Texture (gp :: * -> *) dim arr t ar where
-    TextureSlot     :: (IsValidTextureSlot t)
-                    => ByteString -- texture slot name
-                    -> TextureType dim mip arr layerCount t ar
-                    -> Texture gp dim arr t ar
-    -- TODO:
-    --  add texture internal format specification
-    Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip)
-                    => TextureType dim canMip arr layerCount t ar
-                    -> TexSizeRepr dim
-                    -> MipMap mip
---                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
-                    -> [gp (Image layerCount (TexDataRepr ar t))]
-                    -> Texture gp dim arr t ar
-{-
-    -- TODO:
-    --  swizzling (arity conversion)
-    --  integral -> floating casting (floating -> integral casting if possible)
-    ConvertTexture  :: Texture gp dim arr t ar
-                    -> Texture gp dim arr t' ar'
--}
-
 -- MipMap validation
 class IsMipValid canMip mip
 instance IsMipValid Mip Mip
@@ -452,6 +428,10 @@ type instance TexRepr DIM3 NoMip   gp layerCount t = [gp (Image layerCount t)]
 type instance TexRepr DIM3 AutoMip gp layerCount t = [gp (Image layerCount t)]
 type instance TexRepr DIM3 Mip     gp layerCount t = [[gp (Image layerCount t)]] -- 3D layers contain mipmap
 -}
+
+data TextureSetting dim arr layerCount t ar
+data SamplerSetting
+data Texture dim arr t ar
 
 -- shader freq tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen

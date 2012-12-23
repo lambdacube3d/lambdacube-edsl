@@ -6,6 +6,7 @@ import Data.Word
 import LC_G_Type
 import LC_T_Sampler
 import LC_T_APIType
+import LC_T_DSLType
 
 data PrimFun freq sig where
 
@@ -80,28 +81,28 @@ data PrimFun freq sig where
     -- Common Functions
     PrimIsNan               :: (IsVecScalar d a Float, IsVecScalar d b Bool)        => PrimFun freq (a -> b)
     PrimIsInf               :: (IsVecScalar d a Float, IsVecScalar d b Bool)        => PrimFun freq (a -> b)
-    PrimAbs                 :: (IsSigned t, IsVecScalar d a t)                => PrimFun freq (a -> a)
-    PrimSign                :: (IsSigned t, IsVecScalar d a t)                => PrimFun freq (a -> a)
-    PrimFloor               :: IsVecScalar d a Float                          => PrimFun freq (a -> a)
-    PrimTrunc               :: IsVecScalar d a Float                          => PrimFun freq (a -> a)
-    PrimRound               :: IsVecScalar d a Float                          => PrimFun freq (a -> a)
-    PrimRoundEven           :: IsVecScalar d a Float                          => PrimFun freq (a -> a)
-    PrimCeil                :: IsVecScalar d a Float                          => PrimFun freq (a -> a)
-    PrimFract               :: IsVecScalar d a Float                          => PrimFun freq (a -> a)
-    PrimModF                :: IsVecScalar d a Float                          => PrimFun freq (a               -> (a,a))
-    PrimMin                 :: (IsNum t, IsVecScalar d a t)                   => PrimFun freq ((a,a)           -> a)
-    PrimMinS                :: (IsNum t, IsVecScalar d a t)                   => PrimFun freq ((a,t)           -> a)
-    PrimMax                 :: (IsNum t, IsVecScalar d a t)                   => PrimFun freq ((a,a)           -> a)
-    PrimMaxS                :: (IsNum t, IsVecScalar d a t)                   => PrimFun freq ((a,t)           -> a)
-    PrimClamp               :: (IsNum t, IsVecScalar d a t)                   => PrimFun freq ((a,a,a)         -> a)
-    PrimClampS              :: (IsNum t, IsVecScalar d a t)                   => PrimFun freq ((a,t,t)         -> a)
-    PrimMix                 :: IsVecScalar d a Float                          => PrimFun freq ((a,a,a)         -> a)
-    PrimMixS                :: IsVecScalar d a Float                          => PrimFun freq ((a,a,Float)     -> a)
+    PrimAbs                 :: (IsSigned t, IsVecScalar d a t)                      => PrimFun freq (a -> a)
+    PrimSign                :: (IsSigned t, IsVecScalar d a t)                      => PrimFun freq (a -> a)
+    PrimFloor               :: IsVecScalar d a Float                                => PrimFun freq (a -> a)
+    PrimTrunc               :: IsVecScalar d a Float                                => PrimFun freq (a -> a)
+    PrimRound               :: IsVecScalar d a Float                                => PrimFun freq (a -> a)
+    PrimRoundEven           :: IsVecScalar d a Float                                => PrimFun freq (a -> a)
+    PrimCeil                :: IsVecScalar d a Float                                => PrimFun freq (a -> a)
+    PrimFract               :: IsVecScalar d a Float                                => PrimFun freq (a -> a)
+    PrimModF                :: IsVecScalar d a Float                                => PrimFun freq (a               -> (a,a))
+    PrimMin                 :: (IsNum t, IsVecScalar d a t)                         => PrimFun freq ((a,a)           -> a)
+    PrimMinS                :: (IsNum t, IsVecScalar d a t)                         => PrimFun freq ((a,t)           -> a)
+    PrimMax                 :: (IsNum t, IsVecScalar d a t)                         => PrimFun freq ((a,a)           -> a)
+    PrimMaxS                :: (IsNum t, IsVecScalar d a t)                         => PrimFun freq ((a,t)           -> a)
+    PrimClamp               :: (IsNum t, IsVecScalar d a t)                         => PrimFun freq ((a,a,a)         -> a)
+    PrimClampS              :: (IsNum t, IsVecScalar d a t)                         => PrimFun freq ((a,t,t)         -> a)
+    PrimMix                 :: IsVecScalar d a Float                                => PrimFun freq ((a,a,a)         -> a)
+    PrimMixS                :: IsVecScalar d a Float                                => PrimFun freq ((a,a,Float)     -> a)
     PrimMixB                :: (IsVecScalar d a Float, IsVecScalar d b Bool)        => PrimFun freq ((a,a,b)         -> a)
-    PrimStep                :: IsVecScalar d a Float                          => PrimFun freq ((a,a)           -> a)
-    PrimStepS               :: IsVecScalar d a Float                          => PrimFun freq ((Float,a)       -> a)
-    PrimSmoothStep          :: IsVecScalar d a Float                          => PrimFun freq ((a,a,a)         -> a)
-    PrimSmoothStepS         :: IsVecScalar d a Float                          => PrimFun freq ((Float,Float,a) -> a)
+    PrimStep                :: IsVecScalar d a Float                                => PrimFun freq ((a,a)           -> a)
+    PrimStepS               :: IsVecScalar d a Float                                => PrimFun freq ((Float,a)       -> a)
+    PrimSmoothStep          :: IsVecScalar d a Float                                => PrimFun freq ((a,a,a)         -> a)
+    PrimSmoothStepS         :: IsVecScalar d a Float                                => PrimFun freq ((Float,Float,a) -> a)
 
     -- Integer/Float Conversion Functions
     PrimFloatBitsToInt      :: (IsVecScalar d fv Float, IsVecScalar d iv Int32)     => PrimFun freq (fv -> iv)
@@ -134,9 +135,9 @@ data PrimFun freq sig where
     PrimGreaterThan         :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun freq ((a,a) -> b)
     PrimGreaterThanEqual    :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun freq ((a,a) -> b)
     PrimEqualV              :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun freq ((a,a) -> b)
-    PrimEqual               :: IsMatVecScalar a t                             => PrimFun freq ((a,a) -> Bool)
+    PrimEqual               :: IsMatVecScalar a t                                   => PrimFun freq ((a,a) -> Bool)
     PrimNotEqualV           :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun freq ((a,a) -> b)
-    PrimNotEqual            :: IsMatVecScalar a t                             => PrimFun freq ((a,a) -> Bool)
+    PrimNotEqual            :: IsMatVecScalar a t                                   => PrimFun freq ((a,a) -> Bool)
 
     -- Fragment Processing Functions
     PrimDFdx                :: IsVecScalar d a Float                          => PrimFun F (a -> a)
@@ -150,25 +151,25 @@ data PrimFun freq sig where
     PrimNoise4              :: (IsVecScalar d a Float, IsVecScalar DIM4 b Float)    => PrimFun freq (a -> b)
 
     -- Texture Lookup Functions
-    PrimTextureSize             :: IsTextureSize sampler lod size                           => PrimFun freq ((sampler,lod)                       -> size)
-    PrimTexture                 :: IsTexture sampler coord bias                             => PrimFun freq ((sampler,coord)                     -> TexelRepr sampler)
-    PrimTextureB                :: IsTexture sampler coord bias                             => PrimFun F     ((sampler,coord,bias)                -> TexelRepr sampler)
-    PrimTextureProj             :: IsTextureProj sampler coord bias                         => PrimFun freq ((sampler,coord)                     -> TexelRepr sampler)
-    PrimTextureProjB            :: IsTextureProj sampler coord bias                         => PrimFun F     ((sampler,coord,bias)                -> TexelRepr sampler)
-    PrimTextureLod              :: IsTextureLod sampler coord lod                           => PrimFun freq ((sampler,coord,lod)                 -> TexelRepr sampler)
-    PrimTextureOffset           :: IsTextureOffset sampler coord offset bias                => PrimFun freq ((sampler,coord,offset)              -> TexelRepr sampler)
-    PrimTextureOffsetB          :: IsTextureOffset sampler coord offset bias                => PrimFun F     ((sampler,coord,offset,bias)         -> TexelRepr sampler)
-    PrimTexelFetch              :: IsTexelFetch sampler coord lod                           => PrimFun freq ((sampler,coord,lod)                 -> TexelRepr sampler)
-    PrimTexelFetchOffset        :: IsTexelFetchOffset sampler coord lod offset              => PrimFun freq ((sampler,coord,lod,offset)          -> TexelRepr sampler)
-    PrimTextureProjOffset       :: IsTextureProjOffset sampler coord offset bias            => PrimFun freq ((sampler,coord,offset)              -> TexelRepr sampler)
-    PrimTextureProjOffsetB      :: IsTextureProjOffset sampler coord offset bias            => PrimFun F     ((sampler,coord,offset,bias)         -> TexelRepr sampler)
-    PrimTextureLodOffset        :: IsTextureLodOffset sampler coord lod offset              => PrimFun freq ((sampler,coord,lod,offset)          -> TexelRepr sampler)
-    PrimTextureProjLod          :: IsTextureProjLod sampler coord lod                       => PrimFun freq ((sampler,coord,lod)                 -> TexelRepr sampler)
-    PrimTextureProjLodOffset    :: IsTextureProjLodOffset sampler coord lod offset          => PrimFun freq ((sampler,coord,lod,offset)          -> TexelRepr sampler)
-    PrimTextureGrad             :: IsTextureGrad sampler coord dx dy                        => PrimFun freq ((sampler,coord,dx,dy)               -> TexelRepr sampler)
-    PrimTextureGradOffset       :: IsTextureGradOffset sampler coord dx dy offset           => PrimFun freq ((sampler,coord,dx,dy,offset)        -> TexelRepr sampler)
-    PrimTextureProjGrad         :: IsTextureProjGrad sampler coord dx dy                    => PrimFun freq ((sampler,coord,dx,dy)               -> TexelRepr sampler)
-    PrimTextureProjGradOffset   :: IsTextureProjGradOffset sampler coord dx dy offset       => PrimFun freq ((sampler,coord,dx,dy,offset)        -> TexelRepr sampler)
+    PrimTextureSize             :: IsTextureSize sampler lod size                           => PrimFun freq ((sampler,lod)                  -> size)
+    PrimTexture                 :: IsTexture sampler coord bias                             => PrimFun freq ((sampler,coord)                -> TexelRepr sampler)
+    PrimTextureB                :: IsTexture sampler coord bias                             => PrimFun F    ((sampler,coord,bias)           -> TexelRepr sampler)
+    PrimTextureProj             :: IsTextureProj sampler coord bias                         => PrimFun freq ((sampler,coord)                -> TexelRepr sampler)
+    PrimTextureProjB            :: IsTextureProj sampler coord bias                         => PrimFun F    ((sampler,coord,bias)           -> TexelRepr sampler)
+    PrimTextureLod              :: IsTextureLod sampler coord lod                           => PrimFun freq ((sampler,coord,lod)            -> TexelRepr sampler)
+    PrimTextureOffset           :: IsTextureOffset sampler coord offset bias                => PrimFun freq ((sampler,coord,offset)         -> TexelRepr sampler)
+    PrimTextureOffsetB          :: IsTextureOffset sampler coord offset bias                => PrimFun F    ((sampler,coord,offset,bias)    -> TexelRepr sampler)
+    PrimTexelFetch              :: IsTexelFetch sampler coord lod                           => PrimFun freq ((sampler,coord,lod)            -> TexelRepr sampler)
+    PrimTexelFetchOffset        :: IsTexelFetchOffset sampler coord lod offset              => PrimFun freq ((sampler,coord,lod,offset)     -> TexelRepr sampler)
+    PrimTextureProjOffset       :: IsTextureProjOffset sampler coord offset bias            => PrimFun freq ((sampler,coord,offset)         -> TexelRepr sampler)
+    PrimTextureProjOffsetB      :: IsTextureProjOffset sampler coord offset bias            => PrimFun F    ((sampler,coord,offset,bias)    -> TexelRepr sampler)
+    PrimTextureLodOffset        :: IsTextureLodOffset sampler coord lod offset              => PrimFun freq ((sampler,coord,lod,offset)     -> TexelRepr sampler)
+    PrimTextureProjLod          :: IsTextureProjLod sampler coord lod                       => PrimFun freq ((sampler,coord,lod)            -> TexelRepr sampler)
+    PrimTextureProjLodOffset    :: IsTextureProjLodOffset sampler coord lod offset          => PrimFun freq ((sampler,coord,lod,offset)     -> TexelRepr sampler)
+    PrimTextureGrad             :: IsTextureGrad sampler coord dx dy                        => PrimFun freq ((sampler,coord,dx,dy)          -> TexelRepr sampler)
+    PrimTextureGradOffset       :: IsTextureGradOffset sampler coord dx dy offset           => PrimFun freq ((sampler,coord,dx,dy,offset)   -> TexelRepr sampler)
+    PrimTextureProjGrad         :: IsTextureProjGrad sampler coord dx dy                    => PrimFun freq ((sampler,coord,dx,dy)          -> TexelRepr sampler)
+    PrimTextureProjGradOffset   :: IsTextureProjGradOffset sampler coord dx dy offset       => PrimFun freq ((sampler,coord,dx,dy,offset)   -> TexelRepr sampler)
 
     -- Builtin variables
     -- hint: modeled as functions with unit input to simplify AST
@@ -182,3 +183,9 @@ data PrimFun freq sig where
     PrimFrontFacing     :: PrimFun F (() -> Bool)
     PrimPointCoord      :: PrimFun F (() -> V2F)
     PrimPrimitiveID     :: PrimFun F (() -> Int32)
+
+    -- Texture Construction
+    PrimNewTexture      :: PrimFun Obj ((TextureSetting dim arr layerCount t ar, Array order (Image layerCount (TexDataRepr ar t))) -> Texture dim arr t ar)
+
+    -- Sampler Construction
+    PrimNewSampler      :: PrimFun Obj ((SamplerSetting, Texture dim arr t ar) -> Sampler dim arr t ar)

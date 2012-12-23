@@ -27,44 +27,86 @@ User Input New Feature:
     - support textures/samplers
 -}
 data InputType a where
-    Bool    :: InputType Bool
-    V2B     :: InputType V2B
-    V3B     :: InputType V3B
-    V4B     :: InputType V4B
-    Word    :: InputType Word32
-    V2U     :: InputType V2U
-    V3U     :: InputType V3U
-    V4U     :: InputType V4U
-    Int     :: InputType Int32
-    V2I     :: InputType V2I
-    V3I     :: InputType V3I
-    V4I     :: InputType V4I
-    Float   :: InputType Float
-    V2F     :: InputType V2F
-    V3F     :: InputType V3F
-    V4F     :: InputType V4F
-    M22F    :: InputType M22F
-    M23F    :: InputType M23F
-    M24F    :: InputType M24F
-    M32F    :: InputType M32F
-    M33F    :: InputType M33F
-    M34F    :: InputType M34F
-    M42F    :: InputType M42F
-    M43F    :: InputType M43F
-    M44F    :: InputType M44F
+    Bool'       :: InputType Bool
+    V2B'        :: InputType V2B
+    V3B'        :: InputType V3B
+    V4B'        :: InputType V4B
+    Word'       :: InputType Word32
+    V2U'        :: InputType V2U
+    V3U'        :: InputType V3U
+    V4U'        :: InputType V4U
+    Int'        :: InputType Int32
+    V2I'        :: InputType V2I
+    V3I'        :: InputType V3I
+    V4I'        :: InputType V4I
+    Float'      :: InputType Float
+    V2F'        :: InputType V2F
+    V3F'        :: InputType V3F
+    V4F'        :: InputType V4F
+    M22F'       :: InputType M22F
+    M23F'       :: InputType M23F
+    M24F'       :: InputType M24F
+    M32F'       :: InputType M32F
+    M33F'       :: InputType M33F
+    M34F'       :: InputType M34F
+    M42F'       :: InputType M42F
+    M43F'       :: InputType M43F
+    M44F'       :: InputType M44F
 
-    Tuple   :: FlatTuple Typeable InputType t
-            -> InputType t -- TODO: accept only at least two long flat tuples
+    Tuple'      :: FlatTuple Typeable InputType t
+                -> InputType t -- TODO: accept only at least two long flat tuples
 
-    Array   :: ordering
-            -> InputType t
-            -> InputType (Array ordering t)
+    Array'      :: ordering
+                -> InputType t
+                -> InputType (Array ordering t)
 
-    Texture :: TextureType dim mip arr layerCount t ar
-            -> InputType (Texture (Exp Obj) dim arr t ar)
+    Texture'    :: TextureType dim mip arr layerCount t ar
+                -> InputType (Texture dim arr t ar)
 
     deriving Typeable
 
+data InputValue a where
+    Bool    :: Bool     -> InputValue Bool
+    V2B     :: V2B      -> InputValue V2B
+    V3B     :: V3B      -> InputValue V3B
+    V4B     :: V4B      -> InputValue V4B
+    Word    :: Word     -> InputValue Word32
+    V2U     :: V2U      -> InputValue V2U
+    V3U     :: V3U      -> InputValue V3U
+    V4U     :: V4U      -> InputValue V4U
+    Int     :: Int      -> InputValue Int32
+    V2I     :: V2I      -> InputValue V2I
+    V3I     :: V3I      -> InputValue V3I
+    V4I     :: V4I      -> InputValue V4I
+    Float   :: Float    -> InputValue Float
+    V2F     :: V2F      -> InputValue V2F
+    V3F     :: V3F      -> InputValue V3F
+    V4F     :: V4F      -> InputValue V4F
+    M22F    :: M22F     -> InputValue M22F
+    M23F    :: M23F     -> InputValue M23F
+    M24F    :: M24F     -> InputValue M24F
+    M32F    :: M32F     -> InputValue M32F
+    M33F    :: M33F     -> InputValue M33F
+    M34F    :: M34F     -> InputValue M34F
+    M42F    :: M42F     -> InputValue M42F
+    M43F    :: M43F     -> InputValue M43F
+    M44F    :: M44F     -> InputValue M44F
+
+    Tuple   :: FlatTuple Typeable InputValue t
+            -> InputValue t -- TODO: accept only at least two long flat tuples
+
+    Array   :: ordering
+            -> [InputValue t]
+            -> InputValue (Array ordering t)
+
+    TextureSetting  :: TextureType dim mip arr layerCount t ar
+                    -> InputValue (TexSizeRepr dim)
+                    -> MipMap mip
+                    -> InputValue (TextureSetting dim arr layerCount t ar)
+
+    SamplerSetting  :: Filter
+                    -> EdgeMode
+                    -> InputValue SamplerSetting
 
 --TODO: check whether we should distinct size limited arrays and arbitrary sized arrays.
 --          former is due to GLSL and GPU restrictions, latter are stored in CPU RAM
@@ -80,15 +122,15 @@ data Exp freq t where
 
     -- constant value
     -- TODO: support constants for all LCTypes
-    Const   :: (LCType t,IsScalar t)
-            => t
+    Const   :: LCType t
+            => InputValue t
             -> Exp freq t
 
     -- User input constant variable
     Var     :: LCType t
             => ByteString
             -> InputType t
-            -> Exp freq t
+            -> Exp Obj t
 
     -- Lift Obj expressions to higher frequencies
     Use     :: Exp Obj t
@@ -117,13 +159,6 @@ data Exp freq t where
             -> Exp freq t
             -> Exp freq e
 
-    -- sampler support
-    Sampler :: LCType (Sampler dim arr t ar)
-            => Filter
-            -> EdgeMode
-            -> Texture (Exp Obj) dim arr t ar
-            -> Exp freq (Sampler dim arr t ar)
-
     -- loop support
     Loop    :: (LCType s, LCType a)
             => (Exp freq s -> Exp freq s)     -- state transform function
@@ -134,6 +169,9 @@ data Exp freq t where
 
     -- Array operations
     -- Construction
+    ArrayFromList   :: [Exp Obj a]
+                    -> Exp Obj (Array order a)
+
     ArrayReplicate  :: Exp Obj Int32
                     -> Exp Obj a
                     -> Exp Obj (Array order a)
