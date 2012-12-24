@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module LC_T_APIType where
 
 import Data.ByteString.Char8
@@ -31,6 +32,128 @@ data Tuple c a t where
             => a t
             -> Tuple c a t'
             -> Tuple c a (t :+: t')
+
+-- all LC supported types including all types of every computation frequency (Obj,V,G,F)
+class LCType a
+
+-- types supported on V,G,F
+class GPUType a
+
+-- types supported as vertex attribute
+class AttributeType a
+
+
+{-
+User Input New Feature:
+    - support tuples
+    - support arrays
+    - support textures/samplers
+-}
+data InputType a where
+    Bool'       :: InputType Bool
+    V2B'        :: InputType V2B
+    V3B'        :: InputType V3B
+    V4B'        :: InputType V4B
+    Word'       :: InputType Word32
+    V2U'        :: InputType V2U
+    V3U'        :: InputType V3U
+    V4U'        :: InputType V4U
+    Int'        :: InputType Int32
+    V2I'        :: InputType V2I
+    V3I'        :: InputType V3I
+    V4I'        :: InputType V4I
+    Float'      :: InputType Float
+    V2F'        :: InputType V2F
+    V3F'        :: InputType V3F
+    V4F'        :: InputType V4F
+    M22F'       :: InputType M22F
+    M23F'       :: InputType M23F
+    M24F'       :: InputType M24F
+    M32F'       :: InputType M32F
+    M33F'       :: InputType M33F
+    M34F'       :: InputType M34F
+    M42F'       :: InputType M42F
+    M43F'       :: InputType M43F
+    M44F'       :: InputType M44F
+
+    Tuple'      :: Tuple Typeable InputType t
+                -> InputType t
+
+    Array'      :: ordering
+                -> InputType t
+                -> InputType (Array ordering t)
+
+    Texture'    :: TextureType dim mip arr layerCount t ar
+                -> InputType (Texture dim arr t ar)
+
+    deriving Typeable
+
+data InputValue a where
+    Bool    :: Bool     -> InputValue Bool
+    V2B     :: V2B      -> InputValue V2B
+    V3B     :: V3B      -> InputValue V3B
+    V4B     :: V4B      -> InputValue V4B
+    Word    :: Word     -> InputValue Word32
+    V2U     :: V2U      -> InputValue V2U
+    V3U     :: V3U      -> InputValue V3U
+    V4U     :: V4U      -> InputValue V4U
+    Int     :: Int      -> InputValue Int32
+    V2I     :: V2I      -> InputValue V2I
+    V3I     :: V3I      -> InputValue V3I
+    V4I     :: V4I      -> InputValue V4I
+    Float   :: Float    -> InputValue Float
+    V2F     :: V2F      -> InputValue V2F
+    V3F     :: V3F      -> InputValue V3F
+    V4F     :: V4F      -> InputValue V4F
+    M22F    :: M22F     -> InputValue M22F
+    M23F    :: M23F     -> InputValue M23F
+    M24F    :: M24F     -> InputValue M24F
+    M32F    :: M32F     -> InputValue M32F
+    M33F    :: M33F     -> InputValue M33F
+    M34F    :: M34F     -> InputValue M34F
+    M42F    :: M42F     -> InputValue M42F
+    M43F    :: M43F     -> InputValue M43F
+    M44F    :: M44F     -> InputValue M44F
+
+    Tuple   :: Tuple Typeable InputValue t
+            -> InputValue t
+
+    Array   :: ordering
+            -> [InputValue t]
+            -> InputValue (Array ordering t)
+
+    TextureSetting  :: TextureType dim mip arr layerCount t ar
+                    -> InputValue (TexSizeRepr dim)
+                    -> MipMap mip
+                    -> InputValue (TextureSetting dim arr layerCount t ar)
+
+    SamplerSetting  :: Filter
+                    -> EdgeMode
+                    -> InputValue SamplerSetting
+
+type N10 = O (I (O (I Z)))
+type N11 = I (I (O (I Z)))
+type N12 = O (O (I (I Z)))
+type N13 = I (O (I (I Z)))
+type N14 = O (I (I (I Z)))
+type N15 = I (I (I (I Z)))
+
+type family PrjTup idx t
+type instance PrjTup N1  (e :+: l) = e
+type instance PrjTup N2  (e :+: l) = PrjTup N1 l
+type instance PrjTup N3  (e :+: l) = PrjTup N2 l
+type instance PrjTup N4  (e :+: l) = PrjTup N3 l
+type instance PrjTup N5  (e :+: l) = PrjTup N4 l
+type instance PrjTup N6  (e :+: l) = PrjTup N5 l
+type instance PrjTup N7  (e :+: l) = PrjTup N6 l
+type instance PrjTup N8  (e :+: l) = PrjTup N7 l
+type instance PrjTup N9  (e :+: l) = PrjTup N8 l
+type instance PrjTup N10 (e :+: l) = PrjTup N9 l
+type instance PrjTup N11 (e :+: l) = PrjTup N10 l
+type instance PrjTup N12 (e :+: l) = PrjTup N11 l
+type instance PrjTup N13 (e :+: l) = PrjTup N12 l
+type instance PrjTup N14 (e :+: l) = PrjTup N13 l
+type instance PrjTup N15 (e :+: l) = PrjTup N14 l
 
 -- primitive types
 data Adjacency
@@ -105,21 +228,15 @@ data Stencil a  deriving Typeable
 data RasterContext t where
     PointCtx    :: RasterContext Point      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN
 
-    LineCtx     :: 
-        { ctxLineWidth          :: Float
-        , ctxProvokingVertex'   :: ProvokingVertex
-        } -> RasterContext Line
+    LineCtx     :: Float            -- line width
+                -> ProvokingVertex
+                -> RasterContext Line
 
-    TriangleCtx ::
-        { ctxCullMode           :: CullMode
-        , ctxPolygonMode        :: PolygonMode
-        , ctxPolygonOffset      :: PolygonOffset
-        , ctxProvokingVertex    :: ProvokingVertex
-        } -> RasterContext Triangle
-
--- default triangle raster context
-triangleCtx :: RasterContext Triangle
-triangleCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
+    TriangleCtx :: CullMode
+                -> PolygonMode
+                -> PolygonOffset
+                -> ProvokingVertex
+                -> RasterContext Triangle
 
 type FrameBuffer layerCount t = Tuple Typeable (Image layerCount) t
 data AccumulationContext t
@@ -213,16 +330,16 @@ type instance TexDataRepr RGBA (v a) = V4 a
 
 -- describes texel (texture component) type
 data TextureDataType t arity where
-    Float   :: ColorArity a
-            -> TextureDataType (Regular Float) a
+    FloatTexel  :: ColorArity a
+                -> TextureDataType (Regular Float) a
 
-    Int     :: ColorArity a
-            -> TextureDataType (Regular Int) a
+    IntTexel    :: ColorArity a
+                -> TextureDataType (Regular Int) a
 
-    Word    :: ColorArity a
-            -> TextureDataType (Regular Word) a
+    WordTexel   :: ColorArity a
+                -> TextureDataType (Regular Word) a
 
-    Shadow  :: TextureDataType (Shadow Float) Red   -- TODO: add params required by shadow textures
+    ShadowTexel :: TextureDataType (Shadow Float) Red   -- TODO: add params required by shadow textures
 
 
 -- helper type level function for texture specification
@@ -342,85 +459,85 @@ data ArrayTex  deriving Typeable    -- array texture
 data CubeTex   deriving Typeable    -- cube texture = array with size 6
 
 data Sampler dim layerCount t ar deriving Typeable
-
+{-
 instance Show (Sampler dim layerCount t ar) where
     show _ = "Sampler dim layerCount t ar"
 
 -- GPU type restriction, the functions are used in shader codegen
 class GPU a where
-
+-}
 -- Float
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Regular Float) a) where
-instance Typeable a => GPU (Sampler DIM2 SingleTex (Regular Float) a) where
-instance Typeable a => GPU (Sampler DIM3 SingleTex (Regular Float) a) where
-instance Typeable a => GPU (Sampler DIM2 CubeTex   (Regular Float) a) where
-instance Typeable a => GPU (Sampler DIM1 ArrayTex  (Regular Float) a) where
-instance Typeable a => GPU (Sampler DIM2 ArrayTex  (Regular Float) a) where
-instance Typeable a => GPU (Sampler DIM2 SingleTex (MultiSample Float) a) where
-instance Typeable a => GPU (Sampler DIM2 ArrayTex  (MultiSample Float) a) where
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Buffer Float) a) where
-instance Typeable a => GPU (Sampler Rect SingleTex (Regular Float) a) where
+instance Typeable a => LCType (Sampler DIM1 SingleTex (Regular Float) a) where
+instance Typeable a => LCType (Sampler DIM2 SingleTex (Regular Float) a) where
+instance Typeable a => LCType (Sampler DIM3 SingleTex (Regular Float) a) where
+instance Typeable a => LCType (Sampler DIM2 CubeTex   (Regular Float) a) where
+instance Typeable a => LCType (Sampler DIM1 ArrayTex  (Regular Float) a) where
+instance Typeable a => LCType (Sampler DIM2 ArrayTex  (Regular Float) a) where
+instance Typeable a => LCType (Sampler DIM2 SingleTex (MultiSample Float) a) where
+instance Typeable a => LCType (Sampler DIM2 ArrayTex  (MultiSample Float) a) where
+instance Typeable a => LCType (Sampler DIM1 SingleTex (Buffer Float) a) where
+instance Typeable a => LCType (Sampler Rect SingleTex (Regular Float) a) where
 
 -- Int
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Regular Int) a) where
-instance Typeable a => GPU (Sampler DIM2 SingleTex (Regular Int) a) where
-instance Typeable a => GPU (Sampler DIM3 SingleTex (Regular Int) a) where
-instance Typeable a => GPU (Sampler DIM2 CubeTex   (Regular Int) a) where
-instance Typeable a => GPU (Sampler DIM1 ArrayTex  (Regular Int) a) where
-instance Typeable a => GPU (Sampler DIM2 ArrayTex  (Regular Int) a) where
-instance Typeable a => GPU (Sampler DIM2 SingleTex (MultiSample Int) a) where
-instance Typeable a => GPU (Sampler DIM2 ArrayTex  (MultiSample Int) a) where
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Buffer Int) a) where
-instance Typeable a => GPU (Sampler Rect SingleTex (Regular Int) a) where
+instance Typeable a => LCType (Sampler DIM1 SingleTex (Regular Int) a) where
+instance Typeable a => LCType (Sampler DIM2 SingleTex (Regular Int) a) where
+instance Typeable a => LCType (Sampler DIM3 SingleTex (Regular Int) a) where
+instance Typeable a => LCType (Sampler DIM2 CubeTex   (Regular Int) a) where
+instance Typeable a => LCType (Sampler DIM1 ArrayTex  (Regular Int) a) where
+instance Typeable a => LCType (Sampler DIM2 ArrayTex  (Regular Int) a) where
+instance Typeable a => LCType (Sampler DIM2 SingleTex (MultiSample Int) a) where
+instance Typeable a => LCType (Sampler DIM2 ArrayTex  (MultiSample Int) a) where
+instance Typeable a => LCType (Sampler DIM1 SingleTex (Buffer Int) a) where
+instance Typeable a => LCType (Sampler Rect SingleTex (Regular Int) a) where
 
 -- Word
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Regular Word) a) where
-instance Typeable a => GPU (Sampler DIM2 SingleTex (Regular Word) a) where
-instance Typeable a => GPU (Sampler DIM3 SingleTex (Regular Word) a) where
-instance Typeable a => GPU (Sampler DIM2 CubeTex   (Regular Word) a) where
-instance Typeable a => GPU (Sampler DIM1 ArrayTex  (Regular Word) a) where
-instance Typeable a => GPU (Sampler DIM2 ArrayTex  (Regular Word) a) where
-instance Typeable a => GPU (Sampler DIM2 SingleTex (MultiSample Word) a) where
-instance Typeable a => GPU (Sampler DIM2 ArrayTex  (MultiSample Word) a) where
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Buffer Word) a) where
-instance Typeable a => GPU (Sampler Rect SingleTex (Regular Word) a) where
+instance Typeable a => LCType (Sampler DIM1 SingleTex (Regular Word) a) where
+instance Typeable a => LCType (Sampler DIM2 SingleTex (Regular Word) a) where
+instance Typeable a => LCType (Sampler DIM3 SingleTex (Regular Word) a) where
+instance Typeable a => LCType (Sampler DIM2 CubeTex   (Regular Word) a) where
+instance Typeable a => LCType (Sampler DIM1 ArrayTex  (Regular Word) a) where
+instance Typeable a => LCType (Sampler DIM2 ArrayTex  (Regular Word) a) where
+instance Typeable a => LCType (Sampler DIM2 SingleTex (MultiSample Word) a) where
+instance Typeable a => LCType (Sampler DIM2 ArrayTex  (MultiSample Word) a) where
+instance Typeable a => LCType (Sampler DIM1 SingleTex (Buffer Word) a) where
+instance Typeable a => LCType (Sampler Rect SingleTex (Regular Word) a) where
 
 -- Shadow
-instance Typeable a => GPU (Sampler DIM1 SingleTex (Shadow Float) a) where
-instance Typeable a => GPU (Sampler DIM2 SingleTex (Shadow Float) a) where
-instance Typeable a => GPU (Sampler DIM2 CubeTex   (Shadow Float) a) where
-instance Typeable a => GPU (Sampler DIM1 ArrayTex  (Shadow Float) a) where
-instance Typeable a => GPU (Sampler DIM2 ArrayTex  (Shadow Float) a) where
-instance Typeable a => GPU (Sampler Rect SingleTex (Shadow Float) a) where
+instance Typeable a => LCType (Sampler DIM1 SingleTex (Shadow Float) a) where
+instance Typeable a => LCType (Sampler DIM2 SingleTex (Shadow Float) a) where
+instance Typeable a => LCType (Sampler DIM2 CubeTex   (Shadow Float) a) where
+instance Typeable a => LCType (Sampler DIM1 ArrayTex  (Shadow Float) a) where
+instance Typeable a => LCType (Sampler DIM2 ArrayTex  (Shadow Float) a) where
+instance Typeable a => LCType (Sampler Rect SingleTex (Shadow Float) a) where
 
-instance GPU Bool where
-instance GPU Float where
-instance GPU Int32 where
-instance GPU Word32 where
-instance GPU V2B where
-instance GPU V2F where
-instance GPU V2I where
-instance GPU V2U where
-instance GPU V3B where
-instance GPU V3F where
-instance GPU V3I where
-instance GPU V3U where
-instance GPU V4B where
-instance GPU V4F where
-instance GPU V4I where
-instance GPU V4U where
-instance GPU M22F where
-instance GPU M23F where
-instance GPU M24F where
-instance GPU M32F where
-instance GPU M33F where
-instance GPU M34F where
-instance GPU M42F where
-instance GPU M43F where
-instance GPU M44F where
-instance GPU ZZ where
-instance (GPU a, GPU b) => GPU (a :+: b) where
-
+instance LCType Bool where
+instance LCType Float where
+instance LCType Int32 where
+instance LCType Word32 where
+instance LCType V2B where
+instance LCType V2F where
+instance LCType V2I where
+instance LCType V2U where
+instance LCType V3B where
+instance LCType V3F where
+instance LCType V3I where
+instance LCType V3U where
+instance LCType V4B where
+instance LCType V4F where
+instance LCType V4I where
+instance LCType V4U where
+instance LCType M22F where
+instance LCType M23F where
+instance LCType M24F where
+instance LCType M32F where
+instance LCType M33F where
+instance LCType M34F where
+instance LCType M42F where
+instance LCType M43F where
+instance LCType M44F where
+instance LCType ZZ where
+instance (LCType a, LCType b) => LCType (a :+: b) where
+{-
 -- stream type restriction, these types can be used in vertex shader input
 class GPU a => SGPU a
 instance SGPU Int32
@@ -446,3 +563,4 @@ instance SGPU V3U
 instance SGPU V4U
 instance SGPU ZZ where
 instance (SGPU a, SGPU b) => SGPU (a :+: b) where
+-}

@@ -1,4 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
 module LC_T_HOAS where
 
 import Data.ByteString.Char8
@@ -14,116 +13,11 @@ import LC_G_APIType
 import LC_T_APIType
 import LC_T_PrimFun
 
--- all LC supported types including all types of every computation frequency (Obj,V,G,F)
-class LCType a
-
--- types supported on V,G,F
-class GPUType a
-
-{-
-User Input New Feature:
-    - support tuples
-    - support arrays
-    - support textures/samplers
--}
-data InputType a where
-    Bool'       :: InputType Bool
-    V2B'        :: InputType V2B
-    V3B'        :: InputType V3B
-    V4B'        :: InputType V4B
-    Word'       :: InputType Word32
-    V2U'        :: InputType V2U
-    V3U'        :: InputType V3U
-    V4U'        :: InputType V4U
-    Int'        :: InputType Int32
-    V2I'        :: InputType V2I
-    V3I'        :: InputType V3I
-    V4I'        :: InputType V4I
-    Float'      :: InputType Float
-    V2F'        :: InputType V2F
-    V3F'        :: InputType V3F
-    V4F'        :: InputType V4F
-    M22F'       :: InputType M22F
-    M23F'       :: InputType M23F
-    M24F'       :: InputType M24F
-    M32F'       :: InputType M32F
-    M33F'       :: InputType M33F
-    M34F'       :: InputType M34F
-    M42F'       :: InputType M42F
-    M43F'       :: InputType M43F
-    M44F'       :: InputType M44F
-
-    Tuple'      :: Tuple Typeable InputType t
-                -> InputType t -- TODO: accept only at least two long flat tuples
-
-    Array'      :: ordering
-                -> InputType t
-                -> InputType (Array ordering t)
-
-    Texture'    :: TextureType dim mip arr layerCount t ar
-                -> InputType (Texture dim arr t ar)
-
-    deriving Typeable
-
-data InputValue a where
-    Bool    :: Bool     -> InputValue Bool
-    V2B     :: V2B      -> InputValue V2B
-    V3B     :: V3B      -> InputValue V3B
-    V4B     :: V4B      -> InputValue V4B
-    Word    :: Word     -> InputValue Word32
-    V2U     :: V2U      -> InputValue V2U
-    V3U     :: V3U      -> InputValue V3U
-    V4U     :: V4U      -> InputValue V4U
-    Int     :: Int      -> InputValue Int32
-    V2I     :: V2I      -> InputValue V2I
-    V3I     :: V3I      -> InputValue V3I
-    V4I     :: V4I      -> InputValue V4I
-    Float   :: Float    -> InputValue Float
-    V2F     :: V2F      -> InputValue V2F
-    V3F     :: V3F      -> InputValue V3F
-    V4F     :: V4F      -> InputValue V4F
-    M22F    :: M22F     -> InputValue M22F
-    M23F    :: M23F     -> InputValue M23F
-    M24F    :: M24F     -> InputValue M24F
-    M32F    :: M32F     -> InputValue M32F
-    M33F    :: M33F     -> InputValue M33F
-    M34F    :: M34F     -> InputValue M34F
-    M42F    :: M42F     -> InputValue M42F
-    M43F    :: M43F     -> InputValue M43F
-    M44F    :: M44F     -> InputValue M44F
-
-    Tuple   :: Tuple Typeable InputValue t
-            -> InputValue t -- TODO: accept only at least two long flat tuples
-
-    Array   :: ordering
-            -> [InputValue t]
-            -> InputValue (Array ordering t)
-
-    TextureSetting  :: TextureType dim mip arr layerCount t ar
-                    -> InputValue (TexSizeRepr dim)
-                    -> MipMap mip
-                    -> InputValue (TextureSetting dim arr layerCount t ar)
-
-    SamplerSetting  :: Filter
-                    -> EdgeMode
-                    -> InputValue SamplerSetting
-
-type N10 = O (I (O (I Z)))
-type N11 = I (I (O (I Z)))
-type N12 = O (O (I (I Z)))
-type N13 = I (O (I (I Z)))
-type N14 = O (I (I (I Z)))
-type N15 = I (I (I (I Z)))
-
-type family PrjTup idx t
-type instance PrjTup N1  (e :+: l) = e
-type instance PrjTup (Greater idx N1 => idx) (e :+: l) = PrjTup (Prev idx) l
-
 --TODO: check whether we should distinct size limited arrays and arbitrary sized arrays.
 --          former is due to GLSL and GPU restrictions, latter are stored in CPU RAM
 
-type InterpolatedExpTuple freq a = Tuple GPU (Interpolated (Exp freq)) a
-type ExpTuple freq a = Tuple GPU (Exp freq) a
+type InterpolatedExpTuple freq a = Tuple LCType (Interpolated (Exp freq)) a
+type ExpTuple freq a = Tuple LCType (Exp freq) a
 
 -- Common Exp, describes shader functions
 data Exp freq t where
@@ -147,7 +41,8 @@ data Exp freq t where
             -> Exp Obj t
 
     -- Lift Obj expressions to higher frequencies
-    Use     :: Exp Obj t
+    Use     :: LCType t
+            => Exp Obj t
             -> Exp freq t
 
     -- conditional expression
@@ -162,13 +57,14 @@ data Exp freq t where
             -> Exp freq a
             -> Exp freq r
 
-    Tup     :: ExpTuple freq t
+    Tup     :: LCType t
+            => ExpTuple freq t
             -> Exp freq t
 
-    Prj     :: Nat idx
+    Prj     :: (e ~ PrjTup idx t, LCType t, LCType e, Nat idx)
             => idx
             -> Exp freq t
-            -> Exp freq (PrjTup idx t)
+            -> Exp freq e
 
     -- loop support
     Loop    :: (LCType s, LCType a)
@@ -180,59 +76,69 @@ data Exp freq t where
 
     -- Array operations
     -- Construction
-    ArrayFromList   :: [Exp Obj a]
+    ArrayFromList   :: LCType (Array order a)
+                    => [Exp Obj a]
                     -> Exp Obj (Array order a)
 
-    ArrayReplicate  :: Exp Obj Int32
+    ArrayReplicate  :: LCType (Array order a)
+                    => Exp Obj Int32
                     -> Exp Obj a
                     -> Exp Obj (Array order a)
 
-    ArrayGenerate   :: Exp Obj Int32
+    ArrayGenerate   :: LCType (Array order a)
+                    => Exp Obj Int32
                     -> (Exp Obj Int32 -> Exp Obj a)
                     -> Exp Obj (Array order a)
 
-    ArrayIterateN   :: Exp Obj Int32
+    ArrayIterateN   :: LCType (Array order a)
+                    => Exp Obj Int32
                     -> (Exp Obj a -> Exp Obj a)
                     -> Exp Obj a
                     -> Exp Obj (Array order a)
+
     -- Elementwise operations
-    ArrayIndex      :: Exp Obj Int32
+    ArrayIndex      :: LCType (Array order a)
+                    => Exp Obj Int32
                     -> Exp Obj (Array order a)
                     -> Exp Obj a
 
-    ArrayFilter     :: (Exp freq a -> Exp freq Bool)
+    ArrayFilter     :: LCType (Array order a)
+                    => (Exp freq a -> Exp freq Bool)
                     -> Exp freq (Array order a)
                     -> Exp freq (Array order a)
 
-    ArrayMap        :: (Exp freq a -> Exp freq b)
+    ArrayMap        :: (LCType (Array order a), LCType (Array order b))
+                    => (Exp freq a -> Exp freq b)
                     -> Exp freq (Array order a)
                     -> Exp freq (Array order b)
 
-    ArrayZipWith    :: (Exp freq a -> Exp freq b -> Exp freq c)
+    ArrayZipWith    :: (LCType (Array order a), LCType (Array order b), LCType (Array order c))
+                    => (Exp freq a -> Exp freq b -> Exp freq c)
                     -> Exp freq (Array order a)
                     -> Exp freq (Array order b)
                     -> Exp freq (Array order c)
 
-    ArrayAccumulate :: (Exp freq a -> Exp freq b -> Exp freq a)
+    ArrayAccumulate :: (LCType a, LCType (Array order b))
+                    => (Exp freq a -> Exp freq b -> Exp freq a)
                     -> Exp freq a
                     -> Exp freq (Array order b)
                     -> Exp freq a
 
     -- Graphics pipeline extensibility
     -- dynamic extension support
-    AccumulateSet   :: GPU a
+    AccumulateSet   :: LCType (FrameBuffer layerCount a)
                     => ByteString
                     -> Exp Obj (FrameBuffer layerCount a)
                     -> Exp Obj (FrameBuffer layerCount a)
 
     -- GPU pipeline model
-    Fetch           :: SGPU a
+    Fetch           :: AttributeType a
                     => FetchPrimitive primitive adjacency 
                     -> Exp Obj (Array order a)
                     -> Maybe (Exp Obj (Array order Int32))
                     -> Exp Obj (VertexStream primitive adjacency a)
 
-    Transform       :: (GPU a, GPU b)
+    Transform       :: (LCType a, LCType b)
                     => (Exp V a -> VertexOut b)                       -- vertex shader
                     -> Exp Obj (VertexStream primitive adjacency a)
                     -> Exp Obj (PrimitiveStream primitive adjacency N1 V b)
@@ -248,7 +154,7 @@ data Exp freq t where
     FrameBuffer     :: FrameBuffer layerCount t
                     -> Exp Obj (FrameBuffer layerCount (t))--TODO ftrepr'
 
-    Accumulate      :: (GPU a, GPU b, IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
+    Accumulate      :: (LCType a, LCType b, IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
                     => AccumulationContext b
                     -> FragmentFilter a
                     -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
@@ -291,7 +197,7 @@ data VertexOut t where
 -- Geometry
 -- describes a geometry shader
 data GeometryShader inputPrimitive inputAdjacency outputPrimitive layerCount a b where
-    GeometryShader      :: (GPU (PrimitiveVertices inputPrimitive inputAdjacency a), GPU i, GPU j, GPU b, Nat layerCount)
+    GeometryShader      :: (LCType (PrimitiveVertices inputPrimitive inputAdjacency a), LCType i, LCType j, LCType b, Nat layerCount)
                         => layerCount                                                                               -- geometry shader:
                         -> OutputPrimitive outputPrimitive                                                          -- output primitive
                         -> Int                                                                                      -- max amount of generated vertices

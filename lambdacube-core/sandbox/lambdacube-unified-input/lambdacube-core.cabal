@@ -38,6 +38,7 @@ Library
         LC_T_HOAS
         LC_T_PrimFun
         LC_T_Sampler
+        LC_T_Language
 
         LC_G_LinearAlgebraTypes
         LC_G_APIType
