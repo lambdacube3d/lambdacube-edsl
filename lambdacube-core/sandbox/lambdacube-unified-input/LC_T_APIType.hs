@@ -10,39 +10,10 @@ import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
 import TypeLevel.Number.Classes
 
-import LC_G_Type
+import LC_G_LinearAlgebraTypes
 import LC_G_APIType
 
--- primitive types
-data Triangle
-data Line
-data Point
-
-data Primitive a where
-    Triangle    :: Primitive Triangle
-    Line        :: Primitive Line
-    Point       :: Primitive Point
-
-data Blending c where
-    NoBlending      :: Blending c
-
-    BlendLogicOp    :: IsIntegral c
-                    => LogicOperation
-                    -> Blending c
-
-    -- FIXME: restrict BlendingFactor at some BlendEquation
-    Blend           :: (BlendEquation, BlendEquation) 
-                    -> ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
-                    -> V4F
-                    -> Blending Float
-
--- abstract types, used in language AST
-data VertexStream prim t
-data PrimitiveStream prim layerCount freq t
-data FragmentStream layerCount t
-
-
--- flat tuple, another internal tuple representation
+-- internal tuple representation
 
 -- means unit
 data ZZ deriving Typeable
@@ -61,6 +32,58 @@ data Tuple c a t where
             -> Tuple c a t'
             -> Tuple c a (t :+: t')
 
+-- primitive types
+data Adjacency
+data NoAdjacency
+
+data Triangle
+data Line
+data Point
+
+data FetchPrimitive primitive adjacency where
+    Points                  :: FetchPrimitive Point     NoAdjacency
+    LineStrip               :: FetchPrimitive Line      NoAdjacency
+    LineLoop                :: FetchPrimitive Line      NoAdjacency
+    Lines                   :: FetchPrimitive Line      NoAdjacency
+    TriangleStrip           :: FetchPrimitive Triangle  NoAdjacency
+    TriangleFan             :: FetchPrimitive Triangle  NoAdjacency
+    Triangles               :: FetchPrimitive Triangle  NoAdjacency
+    LinesAdjacency          :: FetchPrimitive Line      Adjacency
+    LineStripAdjacency      :: FetchPrimitive Line      Adjacency
+    TrianglesAdjacency      :: FetchPrimitive Triangle  Adjacency
+    TriangleStripAdjacency  :: FetchPrimitive Triangle  Adjacency
+
+data OutputPrimitive primitive where
+    TrianglesOutput :: OutputPrimitive Triangle
+    LinesOutput     :: OutputPrimitive Line
+    PointsOutput    :: OutputPrimitive Point
+
+-- describe geometry shader input 
+type family PrimitiveVertices primitive adajcency a
+type instance PrimitiveVertices Point NoAdjacency a     = a
+type instance PrimitiveVertices Line NoAdjacency a      = a:+:a:+:ZZ
+type instance PrimitiveVertices Line Adjacency a        = a:+:a:+:a:+:a:+:ZZ
+type instance PrimitiveVertices Triangle NoAdjacency a  = a:+:a:+:a:+:ZZ
+type instance PrimitiveVertices Triangle Adjacency a    = a:+:a:+:a:+:a:+:a:+:a:+:ZZ
+
+data Blending c where
+    NoBlending      :: Blending c
+
+    BlendLogicOp    :: IsIntegral c
+                    => LogicOperation
+                    -> Blending c
+
+    -- FIXME: restrict BlendingFactor at some BlendEquation
+    Blend           :: (BlendEquation, BlendEquation) 
+                    -> ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
+                    -> V4F
+                    -> Blending Float
+
+-- abstract types, used in language AST
+data VertexStream primitive adjacency t
+data PrimitiveStream primitive adjacency layerCount freq t
+data FragmentStream layerCount t
+
 -- vertex attribute interpolation
 data Interpolated e a where
     Flat            :: e a -> Interpolated e a
@@ -75,9 +98,6 @@ data Interpolated e a where
 data Color a    deriving Typeable
 data Depth a    deriving Typeable
 data Stencil a  deriving Typeable
-
--- TODO: needed to describe geometry shader input 
-data PrimitiveVertices prim a
 
 
 -- raster context description

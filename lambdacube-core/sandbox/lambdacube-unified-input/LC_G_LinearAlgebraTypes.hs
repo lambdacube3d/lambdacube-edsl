@@ -1,4 +1,4 @@
-module LC_G_Type where
+module LC_G_LinearAlgebraTypes where
 
 import Data.Int
 import Data.Data

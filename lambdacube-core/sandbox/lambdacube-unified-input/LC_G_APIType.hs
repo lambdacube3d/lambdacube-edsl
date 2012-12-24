@@ -4,8 +4,6 @@ import Data.Data
 import Data.Int
 import Data.Word
 
-data PrimitiveType  = TriangleStrip | TriangleList | TriangleFan | LineStrip | LineList | PointList deriving (Eq,Ord,Bounded,Enum,Show, Data,Typeable)
-
 data PointSize          = PointSize Float | PointSizeRast deriving (Eq,Ord,Show, Data,Typeable)
 data PolygonOffset      = NoOffset | Offset Float Float  deriving (Eq,Ord,Show, Data,Typeable)
 data FrontFace          = CCW | CW deriving (Eq,Ord,Show, Data,Typeable)

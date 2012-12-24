@@ -3,7 +3,7 @@ module LC_T_PrimFun where
 import Data.Int
 import Data.Word
 
-import LC_G_Type
+import LC_G_LinearAlgebraTypes
 import LC_T_Sampler
 import LC_T_APIType
 

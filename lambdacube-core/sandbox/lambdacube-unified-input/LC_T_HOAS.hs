@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module LC_T_HOAS where
 
 import Data.ByteString.Char8
@@ -8,7 +9,7 @@ import Data.Word
 import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
 
-import LC_G_Type
+import LC_G_LinearAlgebraTypes
 import LC_G_APIType
 import LC_T_APIType
 import LC_T_PrimFun
@@ -116,20 +117,7 @@ type N15 = I (I (I (I Z)))
 
 type family PrjTup idx t
 type instance PrjTup N1  (e :+: l) = e
-type instance PrjTup N2  (e :+: l) = PrjTup N1 l
-type instance PrjTup N3  (e :+: l) = PrjTup N2 l
-type instance PrjTup N4  (e :+: l) = PrjTup N3 l
-type instance PrjTup N5  (e :+: l) = PrjTup N4 l
-type instance PrjTup N6  (e :+: l) = PrjTup N5 l
-type instance PrjTup N7  (e :+: l) = PrjTup N6 l
-type instance PrjTup N8  (e :+: l) = PrjTup N7 l
-type instance PrjTup N9  (e :+: l) = PrjTup N8 l
-type instance PrjTup N10 (e :+: l) = PrjTup N9 l
-type instance PrjTup N11 (e :+: l) = PrjTup N10 l
-type instance PrjTup N12 (e :+: l) = PrjTup N11 l
-type instance PrjTup N13 (e :+: l) = PrjTup N12 l
-type instance PrjTup N14 (e :+: l) = PrjTup N13 l
-type instance PrjTup N15 (e :+: l) = PrjTup N14 l
+type instance PrjTup (Greater idx N1 => idx) (e :+: l) = PrjTup (Prev idx) l
 
 --TODO: check whether we should distinct size limited arrays and arbitrary sized arrays.
 --          former is due to GLSL and GPU restrictions, latter are stored in CPU RAM
@@ -177,7 +165,7 @@ data Exp freq t where
     Tup     :: ExpTuple freq t
             -> Exp freq t
 
-    Prj     :: (Nat idx)
+    Prj     :: Nat idx
             => idx
             -> Exp freq t
             -> Exp freq (PrjTup idx t)
@@ -239,22 +227,22 @@ data Exp freq t where
 
     -- GPU pipeline model
     Fetch           :: SGPU a
-                    => Primitive prim
+                    => FetchPrimitive primitive adjacency 
                     -> Exp Obj (Array order a)
                     -> Maybe (Exp Obj (Array order Int32))
-                    -> Exp Obj (VertexStream prim a)
+                    -> Exp Obj (VertexStream primitive adjacency a)
 
     Transform       :: (GPU a, GPU b)
                     => (Exp V a -> VertexOut b)                       -- vertex shader
-                    -> Exp Obj (VertexStream prim a)
-                    -> Exp Obj (PrimitiveStream prim N1 V b)
+                    -> Exp Obj (VertexStream primitive adjacency a)
+                    -> Exp Obj (PrimitiveStream primitive adjacency N1 V b)
 
-    Reassemble      :: GeometryShader primIn primOut layerCount a b
-                    -> Exp Obj (PrimitiveStream primIn N1 V a)
-                    -> Exp Obj (PrimitiveStream primOut layerCount G b)
+    Reassemble      :: GeometryShader inputPrimitive inputAdjacency outputPrimitive layerCount a b
+                    -> Exp Obj (PrimitiveStream inputPrimitive inputAdjacency N1 V a)
+                    -> Exp Obj (PrimitiveStream outputPrimitive NoAdjacency layerCount G b)
 
-    Rasterize       :: RasterContext prim
-                    -> Exp Obj (PrimitiveStream prim layerCount freq a)
+    Rasterize       :: RasterContext primitive
+                    -> Exp Obj (PrimitiveStream primitive adjacency layerCount freq a)
                     -> Exp Obj (FragmentStream layerCount a)
 
     FrameBuffer     :: FrameBuffer layerCount t
@@ -269,7 +257,7 @@ data Exp freq t where
                     -> Exp Obj (FrameBuffer layerCount (b))--TODO ftrepr'
 
     -- Transform feedback support
-    ArrayFromStream :: Exp Obj (PrimitiveStream prim layerCount freq a)
+    ArrayFromStream :: Exp Obj (PrimitiveStream primitive adjacency layerCount freq a)
                     -> Exp Obj (Array order a)
 
     -- FrameBuffer and Image helpers
@@ -282,9 +270,6 @@ data Exp freq t where
                     => idx
                     -> Exp Obj (Image layerCount t)
                     -> Exp Obj (Image N1 t)
-
-
-
 
 -- Vertex
 {-
@@ -305,15 +290,15 @@ data VertexOut t where
 
 -- Geometry
 -- describes a geometry shader
-data GeometryShader primIn primOut layerNum a b where
-    GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, Nat layerNum)
-                        => layerNum                                                 -- geometry shader:
-                        -> Primitive primOut                                        -- output primitive
-                        -> Int                                                      -- max amount of generated vertices
-                        -> (Exp G (PrimitiveVertices primIn a) -> Exp G (i,Int32))  -- how many primitives?
-                        -> (Exp G i -> Exp G (i,j,Int32))                           -- how many vertices?
-                        -> (Exp G j -> GeometryOut (j,b))                           -- generate vertices
-                        -> GeometryShader primIn primOut layerNum a b
+data GeometryShader inputPrimitive inputAdjacency outputPrimitive layerCount a b where
+    GeometryShader      :: (GPU (PrimitiveVertices inputPrimitive inputAdjacency a), GPU i, GPU j, GPU b, Nat layerCount)
+                        => layerCount                                                                               -- geometry shader:
+                        -> OutputPrimitive outputPrimitive                                                          -- output primitive
+                        -> Int                                                                                      -- max amount of generated vertices
+                        -> (Exp G (PrimitiveVertices inputPrimitive inputAdjacency a) -> Exp G (i:+:Int32:+:ZZ))    -- how many primitives?
+                        -> (Exp G i -> Exp G (i:+:j:+:Int32:+:ZZ))                                                  -- how many vertices?
+                        -> (Exp G j -> GeometryOut (j:+:b:+:ZZ))                                                    -- generate vertices
+                        -> GeometryShader inputPrimitive inputAdjacency outputPrimitive layerCount a b
 
 {-
     Geometry shader builtin output:
@@ -333,7 +318,7 @@ data GeometryOut t where
                 -> Exp G Int32    -- layer
                 -> Exp G j
                 -> InterpolatedExpTuple G a
-                -> GeometryOut (j,a)
+                -> GeometryOut (j:+:a:+:ZZ)
 
 -- Fragment
 {-
@@ -360,10 +345,10 @@ data FragmentFilter a where
             -> FragmentFilter a
 
 
-data GPOutput where
+data Output where
     ImageOut    :: ByteString
                 -> Exp Obj (Image layerCount t)
-                -> GPOutput
+                -> Output
 
     ScreenOut   :: Exp Obj (Image N1 t)
-                -> GPOutput
+                -> Output
