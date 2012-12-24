@@ -5,7 +5,6 @@ import Data.Word
 
 import LC_G_Type
 import LC_T_APIType
-import LC_T_DSLType
 
 {-
 -- shadow samplers
@@ -72,16 +71,16 @@ instance IsTextureSize  (Sampler1D t ar)           Int32   Int32
 instance IsTextureSize  (Sampler1DArray t ar)      Int32   V2I
 instance IsTextureSize  (Sampler2D t ar)           Int32   V2I
 instance IsTextureSize  (Sampler2DArray t ar)      Int32   V3I
-instance IsTextureSize  (Sampler2DMS t ar)         ()      V2I
-instance IsTextureSize  (Sampler2DMSArray t ar)    ()      V3I
-instance IsTextureSize  (Sampler2DRect t ar)       ()      V2I
+instance IsTextureSize  (Sampler2DMS t ar)         ZZ      V2I
+instance IsTextureSize  (Sampler2DMSArray t ar)    ZZ      V3I
+instance IsTextureSize  (Sampler2DRect t ar)       ZZ      V2I
 instance IsTextureSize  (Sampler3D t ar)           Int32   V3I
 instance IsTextureSize  (SamplerCube t ar)         Int32   V2I
-instance IsTextureSize  (SamplerBuffer t ar)       ()      Int32
+instance IsTextureSize  (SamplerBuffer t ar)       ZZ      Int32
 instance IsTextureSize  Sampler1DArrayShadow       Int32   V2I
 instance IsTextureSize  Sampler1DShadow            Int32   Int32
 instance IsTextureSize  Sampler2DArrayShadow       Int32   V3I
-instance IsTextureSize  Sampler2DRectShadow        ()      V2I
+instance IsTextureSize  Sampler2DRectShadow        ZZ      V2I
 instance IsTextureSize  Sampler2DShadow            Int32   V2I
 instance IsTextureSize  SamplerCubeShadow          Int32   V2I
 
@@ -92,14 +91,14 @@ instance IsTexture  (Sampler1D t ar)               Float   Float
 instance IsTexture  (Sampler1DArray t ar)          V2F     Float
 instance IsTexture  (Sampler2D t ar)               V2F     Float
 instance IsTexture  (Sampler2DArray t ar)          V3F     Float
-instance IsTexture  (Sampler2DRect t ar)           V2F     ()   
+instance IsTexture  (Sampler2DRect t ar)           V2F     ZZ   
 instance IsTexture  (Sampler3D t ar)               V3F     Float
 instance IsTexture  (SamplerCube t ar)             V3F     Float
 instance IsTexture  Sampler1DShadow                V3F     Float
 instance IsTexture  Sampler1DArrayShadow           V3F     Float
 instance IsTexture  Sampler2DShadow                V3F     Float
-instance IsTexture  Sampler2DArrayShadow           V4F     ()   
-instance IsTexture  Sampler2DRectShadow            V3F     ()   
+instance IsTexture  Sampler2DArrayShadow           V4F     ZZ   
+instance IsTexture  Sampler2DRectShadow            V3F     ZZ   
 instance IsTexture  SamplerCubeShadow              V4F     Float
 
 -- arity problem: bias
@@ -109,11 +108,11 @@ instance IsTextureProj  (Sampler1D t ar)           V2F     Float
 instance IsTextureProj  (Sampler1D t ar)           V4F     Float
 instance IsTextureProj  (Sampler2D t ar)           V3F     Float
 instance IsTextureProj  (Sampler2D t ar)           V4F     Float
-instance IsTextureProj  (Sampler2DRect t ar)       V3F     ()   
-instance IsTextureProj  (Sampler2DRect t ar)       V4F     ()   
+instance IsTextureProj  (Sampler2DRect t ar)       V3F     ZZ   
+instance IsTextureProj  (Sampler2DRect t ar)       V4F     ZZ   
 instance IsTextureProj  (Sampler3D t ar)           V4F     Float
 instance IsTextureProj  Sampler1DShadow            V4F     Float
-instance IsTextureProj  Sampler2DRectShadow        V4F     ()   
+instance IsTextureProj  Sampler2DRectShadow        V4F     ZZ   
 instance IsTextureProj  Sampler2DShadow            V4F     Float
 
 -- arity ok
@@ -136,12 +135,12 @@ instance IsTextureOffset  (Sampler1D t ar)         Float   Int32   Float
 instance IsTextureOffset  (Sampler1DArray t ar)    V2F     Int32   Float
 instance IsTextureOffset  (Sampler2D t ar)         V2F     V2I     Float
 instance IsTextureOffset  (Sampler2DArray t ar)    V3F     V2I     Float
-instance IsTextureOffset  (Sampler2DRect t ar)     V2F     V2I     ()   
+instance IsTextureOffset  (Sampler2DRect t ar)     V2F     V2I     ZZ   
 instance IsTextureOffset  (Sampler3D t ar)         V3F     V3I     Float
 instance IsTextureOffset  Sampler1DShadow          V3F     Int32   Float
 instance IsTextureOffset  Sampler1DArrayShadow     V3F     Int32   Float
 instance IsTextureOffset  Sampler2DShadow          V3F     V2I     Float
-instance IsTextureOffset  Sampler2DRectShadow      V3F     V2I     ()   
+instance IsTextureOffset  Sampler2DRectShadow      V3F     V2I     ZZ   
 
 -- arity problem: lod, sample
 class IsTexelFetch sampler coord lod | sampler -> coord lod
@@ -151,9 +150,9 @@ instance IsTexelFetch  (Sampler2D t ar)            V2I     Int32
 instance IsTexelFetch  (Sampler2DArray t ar)       V3I     Int32
 instance IsTexelFetch  (Sampler2DMS t ar)          V2I     Int32
 instance IsTexelFetch  (Sampler2DMSArray t ar)     V3I     Int32
-instance IsTexelFetch  (Sampler2DRect t ar)        V2I     ()   
+instance IsTexelFetch  (Sampler2DRect t ar)        V2I     ZZ   
 instance IsTexelFetch  (Sampler3D t ar)            V3I     Int32
-instance IsTexelFetch  (SamplerBuffer t ar)        Int32   ()   
+instance IsTexelFetch  (SamplerBuffer t ar)        Int32   ZZ   
 
 -- arity problem: lod
 class IsTexelFetchOffset sampler coord lod offset | sampler -> coord lod offset
@@ -161,7 +160,7 @@ instance IsTexelFetchOffset  (Sampler1D t ar)      Int32   Int32   Int32
 instance IsTexelFetchOffset  (Sampler1DArray t ar) V2I     Int32   Int32
 instance IsTexelFetchOffset  (Sampler2D t ar)      V2I     Int32   V2I  
 instance IsTexelFetchOffset  (Sampler2DArray t ar) V3I     Int32   V2I  
-instance IsTexelFetchOffset  (Sampler2DRect t ar)  V2I     ()      V2I  
+instance IsTexelFetchOffset  (Sampler2DRect t ar)  V2I     ZZ      V2I  
 instance IsTexelFetchOffset  (Sampler3D t ar)      V3I     Int32   V3I  
 
 -- arity problem: bias
@@ -171,8 +170,8 @@ instance IsTextureProjOffset  (Sampler1D t ar)      V4F     Int32   Float
 instance IsTextureProjOffset  (Sampler2D t ar)      V3F     V2I     Float
 instance IsTextureProjOffset  (Sampler2D t ar)      V4F     V2I     Float
 instance IsTextureProjOffset  (Sampler3D t ar)      V4F     V3I     Float
-instance IsTextureProjOffset  (Sampler2DRect t ar)  V3F     V2I     ()   
-instance IsTextureProjOffset  (Sampler2DRect t ar)  V4F     V2I     ()   
+instance IsTextureProjOffset  (Sampler2DRect t ar)  V3F     V2I     ZZ   
+instance IsTextureProjOffset  (Sampler2DRect t ar)  V4F     V2I     ZZ   
 instance IsTextureProjOffset  Sampler1DShadow       V4F     Int32   Float
 instance IsTextureProjOffset  Sampler2DShadow       V4F     V2I     Float
 instance IsTextureProjOffset  Sampler2DRectShadow   V4F     V2I     Float

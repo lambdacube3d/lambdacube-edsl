@@ -35,12 +35,11 @@ Library
 
   Exposed-modules:
         LC_T_APIType
-        LC_T_DSLType
         LC_T_HOAS
         LC_T_PrimFun
         LC_T_Sampler
 
-        LC_U_APIType
+        LC_G_Type
         LC_G_APIType
   GHC-options:
 --        -Werror

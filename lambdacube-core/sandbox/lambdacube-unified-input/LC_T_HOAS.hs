@@ -11,7 +11,6 @@ import TypeLevel.Number.Nat.Num
 import LC_G_Type
 import LC_G_APIType
 import LC_T_APIType
-import LC_T_DSLType
 import LC_T_PrimFun
 
 -- all LC supported types including all types of every computation frequency (Obj,V,G,F)
@@ -135,6 +134,9 @@ type instance PrjTup N15 (e :+: l) = PrjTup N14 l
 --TODO: check whether we should distinct size limited arrays and arbitrary sized arrays.
 --          former is due to GLSL and GPU restrictions, latter are stored in CPU RAM
 
+type InterpolatedExpTuple freq a = Tuple GPU (Interpolated (Exp freq)) a
+type ExpTuple freq a = Tuple GPU (Exp freq) a
+
 -- Common Exp, describes shader functions
 data Exp freq t where
     -- Needed for conversion to de Bruijn form
@@ -172,7 +174,7 @@ data Exp freq t where
             -> Exp freq a
             -> Exp freq r
 
-    Tup     :: Tuple LCType (Exp freq) t
+    Tup     :: ExpTuple freq t
             -> Exp freq t
 
     Prj     :: (Nat idx)
@@ -283,8 +285,6 @@ data Exp freq t where
 
 
 
-type InterpolatedExpTuple freq a = Tuple GPU (Interpolated (Exp freq)) a
-type ExpTuple freq a = Tuple GPU (Exp freq) a
 
 -- Vertex
 {-

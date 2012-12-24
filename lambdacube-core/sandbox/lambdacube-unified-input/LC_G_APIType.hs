@@ -4,8 +4,6 @@ import Data.Data
 import Data.Int
 import Data.Word
 
-import LC_G_Type
-
 data PrimitiveType  = TriangleStrip | TriangleList | TriangleFan | LineStrip | LineList | PointList deriving (Eq,Ord,Bounded,Enum,Show, Data,Typeable)
 
 data PointSize          = PointSize Float | PointSizeRast deriving (Eq,Ord,Show, Data,Typeable)
