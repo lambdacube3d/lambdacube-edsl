@@ -9,7 +9,7 @@ import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
 
 import LC_G_Type
-import LC_G_APIType (Filter(..),EdgeMode(..))
+import LC_G_APIType
 import LC_T_APIType
 import LC_T_DSLType
 import LC_T_PrimFun
@@ -53,7 +53,7 @@ data InputType a where
     M43F'       :: InputType M43F
     M44F'       :: InputType M44F
 
-    Tuple'      :: FlatTuple Typeable InputType t
+    Tuple'      :: Tuple Typeable InputType t
                 -> InputType t -- TODO: accept only at least two long flat tuples
 
     Array'      :: ordering
@@ -92,7 +92,7 @@ data InputValue a where
     M43F    :: M43F     -> InputValue M43F
     M44F    :: M44F     -> InputValue M44F
 
-    Tuple   :: FlatTuple Typeable InputValue t
+    Tuple   :: Tuple Typeable InputValue t
             -> InputValue t -- TODO: accept only at least two long flat tuples
 
     Array   :: ordering
@@ -107,6 +107,30 @@ data InputValue a where
     SamplerSetting  :: Filter
                     -> EdgeMode
                     -> InputValue SamplerSetting
+
+type N10 = O (I (O (I Z)))
+type N11 = I (I (O (I Z)))
+type N12 = O (O (I (I Z)))
+type N13 = I (O (I (I Z)))
+type N14 = O (I (I (I Z)))
+type N15 = I (I (I (I Z)))
+
+type family PrjTup idx t
+type instance PrjTup N1  (e :+: l) = e
+type instance PrjTup N2  (e :+: l) = PrjTup N1 l
+type instance PrjTup N3  (e :+: l) = PrjTup N2 l
+type instance PrjTup N4  (e :+: l) = PrjTup N3 l
+type instance PrjTup N5  (e :+: l) = PrjTup N4 l
+type instance PrjTup N6  (e :+: l) = PrjTup N5 l
+type instance PrjTup N7  (e :+: l) = PrjTup N6 l
+type instance PrjTup N8  (e :+: l) = PrjTup N7 l
+type instance PrjTup N9  (e :+: l) = PrjTup N8 l
+type instance PrjTup N10 (e :+: l) = PrjTup N9 l
+type instance PrjTup N11 (e :+: l) = PrjTup N10 l
+type instance PrjTup N12 (e :+: l) = PrjTup N11 l
+type instance PrjTup N13 (e :+: l) = PrjTup N12 l
+type instance PrjTup N14 (e :+: l) = PrjTup N13 l
+type instance PrjTup N15 (e :+: l) = PrjTup N14 l
 
 --TODO: check whether we should distinct size limited arrays and arbitrary sized arrays.
 --          former is due to GLSL and GPU restrictions, latter are stored in CPU RAM
@@ -148,16 +172,13 @@ data Exp freq t where
             -> Exp freq a
             -> Exp freq r
 
-    -- tuple support
-    -- TODO: replace Tuple and TupleIdx with FlatTuple and Nat
-    Tup     :: (LCType t, IsTuple t)
-            => Tuple (Exp freq) (TupleRepr t)
+    Tup     :: Tuple LCType (Exp freq) t
             -> Exp freq t
 
-    Prj     :: (LCType e, LCType t, IsTuple t)
-            => TupleIdx (TupleRepr t) e
+    Prj     :: (Nat idx)
+            => idx
             -> Exp freq t
-            -> Exp freq e
+            -> Exp freq (PrjTup idx t)
 
     -- loop support
     Loop    :: (LCType s, LCType a)
@@ -215,8 +236,8 @@ data Exp freq t where
                     -> Exp Obj (FrameBuffer layerCount a)
 
     -- GPU pipeline model
-    Fetch           :: (SGPU a, IsPrimitive prim)
-                    => prim
+    Fetch           :: SGPU a
+                    => Primitive prim
                     -> Exp Obj (Array order a)
                     -> Maybe (Exp Obj (Array order Int32))
                     -> Exp Obj (VertexStream prim a)
@@ -235,36 +256,35 @@ data Exp freq t where
                     -> Exp Obj (FragmentStream layerCount a)
 
     FrameBuffer     :: FrameBuffer layerCount t
-                    -> Exp Obj (FrameBuffer layerCount (FTRepr' t))
+                    -> Exp Obj (FrameBuffer layerCount (t))--TODO ftrepr'
 
-    Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
+    Accumulate      :: (GPU a, GPU b, IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
                     => AccumulationContext b
                     -> FragmentFilter a
                     -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
                     -> Exp Obj (FragmentStream layerCount a)
-                    -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
-                    -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
+                    -> Exp Obj (FrameBuffer layerCount (b))--TODO ftrepr'
+                    -> Exp Obj (FrameBuffer layerCount (b))--TODO ftrepr'
 
     -- Transform feedback support
     ArrayFromStream :: Exp Obj (PrimitiveStream prim layerCount freq a)
                     -> Exp Obj (Array order a)
 
     -- FrameBuffer and Image helpers
-    PrjFrameBuffer  :: ByteString                       -- internal image output (can be allocated on request)
-                    -> TupleIdx (EltRepr b) t
+    PrjFrameBuffer  :: Nat idx
+                    => idx
                     -> Exp Obj (FrameBuffer layerCount b)
-                    -> Exp Obj (Image layerCount t)
+                    -> Exp Obj (Image layerCount (PrjTup idx t))
 
     PrjImage        :: (Nat idx, LesserEq idx layerCount)
-                    => ByteString                       -- internal image output (can be allocated on request)
-                    -> idx
+                    => idx
                     -> Exp Obj (Image layerCount t)
                     -> Exp Obj (Image N1 t)
 
 
 
-type InterpolatedFlatExp freq a = FlatTuple GPU (Interpolated (Exp freq)) a
-type FlatExp freq a = FlatTuple GPU (Exp freq) a
+type InterpolatedExpTuple freq a = Tuple GPU (Interpolated (Exp freq)) a
+type ExpTuple freq a = Tuple GPU (Exp freq) a
 
 -- Vertex
 {-
@@ -280,15 +300,15 @@ type FlatExp freq a = FlatTuple GPU (Exp freq) a
 data VertexOut t where
     VertexOut   :: Exp V V4F      -- position
                 -> Exp V Float    -- point size
-                -> InterpolatedFlatExp V a
-                -> VertexOut (FTRepr a)
+                -> InterpolatedExpTuple V a
+                -> VertexOut a
 
 -- Geometry
 -- describes a geometry shader
 data GeometryShader primIn primOut layerNum a b where
-    GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum)
+    GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, Nat layerNum)
                         => layerNum                                                 -- geometry shader:
-                        -> primOut                                                  -- output primitive
+                        -> Primitive primOut                                        -- output primitive
                         -> Int                                                      -- max amount of generated vertices
                         -> (Exp G (PrimitiveVertices primIn a) -> Exp G (i,Int32))  -- how many primitives?
                         -> (Exp G i -> Exp G (i,j,Int32))                           -- how many vertices?
@@ -312,8 +332,8 @@ data GeometryOut t where
                 -> Exp G Int32    -- primitive ID
                 -> Exp G Int32    -- layer
                 -> Exp G j
-                -> InterpolatedFlatExp G a
-                -> GeometryOut (j,(FTRepr a))
+                -> InterpolatedExpTuple G a
+                -> GeometryOut (j,a)
 
 -- Fragment
 {-
@@ -322,14 +342,14 @@ data GeometryOut t where
 -}
 -- result of a fragment shader function
 data FragmentOut t where
-    FragmentOut             :: FlatExp F a
+    FragmentOut             :: ExpTuple F a
                             -> FragmentOut (ColorRepr a)
 
     FragmentOutDepth        :: Exp F Float
-                            -> FlatExp F a
+                            -> ExpTuple F a
                             -> FragmentOut (Depth Float :+: ColorRepr a)
 
-    FragmentOutRastDepth    :: FlatExp F a
+    FragmentOutRastDepth    :: ExpTuple F a
                             -> FragmentOut (Depth Float :+: ColorRepr a)
 
 -- fragment filter function, we express discard using a filter function

@@ -11,123 +11,18 @@ import TypeLevel.Number.Nat.Num
 import TypeLevel.Number.Classes
 
 import LC_G_Type
-import LC_G_APIType hiding (InputType(..))
-import LC_G_APIType (InputType)
-import qualified LC_G_APIType as U
-import qualified LC_U_APIType as U
+import LC_G_APIType
 import LC_T_DSLType
 
--- user can define stream input using InputTuple type class
-class InputTuple tup where
-    type InputTupleRepr tup
-    toInputList :: tup -> [(ByteString,InputType)]
-
-instance InputTuple (Input a) where
-    type InputTupleRepr (Input a) = a
-    toInputList a = [toInput a]
-
-instance InputTuple (Input a, Input b) where
-    type InputTupleRepr (Input a, Input b) = (a, b)
-    toInputList (a, b) = [toInput a, toInput b]
-
-instance InputTuple (Input a, Input b, Input c) where
-    type InputTupleRepr (Input a, Input b, Input c) = (a, b, c)
-    toInputList (a, b, c) = [toInput a, toInput b, toInput c]
-
-instance InputTuple (Input a, Input b, Input c, Input d) where
-    type InputTupleRepr (Input a, Input b, Input c, Input d) = (a, b, c, d)
-    toInputList (a, b, c, d) = [toInput a, toInput b, toInput c, toInput d]
-
-instance InputTuple (Input a, Input b, Input c, Input d, Input e) where
-    type InputTupleRepr (Input a, Input b, Input c, Input d, Input e) = (a, b, c, d, e)
-    toInputList (a, b, c, d, e) = [toInput a, toInput b, toInput c, toInput d, toInput e]
-
-instance InputTuple (Input a, Input b, Input c, Input d, Input e, Input f) where
-    type InputTupleRepr (Input a, Input b, Input c, Input d, Input e, Input f) = (a, b, c, d, e, f)
-    toInputList (a, b, c, d, e, f) = [toInput a, toInput b, toInput c, toInput d, toInput e, toInput f]
-
-instance InputTuple (Input a, Input b, Input c, Input d, Input e, Input f, Input g) where
-    type InputTupleRepr (Input a, Input b, Input c, Input d, Input e, Input f, Input g) = (a, b, c, d, e, f, g)
-    toInputList (a, b, c, d, e, f, g) = [toInput a, toInput b, toInput c, toInput d, toInput e, toInput f, toInput g]
-
-instance InputTuple (Input a, Input b, Input c, Input d, Input e, Input f, Input g, Input h) where
-    type InputTupleRepr (Input a, Input b, Input c, Input d, Input e, Input f, Input g, Input h) = (a, b, c, d, e, f, g, h)
-    toInputList (a, b, c, d, e, f, g, h) = [toInput a, toInput b, toInput c, toInput d, toInput e, toInput f, toInput g, toInput h]
-
-instance InputTuple (Input a, Input b, Input c, Input d, Input e, Input f, Input g, Input h, Input i) where
-    type InputTupleRepr (Input a, Input b, Input c, Input d, Input e, Input f, Input g, Input h, Input i) = (a, b, c, d, e, f, g, h, i)
-    toInputList (a, b, c, d, e, f, g, h, i) = [toInput a, toInput b, toInput c, toInput d, toInput e, toInput f, toInput g, toInput h, toInput i]
-
--- we should define all of input types
--- supported stream input types (the ByteString argument is the input slot name)
-data Input a where
-    IBool   :: ByteString -> Input Bool
-    IV2B    :: ByteString -> Input V2B
-    IV3B    :: ByteString -> Input V3B
-    IV4B    :: ByteString -> Input V4B
-    IWord   :: ByteString -> Input Word32
-    IV2U    :: ByteString -> Input V2U
-    IV3U    :: ByteString -> Input V3U
-    IV4U    :: ByteString -> Input V4U
-    IInt    :: ByteString -> Input Int32
-    IV2I    :: ByteString -> Input V2I
-    IV3I    :: ByteString -> Input V3I
-    IV4I    :: ByteString -> Input V4I
-    IFloat  :: ByteString -> Input Float
-    IV2F    :: ByteString -> Input V2F
-    IV3F    :: ByteString -> Input V3F
-    IV4F    :: ByteString -> Input V4F
-    IM22F   :: ByteString -> Input M22F
-    IM23F   :: ByteString -> Input M23F
-    IM24F   :: ByteString -> Input M24F
-    IM32F   :: ByteString -> Input M32F
-    IM33F   :: ByteString -> Input M33F
-    IM34F   :: ByteString -> Input M34F
-    IM42F   :: ByteString -> Input M42F
-    IM43F   :: ByteString -> Input M43F
-    IM44F   :: ByteString -> Input M44F
-
-toInput :: Input a -> (ByteString,InputType)
-toInput (IBool  n) = (n, U.Bool)
-toInput (IV2B   n) = (n, U.V2B)
-toInput (IV3B   n) = (n, U.V3B)
-toInput (IV4B   n) = (n, U.V4B)
-toInput (IWord  n) = (n, U.Word)
-toInput (IV2U   n) = (n, U.V2U)
-toInput (IV3U   n) = (n, U.V3U)
-toInput (IV4U   n) = (n, U.V4U)
-toInput (IInt   n) = (n, U.Int)
-toInput (IV2I   n) = (n, U.V2I)
-toInput (IV3I   n) = (n, U.V3I)
-toInput (IV4I   n) = (n, U.V4I)
-toInput (IFloat n) = (n, U.Float)
-toInput (IV2F   n) = (n, U.V2F)
-toInput (IV3F   n) = (n, U.V3F)
-toInput (IV4F   n) = (n, U.V4F)
-toInput (IM22F  n) = (n, U.M22F)
-toInput (IM23F  n) = (n, U.M23F)
-toInput (IM24F  n) = (n, U.M24F)
-toInput (IM32F  n) = (n, U.M32F)
-toInput (IM33F  n) = (n, U.M33F)
-toInput (IM34F  n) = (n, U.M34F)
-toInput (IM42F  n) = (n, U.M42F)
-toInput (IM43F  n) = (n, U.M43F)
-toInput (IM44F  n) = (n, U.M44F)
-
 -- primitive types
-data Triangle   = Triangle deriving (Show, Eq, Ord)
-data Line       = Line     deriving (Show, Eq, Ord)
-data Point      = Point    deriving (Show, Eq, Ord)
+data Triangle
+data Line
+data Point
 
-class Show p => IsPrimitive p where
-    toPrimitive :: p -> U.PrimitiveType
-
-instance IsPrimitive Triangle where
-    toPrimitive _ = U.Triangle
-instance IsPrimitive Line where
-    toPrimitive _ = U.Line
-instance IsPrimitive Point where
-    toPrimitive _ = U.Point
+data Primitive a where
+    Triangle    :: Primitive Triangle
+    Line        :: Primitive Line
+    Point       :: Primitive Point
 
 data Blending c where
     NoBlending      :: Blending c
@@ -159,13 +54,13 @@ data tail :+: head = !tail :+: !head deriving (Typeable, Show)
 
 -- used for tuple value description
 infixr 1 :.
-data FlatTuple c a t where
-    ZT      :: FlatTuple c a ZZ
+data Tuple c a t where
+    ZT      :: Tuple c a ZZ
 
     (:.)    :: c t
             => a t
-            -> FlatTuple c a t'
-            -> FlatTuple c a (t :+: t')
+            -> Tuple c a t'
+            -> Tuple c a (t :+: t')
 
 -- vertex attribute interpolation
 data Interpolated e a where
@@ -207,11 +102,11 @@ data RasterContext t where
 triangleCtx :: RasterContext Triangle
 triangleCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
 
-type FrameBuffer layerCount t = FlatTuple Typeable (Image layerCount) t
+type FrameBuffer layerCount t = Tuple Typeable (Image layerCount) t
 data AccumulationContext t
     = AccumulationContext
     { accViewportName   :: Maybe ByteString
-    , accOperations     :: FlatTuple Typeable FragmentOperation t
+    , accOperations     :: Tuple Typeable FragmentOperation t
     }
 
 -- Fragment Operation
@@ -225,7 +120,7 @@ data FragmentOperation ty where
                     -> StencilOps
                     -> FragmentOperation (Stencil Int32)
 
-    ColorOp         :: (IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c, IsScalar mask)
+    ColorOp         :: (IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c)
                     => Blending c   -- blending type
                     -> mask         -- write mask
                     -> FragmentOperation (Color color)
@@ -244,7 +139,7 @@ data Image layerCount t where
                     -> Int32    -- initial value
                     -> Image layerCount (Stencil Int32)
 
-    ColorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount, IsScalar color)
+    ColorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount)
                     => layerCount
                     -> color    -- initial value
                     -> Image layerCount (Color color)
@@ -261,32 +156,6 @@ instance (IsColorOutput a) => IsValidOutput (Color c :+: a)
 instance (IsColorOutput a) => IsValidOutput (Depth d :+: a)
 instance (IsColorOutput a) => IsValidOutput (Stencil s :+: a)
 instance (IsColorOutput a) => IsValidOutput (Stencil s :+: Depth d :+: a)
-
--- helper class (type level function), used in language AST
--- converts FlatTuple type to ordinary tuple type
-type family FTRepr a :: *
-type instance FTRepr ZZ = ()
-type instance FTRepr (a :+: ZZ) = a
-type instance FTRepr (a :+: b :+: ZZ) = (a, b)
-type instance FTRepr (a :+: b :+: c :+: ZZ) = (a, b, c)
-type instance FTRepr (a :+: b :+: c :+: d :+: ZZ) = (a, b, c, d)
-type instance FTRepr (a :+: b :+: c :+: d :+: e :+: ZZ) = (a, b, c, d, e)
-type instance FTRepr (a :+: b :+: c :+: d :+: e :+: f :+: ZZ) = (a, b, c, d, e, f)
-type instance FTRepr (a :+: b :+: c :+: d :+: e :+: f :+: g :+: ZZ) = (a, b, c, d, e, f, g)
-type instance FTRepr (a :+: b :+: c :+: d :+: e :+: f :+: g :+: h :+: ZZ) = (a, b, c, d, e, f, g, h)
-type instance FTRepr (a :+: b :+: c :+: d :+: e :+: f :+: g :+: h :+: i :+: ZZ) = (a, b, c, d, e, f, g, h, i)
-
--- helper type level function, used in language AST
-type family FTRepr' a :: *
-type instance FTRepr' (i1 a :+: ZZ) = a
-type instance FTRepr' (i1 a :+: i2 b :+: ZZ) = (a, b)
-type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: ZZ) = (a, b, c)
-type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: ZZ) = (a, b, c, d)
-type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: ZZ) = (a, b, c, d, e)
-type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: ZZ) = (a, b, c, d, e, f)
-type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: ZZ) = (a, b, c, d, e, f, g)
-type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
-type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
 
 -- helper type level function, used in language AST
 type family ColorRepr a :: *
@@ -325,16 +194,13 @@ type instance TexDataRepr RGBA (v a) = V4 a
 
 -- describes texel (texture component) type
 data TextureDataType t arity where
-    Float   :: (IsColorArity a)
-            => a
+    Float   :: ColorArity a
             -> TextureDataType (Regular Float) a
 
-    Int     :: (IsColorArity a)
-            => a
+    Int     :: ColorArity a
             -> TextureDataType (Regular Int) a
 
-    Word    :: (IsColorArity a)
-            => a
+    Word    :: ColorArity a
             -> TextureDataType (Regular Word) a
 
     Shadow  :: TextureDataType (Shadow Float) Red   -- TODO: add params required by shadow textures
@@ -348,16 +214,11 @@ type instance TexArrRepr (Greater t N1 => t) = ArrayTex
 
 -- supported texture component arities
 
-class IsColorArity a where
-    toColorArity :: a -> U.ColorArity
-instance IsColorArity Red where
-    toColorArity _ = U.Red
-instance IsColorArity RG where
-    toColorArity _ = U.RG
-instance IsColorArity RGB where
-    toColorArity _ = U.RGB
-instance IsColorArity RGBA where
-    toColorArity _ = U.RGBA
+data ColorArity a where
+    Red     :: ColorArity Red
+    RG      :: ColorArity RG
+    RGB     :: ColorArity RGB
+    RGBA    :: ColorArity RGBA
 
 -- component arity specification (Red,RG,RGB,RGBA)
 --          hint: there is an interference with Shadow component format
