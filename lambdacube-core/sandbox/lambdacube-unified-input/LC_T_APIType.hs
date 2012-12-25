@@ -14,6 +14,19 @@ import TypeLevel.Number.Classes
 import LC_G_LinearAlgebraTypes
 import LC_G_APIType
 
+-- natural number helper
+newtype NatNumber n = Num Int
+
+num :: Nat n => n -> NatNumber n
+num n = Num $ toInt n
+
+type N10 = O (I (O (I Z)))
+type N11 = I (I (O (I Z)))
+type N12 = O (O (I (I Z)))
+type N13 = I (O (I (I Z)))
+type N14 = O (I (I (I Z)))
+type N15 = I (I (I (I Z)))
+
 -- internal tuple representation
 
 -- means unit
@@ -32,6 +45,24 @@ data Tuple c a t where
             => a t
             -> Tuple c a t'
             -> Tuple c a (t :+: t')
+
+type family PrjTup idx t
+type instance PrjTup N1  (e :+: l) = e
+type instance PrjTup N2  (e :+: l) = PrjTup N1 l
+type instance PrjTup N3  (e :+: l) = PrjTup N2 l
+type instance PrjTup N4  (e :+: l) = PrjTup N3 l
+type instance PrjTup N5  (e :+: l) = PrjTup N4 l
+type instance PrjTup N6  (e :+: l) = PrjTup N5 l
+type instance PrjTup N7  (e :+: l) = PrjTup N6 l
+type instance PrjTup N8  (e :+: l) = PrjTup N7 l
+type instance PrjTup N9  (e :+: l) = PrjTup N8 l
+type instance PrjTup N10 (e :+: l) = PrjTup N9 l
+type instance PrjTup N11 (e :+: l) = PrjTup N10 l
+type instance PrjTup N12 (e :+: l) = PrjTup N11 l
+type instance PrjTup N13 (e :+: l) = PrjTup N12 l
+type instance PrjTup N14 (e :+: l) = PrjTup N13 l
+type instance PrjTup N15 (e :+: l) = PrjTup N14 l
+
 
 -- all LC supported types including all types of every computation frequency (Obj,V,G,F)
 class LCType a
@@ -130,30 +161,6 @@ data InputValue a where
     SamplerSetting  :: Filter
                     -> EdgeMode
                     -> InputValue SamplerSetting
-
-type N10 = O (I (O (I Z)))
-type N11 = I (I (O (I Z)))
-type N12 = O (O (I (I Z)))
-type N13 = I (O (I (I Z)))
-type N14 = O (I (I (I Z)))
-type N15 = I (I (I (I Z)))
-
-type family PrjTup idx t
-type instance PrjTup N1  (e :+: l) = e
-type instance PrjTup N2  (e :+: l) = PrjTup N1 l
-type instance PrjTup N3  (e :+: l) = PrjTup N2 l
-type instance PrjTup N4  (e :+: l) = PrjTup N3 l
-type instance PrjTup N5  (e :+: l) = PrjTup N4 l
-type instance PrjTup N6  (e :+: l) = PrjTup N5 l
-type instance PrjTup N7  (e :+: l) = PrjTup N6 l
-type instance PrjTup N8  (e :+: l) = PrjTup N7 l
-type instance PrjTup N9  (e :+: l) = PrjTup N8 l
-type instance PrjTup N10 (e :+: l) = PrjTup N9 l
-type instance PrjTup N11 (e :+: l) = PrjTup N10 l
-type instance PrjTup N12 (e :+: l) = PrjTup N11 l
-type instance PrjTup N13 (e :+: l) = PrjTup N12 l
-type instance PrjTup N14 (e :+: l) = PrjTup N13 l
-type instance PrjTup N15 (e :+: l) = PrjTup N14 l
 
 -- primitive types
 data Adjacency
@@ -257,27 +264,25 @@ data FragmentOperation ty where
                     -> FragmentOperation (Stencil Int32)
 
     ColorOp         :: (IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c)
-                    => Blending c   -- blending type
-                    -> mask         -- write mask
+                    => Blending c       -- blending type
+                    -> InputValue mask  -- write mask
                     -> FragmentOperation (Color color)
     deriving Typeable
 
 -- specifies an empty image (pixel rectangle)
 -- hint: framebuffer is composed from images
 data Image layerCount t where
-    DepthImage      :: Nat layerCount
-                    => layerCount
+    DepthImage      :: NatNumber layerCount
                     -> Float    -- initial value
                     -> Image layerCount (Depth Float)
 
-    StencilImage    :: Nat layerCount
-                    => layerCount
+    StencilImage    :: NatNumber layerCount
                     -> Int32    -- initial value
                     -> Image layerCount (Stencil Int32)
 
-    ColorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount)
-                    => layerCount
-                    -> color    -- initial value
+    ColorImage      :: (IsNum t, IsVecScalar d color t)
+                    => NatNumber layerCount
+                    -> InputValue color -- initial value
                     -> Image layerCount (Color color)
     deriving Typeable
 
@@ -365,14 +370,12 @@ data ColorArity a where
 
 -- fully describes a texture type
 data TextureType dim mip arr layerCount t ar where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
-    Texture1D       :: (Nat layerCount)
-                    => TextureDataType t ar
-                    -> layerCount
+    Texture1D       :: TextureDataType t ar
+                    -> NatNumber layerCount
                     -> TextureType DIM1 Mip (TexArrRepr layerCount) layerCount t ar
 
-    Texture2D       :: (Nat layerCount)
-                    => TextureDataType t ar
-                    -> layerCount
+    Texture2D       :: TextureDataType t ar
+                    -> NatNumber layerCount
                     -> TextureType DIM2 Mip (TexArrRepr layerCount) layerCount t ar
 
     Texture3D       :: TextureDataType (Regular t) ar
@@ -384,9 +387,8 @@ data TextureType dim mip arr layerCount t ar where -- hint: arr - single or arra
     TextureRect     :: TextureDataType t ar
                     -> TextureType Rect NoMip SingleTex N1 t ar
 
-    Texture2DMS     :: (Nat layerCount)
-                    => TextureDataType (Regular t) ar
-                    -> layerCount
+    Texture2DMS     :: TextureDataType (Regular t) ar
+                    -> NatNumber layerCount
                     -> TextureType DIM2 NoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
 
     TextureBuffer   :: TextureDataType (Regular t) ar
