@@ -1,6 +1,5 @@
-module LC_C_Convert {-(convertOutput)-} where
+module LC_C_Convert (convertExp) where
 
-import Data.Typeable
 import Debug.Trace
 
 import TypeLevel.Number.Nat
@@ -15,127 +14,122 @@ import LC_U_APIType
 import LC_G_APIType
 import LC_C_PrimFun
 
-
 type Layout = [Ty]
-{-
-genTy :: GPU a => a -> Ty
+
+genTy :: T.LCType t => H.Exp freq t -> Ty
 genTy a = Ty
 
-convertOutput :: ExpC exp => H.Output -> exp
-
--- GP
-convertGP :: ExpC exp => H.Exp T.Obj t -> exp
-convertGP = convertOpenGP []
-
-
--- Common
-convertOpenInterpolatedFlatExp :: ExpC exp => forall freq t.
-                                  Layout       -- scalar environment
-                               -> Layout      -- array environment
-                               -> H.InterpolatedFlatExp freq t               -- expression to be converted
-                               -> [exp]
-convertOpenInterpolatedFlatExp lyt glyt = cvt
+convertInterpolatedExpTuple :: ExpC exp => forall freq t.
+                               Layout       -- scalar environment
+                            -> H.InterpolatedExpTuple freq t               -- expression to be converted
+                            -> [exp]
+convertInterpolatedExpTuple lyt expr = cvtExpr
   where
-    cvt :: ExpC exp => H.InterpolatedFlatExp freq t' -> [exp]
-    cvt (ZT)    = []
-    cvt (e:.xs) = cvt' e : cvt xs
+    cvtExpr = case expr of
+        ZT      -> []
+        e :. xs -> cvt' e : convertInterpolatedExpTuple lyt xs
 
-    cvt' :: ExpC exp => T.Interpolated (H.Exp freq) t' -> exp
-    cvt' (T.Flat e)           = flat          $ convertOpenExp lyt glyt e
-    cvt' (T.Smooth e)         = smooth        $ convertOpenExp lyt glyt e
-    cvt' (T.NoPerspective e)  = noPerspective $ convertOpenExp lyt glyt e
+    cvt' :: (T.LCType t', ExpC exp) => H.Interpolated (H.Exp freq) t' -> exp
+    cvt' v = case v of
+        H.Flat e            -> flat          ty (convertExp lyt e)
+        H.Smooth e          -> smooth        ty (convertExp lyt e)
+        H.NoPerspective e   -> noPerspective ty (convertExp lyt e)
+      where
+        ty = undefined--genTy v
 
-convertOpenFlatExp :: ExpC exp => forall freq t.
-                      Layout       -- scalar environment
-                   -> Layout      -- array environment
-                   -> H.FlatExp freq t               -- expression to be converted
-                   -> [exp]
-convertOpenFlatExp lyt glyt = cvt
-  where
-    cvt :: ExpC exp => H.FlatExp freq t' -> [exp]
-    cvt (ZT)    = []
-    cvt (e:.xs) = convertOpenExp lyt glyt e : cvt xs
+convertExpTuple :: ExpC exp => forall freq t.
+                   Layout       -- scalar environment
+                -> H.ExpTuple freq t               -- expression to be converted
+                -> [exp]
+convertExpTuple lyt expr = case expr of
+    ZT      -> []
+    e :. xs -> convertExp lyt e : convertExpTuple lyt xs
 
-convertOpenExp :: ExpC exp => forall freq t.
+convertExp :: (T.LCType t, ExpC exp) => forall freq.
                   Layout
                -> H.Exp freq t               -- expression to be converted
                -> exp
-convertOpenExp lyt expr = cvtExpt
+convertExp lyt expr = cvtExpr
   where
     ty = genTy expr
     cvtExpr = case expr of
-        H.Tag i li                      -> var          ty (prjIdx i lyt) li
-        H.Const v                       -> const_       ty (T.toValue v)
-        H.PrimVar v                     -> primVar      ty (fst $ T.toInput v)
-        H.Uni v                         -> uni          ty (fst $ T.toInput v)
-        H.Tup tupl                      -> tup          ty $ convertTuple lyt glyt tupl
-        H.Prj idx e                     -> prj          ty (prjToInt idx) $ cvt e
-        H.Cond e1 e2 e3                 -> cond         ty (cvt e1) (cvt e2) (cvt e3)
-        H.PrimApp p e                   -> primApp      ty (convertPrimFun p) $ cvt e
-        H.Loop e1 e2 e3 s               -> loop         ty (convertFun1Exp glyt e1) (convertFun1Exp glyt e2) (convertFun1Exp glyt e3) (cvt s)
-        H.Fetch n p i                   -> fetch        ty n (T.toPrimitive p) (T.toInputList i)
-        H.Transform vs ps               -> transform    ty (convertFun1Vert glyt vs) (cvt glyt ps)
-        H.Reassemble sh ps              -> reassemble   ty (convertGeometryShader glyt sh) (cvt glyt ps)
-        H.Rasterize ctx ps              -> rasterize    ty (convertRasterContext ctx) $ cvt glyt ps
-        H.FrameBuffer fb                -> frameBuffer  ty (convertFrameBuffer fb)
-        H.Accumulate ctx f sh fs fb     -> accumulate   ty (convertAccumulationContext ctx) (convertFragmentFilter glyt f)
-                                                                                     (convertFun1Frag glyt sh)
-                                                                                     (cvt glyt fs)
-                                                                                     (cvt glyt fb)
-        H.PrjFrameBuffer n idx fb       -> prjFrameBuffer       ty n (prjToInt idx) $ convertGP fb
-        H.PrjImage n idx img            -> prjImage             ty n (toInt idx) $ convertGP img
-
-        H.ImageOut a b                  -> imageOut             ty a $ convertGP b
-        H.ScreenOut a                   -> screenOut            ty $ convertGP a
-
-        H.VertexOut e1 e2 ie            -> vertexOut            ty (convertOpenExp lyt glyt e1) (convertOpenExp lyt glyt e2) (convertOpenInterpolatedFlatExp lyt glyt ie)
-        H.FragmentOut fe                -> fragmentOut          ty $ convertOpenFlatExp lyt glyt fe
-        H.FragmentOutDepth e fe         -> fragmentOutDepth     ty (convertOpenExp lyt glyt e) (convertOpenFlatExp lyt glyt fe)
-        H.FragmentOutRastDepth fe       -> fragmentOutRastDepth ty $ convertOpenFlatExp lyt glyt fe
-        H.GeometryOut e1 e2 e3 e4 e5 ie -> geometryOut          ty (convertOpenExp lyt glyt e1)
-                                                                            (convertOpenExp lyt glyt e2)
-                                                                            (convertOpenExp lyt glyt e3)
-                                                                            (convertOpenExp lyt glyt e4)
-                                                                            (convertOpenExp lyt glyt e5)
-                                                                            (convertOpenInterpolatedFlatExp lyt glyt ie)
-
-        H.PassAll                       -> passAll  ty
-        H.Filter f                      -> filter_  ty $ convertFun1Exp glyt f
-
-        H.GeometryShader a b c e1 e2 e3 -> geometryShader   ty (toInt a) (T.toPrimitive b) c (convertFun1Exp glyt e1)
-                                                                                               (convertFun1Exp glyt e2)
-                                                                                               (convertFun1Geom glyt e3)
--}
 {-
-convertFun1 :: (GPU a, Typeable a)
-            => (Layout (env, a) ((), a) -> Layout genv genv -> he b -> de (env, a) genv b)
-            -> Layout genv genv
-            -> (H.Exp a -> he b)
-            -> D.OpenFun de env genv (a -> b)
+        H.Tag i li                      -> var              ty (prjIdx i lyt) li
+        H.Const v                       -> const_           ty (T.toValue v)
+        H.Input v                       -> input            ty (fst $ T.toInput v)
 -}
+        H.Use a                         -> use              ty (convertExp lyt a)
+        H.Cond a b c                    -> cond             ty (convertExp lyt a) (convertExp lyt b) (convertExp lyt c)
+        H.PrimApp a b                   -> primApp          ty (convertPrimFun a) (convertExp lyt b)
+        H.Tup a                         -> tup              ty (convertExpTuple lyt a)
+        H.Prj a b                       -> prj              ty (toInt a) (convertExp lyt b)
+        H.Loop a b c d                  -> loop             ty (convertFun1 lyt a) (convertFun1 lyt b) (convertFun1 lyt c) (convertExp lyt d)
+
+        H.ArrayFromList a               -> arrayFromList    ty (map (convertExp lyt) a)
+        H.ArrayReplicate a b            -> arrayReplicate   ty (convertExp lyt a) (convertExp lyt b)
+        H.ArrayGenerate a b             -> arrayGenerate    ty (convertExp lyt a) (convertFun1 lyt b)
+        H.ArrayIterateN a b c           -> arrayIterateN    ty (convertExp lyt a) (convertFun1 lyt b) (convertExp lyt c)
+        H.ArrayIndex a b                -> arrayIndex       ty (convertExp lyt a) (convertExp lyt b)
+        H.ArrayFilter a b               -> arrayFilter      ty (convertFun1 lyt a) (convertExp lyt b)
+        H.ArrayMap a b                  -> arrayMap         ty (convertFun1 lyt a) (convertExp lyt b)
+        H.ArrayZipWith a b c            -> arrayZipWith     ty (convertFun2 lyt a) (convertExp lyt b) (convertExp lyt c)
+        H.ArrayAccumulate a b c         -> arrayAccumulate  ty (convertFun2 lyt a) (convertExp lyt b) (convertExp lyt c)
+
+        H.Fetch a b c                   -> fetch            ty (convertFetchPrimitive a) (convertExp lyt b) (maybe Nothing (\v -> Just (convertExp lyt v)) c)
+        H.Transform a b                 -> transform        ty (convertFun1 lyt a) (convertExp lyt b)
+        H.Reassemble a b                -> reassemble       ty (convertExp lyt a) (convertExp lyt b)
+        H.Rasterize a b                 -> rasterize        ty (convertRasterContext a) (convertExp lyt b)
 {-
-convertFun1 :: (GPU t, ExpC b) => ([t3] -> t1 -> t2 -> b) -> t1 -> (H.Exp freq t -> t2) -> b
-convertFun1 cvt glyt f = lam $ body $ cvt lyt glyt (f a)
+        H.FrameBuffer a                 -> frameBuffer      ty (convertFrameBuffer a)
+
+        H.Accumulate a b c d e          -> accumulate       ty (convertAccumulationContext a) (convertExp lyt b)
+                                                                                     (convertFun1 lyt c)
+                                                                                     (convertExp lyt d)
+                                                                                     (convertExp lyt e)
+
+-}
+        H.ArrayFromStream a             -> arrayFromStream  ty (convertExp lyt a)
+
+        H.PrjFrameBuffer a b            -> prjFrameBuffer   ty (toInt a) (convertExp lyt b)
+        H.PrjImage a b                  -> prjImage         ty (toInt a) (convertExp lyt b)
+
+        H.VertexOut a b c               -> vertexOut            ty (convertExp lyt a) (convertExp lyt b) (convertInterpolatedExpTuple lyt c)
+        H.GeometryShader a b c d e f    -> geometryShader       ty (toInt a) (convertOutputPrimitive b) c (convertFun1 lyt d) (convertFun1 lyt e) (convertFun1 lyt f)
+        H.GeometryOut a b c d e f       -> geometryOut          ty (convertExp lyt a) (convertExp lyt b) (convertExp lyt c) (convertExp lyt d) (convertExp lyt e) (convertInterpolatedExpTuple lyt f)
+        H.FragmentOut a                 -> fragmentOut          ty (convertExpTuple lyt a)
+        H.FragmentOutDepth a b          -> fragmentOutDepth     ty (convertExp lyt a) (convertExpTuple lyt b)
+        H.FragmentOutRastDepth a        -> fragmentOutRastDepth ty (convertExpTuple lyt a)
+
+        H.PassAll                       -> passAll              ty
+        H.Filter f                      -> filter_              ty (convertFun1 lyt f)
+
+        H.ImageOut n a                  -> imageOut             ty n (convertExp lyt a)
+        H.ScreenOut a                   -> screenOut            ty (convertExp lyt a)
+
+-- TODO
+convertFun1 :: (T.LCType a, T.LCType b, ExpC exp)
+            => [Ty] -> (H.Exp freq a -> H.Exp freq b) -> exp
+convertFun1 lyt f = lam ty1 $ body ty2 $ convertExp lyt' (f a)
   where
-    a     = case f of
-              (fv :: H.Exp freq t -> t2) -> H.Tag 0 (typeOf (undefined :: t))
-    lyt   = [undefined]
+    a       = case f of
+              (fv :: H.Exp freq a -> H.Exp freq b) -> H.Tag (length lyt) undefined--(typeOf (undefined :: a))
+    lyt'    = undefined:lyt -- TODO
+    ty1     = undefined
+    ty2     = undefined
 
+convertFun2 :: (T.LCType a, T.LCType b, T.LCType c, ExpC exp)
+            => [Ty] -> (H.Exp freq a -> H.Exp freq b -> H.Exp freq c) -> exp
+convertFun2 lyt f = lam ty1 $ lam ty2 $ body ty3 $ convertExp lyt' (f a b)
+  where
+    a       = case f of
+              (fv :: H.Exp freq a -> H.Exp freq b -> H.Exp freq c) -> H.Tag (length lyt+1) undefined--(typeOf (undefined :: a))
+    b       = case f of
+              (fv :: H.Exp freq a -> H.Exp freq b -> H.Exp freq c) -> H.Tag (length lyt) undefined--(typeOf (undefined :: a))
+    lyt'    = undefined:undefined:lyt -- TODO
+    ty1     = undefined
+    ty2     = undefined
+    ty3     = undefined
 
-convertExp :: ExpC exp
-           => Layout      -- array environment
-           -> H.Exp freq t          -- expression to be converted
-           -> exp
-convertExp glyt = convertOpenExp [] glyt
-
-convertTuple :: ExpC exp
-             => Layout
-             -> Layout
-             -> Tuple (H.Exp freq) t 
-             -> [exp]
-convertTuple _lyt _glyt NilTup          = []
-convertTuple lyt  glyt (es `SnocTup` e) = convertTuple lyt glyt es ++ [convertOpenExp lyt glyt e]
--}
 
 -- data type conversion
 
@@ -180,6 +174,27 @@ convertBlending v = case v of
     T.NoBlending        -> NoBlending
     T.BlendLogicOp a    -> BlendLogicOp a
     T.Blend a b c       -> Blend a b c
+
+convertFetchPrimitive :: T.FetchPrimitive a b -> FetchPrimitive
+convertFetchPrimitive v = case v of
+    T.Points                    -> Points
+    T.LineStrip                 -> LineStrip
+    T.LineLoop                  -> LineLoop
+    T.Lines                     -> Lines
+    T.TriangleStrip             -> TriangleStrip
+    T.TriangleFan               -> TriangleFan
+    T.Triangles                 -> Triangles
+    T.LinesAdjacency            -> LinesAdjacency
+    T.LineStripAdjacency        -> LineStripAdjacency
+    T.TrianglesAdjacency        -> TrianglesAdjacency
+    T.TriangleStripAdjacency    -> TriangleStripAdjacency
+
+convertOutputPrimitive :: T.OutputPrimitive a -> OutputPrimitive
+convertOutputPrimitive v = case v of
+    T.TrianglesOutput   -> TrianglesOutput
+    T.LinesOutput       -> LinesOutput
+    T.PointsOutput      -> PointsOutput
+
 {-
 convertAccumulationContext :: T.AccumulationContext b -> AccumulationContext
 convertAccumulationContext (T.AccumulationContext n ops) = AccumulationContext n $ cvt ops

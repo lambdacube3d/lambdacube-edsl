@@ -218,16 +218,6 @@ data VertexStream primitive adjacency t
 data PrimitiveStream primitive adjacency layerCount freq t
 data FragmentStream layerCount t
 
--- vertex attribute interpolation
-data Interpolated e a where
-    Flat            :: e a -> Interpolated e a
-
-    Smooth          :: IsFloating a
-                    => e a -> Interpolated e a
-
-    NoPerspective   :: IsFloating a
-                    => e a -> Interpolated e a
-
 -- framebuffer data / fragment output semantic
 data Color a    deriving Typeable
 data Depth a    deriving Typeable
@@ -402,19 +392,19 @@ data TextureType dim mip arr layerCount t ar where -- hint: arr - single or arra
 
     TextureBuffer   :: TextureDataType (Regular t) ar
                     -> TextureType DIM1 NoMip SingleTex N1 (Buffer t) ar
-
+{-
 -- MipMap validation
 class IsMipValid canMip mip
 instance IsMipValid Mip Mip
 instance IsMipValid Mip NoMip
 instance IsMipValid NoMip NoMip
 
--- restriction for texture types what can be specified as texture slots, e.g. multisample textures cannot be created im this way
+-- restriction for texture types what can be specified as texture slots, e.g. multisample textures cannot be created in this way
 class IsValidTextureSlot a
 instance IsValidTextureSlot (Regular a)
 instance IsValidTextureSlot (Shadow a)
 instance IsValidTextureSlot (Buffer a)
-
+-}
 -- type level hepler function, used for texture specification
 type family TexSizeRepr a
 type instance TexSizeRepr (DIM1) = Word32
