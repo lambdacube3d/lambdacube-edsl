@@ -441,6 +441,13 @@ data TextureSetting dim arr layerCount t ar
 data SamplerSetting
 data Texture dim arr t ar
 
+data VertexOut t
+data GeometryShader inputPrimitive inputAdjacency outputPrimitive layerCount a b
+data GeometryOut t
+data FragmentOut t
+data FragmentFilter a
+data Output
+
 -- shader freq tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen
 data Obj

@@ -4,7 +4,7 @@ import Data.ByteString.Char8
 import Data.Int
 import Data.Word
 
-import LC_G_Type
+import LC_G_LinearAlgebraTypes
 
 import LC_G_APIType
 
