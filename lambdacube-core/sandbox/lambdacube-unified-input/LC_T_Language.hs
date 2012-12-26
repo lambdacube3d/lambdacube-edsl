@@ -320,21 +320,6 @@ complement' a    = PrimApp PrimBNot a
 neg'  a = PrimApp PrimNeg a
 modf' a = PrimApp PrimModF a
 
-{-
-data PrimFun sig where
-
-    -- Vec/Mat (de)construction
-    PrimTupToV2             :: IsComponent a                            => PrimFun ((a,a)     -> V2 a)
-    PrimTupToV3             :: IsComponent a                            => PrimFun ((a,a,a)   -> V3 a)
-    PrimTupToV4             :: IsComponent a                            => PrimFun ((a,a,a,a) -> V4 a)
-    PrimV2ToTup             :: IsComponent a                            => PrimFun (V2 a     -> (a,a))
-    PrimV3ToTup             :: IsComponent a                            => PrimFun (V3 a   -> (a,a,a))
-    PrimV4ToTup             :: IsComponent a                            => PrimFun (V4 a -> (a,a,a,a))
--}
---mkV2 a b = 
---mkV3 
---mkV4
-
 class SpecialConstant a where
     zero'    :: a
     one'     :: a

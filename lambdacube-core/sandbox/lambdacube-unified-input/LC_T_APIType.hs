@@ -15,11 +15,6 @@ import LC_G_LinearAlgebraTypes
 import LC_G_APIType
 
 -- natural number helper
-newtype NatNumber n = Num Int
-
-num :: Nat n => n -> NatNumber n
-num n = Num $ toInt n
-
 type N10 = O (I (O (I Z)))
 type N11 = I (I (O (I Z)))
 type N12 = O (O (I (I Z)))
@@ -80,6 +75,15 @@ User Input New Feature:
     - support arrays
     - support textures/samplers
 -}
+data Ordered
+data Unordered
+
+data Array orderType a
+
+data OrderingType a where
+    Ordered     :: OrderingType Ordered
+    Unordered   :: OrderingType Unordered
+
 data InputType a where
     Bool'       :: InputType Bool
     V2B'        :: InputType V2B
@@ -110,7 +114,7 @@ data InputType a where
     Tuple'      :: Tuple Typeable InputType t
                 -> InputType t
 
-    Array'      :: ordering
+    Array'      :: OrderingType ordering
                 -> InputType t
                 -> InputType (Array ordering t)
 
@@ -149,7 +153,7 @@ data InputValue a where
     Tuple   :: Tuple Typeable InputValue t
             -> InputValue t
 
-    Array   :: ordering
+    Array   :: OrderingType ordering
             -> [InputValue t]
             -> InputValue (Array ordering t)
 
@@ -272,16 +276,18 @@ data FragmentOperation ty where
 -- specifies an empty image (pixel rectangle)
 -- hint: framebuffer is composed from images
 data Image layerCount t where
-    DepthImage      :: NatNumber layerCount
+    DepthImage      :: Nat layerCount
+                    => layerCount
                     -> Float    -- initial value
                     -> Image layerCount (Depth Float)
 
-    StencilImage    :: NatNumber layerCount
+    StencilImage    :: Nat layerCount
+                    => layerCount
                     -> Int32    -- initial value
                     -> Image layerCount (Stencil Int32)
 
-    ColorImage      :: (IsNum t, IsVecScalar d color t)
-                    => NatNumber layerCount
+    ColorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount)
+                    => layerCount
                     -> InputValue color -- initial value
                     -> Image layerCount (Color color)
     deriving Typeable
@@ -370,12 +376,14 @@ data ColorArity a where
 
 -- fully describes a texture type
 data TextureType dim mip arr layerCount t ar where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
-    Texture1D       :: TextureDataType t ar
-                    -> NatNumber layerCount
+    Texture1D       :: Nat layerCount
+                    => TextureDataType t ar
+                    -> layerCount
                     -> TextureType DIM1 Mip (TexArrRepr layerCount) layerCount t ar
 
-    Texture2D       :: TextureDataType t ar
-                    -> NatNumber layerCount
+    Texture2D       :: Nat layerCount
+                    => TextureDataType t ar
+                    -> layerCount
                     -> TextureType DIM2 Mip (TexArrRepr layerCount) layerCount t ar
 
     Texture3D       :: TextureDataType (Regular t) ar
@@ -387,8 +395,9 @@ data TextureType dim mip arr layerCount t ar where -- hint: arr - single or arra
     TextureRect     :: TextureDataType t ar
                     -> TextureType Rect NoMip SingleTex N1 t ar
 
-    Texture2DMS     :: TextureDataType (Regular t) ar
-                    -> NatNumber layerCount
+    Texture2DMS     :: Nat layerCount
+                    => TextureDataType (Regular t) ar
+                    -> layerCount
                     -> TextureType DIM2 NoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
 
     TextureBuffer   :: TextureDataType (Regular t) ar
@@ -438,10 +447,6 @@ data Obj
 data V
 data G
 data F
-
-data Ordered
-data Unordered
-data Array orderType a
 
 -- type sets
 data Rect deriving Typeable

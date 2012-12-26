@@ -2,12 +2,8 @@ module LC_U_DeBruijn where
 
 import Data.Typeable
 import Debug.Trace
-import Control.Applicative hiding (empty,Const)
 import Control.Monad.State
 import Data.ByteString.Char8 (ByteString)
-import Data.Int
-
-import LC_G_Type
 
 import LC_G_APIType
 import LC_U_APIType

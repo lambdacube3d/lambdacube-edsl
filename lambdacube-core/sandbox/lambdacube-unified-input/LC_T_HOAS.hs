@@ -35,7 +35,7 @@ data Exp freq t where
             -> Exp freq t
 
     -- User input constant variable
-    Var     :: LCType t
+    Input   :: LCType t
             => ByteString
             -> InputType t
             -> Exp Obj t
@@ -123,14 +123,15 @@ data Exp freq t where
                     -> Exp freq a
                     -> Exp freq (Array order b)
                     -> Exp freq a
-
+{-
+    -- TODO: should be done through input api
     -- Graphics pipeline extensibility
     -- dynamic extension support
     AccumulateSet   :: LCType (FrameBuffer layerCount a)
                     => ByteString
                     -> Exp Obj (FrameBuffer layerCount a)
                     -> Exp Obj (FrameBuffer layerCount a)
-
+-}
     -- GPU pipeline model
     Fetch           :: AttributeType a
                     => FetchPrimitive primitive adjacency 
