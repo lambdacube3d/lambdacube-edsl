@@ -1,114 +1,173 @@
 module LC_C_Convert (convertExp) where
 
+import Control.Applicative hiding (empty,Const)
+import Control.Monad.State
+import Data.ByteString.Char8 (ByteString)
 import Debug.Trace
-
 import TypeLevel.Number.Nat
-import TypeLevel.Number.Nat.Num
+import qualified Data.IntMap as IM
 
-import LC_T_APIType (Tuple(..),V,G,F)
-import qualified LC_T_APIType as T
-import qualified LC_T_PrimFun as T
+import BiMap
+
+import LC_T_APIType (Tuple(..),LCType)
 import qualified LC_T_HOAS as H
 import LC_U_DeBruijn
-import LC_U_APIType
-import LC_G_APIType
-import LC_C_PrimFun
+import LC_C_Data
+
+-- Hint: This module does closure conversion (HOAS -> DeBruijn) and hash consing (CSE)
+
+-- Hash consing
+
+-- Fun
+lam                     !t !a               = mkN t (Lam    <$> unN a)
+body                    !t !a               = mkN t (Body   <$> unN a)
+let_                    !t !a !b            = mkN t (Let    <$> unN a <*> unN b)
+var                     !t !a !b            = mkN t $ return $ Var a b
+apply                   !t !a !b            = mkN t (Apply  <$> unN a <*> unN b)
+
+-- Exp
+const_                  !t !a               = mkN t $ return $ Const a
+input                   !t !a               = mkN t $ return $ Input a
+
+frameBuffer             !t !a               = mkN t (return $ FrameBuffer a)
+accumulate              !t !a !b !c !d !e   = mkN t (Accumulate a   <$> unN b <*> unN c <*> unN d <*> unN e)
+
+newtype N = N {unN :: State DAG ExpId}
+
+--mkN :: Ty -> StateT DAG Data.Functor.Identity.Identity Exp -> N
+mkN t m = N (hashcons t =<< m)
+
+hashcons :: Ty -> Exp -> State DAG ExpId
+hashcons !t !e = do
+  DAG !m !tm <- get
+  case lookup_key e m of
+    Nothing -> let (!k,!m') = insert e m
+                   !tm'    = IM.insert k t tm
+               in put (DAG m' tm') >> return k
+    Just !k  -> {-trace ("sharing : " ++ show k ++ " :: " ++ show (tm IM.! k)) $ -} return k
+
+-- Closure conversion
 
 type Layout = [Ty]
 
-genTy :: T.LCType t => H.Exp freq t -> Ty
+genTy :: LCType t => H.Exp freq t -> Ty
 genTy a = Ty
 
-convertInterpolatedExpTuple :: ExpC exp => forall freq t.
+convertInterpolatedExpTuple :: forall freq t.
                                Layout       -- scalar environment
                             -> H.InterpolatedExpTuple freq t               -- expression to be converted
-                            -> [exp]
+                            -> [N]
 convertInterpolatedExpTuple lyt expr = cvtExpr
   where
+    unE :: LCType a => forall freq. H.Exp freq a -> State DAG ExpId
+    unE = unN . convertExp lyt
+
     cvtExpr = case expr of
         ZT      -> []
         e :. xs -> cvt' e : convertInterpolatedExpTuple lyt xs
 
-    cvt' :: (T.LCType t', ExpC exp) => H.Interpolated (H.Exp freq) t' -> exp
-    cvt' v = case v of
-        H.Flat e            -> flat          ty (convertExp lyt e)
-        H.Smooth e          -> smooth        ty (convertExp lyt e)
-        H.NoPerspective e   -> noPerspective ty (convertExp lyt e)
+    cvt' :: LCType t' => H.Interpolated (H.Exp freq) t' -> N
+    cvt' v = mkN ty $ case v of
+        H.Flat e            -> Flat <$> unE e
+        H.Smooth e          -> Smooth <$> unE e
+        H.NoPerspective e   -> NoPerspective <$> unE e
       where
         ty = undefined--genTy v
 
-convertExpTuple :: ExpC exp => forall freq t.
+convertExpTuple :: forall freq t.
                    Layout       -- scalar environment
                 -> H.ExpTuple freq t               -- expression to be converted
-                -> [exp]
+                -> [N]
 convertExpTuple lyt expr = case expr of
     ZT      -> []
     e :. xs -> convertExp lyt e : convertExpTuple lyt xs
 
-convertExp :: (T.LCType t, ExpC exp) => forall freq.
+
+convertExp :: LCType t => forall freq.
                   Layout
                -> H.Exp freq t               -- expression to be converted
-               -> exp
-convertExp lyt expr = cvtExpr
+               -> N
+convertExp lyt expr = mkN (genTy expr) cvtExpr
   where
-    ty = genTy expr
+    unE :: LCType t => forall freq. H.Exp freq t -> State DAG ExpId
+    unE     = unN . convertExp lyt
+    unF1 :: (LCType a, LCType b) => forall freq. (H.Exp freq a -> H.Exp freq b) -> State DAG ExpId
+    unF1    = unN . convertFun1 lyt
+    unF2 :: (LCType a, LCType b, LCType c) => forall freq. (H.Exp freq a -> H.Exp freq b -> H.Exp freq c) -> State DAG ExpId
+    unF2    = unN . convertFun2 lyt
+    unET :: forall freq t. H.ExpTuple freq t -> State DAG [ExpId]
+    unET a  = mapM unN (convertExpTuple lyt a)
+    unIET :: forall freq t. H.InterpolatedExpTuple freq t -> State DAG [ExpId]
+    unIET a = mapM unN (convertInterpolatedExpTuple lyt a)
     cvtExpr = case expr of
 {-
         H.Tag i li                      -> var              ty (prjIdx i lyt) li
+-}
+        -- Exp
+{-
         H.Const v                       -> const_           ty (T.toValue v)
         H.Input v                       -> input            ty (fst $ T.toInput v)
 -}
-        H.Use a                         -> use              ty (convertExp lyt a)
-        H.Cond a b c                    -> cond             ty (convertExp lyt a) (convertExp lyt b) (convertExp lyt c)
-        H.PrimApp a b                   -> primApp          ty (convertPrimFun a) (convertExp lyt b)
-        H.Tup a                         -> tup              ty (convertExpTuple lyt a)
-        H.Prj a b                       -> prj              ty (toInt a) (convertExp lyt b)
-        H.Loop a b c d                  -> loop             ty (convertFun1 lyt a) (convertFun1 lyt b) (convertFun1 lyt c) (convertExp lyt d)
+        H.Use a                         -> Use      <$> unE a
+        H.Cond a b c                    -> Cond     <$> unE a <*> unE b <*> unE c
+        H.PrimApp a b                   -> PrimApp  (convertPrimFun a) <$> unE b
+        H.Tup a                         -> Tup      <$> unET a
+        H.Prj a b                       -> Prj      (toInt a) <$> unE b
+        H.Loop a b c d                  -> Loop     <$> unF1 a <*> unF1 b <*> unF1 c <*> unE d
 
-        H.ArrayFromList a               -> arrayFromList    ty (map (convertExp lyt) a)
-        H.ArrayReplicate a b            -> arrayReplicate   ty (convertExp lyt a) (convertExp lyt b)
-        H.ArrayGenerate a b             -> arrayGenerate    ty (convertExp lyt a) (convertFun1 lyt b)
-        H.ArrayIterateN a b c           -> arrayIterateN    ty (convertExp lyt a) (convertFun1 lyt b) (convertExp lyt c)
-        H.ArrayIndex a b                -> arrayIndex       ty (convertExp lyt a) (convertExp lyt b)
-        H.ArrayFilter a b               -> arrayFilter      ty (convertFun1 lyt a) (convertExp lyt b)
-        H.ArrayMap a b                  -> arrayMap         ty (convertFun1 lyt a) (convertExp lyt b)
-        H.ArrayZipWith a b c            -> arrayZipWith     ty (convertFun2 lyt a) (convertExp lyt b) (convertExp lyt c)
-        H.ArrayAccumulate a b c         -> arrayAccumulate  ty (convertFun2 lyt a) (convertExp lyt b) (convertExp lyt c)
+        -- Array operations
+        H.ArrayFromList a               -> ArrayFromList      <$> mapM unE a
+        H.ArrayReplicate a b            -> ArrayReplicate     <$> unE a <*> unE b
+        H.ArrayGenerate a b             -> ArrayGenerate      <$> unE a <*> unF1 b
+        H.ArrayIterateN a b c           -> ArrayIterateN      <$> unE a <*> unF1 b <*> unE c
+        H.ArrayIndex a b                -> ArrayIndex         <$> unE a <*> unE b
+        H.ArrayFilter a b               -> ArrayFilter        <$> unF1 a <*> unE b
+        H.ArrayMap a b                  -> ArrayMap           <$> unF1 a <*> unE b
+        H.ArrayZipWith a b c            -> ArrayZipWith       <$> unF2 a <*> unE b <*> unE c
+        H.ArrayAccumulate a b c         -> ArrayAccumulate    <$> unF2 a <*> unE b <*> unE c
 
-        H.Fetch a b c                   -> fetch            ty (convertFetchPrimitive a) (convertExp lyt b) (maybe Nothing (\v -> Just (convertExp lyt v)) c)
-        H.Transform a b                 -> transform        ty (convertFun1 lyt a) (convertExp lyt b)
-        H.Reassemble a b                -> reassemble       ty (convertExp lyt a) (convertExp lyt b)
-        H.Rasterize a b                 -> rasterize        ty (convertRasterContext a) (convertExp lyt b)
+        -- GPU pipeline model
+        H.Fetch a b c                   -> Fetch        (convertFetchPrimitive a) <$> unE b <*> maybe (return Nothing) (\v -> return . Just =<< unE v) c
+        H.Transform a b                 -> Transform    <$> unF1 a <*> unE b
+        H.Reassemble a b                -> Reassemble   <$> unE a <*> unE b
+        H.Rasterize a b                 -> Rasterize    (convertRasterContext a) <$> unE b
 {-
         H.FrameBuffer a                 -> frameBuffer      ty (convertFrameBuffer a)
 
-        H.Accumulate a b c d e          -> accumulate       ty (convertAccumulationContext a) (convertExp lyt b)
-                                                                                     (convertFun1 lyt c)
-                                                                                     (convertExp lyt d)
-                                                                                     (convertExp lyt e)
+        H.Accumulate a b c d e          -> accumulate       ty (convertAccumulationContext a) (cvtE b)
+                                                                                     (cvtF1 c)
+                                                                                     (cvtE d)
+                                                                                     (cvtE e)
 
 -}
-        H.ArrayFromStream a             -> arrayFromStream  ty (convertExp lyt a)
+        -- Transform feedback support
+        H.ArrayFromStream a             -> ArrayFromStream  <$> unE a
 
-        H.PrjFrameBuffer a b            -> prjFrameBuffer   ty (toInt a) (convertExp lyt b)
-        H.PrjImage a b                  -> prjImage         ty (toInt a) (convertExp lyt b)
+        -- FrameBuffer and Image helpers
+        H.PrjFrameBuffer a b            -> PrjFrameBuffer   (toInt a) <$> unE b
+        H.PrjImage a b                  -> PrjImage         (toInt a) <$> unE b
 
-        H.VertexOut a b c               -> vertexOut            ty (convertExp lyt a) (convertExp lyt b) (convertInterpolatedExpTuple lyt c)
-        H.GeometryShader a b c d e f    -> geometryShader       ty (toInt a) (convertOutputPrimitive b) c (convertFun1 lyt d) (convertFun1 lyt e) (convertFun1 lyt f)
-        H.GeometryOut a b c d e f       -> geometryOut          ty (convertExp lyt a) (convertExp lyt b) (convertExp lyt c) (convertExp lyt d) (convertExp lyt e) (convertInterpolatedExpTuple lyt f)
-        H.FragmentOut a                 -> fragmentOut          ty (convertExpTuple lyt a)
-        H.FragmentOutDepth a b          -> fragmentOutDepth     ty (convertExp lyt a) (convertExpTuple lyt b)
-        H.FragmentOutRastDepth a        -> fragmentOutRastDepth ty (convertExpTuple lyt a)
+        -- Special tuple expressions
+        H.VertexOut a b c               -> VertexOut              <$> unE a <*> unE b <*> unIET c
+        H.GeometryOut a b c d e f       -> GeometryOut            <$> unE a <*> unE b <*> unE c <*> unE d <*> unE e <*> unIET f
+        H.FragmentOut a                 -> FragmentOut            <$> unET a
+        H.FragmentOutDepth a b          -> FragmentOutDepth       <$> unE a <*> unET b
+        H.FragmentOutRastDepth a        -> FragmentOutRastDepth   <$> unET a
 
-        H.PassAll                       -> passAll              ty
-        H.Filter f                      -> filter_              ty (convertFun1 lyt f)
+        -- GeometryShader constructors
+        H.GeometryShader a b c d e f    -> GeometryShader (toInt a) (convertOutputPrimitive b) c <$> unF1 d <*> unF1 e <*> unF1 f
 
-        H.ImageOut n a                  -> imageOut             ty n (convertExp lyt a)
-        H.ScreenOut a                   -> screenOut            ty (convertExp lyt a)
+        -- FragmentFilter constructors
+        H.PassAll                       -> pure PassAll
+        H.Filter a                      -> Filter     <$> unF1 a
+
+        -- Output constructors
+        H.ImageOut a b                  -> ImageOut a <$> unE b
+        H.ScreenOut a                   -> ScreenOut  <$> unE a
 
 -- TODO
-convertFun1 :: (T.LCType a, T.LCType b, ExpC exp)
-            => [Ty] -> (H.Exp freq a -> H.Exp freq b) -> exp
+convertFun1 :: (LCType a, LCType b)
+            => [Ty] -> (H.Exp freq a -> H.Exp freq b) -> N
 convertFun1 lyt f = lam ty1 $ body ty2 $ convertExp lyt' (f a)
   where
     a       = case f of
@@ -117,8 +176,8 @@ convertFun1 lyt f = lam ty1 $ body ty2 $ convertExp lyt' (f a)
     ty1     = undefined
     ty2     = undefined
 
-convertFun2 :: (T.LCType a, T.LCType b, T.LCType c, ExpC exp)
-            => [Ty] -> (H.Exp freq a -> H.Exp freq b -> H.Exp freq c) -> exp
+convertFun2 :: (LCType a, LCType b, LCType c)
+            => [Ty] -> (H.Exp freq a -> H.Exp freq b -> H.Exp freq c) -> N
 convertFun2 lyt f = lam ty1 $ lam ty2 $ body ty3 $ convertExp lyt' (f a b)
   where
     a       = case f of
@@ -129,88 +188,3 @@ convertFun2 lyt f = lam ty1 $ lam ty2 $ body ty3 $ convertExp lyt' (f a b)
     ty1     = undefined
     ty2     = undefined
     ty3     = undefined
-
-
--- data type conversion
-
-convertColorArity :: T.ColorArity a -> ColorArity
-convertColorArity v = case v of
-    T.Red   -> Red
-    T.RG    -> RG
-    T.RGB   -> RGB
-    T.RGBA  -> RGBA
-
-convertTextureDataType :: T.TextureDataType t ar -> TextureDataType
-convertTextureDataType v = case v of
-    T.FloatTexel a  -> FloatTexel   (convertColorArity a)
-    T.IntTexel a    -> IntTexel     (convertColorArity a)
-    T.WordTexel a   -> WordTexel    (convertColorArity a)
-    T.ShadowTexel   -> ShadowTexel
-
-convertTextureType :: T.TextureType dim mip arr layerCount t ar -> TextureType
-convertTextureType v = case v of
-    T.Texture1D a b     -> Texture1D     (convertTextureDataType a) (toInt b)
-    T.Texture2D a b     -> Texture2D     (convertTextureDataType a) (toInt b)
-    T.Texture3D a       -> Texture3D     (convertTextureDataType a)
-    T.TextureCube a     -> TextureCube   (convertTextureDataType a)
-    T.TextureRect a     -> TextureRect   (convertTextureDataType a)
-    T.Texture2DMS a b   -> Texture2DMS   (convertTextureDataType a) (toInt b)
-    T.TextureBuffer a   -> TextureBuffer (convertTextureDataType a)
-
-convertMipMap :: T.MipMap t -> MipMap
-convertMipMap v = case v of
-    T.NoMip         -> NoMip
-    T.Mip a b       -> Mip a b
-    T.AutoMip a b   -> AutoMip a b
-
-convertRasterContext :: T.RasterContext p -> RasterContext
-convertRasterContext v = case v of
-    T.PointCtx              -> PointCtx
-    T.LineCtx a b           -> LineCtx a b
-    T.TriangleCtx a b c d   -> TriangleCtx a b c d
-
-convertBlending :: T.Blending c -> Blending
-convertBlending v = case v of 
-    T.NoBlending        -> NoBlending
-    T.BlendLogicOp a    -> BlendLogicOp a
-    T.Blend a b c       -> Blend a b c
-
-convertFetchPrimitive :: T.FetchPrimitive a b -> FetchPrimitive
-convertFetchPrimitive v = case v of
-    T.Points                    -> Points
-    T.LineStrip                 -> LineStrip
-    T.LineLoop                  -> LineLoop
-    T.Lines                     -> Lines
-    T.TriangleStrip             -> TriangleStrip
-    T.TriangleFan               -> TriangleFan
-    T.Triangles                 -> Triangles
-    T.LinesAdjacency            -> LinesAdjacency
-    T.LineStripAdjacency        -> LineStripAdjacency
-    T.TrianglesAdjacency        -> TrianglesAdjacency
-    T.TriangleStripAdjacency    -> TriangleStripAdjacency
-
-convertOutputPrimitive :: T.OutputPrimitive a -> OutputPrimitive
-convertOutputPrimitive v = case v of
-    T.TrianglesOutput   -> TrianglesOutput
-    T.LinesOutput       -> LinesOutput
-    T.PointsOutput      -> PointsOutput
-
-{-
-convertAccumulationContext :: T.AccumulationContext b -> AccumulationContext
-convertAccumulationContext (T.AccumulationContext n ops) = AccumulationContext n $ cvt ops
-  where
-    cvt :: FlatTuple Typeable T.FragmentOperation b -> [FragmentOperation]
-    cvt ZT                          = []
-    cvt (T.DepthOp a b :. xs)       = DepthOp a b : cvt xs
-    cvt (T.StencilOp a b c :. xs)   = StencilOp a b c : cvt xs
-    cvt (T.ColorOp a b :. xs)       = ColorOp (convertBlending a) (T.toValue b) : cvt xs
-
-convertFrameBuffer :: T.FrameBuffer layerCount t -> [Image]
-convertFrameBuffer = cvt
-  where
-    cvt :: T.FrameBuffer layerCount t -> [Image]
-    cvt ZT                          = []
-    cvt (T.DepthImage a b:.xs)      = DepthImage (toInt a) b : cvt xs
-    cvt (T.StencilImage a b:.xs)    = StencilImage (toInt a) b : cvt xs
-    cvt (T.ColorImage a b:.xs)      = ColorImage (toInt a) (T.toValue b) : cvt xs
--}

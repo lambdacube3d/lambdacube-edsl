@@ -118,7 +118,8 @@ data InputType a where
                 -> InputType t
                 -> InputType (Array ordering t)
 
-    Texture'    :: TextureType dim mip arr layerCount t ar
+    Texture'    :: IsValidTextureSlot t
+                => TextureType dim mip arr layerCount t ar
                 -> InputType (Texture dim arr t ar)
 
     deriving Typeable
@@ -398,13 +399,13 @@ class IsMipValid canMip mip
 instance IsMipValid Mip Mip
 instance IsMipValid Mip NoMip
 instance IsMipValid NoMip NoMip
-
+-}
 -- restriction for texture types what can be specified as texture slots, e.g. multisample textures cannot be created in this way
 class IsValidTextureSlot a
 instance IsValidTextureSlot (Regular a)
 instance IsValidTextureSlot (Shadow a)
 instance IsValidTextureSlot (Buffer a)
--}
+
 -- type level hepler function, used for texture specification
 type family TexSizeRepr a
 type instance TexSizeRepr (DIM1) = Word32

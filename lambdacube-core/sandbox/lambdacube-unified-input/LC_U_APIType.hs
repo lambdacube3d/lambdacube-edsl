@@ -9,13 +9,109 @@ import LC_G_LinearAlgebraTypes
 import LC_G_APIType
 
 data OrderingType
-    = Ordered
-    | Unordered
+    = Ordered'
+    | Unordered'
     deriving (Show,Eq,Ord)
 
-data InputType = InputType -- TODO
+{-
+  TODO:
+    - reify comutational frequency
+    - add ViewportSize type: fullscreen, percentage, per pixel
+    - add ViewportSize to accumulation context
+-}
+
+{-
+-- Exp types:
+Bool'
+Float'
+Int32'
+Word32'
+V2B'
+V2F'
+V2I'
+V2U'
+V3B'
+V3F'
+V3I'
+V3U'
+V4B'
+V4F'
+V4I'
+V4U'
+M22F'
+M23F'
+M24F'
+M32F'
+M33F'
+M34F'
+M42F'
+M43F'
+M44F'
+ZZ'
+Array' orderType a
+FragmentFilter' a
+FragmentOut' a
+FragmentStream' layerCount a
+FrameBuffer' layerCount (t)
+GeometryOut' a
+GeometryShader' inputPrimitive inputAdjacency outputPrimitive layerCount a b
+Image' layerCount e
+Interpolated' e a
+Output'
+PrimitiveStream' primitive adjacency N1 V b
+Sampler' dim arr t ar
+SamplerSetting'
+Texture' dim arr t ar
+TextureSetting' dim arr layerCount t ar
+Tuple' c a t
+VertexOut' a
+VertexStream' primitive adjacency a
+-> (function)
+----------------
+
+-- Array types:
+  OrderingType
+    Ordered'
+    Unordered'
+
+-- GeometryShader types:
+  PrimitiveType
+    Triangle'
+    Line'
+    Point'
+
+  AdjacencyType
+    Adjacency'
+    NoAdjacency'
+    
+-- Sampler and Texture types:
+  DimensionType
+    DIM1'
+    DIM2'
+    DIM3'
+    DIM4'
+    Rect'
+
+  TextureArrayType
+    SingleTex'
+    ArrayTex'
+    CubeTex'
+
+  TextureType
+    Regular' a
+    Shadow' a
+    MultiSample' a
+    Buffer' a
+
+  ColorArityType
+    Red'
+    RG'
+    RGB'
+    RGBA'
+-}
+data ExpType = ExpType -- TODO
     deriving (Show,Eq,Ord)
-data InputValue = InputValue -- TODO
+data ExpValue = ExpValue -- TODO
     deriving (Show,Eq,Ord)
 
 data FetchPrimitive
@@ -62,7 +158,7 @@ data RasterContext
 data FragmentOperation
     = DepthOp       DepthFunction Bool
     | StencilOp     StencilTests StencilOps StencilOps
-    | ColorOp       Blending InputValue
+    | ColorOp       Blending ExpValue
     deriving (Show, Eq, Ord)
 
 data AccumulationContext
@@ -75,7 +171,7 @@ data AccumulationContext
 data Image
     = DepthImage    Int Float
     | StencilImage  Int Int32
-    | ColorImage    Int InputValue
+    | ColorImage    Int ExpValue
     deriving (Show, Eq, Ord)
 
 data TextureDataType

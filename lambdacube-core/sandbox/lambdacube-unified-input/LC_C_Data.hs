@@ -1,7 +1,93 @@
-module LC_C_PrimFun where
+module LC_C_Data where
 
-import qualified LC_T_PrimFun as T
+import TypeLevel.Number.Nat
+
+import LC_U_APIType
 import LC_U_PrimFun
+import qualified LC_T_APIType as T
+import qualified LC_T_PrimFun as T
+
+convertColorArity :: T.ColorArity a -> ColorArity
+convertColorArity v = case v of
+    T.Red   -> Red
+    T.RG    -> RG
+    T.RGB   -> RGB
+    T.RGBA  -> RGBA
+
+convertTextureDataType :: T.TextureDataType t ar -> TextureDataType
+convertTextureDataType v = case v of
+    T.FloatTexel a  -> FloatTexel   (convertColorArity a)
+    T.IntTexel a    -> IntTexel     (convertColorArity a)
+    T.WordTexel a   -> WordTexel    (convertColorArity a)
+    T.ShadowTexel   -> ShadowTexel
+
+convertTextureType :: T.TextureType dim mip arr layerCount t ar -> TextureType
+convertTextureType v = case v of
+    T.Texture1D a b     -> Texture1D     (convertTextureDataType a) (toInt b)
+    T.Texture2D a b     -> Texture2D     (convertTextureDataType a) (toInt b)
+    T.Texture3D a       -> Texture3D     (convertTextureDataType a)
+    T.TextureCube a     -> TextureCube   (convertTextureDataType a)
+    T.TextureRect a     -> TextureRect   (convertTextureDataType a)
+    T.Texture2DMS a b   -> Texture2DMS   (convertTextureDataType a) (toInt b)
+    T.TextureBuffer a   -> TextureBuffer (convertTextureDataType a)
+
+convertMipMap :: T.MipMap t -> MipMap
+convertMipMap v = case v of
+    T.NoMip         -> NoMip
+    T.Mip a b       -> Mip a b
+    T.AutoMip a b   -> AutoMip a b
+
+convertRasterContext :: T.RasterContext p -> RasterContext
+convertRasterContext v = case v of
+    T.PointCtx              -> PointCtx
+    T.LineCtx a b           -> LineCtx a b
+    T.TriangleCtx a b c d   -> TriangleCtx a b c d
+
+convertBlending :: T.Blending c -> Blending
+convertBlending v = case v of 
+    T.NoBlending        -> NoBlending
+    T.BlendLogicOp a    -> BlendLogicOp a
+    T.Blend a b c       -> Blend a b c
+
+convertFetchPrimitive :: T.FetchPrimitive a b -> FetchPrimitive
+convertFetchPrimitive v = case v of
+    T.Points                    -> Points
+    T.LineStrip                 -> LineStrip
+    T.LineLoop                  -> LineLoop
+    T.Lines                     -> Lines
+    T.TriangleStrip             -> TriangleStrip
+    T.TriangleFan               -> TriangleFan
+    T.Triangles                 -> Triangles
+    T.LinesAdjacency            -> LinesAdjacency
+    T.LineStripAdjacency        -> LineStripAdjacency
+    T.TrianglesAdjacency        -> TrianglesAdjacency
+    T.TriangleStripAdjacency    -> TriangleStripAdjacency
+
+convertOutputPrimitive :: T.OutputPrimitive a -> OutputPrimitive
+convertOutputPrimitive v = case v of
+    T.TrianglesOutput   -> TrianglesOutput
+    T.LinesOutput       -> LinesOutput
+    T.PointsOutput      -> PointsOutput
+
+{-
+convertAccumulationContext :: T.AccumulationContext b -> AccumulationContext
+convertAccumulationContext (T.AccumulationContext n ops) = AccumulationContext n $ cvt ops
+  where
+    cvt :: FlatTuple Typeable T.FragmentOperation b -> [FragmentOperation]
+    cvt ZT                          = []
+    cvt (T.DepthOp a b :. xs)       = DepthOp a b : cvt xs
+    cvt (T.StencilOp a b c :. xs)   = StencilOp a b c : cvt xs
+    cvt (T.ColorOp a b :. xs)       = ColorOp (convertBlending a) (T.toValue b) : cvt xs
+
+convertFrameBuffer :: T.FrameBuffer layerCount t -> [Image]
+convertFrameBuffer = cvt
+  where
+    cvt :: T.FrameBuffer layerCount t -> [Image]
+    cvt ZT                          = []
+    cvt (T.DepthImage a b:.xs)      = DepthImage (toInt a) b : cvt xs
+    cvt (T.StencilImage a b:.xs)    = StencilImage (toInt a) b : cvt xs
+    cvt (T.ColorImage a b:.xs)      = ColorImage (toInt a) (T.toValue b) : cvt xs
+-}
 
 convertPrimFun :: T.PrimFun a b -> PrimFun
 convertPrimFun a = case a of
