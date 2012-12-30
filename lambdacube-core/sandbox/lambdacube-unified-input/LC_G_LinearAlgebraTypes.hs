@@ -1,20 +1,21 @@
 module LC_G_LinearAlgebraTypes where
 
-import Data.Int
 import Data.Data
+import Data.Int
+import Data.Typeable
 import Data.Word
 import Foreign.Storable
 import Foreign.Ptr
 
 -- constructors are required for texture specification
-data DIM1 = DIM1 deriving (Eq,Ord,Typeable)
-data DIM2 = DIM2 deriving (Eq,Ord,Typeable)
-data DIM3 = DIM3 deriving (Eq,Ord,Typeable)
-data DIM4 deriving Typeable
+data DIM1
+data DIM2
+data DIM3
+data DIM4
 
-data V2 a = V2 !a !a deriving (Eq,Ord,Show,Data,Typeable)
-data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Data,Typeable)
-data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Data,Typeable)
+data V2 a = V2 !a !a deriving (Eq,Ord,Show,Typeable)
+data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Typeable)
+data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Typeable)
 
 -- matrices are stored in column major order
 type M22F = V2 V2F

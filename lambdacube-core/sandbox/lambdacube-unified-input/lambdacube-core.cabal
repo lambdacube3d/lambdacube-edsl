@@ -34,14 +34,19 @@ Library
         bitmap
 
   Exposed-modules:
+        LC_C_Convert
+        LC_C_Data
+        LC_G_APIType
+        LC_G_LinearAlgebraTypes
         LC_T_APIType
         LC_T_HOAS
+        LC_T_Instances
+        LC_T_Language
         LC_T_PrimFun
         LC_T_Sampler
-        LC_T_Language
-
-        LC_G_LinearAlgebraTypes
-        LC_G_APIType
+        LC_U_APIType
+        LC_U_DeBruijn
+        LC_U_PrimFun
   GHC-options:
 --        -Werror
         -Wall
@@ -78,3 +83,6 @@ Library
         TypeFamilies
         TypeOperators
         TypeSynonymInstances
+        DeriveFunctor
+        DeriveFoldable
+        DeriveTraversable

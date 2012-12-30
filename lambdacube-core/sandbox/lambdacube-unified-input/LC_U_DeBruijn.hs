@@ -1,110 +1,79 @@
 module LC_U_DeBruijn where
 
 import Data.ByteString.Char8 (ByteString)
-import qualified Data.IntMap as IM
 
-import BiMap
+import Data.Generics.Fixplate
 
 import LC_U_APIType
 import LC_U_PrimFun
 
-type ExpId = Int
-data Ty = Ty
-    deriving (Show,Eq,Ord)-- TODO
-
-
---newtype DAG = DAG (BiMap Exp) deriving Show
-data DAG
-    = DAG 
-    { dagExp    :: BiMap Exp
-    , dagTy     :: IM.IntMap Ty
-    } deriving Show
-
-emptyDAG :: DAG
-emptyDAG = DAG empty IM.empty
-
-toExp :: DAG -> ExpId -> Exp
-toExp (DAG !m _) !k = lookup_val k m
-
-toExpId :: DAG -> Exp -> ExpId
-toExpId (DAG !m _) !v = let Just k = lookup_key v m in k
-
-expIdType :: DAG -> ExpId -> Ty
-expIdType (DAG _ !tm) !k = tm IM.! k
-
-expType :: DAG -> Exp -> Ty
-expType dag@(DAG !m !tm) !e = case lookup_key e m of
-    Nothing -> error $ "unknown Exp node: " ++ show e
-    Just !k  -> expIdType dag k
-
 {-
   TODO:
-    represent these as tuples from specific types:  VertexOut, GeometryOut, FragmentOut, FragmentOutDepth, FragmentOutRastDepth
+    represent these as tuples from specific types:  Vertex, Fragment, FragmentDepth, FragmentRastDepth
 -}
 
-data Exp
+data Exp e
     -- Fun
-    = Lam                   !ExpId
-    | Body                  !ExpId
-    | Let                   !ExpId !ExpId
+    = Lam                   !e
+    | Body                  !e
+    | Let                   !e !e
     | Var                   !Int !ExpType   -- index, layout counter
-    | Apply                 !ExpId !ExpId
+    | Apply                 !e !e
 
     -- Exp
     | Const                 !ExpValue
     | Input                 !ByteString
-    | Use                   !ExpId
-    | Cond                  !ExpId !ExpId !ExpId
-    | PrimApp               !PrimFun !ExpId
-    | Tup                   [ExpId]
-    | Prj                   Int !ExpId
-    | Loop                  !ExpId !ExpId !ExpId !ExpId
+    | Use                   !e
+    | Cond                  !e !e !e
+    | PrimApp               !PrimFun !e
+    | Tup                   [e]
+    | Prj                   Int !e
+    | Loop                  !e !e !e !e
 
     -- Array operations
-    | ArrayFromList         [ExpId]
-    | ArrayReplicate        !ExpId !ExpId
-    | ArrayGenerate         !ExpId !ExpId
-    | ArrayIterateN         !ExpId !ExpId !ExpId
-    | ArrayIndex            !ExpId !ExpId
-    | ArrayFilter           !ExpId !ExpId
-    | ArrayMap              !ExpId !ExpId
-    | ArrayZipWith          !ExpId !ExpId !ExpId
-    | ArrayAccumulate       !ExpId !ExpId !ExpId
+    | ArrayFromList         [e]
+    | ArrayReplicate        !e !e
+    | ArrayGenerate         !e !e
+    | ArrayIterateN         !e !e !e
+    | ArrayIndex            !e !e
+    | ArrayFilter           !e !e
+    | ArrayMap              !e !e
+    | ArrayZipWith          !e !e !e
+    | ArrayAccumulate       !e !e !e
 
     -- GPU pipeline model
-    | Fetch                 !FetchPrimitive !ExpId !(Maybe ExpId)
-    | Transform             !ExpId !ExpId
-    | Reassemble            !ExpId !ExpId
-    | Rasterize             RasterContext !ExpId
+    | Fetch                 !FetchPrimitive !e !(Maybe e)
+    | Transform             !e !e
+    | Reassemble            !e !e
+    | Rasterize             RasterContext !e !(Maybe e) !e
     | FrameBuffer           [Image]
-    | Accumulate            AccumulationContext !ExpId !ExpId !ExpId !ExpId
+    | Accumulate            AccumulationContext !(Maybe e) !(Maybe e) !e !e !e !e
 
     -- Transform feedback support
-    | ArrayFromStream       !ExpId
+    | ArrayFromStream       !e
 
     -- FrameBuffer and Image helpers
-    | PrjFrameBuffer        Int !ExpId
-    | PrjImage              Int !ExpId
+    | PrjFrameBuffer        Int !e
+    | PrjImage              Int !e
 
     -- Special tuple expressions
-    | VertexOut             !ExpId !ExpId [ExpId]
-    | GeometryOut           !ExpId !ExpId !ExpId !ExpId !ExpId [ExpId]
-    | FragmentOut           [ExpId]
-    | FragmentOutDepth      !ExpId [ExpId]
-    | FragmentOutRastDepth  [ExpId]
+    | Vertex                !e !e [e] [e]
+    | Fragment              [e]
+    | FragmentDepth         !e [e]
+    | FragmentRastDepth     [e]
 
     -- Interpolated
-    | Flat                  !ExpId
-    | Smooth                !ExpId
-    | NoPerspective         !ExpId
+    | Flat                  !e
+    | Smooth                !e
+    | NoPerspective         !e
 
-    | GeometryShader        Int OutputPrimitive Int !ExpId !ExpId !ExpId
-
-    -- FragmentFilter
-    | PassAll
-    | Filter                !ExpId
+    | GeometryShader        Int OutputPrimitive Int !e !e !e
 
     -- Output
-    | ImageOut              ByteString !ExpId
-    | ScreenOut             !ExpId
-    deriving (Eq, Ord, Show)
+    | ImageOut              ByteString !e
+    | ScreenOut             !e
+    deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance ShowF Exp where showsPrecF = showsPrec
+instance EqF   Exp where equalF     = (==)
+instance OrdF  Exp where compareF   = compare

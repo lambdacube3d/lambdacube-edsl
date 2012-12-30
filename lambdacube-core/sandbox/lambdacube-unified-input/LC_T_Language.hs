@@ -3,7 +3,6 @@ module LC_T_Language where
 
 import Data.ByteString.Char8
 import Data.Int
-import Data.Typeable
 import Data.Word
 
 import TypeLevel.Number.Nat
@@ -371,10 +370,10 @@ instance IdentityMatrix M44F where
 -}
 
 class PkgVec v where
-    unpack' :: (LCType a, LCType (v a), IsComponent a, Typeable (v a))
+    unpack' :: (LCType a, LCType (v a), IsComponent a)
             => Exp stage (v a) -> v (Exp stage a)
 
-    pack'   :: (LCType a, LCType (v a), IsComponent a, Typeable (v a))
+    pack'   :: (LCType a, LCType (v a), IsComponent a)
             => v (Exp stage a) -> Exp stage (v a)
 
 instance PkgVec V2 where

@@ -8,9 +8,59 @@ import LC_G_LinearAlgebraTypes
 
 import LC_G_APIType
 
+data Ty = Ty FrequencyType ExpType
+    deriving (Show,Eq,Ord)
+
+data FrequencyType
+    = Obj'
+    | V'
+    | G'
+    | F'
+    deriving (Show,Eq,Ord)
+
 data OrderingType
     = Ordered'
     | Unordered'
+    deriving (Show,Eq,Ord)
+
+data PrimitiveType
+    = Triangle'
+    | Line'
+    | Point'
+    deriving (Show,Eq,Ord)
+
+data AdjacencyType
+    = Adjacency'
+    | NoAdjacency'
+    deriving (Show,Eq,Ord)
+
+data DimensionType
+    = DIM1'
+    | DIM2'
+    | DIM3'
+    | DIM4'
+    | Rect'
+    deriving (Show,Eq,Ord)
+
+data TextureArrayType
+    = SingleTex'
+    | ArrayTex'
+    | CubeTex'
+    deriving (Show,Eq,Ord)
+
+{-
+  TextureType
+    Regular' a
+    Shadow' a
+    MultiSample' a
+    Buffer' a
+-}
+
+data ColorArityType
+    = Red'
+    | RG'
+    | RGB'
+    | RGBA'
     deriving (Show,Eq,Ord)
 
 {-
@@ -19,99 +69,91 @@ data OrderingType
     - add ViewportSize type: fullscreen, percentage, per pixel
     - add ViewportSize to accumulation context
 -}
+infixr 1 :->
+
+data ExpType
+    = Bool'
+    | Float'
+    | Int32'
+    | Word32'
+    | V2B'
+    | V2F'
+    | V2I'
+    | V2U'
+    | V3B'
+    | V3F'
+    | V3I'
+    | V3U'
+    | V4B'
+    | V4F'
+    | V4I'
+    | V4U'
+    | M22F'
+    | M23F'
+    | M24F'
+    | M32F'
+    | M33F'
+    | M34F'
+    | M42F'
+    | M43F'
+    | M44F'
+    | ZZ'
+    | Array'            OrderingType ExpType
+    | Fragment'         ExpType
+    | FragmentStream'   Int ExpType
+{-
+FrameBuffer' layerCount (t)
+-}
+    | GeometryShader'   PrimitiveType AdjacencyType PrimitiveType Int Int Int ExpType ExpType
+{-
+Image' layerCount e
+-}
+    | Interpolated'     ExpType
+    | Output'
+    | PrimitiveStream'  PrimitiveType AdjacencyType Int Int FrequencyType ExpType
 
 {-
--- Exp types:
-Bool'
-Float'
-Int32'
-Word32'
-V2B'
-V2F'
-V2I'
-V2U'
-V3B'
-V3F'
-V3I'
-V3U'
-V4B'
-V4F'
-V4I'
-V4U'
-M22F'
-M23F'
-M24F'
-M32F'
-M33F'
-M34F'
-M42F'
-M43F'
-M44F'
-ZZ'
-Array' orderType a
-FragmentFilter' a
-FragmentOut' a
-FragmentStream' layerCount a
-FrameBuffer' layerCount (t)
-GeometryOut' a
-GeometryShader' inputPrimitive inputAdjacency outputPrimitive layerCount a b
-Image' layerCount e
-Interpolated' e a
-Output'
-PrimitiveStream' primitive adjacency N1 V b
 Sampler' dim arr t ar
-SamplerSetting'
+-}
+    | SamplerSetting'
+{-
 Texture' dim arr t ar
 TextureSetting' dim arr layerCount t ar
-Tuple' c a t
-VertexOut' a
-VertexStream' primitive adjacency a
--> (function)
-----------------
-
--- Array types:
-  OrderingType
-    Ordered'
-    Unordered'
-
--- GeometryShader types:
-  PrimitiveType
-    Triangle'
-    Line'
-    Point'
-
-  AdjacencyType
-    Adjacency'
-    NoAdjacency'
-    
--- Sampler and Texture types:
-  DimensionType
-    DIM1'
-    DIM2'
-    DIM3'
-    DIM4'
-    Rect'
-
-  TextureArrayType
-    SingleTex'
-    ArrayTex'
-    CubeTex'
-
-  TextureType
-    Regular' a
-    Shadow' a
-    MultiSample' a
-    Buffer' a
-
-  ColorArityType
-    Red'
-    RG'
-    RGB'
-    RGBA'
 -}
-data ExpType = ExpType -- TODO
+    | Tuple'            [ExpType]
+    | Vertex'           ExpType ExpType
+    | VertexStream'     PrimitiveType AdjacencyType ExpType
+    | ExpType :-> ExpType
     deriving (Show,Eq,Ord)
-data ExpValue = ExpValue -- TODO
+
+data ExpValue -- TODO
+    = Bool      Bool
+    | Float     Float
+    | Int32     Int32
+    | Word32    Word32
+    | V2B       V2B
+    | V2F       V2F
+    | V2I       V2I
+    | V2U       V2U
+    | V3B       V3B
+    | V3F       V3F
+    | V3I       V3I
+    | V3U       V3U
+    | V4B       V4B
+    | V4F       V4F
+    | V4I       V4I
+    | V4U       V4U
+    | M22F      M22F
+    | M23F      M23F
+    | M24F      M24F
+    | M32F      M32F
+    | M33F      M33F
+    | M34F      M34F
+    | M42F      M42F
+    | M43F      M43F
+    | M44F      M44F
+    | ZZ
+    | Array -- TODO
     deriving (Show,Eq,Ord)
 
 data FetchPrimitive
@@ -163,8 +205,8 @@ data FragmentOperation
 
 data AccumulationContext
     = AccumulationContext
-    { accViewportName   :: Maybe ByteString
-    , accOperations     :: [FragmentOperation]
+    { accDithering  :: Bool
+    , accOperations :: [FragmentOperation]
     }
     deriving (Show, Eq, Ord)
 
