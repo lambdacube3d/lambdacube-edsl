@@ -188,3 +188,10 @@ data PrimFun freq sig where
 
     -- Sampler Construction
     PrimNewSampler      :: PrimFun Obj (SamplerSetting :+: Texture dim arr t ar :+: ZZ -> Sampler dim arr t ar)
+
+    -- Occlusion query
+    -- TODO: add depth buffer check, occlusion query only supported when depth test is presented
+    PrimAnySamplesPassed    :: PrimFun Obj (FrameBuffer layerCount a -> Bool)
+    PrimSamplesPassed       :: PrimFun Obj (FrameBuffer layerCount a -> Int32)
+
+    -- Conditional redering

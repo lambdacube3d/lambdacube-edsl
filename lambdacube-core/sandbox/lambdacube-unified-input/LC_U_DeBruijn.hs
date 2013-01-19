@@ -17,7 +17,7 @@ data Exp e
     = Lam                   !e
     | Body                  !e
     | Let                   !e !e
-    | Var                   !Int !ExpType   -- index, layout counter
+    | Var                   !Int    -- De Bruijn index
     | Apply                 !e !e
 
     -- Exp
@@ -70,8 +70,8 @@ data Exp e
     | GeometryShader        Int OutputPrimitive Int !e !e !e
 
     -- Output
-    | ImageOut              ByteString !e
-    | ScreenOut             !e
+    | Output                ByteString !e
+    | ScreenOutput          !e
     deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance ShowF Exp where showsPrecF = showsPrec

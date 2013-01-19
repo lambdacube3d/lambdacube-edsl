@@ -445,6 +445,7 @@ data Output
 
 -- shader freq tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen
+data C
 data Obj
 data V
 data G

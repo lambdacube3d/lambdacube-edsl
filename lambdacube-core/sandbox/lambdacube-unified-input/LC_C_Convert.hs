@@ -162,8 +162,8 @@ convertExp lyt expr = Fix $ Ann (genTy expr) cvtExpr
         H.GeometryShader a b c d e f    -> GeometryShader (toInt a) (convertOutputPrimitive b) c (cF1 d) (cF1 e) (cF1 f)
 
         -- Output constructors
-        H.ImageOut a b                  -> ImageOut a (cE b)
-        H.ScreenOut a                   -> ScreenOut (cE a)
+        H.Output a b                    -> Output a (cE b)
+        H.ScreenOutput a                -> ScreenOutput (cE a)
 
 -- TODO
 convertFun1 :: (LCType freq a, LCType freq b)
