@@ -28,6 +28,10 @@ data Interpolated e a where
 type InterpolatedExpTuple freq a = Tuple (LCType freq) (Interpolated (Exp freq)) a
 type ExpTuple freq a = Tuple (LCType freq) (Exp freq) a
 
+class IsFrameBuffer t
+instance IsFrameBuffer (Image layerCount a :+: ZZ)
+instance IsFrameBuffer (Image layerCount b :+: tail) => IsFrameBuffer (Image layerCount a :+: Image layerCount b :+: tail)
+
 -- Common Exp, describes shader functions
 data Exp freq t where
     -- Needed for conversion to de Bruijn form
@@ -62,6 +66,9 @@ data Exp freq t where
                     -> Exp freq t
 
     -- conditional expression
+    {-
+        structural types (Output, GeometryShader, Vertex, etc..) can be ecaulated only in C constant frequency
+    -}
     Cond            :: LCType freq t
                     => Exp freq Bool
                     -> Exp freq t
@@ -189,37 +196,38 @@ data Exp freq t where
                     -> Exp Obj (PrimitiveStream primitive adjacency clipDistances layerCount freq a)
                     -> Exp Obj (FragmentStream layerCount a)
 
-    FrameBuffer     :: FrameBuffer layerCount t
-                    -> Exp Obj (FrameBuffer layerCount (t))--TODO ftrepr'
-
     Accumulate      :: ( LCType F a
-                       , LCType F (Fragment (NoStencilRepr b))
+                       -- , LCType F (Fragment (NoStencilRepr b))
                        , LCType Obj (FragmentStream layerCount a)
-                       , LCType Obj (FrameBuffer layerCount b)
-                       , IsValidOutput b    -- restriction: depth and stencil optional, arbitrary color component
+                       , LCType Obj framebuffer
+                       , IsValidOutput semantic    -- restriction: depth and stencil optional, arbitrary color component
+                       , IsFrameBuffer framebuffer
+                       --TODO: , IsMatchOutput semantic framebuffer b
                        )
-                    => AccumulationContext b
-                    -> Maybe (Exp Obj V2I -> Exp Obj V4I)   -- calculates scissor position and size from framebuffer size (optional)
-                    -> Maybe (Exp F a -> Exp F Bool)        -- fragment filter function, we express discard using a filter function
-                    -> (Exp F a -> Exp F (Fragment (NoStencilRepr b)))     -- fragment shader
+                    => AccumulationContext semantic
+                    -> Maybe (Exp Obj V2I -> Exp Obj V4I)           -- calculates scissor position and size from framebuffer size (optional)
+                    -> Maybe (Exp F a -> Exp F Bool)                -- fragment filter function, we express discard using a filter function
+                    -> DepthOutput hasDepth (Exp F a -> Exp F Float)-- depth value function
+                    -> (Exp F a -> Exp F b)                         -- fragment shader
                     -> Exp Obj (FragmentStream layerCount a)
-                    -> Exp Obj (FrameBuffer layerCount (b))--TODO ftrepr'
-                    -> Exp Obj (FrameBuffer layerCount (b))--TODO ftrepr'
+                    -> Exp Obj framebuffer
+                    -> Exp Obj (framebuffer :+: ToOcclusionQuery hasDepth :+: ZZ)
 
     -- Transform feedback support
     ArrayFromStream :: LCType Obj (PrimitiveStream primitive adjacency clipDistances layerCount freq a)
                     => Exp Obj (PrimitiveStream primitive adjacency clipDistances layerCount freq a)
                     -> Exp Obj (Array order a)
 
-    -- FrameBuffer and Image helpers
-    PrjFrameBuffer  :: ( Nat idx
-                       , e ~ PrjTup idx t
-                       , LCType Obj (FrameBuffer layerCount b)
-                       )
-                    => idx
-                    -> Exp Obj (FrameBuffer layerCount b)
-                    -> Exp Obj (Image layerCount e)
+    -- Image operations
+    -- Construction
+    -- specifies an empty image (pixel rectangle)
+    -- hint: framebuffer is composed from images
+    Image           :: (IsNum t, IsVecScalar d color t, Nat layerCount)
+                    => layerCount
+                    -> Exp Obj color -- initial value
+                    -> Exp Obj (Image layerCount color)
 
+    -- Layer projection
     PrjImage        :: ( Nat idx
                        , LesserEq idx layerCount
                        , LCType Obj (Image layerCount t)
@@ -257,18 +265,6 @@ data Exp freq t where
                                                                                     --   gl_PrimitiveID; gl_Layer; loop var; vertex loop seed; vertex loop iteration count)
                     -> (Exp G j -> Exp G (j:+:Vertex outputClipDistances b:+:ZZ))   -- generate vertices
                     -> Exp Obj (GeometryShader inputPrimitive inputAdjacency outputPrimitive inputClipDistances outputClipDistances layerCount a b)
-
-    -- Fragment
-    -- result of a fragment shader function
-    Fragment            :: ExpTuple F a
-                        -> Exp F (Fragment (ColorRepr a))
-
-    FragmentDepth       :: Exp F Float
-                        -> ExpTuple F a
-                        -> Exp F (Fragment (Depth Float :+: ColorRepr a))
-
-    FragmentRastDepth   :: ExpTuple F a
-                        -> Exp F (Fragment (Depth Float :+: ColorRepr a))
 
     -- Output
     Output          :: LCType Obj t

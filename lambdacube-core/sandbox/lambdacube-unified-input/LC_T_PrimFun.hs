@@ -191,7 +191,7 @@ data PrimFun freq sig where
 
     -- Occlusion query
     -- TODO: add depth buffer check, occlusion query only supported when depth test is presented
-    PrimAnySamplesPassed    :: PrimFun Obj (FrameBuffer layerCount a -> Bool)
-    PrimSamplesPassed       :: PrimFun Obj (FrameBuffer layerCount a -> Int32)
+    PrimAnySamplesPassed    :: PrimFun Obj (OcclusionQuery -> Bool)
+    PrimSamplesPassed       :: PrimFun Obj (OcclusionQuery -> Int32)
 
     -- Conditional redering

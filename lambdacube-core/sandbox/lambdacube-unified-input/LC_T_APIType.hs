@@ -205,6 +205,15 @@ type instance PrimitiveVertices Line Adjacency a        = a:+:a:+:a:+:a:+:ZZ
 type instance PrimitiveVertices Triangle NoAdjacency a  = a:+:a:+:a:+:ZZ
 type instance PrimitiveVertices Triangle Adjacency a    = a:+:a:+:a:+:a:+:a:+:a:+:ZZ
 
+data True
+data False
+-- depth generation
+data DepthOutput hasDepth t where
+    NoDepth     :: DepthOutput False a
+    RastDepth   :: DepthOutput True a
+    Depth       :: a
+                -> DepthOutput True a
+
 data Blending c where
     NoBlending      :: Blending c
 
@@ -244,7 +253,6 @@ data RasterContext t where
                 -> ProvokingVertex
                 -> RasterContext Triangle
 
-type FrameBuffer layerCount t = Tuple (LCType Obj) (Image layerCount) t
 -- TODO: add scissor size function
 --       multisample
 --       sRGB
@@ -270,24 +278,6 @@ data FragmentOperation ty where
                     => Blending c           -- blending type
                     -> InputValue Obj mask  -- write mask
                     -> FragmentOperation (Color color)
-
--- specifies an empty image (pixel rectangle)
--- hint: framebuffer is composed from images
-data Image layerCount t where
-    DepthImage      :: Nat layerCount
-                    => layerCount
-                    -> Float    -- initial value
-                    -> Image layerCount (Depth Float)
-
-    StencilImage    :: Nat layerCount
-                    => layerCount
-                    -> Int32    -- initial value
-                    -> Image layerCount (Stencil Int32)
-
-    ColorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount)
-                    => layerCount
-                    -> InputValue Obj color -- initial value
-                    -> Image layerCount (Color color)
 
 -- restriction for framebuffer structure according content semantic
 -- supported configurations: optional stencil + optional depth + [zero or more color]
@@ -440,8 +430,12 @@ data Texture dim arr t ar
 
 data Vertex clipDistances t
 data GeometryShader inputPrimitive inputAdjacency outputPrimitive inputClipDistances outputClipDistances layerCount a b
-data Fragment t
 data Output
+data OcclusionQuery
+
+type family ToOcclusionQuery a
+type instance ToOcclusionQuery True     = OcclusionQuery
+type instance ToOcclusionQuery False    = ZZ
 
 -- shader freq tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen
@@ -469,3 +463,4 @@ data ArrayTex   -- array texture
 data CubeTex    -- cube texture = array with size 6
 
 data Sampler dim layerCount t ar
+data Image layerCount t
