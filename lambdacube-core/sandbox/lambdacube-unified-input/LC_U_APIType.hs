@@ -238,3 +238,30 @@ data MipMap
     | NoMip 
     | AutoMip       Int Int -- Base level, Max level
     deriving (Show,Eq,Ord)
+
+data PolygonOffset
+    = NoOffset
+    | Offset Float Float
+    deriving (Eq,Ord,Show)
+
+data PolygonMode
+    = PolygonPoint PointSize
+    | PolygonLine Float
+    | PolygonFill
+    deriving (Eq,Ord,Show)
+
+data StencilTests
+    = StencilTests StencilTest StencilTest
+    deriving (Eq,Ord,Show)
+
+data PointSize
+    = PointSize Float
+    | PointSizeRast
+    deriving (Eq,Ord,Show)
+
+data StencilTest
+    = StencilTest
+    { stencilComparision    :: ComparisonFunction   -- ^ The function used to compare the @stencilReference@ and the stencil buffers value with.
+    , stencilReference      :: Int32                -- ^ The value to compare with the stencil buffer's value.
+    , stencilMask           :: Word32               -- ^ A bit mask with ones in each position that should be compared and written to the stencil buffer.
+    } deriving (Eq,Ord,Show)

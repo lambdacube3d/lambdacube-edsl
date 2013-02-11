@@ -3,6 +3,7 @@ module LC_T_HOAS where
 import Data.ByteString.Char8
 import Data.Int
 import Data.Word
+import Data.Typeable
 
 import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
@@ -190,7 +191,7 @@ data Exp freq t where
                     -> Exp Obj (PrimitiveStream outputPrimitive NoAdjacency outputClipDistances layerCount G b)
 
     Rasterize       :: LCType Obj (PrimitiveStream primitive adjacency clipDistances layerCount freq a)
-                    => RasterContext primitive
+                    => Exp Obj (RasterContext primitive)
                     -> (Exp Obj V2I -> Exp Obj V4I) -- calculates viewport position and size from framebuffer size
                     -> Maybe (Exp Obj V2F)          -- Just: depth range (near,far) value or Nothing: depth clamp is disabled
                     -> Exp Obj (PrimitiveStream primitive adjacency clipDistances layerCount freq a)
@@ -239,9 +240,9 @@ data Exp freq t where
     -- Vertex
     -- result of a vertex or geometry shader function
     Vertex          :: IsFloatTuple clipDistances
-                    => Exp freq V4F                 -- position
-                    -> Exp freq Float               -- point size
-                    -> ExpTuple freq clipDistances  -- clip distance []
+                    => Exp freq V4F             -- position
+                    -> Exp freq Float           -- point size
+                    -> Exp freq clipDistances   -- clip distance []
                     -> InterpolatedExpTuple freq a
                     -> Exp freq (Vertex clipDistances a)
 
@@ -275,3 +276,94 @@ data Exp freq t where
     ScreenOutput    :: LCType Obj (Image N1 t)
                     => Exp Obj (Image N1 t)
                     -> Exp Obj Output
+
+    -- Raster context
+    -- TODO: 
+    --       add clip distance mask
+    PointCtx        :: Exp Obj (RasterContext Point)      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN
+
+    LineCtx         :: Exp Obj Float            -- line width
+                    -> ProvokingVertex
+                    -> Exp Obj (RasterContext Line)
+
+    TriangleCtx     :: CullMode
+                    -> PolygonMode
+                    -> PolygonOffset
+                    -> ProvokingVertex
+                    -> Exp Obj (RasterContext Triangle)
+
+    -- PointSize
+    PointSize       :: Exp Obj Float
+                    -> Exp Obj PointSize
+
+    PointSizeRast   :: Exp Obj PointSize
+
+    -- PolygonOffset
+    NoOffset        :: Exp Obj PolygonOffset
+
+    Offset          :: Exp Obj Float
+                    -> Exp Obj Float
+                    -> Exp Obj PolygonOffset
+
+    -- PolygonMode
+    PolygonPoint    :: Exp Obj PointSize
+
+    PolygonLine     :: Exp Obj Float
+                    -> Exp Obj PointSize
+
+    PolygonFill     :: Exp Obj PointSize
+
+    -- StencilTest
+    StencilTest     :: ComparisonFunction   -- ^ The function used to compare the @stencilReference@ and the stencil buffers value with.
+                    -> Exp Obj Int32        -- ^ The value to compare with the stencil buffer's value.
+                    -> Exp Obj Word32       -- ^ A bit mask with ones in each position that should be compared and written to the stencil buffer.
+                    -> Exp Obj StencilTest
+
+    -- Blending
+    NoBlending      :: Exp Obj (Blending c)
+
+    BlendLogicOp    :: IsIntegral c
+                    => LogicOperation
+                    -> Exp Obj (Blending c)
+
+    -- FIXME: restrict BlendingFactor at some BlendEquation
+    Blend           :: (BlendEquation, BlendEquation) 
+                    -> ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
+                    -> Exp Obj V4F
+                    -> Exp Obj (Blending Float)
+
+    -- FragmentOperation
+    DepthOp         :: DepthFunction
+                    -> Exp Obj Bool     -- depth write
+                    -> Exp Obj (FragmentOperation (Depth Float))
+
+    StencilOp       :: Exp Obj (StencilTest :+: StencilTest :+: ZZ)
+                    -> StencilOps
+                    -> StencilOps
+                    -> Exp Obj (FragmentOperation (Stencil Int32))
+
+    ColorOp         :: (IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c)
+                    => Exp Obj (Blending c)           -- blending type
+                    -> Exp Obj mask  -- write mask
+                    -> Exp Obj (FragmentOperation (Color color))
+
+    -- AccumulationContext
+    -- TODO: add scissor size function
+    --       multisample
+    --       sRGB
+    --       dithering
+    {-
+    AccumulationContext :: Exp Obj Bool -- dithering
+                        -> Exp 
+    { accDithering      :: Bool
+    , accOperations     :: Tuple Typeable FragmentOperation t
+    }
+    -}
+data PointSize
+data PolygonOffset
+data PolygonMode
+data StencilTest
+data Blending c
+data AccumulationContext t
+data FragmentOperation ty
+    

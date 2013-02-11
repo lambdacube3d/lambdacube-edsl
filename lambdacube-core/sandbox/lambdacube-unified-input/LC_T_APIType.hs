@@ -214,19 +214,6 @@ data DepthOutput hasDepth t where
     Depth       :: a
                 -> DepthOutput True a
 
-data Blending c where
-    NoBlending      :: Blending c
-
-    BlendLogicOp    :: IsIntegral c
-                    => LogicOperation
-                    -> Blending c
-
-    -- FIXME: restrict BlendingFactor at some BlendEquation
-    Blend           :: (BlendEquation, BlendEquation) 
-                    -> ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
-                    -> V4F
-                    -> Blending Float
-
 -- abstract types, used in language AST
 data VertexStream primitive adjacency t
 data PrimitiveStream primitive adjacency clipDistances layerCount freq t
@@ -237,47 +224,7 @@ data Color a    deriving Typeable
 data Depth a    deriving Typeable
 data Stencil a  deriving Typeable
 
--- raster context description
--- TODO: 
---       add clip distance mask
-data RasterContext t where
-    PointCtx    :: RasterContext Point      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN
-
-    LineCtx     :: Float            -- line width
-                -> ProvokingVertex
-                -> RasterContext Line
-
-    TriangleCtx :: CullMode
-                -> PolygonMode
-                -> PolygonOffset
-                -> ProvokingVertex
-                -> RasterContext Triangle
-
--- TODO: add scissor size function
---       multisample
---       sRGB
---       dithering
-data AccumulationContext t
-    = AccumulationContext
-    { accDithering      :: Bool
-    , accOperations     :: Tuple Typeable FragmentOperation t
-    }
-
--- Fragment Operation
-data FragmentOperation ty where
-    DepthOp         :: DepthFunction
-                    -> Bool     -- depth write
-                    -> FragmentOperation (Depth Float)
-
-    StencilOp       :: StencilTests
-                    -> StencilOps
-                    -> StencilOps
-                    -> FragmentOperation (Stencil Int32)
-
-    ColorOp         :: (IsVecScalar d mask Bool, IsVecScalar d color c, IsNum c)
-                    => Blending c           -- blending type
-                    -> InputValue Obj mask  -- write mask
-                    -> FragmentOperation (Color color)
+data RasterContext t
 
 -- restriction for framebuffer structure according content semantic
 -- supported configurations: optional stencil + optional depth + [zero or more color]
