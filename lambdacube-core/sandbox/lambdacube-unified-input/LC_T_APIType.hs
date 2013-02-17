@@ -239,16 +239,11 @@ instance (IsColorOutput a) => IsValidOutput (Stencil s :+: a)
 instance (IsColorOutput a) => IsValidOutput (Stencil s :+: Depth d :+: a)
 
 -- helper type level function, used in language AST
-type family ColorRepr a :: *
-type instance ColorRepr ZZ = ZZ
-type instance ColorRepr (a :+: b) = Color a :+: (ColorRepr b)
-
--- helper type level function, used in language AST
-type family NoStencilRepr a :: *
-type instance NoStencilRepr ZZ = ZZ
-type instance NoStencilRepr (Stencil a :+: b) = NoStencilRepr b
-type instance NoStencilRepr (Color a :+: b) = Color a :+: (NoStencilRepr b)
-type instance NoStencilRepr (Depth a :+: b) = Depth a :+: (NoStencilRepr b)
+type family FilterColor a
+type instance FilterColor ZZ = ZZ
+type instance FilterColor (Stencil a :+: b) = FilterColor b
+type instance FilterColor (Depth a :+: b)   = FilterColor b
+type instance FilterColor (Color a :+: b)   = a :+: (FilterColor b)
 
 -- sampler and texture specification
 

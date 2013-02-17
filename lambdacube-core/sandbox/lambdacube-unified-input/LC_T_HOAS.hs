@@ -16,23 +16,6 @@ import LC_T_PrimFun
 --TODO: check whether we should distinct size limited arrays and arbitrary sized arrays.
 --          former is due to GLSL and GPU restrictions, latter are stored in CPU RAM
 
--- vertex attribute interpolation
-data Interpolated e a where
-    Flat            :: e a -> Interpolated e a
-
-    Smooth          :: IsFloating a
-                    => e a -> Interpolated e a
-
-    NoPerspective   :: IsFloating a
-                    => e a -> Interpolated e a
-
-type InterpolatedExpTuple freq a = Tuple (LCType freq) (Interpolated (Exp freq)) a
-type ExpTuple freq a = Tuple (LCType freq) (Exp freq) a
-
-class IsFrameBuffer t
-instance IsFrameBuffer (Image layerCount a :+: ZZ)
-instance IsFrameBuffer (Image layerCount b :+: tail) => IsFrameBuffer (Image layerCount a :+: Image layerCount b :+: tail)
-
 -- Common Exp, describes shader functions
 data Exp freq t where
     -- Needed for conversion to de Bruijn form
@@ -82,7 +65,7 @@ data Exp freq t where
                     -> Exp freq r
 
     Tup             :: LCType freq t
-                    => ExpTuple freq t
+                    => Tuple (LCType freq) (Exp freq) t --ExpTuple freq t
                     -> Exp freq t
 
     Prj             :: ( Nat idx
@@ -197,15 +180,21 @@ data Exp freq t where
                     -> Exp Obj (PrimitiveStream primitive adjacency clipDistances layerCount freq a)
                     -> Exp Obj (FragmentStream layerCount a)
 
+    -- AccumulationContext
+    -- TODO: multisample
+    --       sRGB
     Accumulate      :: ( LCType F a
-                       -- , LCType F (Fragment (NoStencilRepr b))
+                       , LCType F b
                        , LCType Obj (FragmentStream layerCount a)
                        , LCType Obj framebuffer
                        , IsValidOutput semantic    -- restriction: depth and stencil optional, arbitrary color component
-                       , IsFrameBuffer framebuffer
-                       --TODO: , IsMatchOutput semantic framebuffer b
+                       , imgTup ~ MapPrj (Image layerCount) framebuffer
+                       , imgTup ~ UnTag semantic
+                       , semantic ~ MapPrj FragmentOperation fbOps
+                       , b ~ FilterColor semantic
                        )
-                    => AccumulationContext semantic
+                    => Exp Obj Bool -- dithering
+                    -> Exp Obj fbOps
                     -> Maybe (Exp Obj V2I -> Exp Obj V4I)           -- calculates scissor position and size from framebuffer size (optional)
                     -> Maybe (Exp F a -> Exp F Bool)                -- fragment filter function, we express discard using a filter function
                     -> DepthOutput hasDepth (Exp F a -> Exp F Float)-- depth value function
@@ -243,8 +232,8 @@ data Exp freq t where
                     => Exp freq V4F             -- position
                     -> Exp freq Float           -- point size
                     -> Exp freq clipDistances   -- clip distance []
-                    -> InterpolatedExpTuple freq a
-                    -> Exp freq (Vertex clipDistances a)
+                    -> Exp freq interpolatedTuple --InterpolatedExpTuple freq a
+                    -> Exp freq (Vertex clipDistances (MapPrj Interpolated a))
 
     -- Geometry
     -- describes a geometry shader
@@ -260,7 +249,7 @@ data Exp freq t where
                        )
                     => layerCount                                                   -- geometry shader:
                     -> OutputPrimitive outputPrimitive                              -- output primitive
-                    -> Int                                                          -- max amount of generated vertices
+                    -> Exp C Int                                                    -- max amount of generated vertices
                     -> (Exp G input -> Exp G (i:+:Int32:+:ZZ))                      -- how many primitives?
                     -> (Exp G i -> Exp G (Int32:+:Int32:+:i:+:j:+:Int32:+:ZZ))      -- how many vertices? primtive loop, out:
                                                                                     --   gl_PrimitiveID; gl_Layer; loop var; vertex loop seed; vertex loop iteration count)
@@ -347,18 +336,21 @@ data Exp freq t where
                     -> Exp Obj mask  -- write mask
                     -> Exp Obj (FragmentOperation (Color color))
 
-    -- AccumulationContext
-    -- TODO: add scissor size function
-    --       multisample
-    --       sRGB
-    --       dithering
-    {-
-    AccumulationContext :: Exp Obj Bool -- dithering
-                        -> Exp 
-    { accDithering      :: Bool
-    , accOperations     :: Tuple Typeable FragmentOperation t
-    }
-    -}
+    
+    -- Interpolated: vertex attribute interpolation
+    -- FIXME: prevent multiple interpolation
+    Flat            :: Exp V a
+                    -> Exp V (Interpolated a)
+
+    Smooth          :: IsFloating a
+                    => Exp V a
+                    -> Exp V (Interpolated a)
+
+    NoPerspective   :: IsFloating a
+                    => Exp V a
+                    -> Exp V (Interpolated a)
+
+data Interpolated a
 data PointSize
 data PolygonOffset
 data PolygonMode
@@ -366,4 +358,11 @@ data StencilTest
 data Blending c
 data AccumulationContext t
 data FragmentOperation ty
-    
+
+type family MapPrj (tag :: * -> *) t
+type instance MapPrj tag ZZ = ZZ
+type instance MapPrj tag (tag a :+: l) = a :+: MapPrj tag l
+
+type family UnTag t
+type instance UnTag ZZ = ZZ
+type instance UnTag (tag a :+: l) = a :+: UnTag l
