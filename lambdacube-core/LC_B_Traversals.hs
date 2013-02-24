@@ -9,12 +9,15 @@ import LC_U_DeBruijn
 
 class HasExp a where
     expUniverse    :: DAG -> a -> [Exp]
+    expUniverse'   :: DAG -> a -> [Exp] -- includes the origin
 
 instance HasExp a => HasExp [a] where
-    expUniverse dag a = concatMap (expUniverse dag) a
+    expUniverse dag a   = concatMap (expUniverse dag) a
+    expUniverse' dag a  = concatMap (expUniverse' dag) a
 
 instance HasExp ExpId where
-    expUniverse dag e = expUniverse dag $ toExp dag e
+    expUniverse dag e   = expUniverse dag $ toExp dag e
+    expUniverse' dag e  = expUniverse' dag $ toExp dag e
 
 instance HasExp Exp where
     expUniverse dag exp = case exp of
@@ -51,6 +54,8 @@ instance HasExp Exp where
         NoPerspective a         -> toExp dag a : expUniverse dag a 
         GeometryShader _ _ _ a b c  -> expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c
         _                       -> []
+
+    expUniverse' dag exp = exp : expUniverse dag exp
 
 gpUniverse :: DAG -> Exp -> [Exp]
 gpUniverse dag gp = gp : case gp of
@@ -118,10 +123,6 @@ gpChildren gp = case gp of
 -- includes the origin
 gpUniverse' :: DAG -> Exp -> [Exp]
 gpUniverse' dag gp = gp : gpUniverse dag gp
-
--- includes the origin
-expUniverse' :: DAG -> Exp -> [Exp]
-expUniverse' dag e = e : expUniverse dag e
 
 findFrameBuffer :: DAG -> Exp -> Exp
 findFrameBuffer dag a = head $ dropWhile notFrameBuffer $ gpUniverse' dag a

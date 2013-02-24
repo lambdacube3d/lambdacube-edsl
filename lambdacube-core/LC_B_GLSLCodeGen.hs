@@ -525,10 +525,10 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
         assigns a e = [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         ppBody l    = pack $! show $! pPrint $! Compound l
         pp a        = pack $! show $! pPrint $! TranslationUnit a
-        allExps     = concat [expUniverse dag outs, expUniverse dag (map snd outs'), filterExps]
+        allExps     = concat [expUniverse' dag outs, expUniverse' dag (map snd outs'), filterExps]
         filterExps  = case ffilter of
             PassAll     -> []
-            Filter f    -> expUniverse dag f
+            Filter f    -> expUniverse' dag f
         uniVars     = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- allExps, let Single t = expType dag u]
         smpVars     = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- allExps, let Single t = expType dag s, let Just n = Map.lookup s smpName]
         body        = assigns (oN' ++ oNames) (concat oE' ++ concat oE)
