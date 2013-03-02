@@ -30,9 +30,13 @@ import Data.Bitmap.Pure
 
 quad :: Mesh
 quad = Mesh
-    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList
-        [ V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b
-        , V2 a2 b2, V2 a2 a2, V2 b2 a2, V2 b2 a2, V2 b2 b2, V2 a2 b2
+    { mAttributes   = T.fromList
+        [ ("position", A_V2F $ SV.fromList
+            [ V2 a b, V2 a a, V2 b a, V2 b b
+            , V2 a2 b2, V2 a2 a2, V2 b2 a2, V2 b2 b2
+            ]
+          )
+        , ("vid", A_Int $ SV.fromList [0..7])
         ]
     , mPrimitive    = P_Points
     , mGPUData      = Nothing
@@ -62,32 +66,20 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
     prims   = Transform vert input
     input   = Fetch "postSlot" Point (IV2F "position")
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 200) (NoPerspective uv:.ZT)
+    vert :: Exp V V2F -> VertexOut ()
+    vert uv = VertexOut v4 (Const 200) ZT
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
 
     up = Uni (IFloat "up") :: Exp F Float
     down = Uni (IFloat "down")
-    frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
-    frag uv' = FragmentOut $ c :. ZT
+    frag :: Exp F () -> FragmentOut (Color V4F :+: ZZ)
+    frag _ = FragmentOut $ c :. ZT
       where
-        c' = Cond (down @< r @&& r @< up) (Const (V4 1 0 0 1)) $
-            Cond (down @< r @&& x @< floatF 128) texel $ pack' $ V4 tR tG tB $ floatF 1--texel2--(Const (V4 0 0 0 1))
-        --c = Const (V4 0 0 1 1)
         c = Cond (primitiveID' @% intF 2 @== intF 0)
                 (smp "ScreenQuad" $ pointCoord')
                 (smp "ScreenQuad2" $ pointCoord')
-        texel = smp "ScreenQuad" uv
-        texel2 = smp "ScreenQuad2" uv
-        V4 r g b a = unpack' texel
-        V4 x y z w = unpack' fragCoord'
-        V4 tR _ _ _ = unpack' $ smp "ScreenQuad2" $ uv @+ (Const (V2 0.1 0) :: Exp F V2F) @* up
-        V4 _ tG _ _ = unpack' $ smp "ScreenQuad2" $ uv @+ (Const (V2 0.11 0) :: Exp F V2F) @* (up @+ r @* floatF 0.1)
-        V4 _ _ tB _ = unpack' $ smp "ScreenQuad2" $ uv @+ (Const (V2 0.117 0) :: Exp F V2F) @* (up @+ r @* floatF 0.1)
-        V2 u v = unpack' uv
-        uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 
 main :: IO ()
