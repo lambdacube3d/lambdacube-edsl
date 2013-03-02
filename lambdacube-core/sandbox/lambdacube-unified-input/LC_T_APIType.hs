@@ -2,7 +2,6 @@ module LC_T_APIType where
 
 import Data.ByteString.Char8
 import Data.Int
-import Data.Typeable
 import Data.Word
 
 import TypeLevel.Number.Nat
@@ -220,9 +219,9 @@ data PrimitiveStream primitive adjacency clipDistances layerCount freq t
 data FragmentStream layerCount t
 
 -- framebuffer data / fragment output semantic
-data Color a    deriving Typeable
-data Depth a    deriving Typeable
-data Stencil a  deriving Typeable
+data Color a
+data Depth a
+data Stencil a
 
 data RasterContext t
 

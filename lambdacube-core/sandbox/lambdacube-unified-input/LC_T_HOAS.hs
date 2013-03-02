@@ -3,7 +3,6 @@ module LC_T_HOAS where
 import Data.ByteString.Char8
 import Data.Int
 import Data.Word
-import Data.Typeable
 
 import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
@@ -356,7 +355,6 @@ data PolygonOffset
 data PolygonMode
 data StencilTest
 data Blending c
-data AccumulationContext t
 data FragmentOperation ty
 
 type family MapPrj (tag :: * -> *) t
