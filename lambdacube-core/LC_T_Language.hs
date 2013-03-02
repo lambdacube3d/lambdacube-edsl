@@ -1,7 +1,6 @@
 {-# LANGUAGE UndecidableInstances, OverlappingInstances #-}
 module LC_T_Language where
 
-import Data.ByteString.Char8
 import Data.Int
 import Data.Typeable
 import Data.Word
@@ -115,6 +114,8 @@ instance OperatorArithmetic (Exp stage V4F) (Exp stage Float) (Exp stage V4F) wh
     a @- b = PrimApp PrimSubS $! tup2 (a,b)
     a @* b = PrimApp PrimMulS $! tup2 (a,b)
 -}
+
+-- FIXME: modulus % is defined only for integral types
 class OperatorDivide a b where
     (@/) :: a -> b -> a
     (@%) :: a -> b -> a
@@ -474,25 +475,25 @@ untup9 e = (tix8 `Prj` e, tix7 `Prj` e, tix6 `Prj` e, tix5 `Prj` e, tix4 `Prj` e
 
 -- builtin variables
 -- vertex shader
-vertexID :: Exp V Int32
-vertexID = PrimVar $ IInt "gl_VertexID"
+vertexID' :: Exp V Int32
+vertexID' = PrimVar $ IInt "gl_VertexID"
 
-instanceID :: Exp V Int32
-instanceID = PrimVar $ IInt "gl_InstanceID"
+instanceID' :: Exp V Int32
+instanceID' = PrimVar $ IInt "gl_InstanceID"
 
 -- geometry shader
-primitiveIDIn :: Exp G Int32
-primitiveIDIn = PrimVar $ IInt "gl_PrimitiveIDIn"
+primitiveIDIn' :: Exp G Int32
+primitiveIDIn' = PrimVar $ IInt "gl_PrimitiveIDIn"
 
 -- fragment shader
-fragCoord :: Exp F V4F
-fragCoord = PrimVar $ IV4F "gl_FragCoord"
+fragCoord' :: Exp F V4F
+fragCoord' = PrimVar $ IV4F "gl_FragCoord"
 
-frontFacing :: Exp F Bool
-frontFacing = PrimVar $ IBool "gl_FrontFacing"
+frontFacing' :: Exp F Bool
+frontFacing' = PrimVar $ IBool "gl_FrontFacing"
 
-pointCoord :: Exp F V2F
-pointCoord = PrimVar $ IV2F "gl_PointCoord"
+pointCoord' :: Exp F V2F
+pointCoord' = PrimVar $ IV2F "gl_PointCoord"
 
-primitiveID :: Exp F Int32
-primitiveID = PrimVar $ IInt "gl_PrimitiveID"
+primitiveID' :: Exp F Int32
+primitiveID' = PrimVar $ IInt "gl_PrimitiveID"

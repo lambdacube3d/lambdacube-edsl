@@ -2,7 +2,6 @@ module LC_U_APIType where
 
 import Data.ByteString.Char8
 import Data.Int
-import Data.Word
 
 import LC_G_Type
 
@@ -22,7 +21,7 @@ data Blending
     deriving (Show,Eq,Ord)
 
 data RasterContext
-    = PointCtx
+    = PointCtx      PointSize Float PointSpriteCoordOrigin
     | LineCtx       Float ProvokingVertex
     | TriangleCtx   CullMode PolygonMode PolygonOffset ProvokingVertex
     deriving (Show, Eq, Ord)

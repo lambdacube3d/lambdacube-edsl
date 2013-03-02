@@ -253,7 +253,7 @@ convertMipMap (T.Mip a b)       = Mip a b
 convertMipMap (T.AutoMip a b)   = AutoMip a b
 
 convertRasterContext :: T.RasterContext p -> RasterContext
-convertRasterContext T.PointCtx                 = PointCtx
+convertRasterContext (T.PointCtx a b c)         = PointCtx a b c
 convertRasterContext (T.LineCtx a b)            = LineCtx a b
 convertRasterContext (T.TriangleCtx a b c d)    = TriangleCtx a b c d
 

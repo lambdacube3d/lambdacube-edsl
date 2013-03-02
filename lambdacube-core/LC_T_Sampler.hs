@@ -1,10 +1,8 @@
 module LC_T_Sampler where
 
 import Data.Int
-import Data.Word
 
 import LC_G_Type
-import LC_T_APIType
 import LC_T_DSLType
 
 {-

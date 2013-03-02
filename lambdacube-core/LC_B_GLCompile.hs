@@ -66,8 +66,13 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_FIRST_VERTEX_CONVENTION
     , gl_LAST_VERTEX_CONVENTION
     -- point
+    , glPointParameterf
     , glPointSize
+    , gl_LOWER_LEFT
+    , gl_POINT_FADE_THRESHOLD_SIZE
+    , gl_POINT_SPRITE_COORD_ORIGIN
     , gl_PROGRAM_POINT_SIZE
+    , gl_UPPER_LEFT
     -- line
     , glLineWidth
     -- triangle
@@ -118,13 +123,19 @@ setupRasterContext = cvt
 
     setPointSize :: PointSize -> IO ()
     setPointSize ps = case ps of
-        PointSizeRast   -> glEnable gl_PROGRAM_POINT_SIZE
-        PointSize s     -> do
+        ProgramPointSize    -> glEnable gl_PROGRAM_POINT_SIZE
+        PointSize s         -> do
             glDisable gl_PROGRAM_POINT_SIZE
             glPointSize $ realToFrac s
 
     cvt :: RasterContext -> IO ()
-    cvt (PointCtx) = return ()
+    cvt (PointCtx ps fts sc) = do
+        setPointSize ps
+        glPointParameterf gl_POINT_FADE_THRESHOLD_SIZE (realToFrac fts)
+        glPointParameterf gl_POINT_SPRITE_COORD_ORIGIN $ realToFrac $ case sc of
+            LowerLeft   -> gl_LOWER_LEFT
+            UpperLeft   -> gl_UPPER_LEFT
+
     cvt (LineCtx lw pv) = do
         glLineWidth (realToFrac lw)
         setProvokingVertex pv

@@ -4,7 +4,6 @@ import Data.ByteString.Char8
 import Data.Int
 import Data.Typeable
 import Data.Word
-import Foreign.Ptr
 
 import TypeLevel.Number.Nat
 import TypeLevel.Number.Nat.Num
@@ -186,9 +185,12 @@ data PrimitiveVertices prim a
 
 
 -- raster context description
--- TODO: add context parameters
 data RasterContext t where
-    PointCtx    :: RasterContext Point      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN
+    PointCtx    ::
+        { ctxPointSize          :: PointSize
+        , ctxFadeThresholdSize  :: Float
+        , ctxSpriteCoordOrigin  :: PointSpriteCoordOrigin
+        } -> RasterContext Point
 
     LineCtx     :: 
         { ctxLineWidth          :: Float

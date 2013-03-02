@@ -1,6 +1,5 @@
 module LC_G_APIType where
 
-import Data.ByteString.Char8
 import Data.Data
 import Data.Int
 import Data.Word
@@ -348,18 +347,19 @@ data IndexStream b
     , indexLength   :: Int
     }
 
-data PointSize          = PointSize Float | PointSizeRast deriving (Eq,Ord,Show, Data,Typeable)
-data PolygonOffset      = NoOffset | Offset Float Float  deriving (Eq,Ord,Show, Data,Typeable)
-data FrontFace          = CCW | CW deriving (Eq,Ord,Show, Data,Typeable)
-data PolygonMode        = PolygonPoint PointSize | PolygonLine Float | PolygonFill deriving (Eq,Ord,Show, Data,Typeable)
-data ProvokingVertex    = FirstVertex | LastVertex deriving (Eq,Ord,Bounded,Enum,Show, Data,Typeable)
-data CullMode           = CullNone | CullFront FrontFace | CullBack FrontFace deriving (Eq,Ord,Show, Data,Typeable)
-type DepthFunction      = ComparisonFunction
-data ComparisonFunction = Never | Less | Equal | Lequal | Greater | Notequal | Gequal | Always deriving ( Eq, Ord, Show, Data,Typeable )
-data StencilOperation   = OpZero | OpKeep | OpReplace | OpIncr | OpIncrWrap | OpDecr | OpDecrWrap | OpInvert deriving ( Eq, Ord, Show, Data,Typeable )
-data BlendEquation      = FuncAdd | FuncSubtract | FuncReverseSubtract | Min | Max deriving ( Eq, Ord, Show, Data,Typeable )
-data BlendingFactor     = Zero | One | SrcColor | OneMinusSrcColor | DstColor | OneMinusDstColor | SrcAlpha | OneMinusSrcAlpha | DstAlpha | OneMinusDstAlpha | ConstantColor | OneMinusConstantColor | ConstantAlpha | OneMinusConstantAlpha | SrcAlphaSaturate deriving ( Eq, Ord, Show, Data,Typeable )
-data LogicOperation     = Clear | And | AndReverse | Copy | AndInverted | Noop | Xor | Or | Nor | Equiv | Invert | OrReverse | CopyInverted | OrInverted | Nand | Set deriving ( Eq, Ord, Show, Data,Typeable )
+data PointSpriteCoordOrigin = LowerLeft | UpperLeft deriving (Show, Eq, Ord)
+data PointSize              = PointSize Float | ProgramPointSize deriving (Eq,Ord,Show, Data,Typeable)
+data PolygonOffset          = NoOffset | Offset Float Float  deriving (Eq,Ord,Show, Data,Typeable)
+data FrontFace              = CCW | CW deriving (Eq,Ord,Show, Data,Typeable)
+data PolygonMode            = PolygonPoint PointSize | PolygonLine Float | PolygonFill deriving (Eq,Ord,Show, Data,Typeable)
+data ProvokingVertex        = FirstVertex | LastVertex deriving (Eq,Ord,Bounded,Enum,Show, Data,Typeable)
+data CullMode               = CullNone | CullFront FrontFace | CullBack FrontFace deriving (Eq,Ord,Show, Data,Typeable)
+type DepthFunction          = ComparisonFunction
+data ComparisonFunction     = Never | Less | Equal | Lequal | Greater | Notequal | Gequal | Always deriving ( Eq, Ord, Show, Data,Typeable )
+data StencilOperation       = OpZero | OpKeep | OpReplace | OpIncr | OpIncrWrap | OpDecr | OpDecrWrap | OpInvert deriving ( Eq, Ord, Show, Data,Typeable )
+data BlendEquation          = FuncAdd | FuncSubtract | FuncReverseSubtract | Min | Max deriving ( Eq, Ord, Show, Data,Typeable )
+data BlendingFactor         = Zero | One | SrcColor | OneMinusSrcColor | DstColor | OneMinusDstColor | SrcAlpha | OneMinusSrcAlpha | DstAlpha | OneMinusDstAlpha | ConstantColor | OneMinusConstantColor | ConstantAlpha | OneMinusConstantAlpha | SrcAlphaSaturate deriving ( Eq, Ord, Show, Data,Typeable )
+data LogicOperation         = Clear | And | AndReverse | Copy | AndInverted | Noop | Xor | Or | Nor | Equiv | Invert | OrReverse | CopyInverted | OrInverted | Nand | Set deriving ( Eq, Ord, Show, Data,Typeable )
 
 data StencilOps
     = StencilOps
