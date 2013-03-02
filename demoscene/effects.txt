@@ -1,0 +1,9 @@
+basic framework:
+    - font rendering
+    - lighting model (standard: e.g. phong)
+    - curve functions
+    - noise data (generators and functions)
+
+effects:
+    - bloom
+    - interlace
