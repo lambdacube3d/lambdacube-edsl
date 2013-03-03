@@ -115,6 +115,7 @@ data RenderDescriptor
     , drawObjectsIORef  :: IORef ObjectSet  -- updated internally, according objectSet
                                             -- hint: Map is required to support slot sharing across different Accumulation nodes,
                                             --       because each node requires it's own render action list: [IO ()]
+    , fragmentOutCount  :: Int
     }
 
 data SlotDescriptor

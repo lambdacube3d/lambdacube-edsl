@@ -140,6 +140,8 @@ data Blending c where
                     -> V4F
                     -> Blending Float
 
+blend = Blend (FuncAdd,FuncAdd) ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4 1 1 1 1)
+
 -- abstract types, used in language AST
 data VertexStream prim t
 data PrimitiveStream prim layerCount stage t

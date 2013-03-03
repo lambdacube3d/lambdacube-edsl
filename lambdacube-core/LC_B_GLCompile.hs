@@ -447,7 +447,7 @@ compileClearFrameBuffer (FrameBuffer fb) = cvt fb
 
 -- FIXME: simple solution, does not support sharing
 -- result: (RenderAction, DisposeAction, UniformLocation, StreamLocation)
-compileRenderFrameBuffer :: DAG -> [(Exp,String)] -> [(Exp,String)] -> IORef ObjectSet -> Exp -> IO (IO (), IO (), Trie GLint, Trie GLuint)
+compileRenderFrameBuffer :: DAG -> [(Exp,String)] -> [(Exp,String)] -> IORef ObjectSet -> Exp -> IO (IO (), IO (), Trie GLint, Trie GLuint, Int)
 compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate aCtx ffilter fsh rastExp fb) = do
     --rndr <- compileFrameBuffer fb rndr'
     po <- glCreateProgram
@@ -461,7 +461,7 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
         samplerNameMap  = Map.fromList allSamplerNames
         (srcV,outV) = codeGenVertexShader dag samplerNameMap slotInput $ toExp dag vsh
         (srcG,outG) = ("",outV)--codeGenGeometryShader samplerNameMap outV gs
-        (srcF,outF) = codeGenFragmentShader dag samplerNameMap outG (toExp dag ffilter) $ toExp dag fsh
+        (srcF,outF,outColorCnt) = codeGenFragmentShader dag samplerNameMap outG (toExp dag ffilter) $ toExp dag fsh
         printGLStatus = checkGL >>= print
         createAndAttach [] _ = return $! Nothing
         createAndAttach sl t = do
@@ -481,7 +481,7 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
 
     -- connect Fragment output to FBO
     forM_ (zip fragOuts [0..]) $ \(n,i) -> SB.useAsCString n $ \pn -> do
-        print (n,i)
+        putStrLn ("variable " ++ show n ++ " attached to color number #" ++ show i)
         glBindFragDataLocation po i $ castPtr pn
     putStr "    + setup shader output mapping: " >> printGLStatus
     glLinkProgram po
@@ -529,4 +529,4 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
                 drawObjs
     print slotName
     print uLoc'
-    return $! (renderFun, disposeFun, uLoc', sLoc)
+    return $! (renderFun, disposeFun, uLoc', sLoc, outColorCnt)

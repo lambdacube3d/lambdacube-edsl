@@ -19,20 +19,26 @@ data DAG
     = DAG 
     { dagExp    :: BiMap Exp
     , dagTy     :: IM.IntMap Ty
+    , dagCount  :: IM.IntMap Int
     } deriving Show
 
 emptyDAG :: DAG
-emptyDAG = DAG empty IM.empty
+emptyDAG = DAG empty IM.empty IM.empty
 
 hashcons :: Ty -> Exp -> State DAG ExpId
 hashcons !t !e = do
-  DAG !m !tm <- get
+  DAG !m !tm !cm <- get
   case lookup_key e m of
     Nothing -> let (!k,!m') = insert e m
-                   !tm'    = IM.insert k t tm
-               in put (DAG m' tm') >> return k
-    Just !k  -> {-trace ("sharing : " ++ show k ++ " :: " ++ show (tm IM.! k)) $ -} return k
-
+                   !tm'     = IM.insert k t tm
+                   !cm'     = IM.insert k 1 cm
+               in put (DAG m' tm' cm') >> return k
+    Just !k  -> do
+        {-trace ("sharing : " ++ show k ++ " :: " ++ show (tm IM.! k)) $ -}
+        let !cm'    = IM.adjust (1+) k cm
+        put (DAG m tm cm')
+        return k
+{-
 --hashcons = dontShare
 dontShare :: Ty -> Exp -> State DAG ExpId
 dontShare t e = do
@@ -40,20 +46,31 @@ dontShare t e = do
     let (k,m') = insert e m
         tm'    = IM.insert k t tm
     put (DAG m' tm') >> return k
+-}
 
+-- Utility functions for CodeGen
 toExp :: DAG -> ExpId -> Exp
-toExp (DAG !m _) !k = lookup_val k m
+toExp (DAG !m _ _) !k = lookup_val k m
 
 toExpId :: DAG -> Exp -> ExpId
-toExpId (DAG !m _) !v = let Just k = lookup_key v m in k
+toExpId (DAG !m _ _) !v = let Just k = lookup_key v m in k
 
 expIdType :: DAG -> ExpId -> Ty
-expIdType (DAG _ !tm) !k = tm IM.! k
+expIdType (DAG _ !tm _) !k = tm IM.! k
 
 expType :: DAG -> Exp -> Ty
-expType dag@(DAG !m !tm) !e = case lookup_key e m of
+expType dag@(DAG !m !tm _) !e = case lookup_key e m of
     Nothing -> error $ "unknown Exp node: " ++ show e
     Just !k  -> expIdType dag k
+
+expIdCount :: DAG -> ExpId -> Int
+expIdCount (DAG _ _ !cm) !k = cm IM.! k
+
+expCount :: DAG -> Exp -> Int
+expCount dag@(DAG !m !tm !cm) !e = case lookup_key e m of
+    Nothing -> error $ "unknown Exp node: " ++ show e
+    Just !k  -> expIdCount dag k
+
 {-
   TODO:
     represent these as tuples from specific types:  VertexOut, GeometryOut, FragmentOut, FragmentOutDepth, FragmentOutRastDepth

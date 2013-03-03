@@ -383,9 +383,13 @@ store dag expId exp = do
         t       = codeGenType $ expIdType dag expId
         [ty]    = {-trace (show expId ++ " [ty]    = " ++ show t)-} t
         newStmt = varStmt name (toGLSLType ty) exp
-    (stmt,varMap) <- get
-    put (newStmt:stmt,IntMap.insert expId [newVar] varMap)
-    return [newVar]
+        cnt     = expIdCount dag expId
+    case cnt > 0 of
+        True    -> do
+            (stmt,varMap) <- get
+            put (newStmt:stmt,IntMap.insert expId [newVar] varMap)
+            return [newVar]
+        False   -> return [exp]
 
 -- require: input names
 codeGenExp' :: DAG -> Map Exp String -> [ByteString] -> ExpId -> CGen [Expr]
@@ -483,7 +487,7 @@ codeGenFragmentShader :: DAG
                       -> [(ByteString,GLSL.InterpolationQualifier,InputType)]
                       -> Exp
                       -> Exp
-                      -> (ByteString, [(ByteString,InputType)])
+                      -> (ByteString, [(ByteString,InputType)],Int)
 codeGenFragmentShader dag smpName inVars ffilter = cvt
   where
     cvtF :: Exp -> CGen Expr
@@ -492,7 +496,7 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
         [e] <- genExp bodyExp
         return e
 
-    cvt :: Exp -> (ByteString, [(ByteString,InputType)])
+    cvt :: Exp -> (ByteString, [(ByteString,InputType)],Int)
     cvt (Lam lam) = cvt $ toExp dag lam
     cvt (Body bodyExp) = case toExp dag bodyExp of
         FragmentOut e             -> src e []
@@ -508,7 +512,7 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
     oNames :: [ByteString]
     oNames = [pack $ "f" ++ show i | i <- [0..]]
 
-    src :: [ExpId] -> [(ByteString,ExpId)] -> (ByteString, [(ByteString,InputType)])
+    src :: [ExpId] -> [(ByteString,ExpId)] -> (ByteString, [(ByteString,InputType)],Int)
     src outs outs' = (SB.unlines $!
         [ "#version 150 core"
         -- , "#pragma optimize(off)"
@@ -520,7 +524,7 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
         , ppBody $ case ffilter of
             PassAll     -> reverse stmt ++ body
             Filter f    -> reverse fstmt ++ [SelectionStatement (UnaryNot fexpr) Discard $ Just (CompoundStatement $ Compound $ reverse stmt ++ body)]
-        ], [(n,t) | n <- oNames | [t] <- oT])
+        ], [(n,t) | n <- oNames | [t] <- oT], length outs)
       where
         assigns a e = [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         ppBody l    = pack $! show $! pPrint $! Compound l
