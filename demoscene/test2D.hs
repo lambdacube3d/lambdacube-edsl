@@ -28,27 +28,17 @@ import Math.Noise.Modules.Billow
 import Data.Maybe
 import Data.Bitmap.Pure
 
-quad :: Mesh
-quad = Mesh
-    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
-    , mPrimitive    = P_Triangles
-    , mGPUData      = Nothing
-    }
-  where
-    a = -1
-    b = 1
+import Geometry
+import Utility
+import Blur
+import Glow
 
-floatV :: Float -> Exp V Float
-floatV = Const
 
-floatF :: Float -> Exp F Float
-floatF = Const
-
-screenQuad :: Exp Obj (FrameBuffer N1 V4F)
+screenQuad :: Exp Obj (FrameBuffer N1 (V4F,V4F))
 screenQuad = Accumulate fragCtx PassAll frag rast clear
   where
-    fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (ColorImage n1 (V4 1 0 0 1):.ZT)
+    fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B) :. ColorOp NoBlending (one' :: V4B) :. ZT
+    clear   = FrameBuffer (ColorImage n1 (V4 1 0 0 1):.ColorImage n1 (V4 0 1 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
     input   = Fetch "postSlot" Triangle (IV2F "position")
@@ -61,11 +51,12 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
 
     up = Uni (IFloat "up") :: Exp F Float
     down = Uni (IFloat "down")
-    frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
-    frag uv' = FragmentOut $ c :. ZT
+    frag :: Exp F V2F -> FragmentOut (Color V4F :+: Color V4F :+: ZZ)
+    frag uv' = FragmentOut $ c :. c2 :. ZT
       where
         c = Cond (down @< r @&& r @< up) (Const (V4 1 0 0 1)) $
             Cond (down @< r @&& x @< floatF 128) texel $ pack' $ V4 tR tG tB $ floatF 1--texel2--(Const (V4 0 0 0 1))
+        c2 = Cond (down @< r @&& r @< up) (Const (V4 1 1 0 1)) $ Const (V4 0 0 0 1)
         texel = smp "ScreenQuad" uv
         texel2 = smp "ScreenQuad2" uv
         V4 r g b a = unpack' texel
@@ -77,10 +68,41 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
         uv = uv' @* floatF 0.5 @+ floatF 0.5
         smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 
+dummy512 img = renderScreen frag
+  where
+    frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
+    frag uv = FragmentOut $ smp img uv :. ZT
+      where
+        sizeI = 512 :: Word32
+        smp i coord = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) coord
+    
+renderRGB :: Exp Obj (FrameBuffer N1 (V4F,V4F,V4F))
+renderRGB = Accumulate fragCtx PassAll frag rast clear
+  where
+    fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):. ColorOp NoBlending (one' :: V4B):.ColorOp NoBlending (one' :: V4B):.ZT
+    clear   = FrameBuffer (ColorImage n1 (V4 0 0 0 1):.ColorImage n1 (V4 0 0 0 1):.ColorImage n1 (V4 0 0 0 1):.ZT)
+    rast    = Rasterize triangleCtx prims
+    prims   = Transform vert input
+    input   = Fetch "ScreenQuad" Triangle (IV2F "position")
+
+    vert :: Exp V V2F -> VertexOut ()
+    vert uv = VertexOut v4 (Const 1) ZT
+      where
+        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
+        V2 u v  = unpack' uv
+
+    frag :: Exp F () -> FragmentOut (Color V4F :+: Color V4F :+: Color V4F :+: ZZ)
+    frag _ = FragmentOut $ Const (V4 1 0 0 1) :. Const (V4 0 1 0 1) :. Const (V4 0 0 1 1) :. ZT
+
+
 main :: IO ()
 main = do
     let lcnet :: Exp Obj (Image N1 V4F)
-        lcnet = PrjFrameBuffer "outFB" tix0 screenQuad
+        --lcnet = dummy512 $ fxBlur blur glowImg
+        lcnet = fxGlow glow sceneImg glowImg
+        --lcnet = fxBlur blur $ sceneImg
+        glowImg = dummy512 $ PrjFrameBuffer "" tix0 screenQuad
+        sceneImg = PrjFrameBuffer "" tix1 screenQuad
 
     windowSize <- initCommon "LC DSL 2D Demo"
 
@@ -88,6 +110,7 @@ main = do
     print $ slotUniform renderer
     print $ slotStream renderer
     print "renderer created"
+    initUtility renderer
 
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
