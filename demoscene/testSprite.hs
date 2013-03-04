@@ -50,23 +50,22 @@ sprites :: Exp Obj (Image N1 V4F)
 sprites = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp blend (one' :: V4B):.ZT
-    clear   = FrameBuffer (ColorImage n1 (V4 1 0 0 1):.ZT)
+    clear   = renderScreen' $ \uv -> FragmentOut $ (smp "background" uv) :. ZT
     rast    = Rasterize rCtx prims
     rCtx    = PointCtx ProgramPointSize 10 UpperLeft
     prims   = Transform vert input
     input   = Fetch "points" Point (IV2F "position")
 
     vert :: Exp V V2F -> VertexOut ()
-    vert uv = VertexOut v4 (Const 200) ZT
+    vert uv = VertexOut v4 (Const 20) ZT
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
 
     offset = Uni (IV2F "offset") :: Exp F V2F
+    smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
     frag :: Exp F () -> FragmentOut (Color V4F :+: ZZ)
     frag _ = FragmentOut $ (smp "explosion" $ (pointCoord' @* floatF 0.25 @+ offset)) :. ZT
-      where
-        smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 
 main :: IO ()
 main = do
@@ -91,6 +90,7 @@ main = do
     let objU    = objectUniformSetter obj
         slotU   = uniformSetter renderer
         diffuse = uniformFTexture2D "explosion" slotU
+        background  = uniformFTexture2D "background" slotU
         draw _  = render renderer >> swapBuffers
         fname   = case args of
             []  -> "Explosion.png"
@@ -98,6 +98,8 @@ main = do
 
     Right img <- loadImage fname
     diffuse =<< compileTexture2DRGBAF False True img
+    Right img <- loadImage "space.jpg"
+    background =<< compileTexture2DRGBAF False True img
 
     s <- fpsState
     sc <- start $ do

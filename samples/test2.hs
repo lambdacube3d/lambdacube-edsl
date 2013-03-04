@@ -88,12 +88,12 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
     frag :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag a = FragmentOutRastDepth $ (v4F (V4 0 0 1 1) @+ snoc a 1 @* color) :. ZT
       where
-        color = Cond (primitiveID @< intF 5) (v4F (V4 1 0 0 1) @* sin' x) (v4F $ V4 0 1 0 1)
+        color = Cond (primitiveID' @< intF 5) (v4F (V4 1 0 0 1) @* sin' x) (v4F $ V4 0 1 0 1)
         --V2 x y = unpack' pointCoord
         x = floatF 1
 
     filter :: Exp F a -> Exp F Bool
-    filter a = (primitiveID @% (Const 2 :: Exp F Int32)) @== (Const 0 :: Exp F Int32)
+    filter a = (primitiveID' @% (Const 2 :: Exp F Int32)) @== (Const 0 :: Exp F Int32)
 
 main :: IO ()
 main = do

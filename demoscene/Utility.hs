@@ -15,7 +15,10 @@ intF = Const
 
 -- screen quad rendering
 renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image N1 V4F)
-renderScreen frag = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
+renderScreen = PrjFrameBuffer "" tix0 . renderScreen'
+
+renderScreen' :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer N1 V4F)
+renderScreen' frag = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (ColorImage n1 (V4 0 0 0 1):.ZT)

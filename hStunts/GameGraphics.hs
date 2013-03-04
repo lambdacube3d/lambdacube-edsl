@@ -109,7 +109,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
       where
         isSolid = solid1 @|| solid2 @|| solid3
         -- TODO this should be done with a noise texture instead of such an expensive operation
-        rand = floatF 2 @* (fract' (sin' ((fragCoord @. (Const (V4 12.9898 78.233 0 0) :: Exp F V4F)) @* floatF 43758.5453)) @- floatF 0.5)
+        rand = floatF 2 @* (fract' (sin' ((fragCoord' @. (Const (V4 12.9898 78.233 0 0) :: Exp F V4F)) @* floatF 43758.5453)) @- floatF 0.5)
         prod1 = pos @. (Const (V3 2 2 (-2)) :: Exp F V3F)
         prod2 = pos @. (Const (V3 2 (-2) 2) :: Exp F V3F)
         prod3 = pos @. (Const (V3 (-2) 2 2) :: Exp F V3F)
@@ -146,7 +146,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
       where
         l = normalize' (trimV4 (worldView @*. snoc lightDirection 0))
         e = normalize' (neg' eyePos)
-        n = Cond frontFacing normal (neg' normal)
+        n = Cond frontFacing' normal (neg' normal)
         r = normalize' (reflect' l n)
         
         lambert = neg' l @. n
@@ -157,7 +157,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
 
         litColour = snoc (trimV4 (colour @* intensity @+ (Const (V4 1 1 1 0) :: Exp F V4F) @* highlight)) 1
         
-        fragDepth = get4Z fragCoord
+        fragDepth = get4Z fragCoord'
         adjustedDepth = fragDepth @+ max' (exp' (floatF (-15) @- log' fragDepth)) (fwidth' fragDepth) @* zBias
 
         (lightViewPos,colour,pos,eyePos,normal,pattern,zBias,shiny) = untup8 attr
@@ -177,7 +177,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
             inShadow = u @>= floatF 0.01 @&& u @<= floatF 0.99 @&& v @>= floatF 0.01 @&& v @<= floatF 0.99
             
             V4 tx ty tz tw = unpack' (lightViewPosVectors !! slice)
-            ditherAngle = dot' fragCoord (Const (V4 (pi/2*1.7) (pi*1.3) 0 0) :: Exp F V4F)
+            ditherAngle = dot' fragCoord' (Const (V4 (pi/2*1.7) (pi*1.3) 0 0) :: Exp F V4F)
             ditherFactor = floatF 3 @/ floatF shadowMapSize
             u = tx @/ tw @* floatF 0.5 @+ floatF 0.5 @+ sin' ditherAngle @* ditherFactor @* sqrt' hScale
             v = ty @/ tw @* floatF 0.5 @+ floatF 0.5 @+ cos' ditherAngle @* ditherFactor @* sqrt' vScale
