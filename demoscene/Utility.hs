@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators, OverloadedStrings #-}
 module Utility where
 
 import LC_API

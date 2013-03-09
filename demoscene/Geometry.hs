@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Geometry where
 
 import Data.ByteString.Char8 (ByteString)

@@ -29,6 +29,7 @@ import Data.Maybe
 import Data.Bitmap.Pure
 
 import Utility
+import Scanlines
 
 points :: Mesh
 points = Mesh
@@ -50,6 +51,7 @@ sprites :: Exp Obj (Image N1 V4F)
 sprites = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp blend (one' :: V4B):.ZT
+    blend   = Blend (FuncAdd, FuncAdd) ((SrcAlpha, One), (SrcAlpha, OneMinusSrcAlpha)) zero'
     clear   = renderScreen' $ \uv -> FragmentOut $ (smp "background" uv) :. ZT
     rast    = Rasterize rCtx prims
     rCtx    = PointCtx ProgramPointSize 10 UpperLeft
@@ -70,7 +72,10 @@ sprites = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
 main :: IO ()
 main = do
     let lcnet :: Exp Obj (Image N1 V4F)
-        lcnet = sprites
+        lcnet = renderScreen $ (FragmentOut.(:.ZT).fxScanlines sl sprites)
+        sl    = scanlines { scanlinesFrequency = floatF 128
+                          , scanlinesColor = Const $ V4 0.9 1 1 1
+                          }
 
     windowSize <- initCommon "LC DSL 2D Demo"
 
