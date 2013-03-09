@@ -88,16 +88,6 @@ setupTables s = do
     tableTexture inverseSawToothTexture "InverseSawToothTable" s
     tableTexture triangleTexture "TriangleTable" s
 
-quad :: Mesh
-quad = Mesh
-    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
-    , mPrimitive    = P_Triangles
-    , mGPUData      = Nothing
-    }
-  where
-    a = -1
-    b = 1
-
 #ifdef CAPTURE
 -- framebuffer capture function
 withFrameBuffer :: Int -> Int -> Int -> Int -> (Ptr Word8 -> IO ()) -> IO ()
@@ -157,8 +147,6 @@ main = do
         -}
         lcnet :: Exp Obj (Image N1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 $ q3GFX $ T.toList shMap
-        lcnetMenu :: Exp Obj (Image N1 V4F)
-        lcnetMenu = PrjFrameBuffer "outFB" tix0 screenQuad
 
         -- extract spawn points
         ents = parseEntities (SB.unpack bspName) $ blEntities bsp
@@ -174,14 +162,11 @@ main = do
     windowSize <- initCommon "LC DSL Quake 3 Demo"
 
     -- CommonAttrs
-    renderer <- compileRenderer $ ScreenOut lcnet
-    menuRenderer <- compileRenderer $ ScreenOut lcnetMenu
+    renderer <- compileRenderer $ ScreenOut $ fxGamma gamma lcnet
     print "renderer created"
     --print $ slotUniform renderer
     --print $ slotStream renderer
-
-    compiledQuad <- compileMesh quad
-    --addMesh renderer "postSlot" compiledQuad []
+    initUtility renderer
 
     let slotU           = uniformSetter renderer
         draw captureA   = render renderer >> captureA >> swapBuffers
@@ -193,7 +178,7 @@ main = do
     worldMat idmtx'
     entityRGB one'
     entityAlpha 1
-    identityLight $ 1.6 --1 / (2 ^ overbrightBits)
+    identityLight $ 1 / (2 ^ overbrightBits)
     setupTables slotU
 
     putStrLn "loading textures:"
@@ -219,14 +204,14 @@ main = do
 
     putStrLn $ "loading: " ++ show bspName
     objs <- addBSP renderer bsp
-
+{-
     -- setup menu
     levelShots <- sequence [(n,) <$> loadQ3Texture True True defaultTexture archiveTrie (SB.append "levelshots/" n) | n <- T.keys bspMap]
     menuObj <- addMesh menuRenderer "postSlot" compiledQuad ["ScreenQuad"]
     let menuObjUnis = objectUniformSetter menuObj
     --uniformFTexture2D "ScreenQuad" menuObjUnis defaultTexture
     uniformFTexture2D "ScreenQuad" menuObjUnis $ snd $ head levelShots
-
+-}
     -- add entities
 {-
 data Item

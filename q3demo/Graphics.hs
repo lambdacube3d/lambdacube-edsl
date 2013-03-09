@@ -10,7 +10,6 @@ import Data.Vect
 import LC_API
 
 import Material hiding (Blending)
-import Effect
 
 import Debug.Trace
 

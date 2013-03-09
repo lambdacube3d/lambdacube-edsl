@@ -1,25 +1,23 @@
 {-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
-module Effect (blurVH,screenQuad) where
+module Effect where
 
 import Data.ByteString.Char8 (ByteString)
+import qualified Data.Trie as T
+import qualified Data.Vector.Storable as SV
+
 import LC_API
+import LC_Mesh
 
--- specialized snoc
-v3v4 :: Exp s V3F -> Exp s V4F
-v3v4 v = let V3 x y z = unpack' v in pack' $ V4 x y z (Const 1)
-
-v4v3 :: Exp s V4F -> Exp s V3F
-v4v3 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
-
--- specialized snoc
-snoc :: Exp s V3F -> Float -> Exp s V4F
-snoc v s = let V3 x y z = unpack' v in pack' $ V4 x y z (Const s)
-
-drop4 :: Exp s V4F -> Exp s V3F
-drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
-
-drop3 :: Exp s V3F -> Exp s V2F
-drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
+-- Geometry for effects
+quad :: Mesh
+quad = Mesh
+    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
+    , mPrimitive    = P_Triangles
+    , mGPUData      = Nothing
+    }
+  where
+    a = -1
+    b = 1
 
 floatV :: Float -> Exp V Float
 floatV = Const
@@ -30,124 +28,63 @@ floatF = Const
 intF :: Int32 -> Exp F Int32
 intF = Const
 
--- blur
+-- screen quad rendering
+renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image N1 V4F)
+renderScreen = PrjFrameBuffer "" tix0 . renderScreen'
 
-blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
-blur' frag = Accumulate fragCtx PassAll frag rast clear
-  where
-    fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
-    rast    = Rasterize triangleCtx prims
-    prims   = Transform vert input
-    input   = Fetch "postSlot" Triangle (IV2F "position")
-
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
-      where
-        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
-        V2 u v  = unpack' uv
-
-gaussFilter7 :: [(Float,Float)]
-gaussFilter7 = 
-    [ (-3.0,   0.015625)
-    , (-2.0,   0.09375)
-    , (-1.0,   0.234375)
-    , (0.0,    0.3125)
-    , (1.0,    0.234375)
-    , (2.0,    0.09375)
-    , (3.0,    0.015625)
-    ]
-
-gaussFilter9 :: [(Float,Float)]
-gaussFilter9 = 
-    [ (-4.0,   0.05)
-    , (-3.0,   0.09)
-    , (-2.0,   0.12)
-    , (-1.0,   0.15)
-    , (0.0,    0.16)
-    , (1.0,    0.15)
-    , (2.0,    0.12)
-    , (3.0,    0.09)
-    , (4.0,    0.05)
-    ]
-
-blurVH :: Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 (Float,V4F))
-blurVH img = blur' fragH
-  where
-    sizeT = 512
-    sizeI = floor sizeT
-    uvH v = Const (V2 (v/sizeT) 0) :: Exp F V2F
-    uvV v = Const (V2 0 (v/sizeT)) :: Exp F V2F
-    fragH :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    fragH uv' = FragmentOutRastDepth $ (sampleH gaussFilter7) :. ZT
-      where
-        sampleH ((o,c):[])  = texture' smp (uv @+ uvH o) @* floatF c
-        sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) @* floatF c) @+ sampleH xs
-        V2 u v = unpack' uv
-        uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter Clamp tex
-        tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [PrjFrameBuffer "" tix0 (blur' fragV)]
-
-    fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    fragV uv' = FragmentOutRastDepth $ (sampleV gaussFilter7) :. ZT
-      where
-        sampleV ((o,c):[])  = texture' smp (uv @+ uvV o) @* floatF c
-        sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) @* floatF c) @+ sampleV xs
-        V2 u v = unpack' uv
-        uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter Clamp tex
-        tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]
-
--- draw quad
-
-screenQuad :: Exp Obj (FrameBuffer N1 V4F)
-screenQuad = Accumulate fragCtx PassAll frag rast clear
+renderScreen' :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer N1 V4F)
+renderScreen' frag = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (ColorImage n1 (V4 1 0 0 1):.ZT)
+    clear   = FrameBuffer (ColorImage n1 (V4 0 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "postSlot" Triangle (IV2F "position")
+    input   = Fetch "ScreenQuad" Triangle (IV2F "position")
 
     vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+    vert uv = VertexOut v4 (Const 1) (NoPerspective uv':.ZT)
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
+        uv'     = uv @* floatV 0.5 @+ floatV 0.5
 
-    frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
-    frag uv' = FragmentOut $ color :. ZT
-      where
-        color = texture' smp (pack' $ V2 u (floatF 1 @- v))
-        V2 u v = unpack' $ uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter Clamp tex
-        tex = TextureSlot "ScreenQuad" $ Texture2D (Float RGBA) n1
+initUtility :: Renderer -> IO ()
+initUtility renderer = do
+    let setMesh n m = compileMesh m >>= (\cm -> addMesh renderer n cm [])
+    setMesh "ScreenQuad" quad
+    return ()
 
-{-
-screenQuad :: Exp Obj (FrameBuffer N1 (Float,V4F))
-screenQuad = Accumulate fragCtx PassAll frag rast clear
+data Gamma
+    = Gamma
+    { gammaBrightness   :: Exp F Float -- 0 is the centre. < 0 = darken, > 1 = brighten
+    , gammaContrast     :: Exp F Float -- 1 is the centre. < 1 = lower contrast, > 1 is raise contrast
+    , gammaGammaCutoff  :: Exp F Float -- UV cutoff before rendering the image uncorrected
+    , gammaInvGamma     :: Exp F Float -- Inverse gamma correction applied to the pixel
+    }
+
+gamma = Gamma
+    { gammaBrightness   = floatF 0
+    , gammaContrast     = floatF 1
+    , gammaGammaCutoff  = floatF 1
+    , gammaInvGamma     = floatF (1 / 2.2)
+    }
+
+fxGamma :: Gamma -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F)
+fxGamma cfg img = renderScreen frag
   where
-    fragCtx = AccumulationContext Nothing $ DepthOp Lequal True:.ColorOp NoBlending (one' :: V4B):.ZT
-    clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 0 1 0 1):.ZT)
-    rast    = Rasterize triangleCtx prims
-    prims   = Transform vert input
-    input   = Fetch "postSlot" Triangle (IV2F "position")
-
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+    sizeI   = 1024 -- FIXME
+    smp uv  = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]) uv
+    frag uv = FragmentOut $ finalColor :. ZT
       where
-        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
-        V2 u v  = unpack' uv
+        V2 u _          = unpack' uv
+        V4 r g b a      = unpack' $ smp uv
+        rgb             = pack' $ V3 r g b
+        rgbBrightness   = rgb @+ gammaBrightness cfg
+        rgbContrast     = (rgbBrightness @- floatF 0.5) @* gammaContrast cfg @+ floatF 0.5
+        rgbClamp        = clamp' rgbContrast (floatF 0) (floatF 1)
+        invGamma        = gammaInvGamma cfg
+        V3 r' g' b'     = unpack' $ Cond (u @< gammaGammaCutoff cfg)
+                            (pow' rgbClamp (pack' $ V3 invGamma invGamma invGamma))
+                            rgbClamp
+        finalColor      = pack' $ V4 r' g' b' a
 
-    frag :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag uv' = FragmentOutRastDepth $ color @+ u :. ZT
-      where
-        V2 u v = unpack' uv
-        uv = uv' @* floatF 0.5 @+ floatF 0.5
-        color = Const one'
--}
-{-
-        color = texture' smp uv
-        smp = Sampler LinearFilter Clamp tex
-        tex = TextureSlot "ScreenQuad" $ Texture2D (Float RGBA) n1
--}
