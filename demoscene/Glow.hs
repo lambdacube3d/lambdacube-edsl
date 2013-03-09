@@ -1,9 +1,6 @@
 module Glow where
 
 import LC_API
-import LC_Mesh
-
-import Geometry
 import Utility
 
 import Blur
