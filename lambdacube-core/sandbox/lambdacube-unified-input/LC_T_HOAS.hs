@@ -268,7 +268,10 @@ data Exp freq t where
     -- Raster context
     -- TODO: 
     --       add clip distance mask
-    PointCtx        :: Exp Obj (RasterContext Point)      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN
+    PointCtx        :: Exp Obj PointSize
+                    -> Exp Obj Float
+                    -> Exp Obj PointSpriteCoordOrigin
+                    -> Exp Obj (RasterContext Point)      -- TODO: PointSize, POINT_FADE_THRESHOLD_SIZE, POINT_SPRITE_COORD_ORIGIN
 
     LineCtx         :: Exp Obj Float            -- line width
                     -> ProvokingVertex
@@ -284,7 +287,12 @@ data Exp freq t where
     PointSize       :: Exp Obj Float
                     -> Exp Obj PointSize
 
-    PointSizeRast   :: Exp Obj PointSize
+    ProgramPointSize :: Exp Obj PointSize
+
+    -- PointSpriteCoordOrigin
+    LowerLeft       :: Exp Obj PointSpriteCoordOrigin
+    
+    UpperLeft       :: Exp Obj PointSpriteCoordOrigin
 
     -- PolygonOffset
     NoOffset        :: Exp Obj PolygonOffset
@@ -351,6 +359,7 @@ data Exp freq t where
 
 data Interpolated a
 data PointSize
+data PointSpriteCoordOrigin
 data PolygonOffset
 data PolygonMode
 data StencilTest
