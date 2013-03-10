@@ -98,9 +98,9 @@ data PrimFun stage sig where
     PrimMix                 :: IsVecScalar d a Float                          => PrimFun stage ((a,a,a)         -> a)
     PrimMixS                :: IsVecScalar d a Float                          => PrimFun stage ((a,a,Float)     -> a)
     PrimMixB                :: (IsVecScalar d a Float, IsVecScalar d b Bool)        => PrimFun stage ((a,a,b)         -> a)
-    PrimStep                :: IsVecScalar d a Float                          => PrimFun stage ((a,a)           -> a)
+    PrimStep                :: IsVec d a Float                                => PrimFun stage ((a,a)           -> a)
     PrimStepS               :: IsVecScalar d a Float                          => PrimFun stage ((Float,a)       -> a)
-    PrimSmoothStep          :: IsVecScalar d a Float                          => PrimFun stage ((a,a,a)         -> a)
+    PrimSmoothStep          :: IsVec d a Float                                => PrimFun stage ((a,a,a)         -> a)
     PrimSmoothStepS         :: IsVecScalar d a Float                          => PrimFun stage ((Float,Float,a) -> a)
 
     -- Integer/Float Conversion Functions

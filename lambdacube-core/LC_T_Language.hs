@@ -301,7 +301,15 @@ class BuiltinStep a b where
     step'        :: b -> a -> a
     smoothstep'  :: b -> b -> a -> a
 
-instance (GPU a, IsVecScalar d a Float) => BuiltinStep (Exp stage a) (Exp stage a) where
+instance BuiltinStep (Exp stage V2F) (Exp stage V2F) where
+    step'          a b = PrimApp PrimStep        $! tup2 (a,b)
+    smoothstep'  a b c = PrimApp PrimSmoothStep  $! tup3 (a,b,c)
+
+instance BuiltinStep (Exp stage V3F) (Exp stage V3F) where
+    step'          a b = PrimApp PrimStep        $! tup2 (a,b)
+    smoothstep'  a b c = PrimApp PrimSmoothStep  $! tup3 (a,b,c)
+
+instance BuiltinStep (Exp stage V4F) (Exp stage V4F) where
     step'          a b = PrimApp PrimStep        $! tup2 (a,b)
     smoothstep'  a b c = PrimApp PrimSmoothStep  $! tup3 (a,b,c)
 

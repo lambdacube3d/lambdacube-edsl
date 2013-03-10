@@ -41,7 +41,7 @@ type V3B = V3 Bool
 type V4B = V4 Bool
 
 -- vector types: V2, V3, V4
-class IsVec dim vec component | vec -> dim component
+class IsVec dim vec component | vec -> dim component, dim component -> vec
 instance IsVec DIM2 (V2 Float) Float
 instance IsVec DIM3 (V3 Float) Float
 instance IsVec DIM4 (V4 Float) Float
@@ -56,7 +56,7 @@ instance IsVec DIM3 (V3 Bool) Bool
 instance IsVec DIM4 (V4 Bool) Bool
 
 -- scalar and vector types: scalar, V2, V3, V4
-class IsVecScalar dim vec component | vec -> dim component
+class IsVecScalar dim vec component | vec -> dim component, dim component -> vec
 instance IsVecScalar DIM1 Float Float
 instance IsVecScalar DIM2 (V2 Float) Float
 instance IsVecScalar DIM3 (V3 Float) Float
