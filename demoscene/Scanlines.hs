@@ -5,18 +5,22 @@ import Utility
 
 data Scanlines = Scanlines
     { scanlinesFrequency :: Exp F Float
-    , scanlinesColor :: Exp F V4F
+    , scanlinesHigh :: Exp F V4F
+    , scanlinesLow :: Exp F V4F
     }
 
 scanlines = Scanlines
     { scanlinesFrequency = floatF 100
-    , scanlinesColor = Const $ V4 1 1 1 1
+    , scanlinesHigh = Const $ V4 1 1 1 1
+    , scanlinesLow = Const $ V4 0 0 0 0
     }
 
 fScanlines :: Scanlines -> Exp F V4F -> Exp F V2F -> Exp F V4F
-fScanlines sl fromColor uv = scanlinesColor sl @* fromColor @* r
+fScanlines sl fromColor uv = fromColor @* mix' sl1 sl2 r
   where
     r = sin' (v @* floatF (2*pi) @* scanlinesFrequency sl) @/ floatF 2 @+ floatF 0.5
+    sl1 = scanlinesLow sl
+    sl2 = scanlinesHigh sl
     V2 _ v = unpack' uv
 
 -- Scanlines as a full render pass.

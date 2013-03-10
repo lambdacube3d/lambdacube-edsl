@@ -74,7 +74,8 @@ main = do
     let lcnet :: Exp Obj (Image N1 V4F)
         lcnet = renderScreen $ (FragmentOut.(:.ZT).fxScanlines sl sprites)
         sl    = scanlines { scanlinesFrequency = floatF 128
-                          , scanlinesColor = Const $ V4 0.9 1 1 1
+                          , scanlinesHigh = Const $ V4 0.9 1 1 1
+                          , scanlinesLow = Const $ V4 0.45 0.5 0.5 1
                           }
 
     windowSize <- initCommon "LC DSL 2D Demo"
