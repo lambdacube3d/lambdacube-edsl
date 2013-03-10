@@ -23,7 +23,7 @@ fScanlines sl fromColor uv = fromColor @* mix' sl1 sl2 r
     sl2 = scanlinesHigh sl
     V2 _ v = unpack' uv
 
--- Scanlines as a full render pass.
+-- Scanlines from a texture, useable as a render pass.
 -- Use @fScanlines@ to use it as part of a bigger fragment shader.
 fxScanlines :: Scanlines -> Exp Obj (Image N1 V4F) -> Exp F V2F -> Exp F V4F
 fxScanlines sl img uv = fScanlines sl c uv

@@ -30,6 +30,7 @@ import Data.Bitmap.Pure
 
 import Utility
 import Scanlines
+import BuiltinVec
 
 points :: Mesh
 points = Mesh
@@ -59,10 +60,7 @@ sprites = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
     input   = Fetch "points" Point (IV2F "position")
 
     vert :: Exp V V2F -> VertexOut ()
-    vert uv = VertexOut v4 (Const 20) ZT
-      where
-        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
-        V2 u v  = unpack' uv
+    vert uv = VertexOut (vec4' uv (floatV 1) (floatV 1)) (Const 20) ZT
 
     offset = Uni (IV2F "offset") :: Exp F V2F
     smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
