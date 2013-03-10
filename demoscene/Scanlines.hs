@@ -15,8 +15,8 @@ scanlines = Scanlines
     , scanlinesLow = Const $ V4 0 0 0 0
     }
 
-fScanlines :: Scanlines -> Exp F V4F -> Exp F V2F -> Exp F V4F
-fScanlines sl fromColor uv = fromColor @* mix' sl1 sl2 r
+fScanlines :: Scanlines -> Exp F V2F -> Exp F V4F -> Exp F V4F
+fScanlines sl uv fromColor = fromColor @* mix' sl1 sl2 r
   where
     r = sin' (v @* floatF (2*pi) @* scanlinesFrequency sl) @/ floatF 2 @+ floatF 0.5
     sl1 = scanlinesLow sl
@@ -26,6 +26,6 @@ fScanlines sl fromColor uv = fromColor @* mix' sl1 sl2 r
 -- Scanlines from a texture, useable as a render pass.
 -- Use @fScanlines@ to use it as part of a bigger fragment shader.
 fxScanlines :: Scanlines -> Exp Obj (Image N1 V4F) -> Exp F V2F -> Exp F V4F
-fxScanlines sl img uv = fScanlines sl c uv
+fxScanlines sl img uv = fScanlines sl uv c
   where
     c = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv

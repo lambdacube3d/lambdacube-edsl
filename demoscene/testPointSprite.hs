@@ -96,22 +96,24 @@ model = Accumulate fragCtx PassAll frag rast (background n_backgroundTex)
             (smp n_diffuseTex $ pointCoord')
         a = vec4' x x x x
 
-scan base = renderScreen f
-  where f uv = FragmentOut (fxScanlines sl base uv :. ZT)
-        sl = scanlines { scanlinesFrequency = floatF 100
-                       , scanlinesHigh = Const (V4 0.5 1 1 1)
-                       , scanlinesLow = Const (V4 0.2 0.5 0.5 1)
-                       }
-
-vign base = renderScreen f
-  where f uv = FragmentOut (fxVignette v base uv :. ZT)
-        v = vignette { vignetteOuterRadius = floatF 0.9
-                     , vignetteInnerRadius = floatF 0.4 }
+postProcess base = renderScreen $ FragmentOut . (:.ZT) . f
+  where
+    f uv = fVignette vign uv $
+           fScanlines sl uv $
+           smp' base uv
+    sl = scanlines { scanlinesFrequency = floatF 100
+                   , scanlinesHigh = Const (V4 0.5 1 1 1)
+                   , scanlinesLow = Const (V4 0.2 0.5 0.5 1)
+                   }
+    vign = vignette { vignetteOuterRadius = floatF 0.9
+                    , vignetteInnerRadius = floatF 0.4
+                    }
+    smp' img uv = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv
 
 main :: IO ()
 main = do
     let lcnet :: Exp Obj (Image N1 V4F)
-        lcnet = vign $ scan $ PrjFrameBuffer "outFB" tix0 model
+        lcnet = postProcess $ PrjFrameBuffer "outFB" tix0 model
 
     windowSize <- initCommon "LC DSL 2D Demo"
 
