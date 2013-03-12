@@ -75,12 +75,10 @@ expCount dag@(DAG !m !tm !cm) !e = case lookup_key e m of
   TODO:
     represent these as tuples from specific types:  VertexOut, GeometryOut, FragmentOut, FragmentOutDepth, FragmentOutRastDepth
 -}
-
 data Exp
     -- Fun
     = Lam                   !ExpId
     | Body                  !ExpId
-    | Let                   !ExpId !ExpId
     | Var                   Int TypeRep   -- index, layout counter
     | Apply                 !ExpId !ExpId
 
@@ -129,14 +127,12 @@ data Exp
     -- GPOutput
     | ImageOut              ByteString !ExpId
     | ScreenOut             !ExpId
-    deriving (Show, Eq, Ord)
+    deriving (Eq, Ord, Show)
 
 class ExpC exp where
     -- exp constructors
     lam         :: exp -> exp
     body        :: exp -> exp
-    let_        :: Ty -> exp -> exp -> exp
-    --let_        :: Ty -> exp -> (exp -> exp) -> exp
     var         :: Ty -> Int -> TypeRep -> exp -- type, index, layout counter (this needed for proper sharing)
     apply       :: Ty -> exp -> exp -> exp
     const_      :: Ty -> Value -> exp
@@ -188,10 +184,6 @@ instance ExpC N where
     body !a = N $ do
         !h1 <- unN a
         hashcons Unknown $ Body h1
-    let_ !t !a !b    = N $ do
-        !h1 <- unN a
-        !h2 <- unN b
-        hashcons t $ Let h1 h2
     var !t !a !b     = N $ hashcons t $ Var a b
     apply !t !a !b   = N $ do
         !h1 <- unN a

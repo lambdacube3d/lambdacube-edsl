@@ -268,7 +268,7 @@ compileRenderer dag (ScreenOut img) = do
         (uniformNames,uniformTypes) = unzip $ nubS $ concatMap (T.toList . snd) $ T.toList slotUniformTrie
 
     putStrLn $ "GP universe size:  " ++ show (length allGPs)
-    putStrLn $ "Exp universe size: " ++ show (length (nubS $ expUniverse dag gp))
+    putStrLn $ "Exp universe size: " ++ show (length (nubS $ expUniverse' dag gp))
 
     -- create RenderState
     rendState <- mkRenderState
@@ -298,6 +298,7 @@ compileRenderer dag (ScreenOut img) = do
         let (drawList, disposeList) = unzip [(renderAction rd, disposeAction rd) | f <- renderChain dag fb, let Just rd = Map.lookup f renderDescriptors]
         let Just rd = Map.lookup fb renderDescriptors
         putStrLn ("pass #" ++ show passNo)
+        putStrLn (" - draw count: " ++ show (length drawList))
         (passSetup,passDispose) <- mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (fb == gp,fragmentOutCount rd - idx, fragmentOutCount rd) fb
         return (passSetup >> sequence_ drawList, passDispose >> sequence_ disposeList)
 

@@ -21,13 +21,17 @@ data Exp stage t where
             -> TypeRep
             -> Exp stage t
                  -- environment size at defining occurrence
+{-
+    -- function support
+    Lam     :: (GPU a, GPU b)
+            => (Exp stage a -> Exp stage b)
+            -> Exp stage (a -> b)
 
-    -- let support
-    Let     :: (GPU a, GPU b)
+    App     :: (GPU a, GPU b)
             => Exp stage a
-            -> (Exp stage a -> Exp stage b)
+            -> Exp stage (a -> b)
             -> Exp stage b
-
+-}
     -- constant value
     Const   :: (GPU t,IsScalar t)
             => t
@@ -121,13 +125,13 @@ data Exp stage t where
                     -> idx
                     -> Exp Obj (Image layerCount t)
                     -> Exp Obj (Image N1 t)
-
+{-
     -- dynamic extension support
     AccumulateSet   :: GPU a
                     => ByteString
                     -> Exp Obj (FrameBuffer layerCount a)
                     -> Exp Obj (FrameBuffer layerCount a)
-
+-}
 
 type InterpolatedFlatExp stage a = FlatTuple GPU (Interpolated (Exp stage)) a
 type FlatExp stage a = FlatTuple GPU (Exp stage) a

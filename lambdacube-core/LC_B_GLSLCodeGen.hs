@@ -14,6 +14,7 @@ import Data.ByteString.Char8 (ByteString,pack,unpack)
 import Data.Int
 import Data.IntMap (IntMap)
 import Data.Map (Map)
+import Data.Maybe
 import Data.Set (Set)
 import Data.Word
 import Text.PrettyPrint.HughesPJClass
@@ -21,6 +22,7 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Vector as V
 
 import LC_G_Type
 import LC_G_APIType hiding (LogicOperation(..), ComparisonFunction(..))
@@ -391,18 +393,64 @@ store dag expId exp = do
             return [newVar]
         False   -> return [exp]
 
--- require: input names
-codeGenExp' :: DAG -> Map Exp String -> [ByteString] -> ExpId -> CGen [Expr]
-codeGenExp' dag smpName inNames expId = do
+addStmt :: Statement -> CGen ()
+addStmt s = do
+    (stmt,varMap) <- get
+    put (s:stmt,varMap)
+    return ()
+
+addExpr :: ExpId -> [Expr] -> CGen ()
+addExpr expId exprs = do
+    (stmt,varMap) <- get
+    put (stmt,IntMap.insert expId exprs varMap)
+    return ()
+
+type Env = V.Vector [Expr]
+
+codeGenExp' :: DAG -> Map Exp String -> Env -> ExpId -> CGen [Expr]
+codeGenExp' dag smpName env expId = do
     (stmt,varMap) <- get
     case IntMap.lookup expId varMap of
         Just v  -> return v
         Nothing -> case toExp dag expId of
+            
+            Loop st lc sr is    -> do
+                -- state transform, loop condition, state to result, initial state
+                isE <- codeGenExp' dag smpName env is
+                let getBody a   = case toExp dag a of
+                        Lam b   -> case toExp dag b of
+                            Body c  -> c
+                            _       -> error "internal error: illegal lambda function!"
+                        _       -> error "internal error: illegal lambda function!"
+                    name        = "state" ++ show expId ++ "_"
+                    t           = codeGenType $ expIdType dag is
+                    (stS,stE)   = unzip $ [(varStmt n' (toGLSLType ty) e, Variable n') | (e@(Variable n),ty) <- zip isE t, let n' = name ++ n]
+                mapM addStmt stS
+                {-
+                    done - create state variable
+                    done - create while loop:
+                        done - loop condition expression
+                        done - state transformation expression
+                    done - create result from final state
+                -}
+                (_,loopCGenState) <- get
+                let loop    = While (Condition $ BoolConstant True) (CompoundStatement $ Compound $ reverse body)
+                    env'    = (V.snoc env stE)
+                    (_,(body,_))    = (flip runState) ([],loopCGenState) $ do
+                        [lcE] <- codeGenExp' dag smpName env' (getBody lc)
+                        addStmt (SelectionStatement (UnaryNot lcE) Break Nothing)
+                        stE' <- codeGenExp' dag smpName env' (getBody st)
+                        mapM_ addStmt $ zipWith assign stE stE'
+                        return ()
+                addStmt loop
+                rE <- codeGenExp' dag smpName env' (getBody sr)
+                addExpr expId rE
+                return rE
             Const c             -> store dag expId $ codeGenConst c
             Uni n               -> return [Variable $! unpack n]
             PrimVar n           -> return [Variable $! unpack n]
             PrimApp f arg       -> do
-                arg' <- codeGenExp' dag smpName inNames arg
+                arg' <- codeGenExp' dag smpName env arg
                 let argTy   = codeGenType $ expIdType dag arg
                     ty      = codeGenType $ expIdType dag expId
                     e       = codeGenPrim f ty argTy arg'
@@ -410,26 +458,30 @@ codeGenExp' dag smpName inNames expId = do
                     store dag expId $ head e
             s@(Sampler f e t)   -> case Map.lookup s smpName of
                 Just name   -> return [Variable name]
-                Nothing     -> error "Unknown sampler value!"
+                Nothing     -> error "Internal error: Unknown sampler value!"
             Cond p t e          -> do
-                [p'] <- codeGenExp' dag smpName inNames p
-                t' <- codeGenExp' dag smpName inNames t
-                e' <- codeGenExp' dag smpName inNames e
+                [p'] <- codeGenExp' dag smpName env p
+                t' <- codeGenExp' dag smpName env t
+                e' <- codeGenExp' dag smpName env e
                 let branch a b  = Selection p' a b
                 return $ zipWith branch t' e'
             e@(Var i li)        -> do
                 let ty      = expType dag e
                     arity   = length $! codeGenType ty
-                if i == 0 && length inNames == arity then return [Variable (unpack n) | n <- inNames] else throw $ userError $ unlines $
-                    [ "codeGenExp failed: "
-                    , "  Var " ++ show i ++ " (" ++ show li ++ ") :: " ++ show ty
-                    , "  input names:  " ++ show inNames
-                    , "  arity:        " ++ show arity
-                    ]
-            Tup t               -> concat <$> mapM (codeGenExp' dag smpName inNames) t
+                    errEx   = throw $ userError $ unlines $
+                        [ "codeGenExp failed: "
+                        , "  Var " ++ show i ++ " (" ++ show li ++ ") :: " ++ show ty
+                        , "  input names:  " ++ show env
+                        , "  arity:        " ++ show arity
+                        ]
+                case env V.!? i of
+                    Nothing -> errEx
+                    Just v  -> if length v == arity then return v else errEx
+
+            Tup t               -> concat <$> mapM (codeGenExp' dag smpName env) t
             p@(Prj idx e)       -> do
                 let ty  = expType dag p
-                e' <- codeGenExp' dag smpName inNames e
+                e' <- codeGenExp' dag smpName env e
                 return $ reverse . take (length $ codeGenType ty) . drop idx . reverse $ e'
 {-
   required info: output variable names
@@ -444,7 +496,7 @@ codeGenVertexShader :: DAG
 codeGenVertexShader dag smpName inVars = cvt
   where
     genExp :: ExpId -> CGen [Expr]
-    genExp = codeGenExp' dag smpName (map fst inVars)
+    genExp = codeGenExp' dag smpName $ V.singleton [Variable (unpack n) | n <- map fst inVars]
 
     genIExp :: Exp -> CGen (GLSL.InterpolationQualifier,[Expr],[InputType])
     genIExp (Flat e)            = (GLSL.Flat,,codeGenType $ expIdType dag e) <$> genExp e
@@ -504,7 +556,7 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
         FragmentOutRastDepth e    -> src e []
 
     genExp :: ExpId -> CGen [Expr]
-    genExp = codeGenExp' dag smpName [n | (n,_,_) <- inVars]
+    genExp = codeGenExp' dag smpName $ V.singleton [Variable (unpack n) | (n,_,_) <- inVars]
 
     genFExp :: ExpId -> CGen ([Expr],[InputType])
     genFExp e = (,codeGenType $ expIdType dag e) <$> genExp e
@@ -546,6 +598,7 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
             (oE'',oN'')   <- unzip <$> sequence [(,n) <$> genExp e | (n,e) <- outs']
             (oE',oT')     <- unzip <$> mapM genFExp outs
             return (oE'',oN'',oE',oT',fstmt',fexpr')
+
 
 codeGenType :: Ty -> [InputType]
 codeGenType (Single ty) = [ty]
