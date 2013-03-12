@@ -7,3 +7,9 @@ basic framework:
 effects:
     - bloom
     - interlace
+
+
+editor:
+    - support scene objects (camera, light, model) in blender
+    - support animation curves
+

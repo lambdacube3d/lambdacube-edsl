@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, FlexibleContexts #-}
 module Swizzling where
 
 import LC_API
