@@ -99,18 +99,6 @@ void main(void)
 	gl_FragColor = vec4(fcolor.xyz,1.0);
 }
 -}
-    iter :: GPU a => Exp F Float -> (Exp F a -> Exp F a) -> Exp F a -> Exp F a
-    iter n fn s0 = Loop st lc sr (tup2 (floatF 0,s0))
-      where
-        st is = tup2 (i @+ floatF 1, fn s)
-          where
-            (i,s) = untup2 is
-        lc is = i @< n
-          where
-            (i,_) = untup2 is
-        sr is = s
-          where
-            (_,s) = untup2 is
         
     frag _ = FragmentOut $ (pack' $ V4 r g b (floatF 1)) :. ZT
       where
@@ -122,11 +110,11 @@ void main(void)
         V2 vx vy        = unpack' v
         dir             = normalize' $ pack' $ V3 (vx @* floatF 1.6) vy (floatF 1)
         -- First raymarching
-        pp              = iter (floatF 64) (\a -> a @+ dir @* scene a) org
+        pp              = iter (intF 64) org $ \a -> a @+ dir @* scene a
         f               = length' $ (pp @- org) @* floatF 0.02
         -- Second raymarching (reflection)
         dir2            = reflect' dir (getNormal pp)
-        p               = iter (floatF 32) (\a -> a @+ dir @* scene a) (pp @+ dir2)
+        p               = iter (intF 32) (pp @+ dir2) $ \a -> a @+ dir @* scene a 
         color           = pack' (V4 (floatF 0.3) (cos' (iGlobalTime @* floatF 0.5) @* floatF 0.5 @+ floatF 0.5) (sin' (iGlobalTime @* floatF 0.5) @* floatF 0.5 @+ floatF 0.5) (floatF 1))
                           @* min' (length' (p @- org) @* floatF 0.04) (floatF 1)
                           @+ max' (dot' (getNormal p) (Const $ V3 0.1 0.1 0 :: Exp F V3F)) (floatF 0)

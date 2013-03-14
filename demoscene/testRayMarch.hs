@@ -30,11 +30,12 @@ import Utility
 import RayMarch
 
 n_time = "time"
+n_size = "size"
 
 main :: IO ()
 main = do
     let lcnet :: Exp Obj (Image N1 V4F)
-        lcnet = fxRayMarch (Uni $ IFloat "time") (Const $ V2 512 512)
+        lcnet = fxRayMarch (Uni $ IFloat n_time) (Uni $ IV2F n_size)
 
     windowSize <- initCommon "LC DSL 2D Demo"
 
@@ -71,10 +72,12 @@ scene :: (Word -> Word -> IO ())
 scene setSize slotU windowSize mousePosition fblrPress = do
     time <- stateful 0 (+)
     let setTime = uniformFloat n_time slotU
+        setFXSize = uniformV2F n_size slotU
         setupGFX (w,h) t' (x,y) = do
             setSize (fromIntegral w) (fromIntegral h)
             let t = 1.5 * t'
             setTime t
+            setFXSize $ V2 (fromIntegral w) (fromIntegral h)
             return ()
     r <- effectful3 setupGFX windowSize time mousePosition
     return r

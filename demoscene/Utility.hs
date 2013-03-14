@@ -14,6 +14,28 @@ floatF = Const
 intF :: Int32 -> Exp F Int32
 intF = Const
 
+v2FF :: V2F -> Exp F V2F
+v2FF = Const
+
+v3FF :: V3F -> Exp F V3F
+v3FF = Const
+
+v4FF :: V4F -> Exp F V4F
+v4FF = Const
+
+iter :: GPU a => Exp F Int32 -> Exp F a -> (Exp F a -> Exp F a) -> Exp F a
+iter n s0 fn = Loop st lc sr (tup2 (intF 0,s0))
+  where
+    st is = tup2 (i @+ intF 1, fn s)
+      where
+        (i,s) = untup2 is
+    lc is = i @< n
+      where
+        (i,_) = untup2 is
+    sr is = s
+      where
+        (_,s) = untup2 is
+
 -- screen quad rendering
 renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image N1 V4F)
 renderScreen = PrjFrameBuffer "" tix0 . renderScreen'

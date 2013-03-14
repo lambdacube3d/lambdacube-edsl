@@ -94,7 +94,7 @@ model = Accumulate fragCtx PassAll frag rast (background n_backgroundTex)
       where
         V4 x _ _ _ = unpack' $
             (smp n_diffuseTex $ pointCoord')
-        a = vec4' x x x x
+        a = vec4' x x x x @* floatF 0.3
 
 postProcess base = renderScreen $ FragmentOut . (:.ZT) . f
   where
