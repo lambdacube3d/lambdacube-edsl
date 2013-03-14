@@ -23,6 +23,19 @@ prjToInt :: TupleIdx t e -> Int
 prjToInt ZeroTupIdx     = 0
 prjToInt (SuccTupIdx i) = 1 + prjToInt i
 
+genTupLen :: GPU a => Int -> a -> Int
+genTupLen i a = cnt i 0 $ T.tupleType a
+  where
+    size :: TupleType a -> Int
+    size UnitTuple         = 0
+    size (SingleTuple a)   = 1
+    size (PairTuple a b )  = size a + size b
+
+    cnt :: Int -> Int -> TupleType a -> Int
+    cnt 0 s _               = s
+    cnt n s (PairTuple a b) = cnt (n-1) (s + size b) a
+    cnt _ _ _               = error "internal error: genTupLen"
+
 type Layout = [[Ty]]
 
 genTy :: GPU a => a -> Ty
@@ -156,7 +169,7 @@ convertOpenExp lyt = cvt
     cvt (H.PrimVar v :: H.Exp stage t')       = primVar (genTy (undefined :: t')) (fst $ T.toInput v)
     cvt (H.Uni v :: H.Exp stage t')           = uni (genTy (undefined :: t')) (fst $ T.toInput v)
     cvt (H.Tup tupl :: H.Exp stage t')        = tup (genTy (undefined :: t')) $ convertTuple lyt tupl
-    cvt (H.Prj idx e :: H.Exp stage t')       = prj (genTy (undefined :: t')) (prjToInt idx) $ cvt e
+    cvt (H.Prj idx (e :: H.Exp stage e') :: H.Exp stage t')       = prj (genTy (undefined :: t')) (genTupLen (prjToInt idx) (undefined :: e')) $ cvt e
     cvt (H.Cond e1 e2 e3 :: H.Exp stage t')   = cond (genTy (undefined :: t')) (cvt e1) (cvt e2) (cvt e3)
     cvt (H.PrimApp p e :: H.Exp stage t')     = primApp (genTy (undefined :: t')) (convertPrimFun p) $ cvt e
     cvt (H.Sampler f em t :: H.Exp stage t')  = sampler (genTy (undefined :: t')) f em $ convertTexture t

@@ -689,8 +689,13 @@ tix8 = SuccTupIdx tix7
 -- used in shader codegen
 data TupleType a where
   UnitTuple   ::                               TupleType ()
-  SingleTuple :: IsScalar a =>            a -> TupleType a
+  SingleTuple :: (IsScalar a,Typeable a) =>            a -> TupleType a
   PairTuple   :: !(TupleType a) -> !(TupleType b) -> TupleType (a, b)
+
+instance Show (TupleType a) where
+    show UnitTuple = "UnitTuple"
+    show (SingleTuple v) = "SingleTuple '"++ show (typeOf v) ++"'"
+    show (PairTuple a b) = "PairTuple (" ++ show a ++ ") (" ++ show b ++ ")"
 
 -- Extend Typeable support for 8- and 9-tuple
 -- ------------------------------------------
