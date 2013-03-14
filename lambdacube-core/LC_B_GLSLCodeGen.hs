@@ -424,7 +424,7 @@ codeGenExp' dag smpName env expId = do
                         _       -> error "internal error: illegal lambda function!"
                     name        = "state" ++ show expId ++ "_"
                     t           = codeGenType $ expIdType dag is
-                    (stS,stE)   = unzip $ [(varStmt n' (toGLSLType ty) e, Variable n') | (e@(Variable n),ty) <- zip isE t, let n' = name ++ n]
+                    (stS,stE)   = unzip $ [(varStmt n (toGLSLType ty) e, Variable n) | (e,ty,i) <- zip3 isE t [0..], let n = name ++ show i]
                 mapM addStmt stS
                 {-
                     done - create state variable
