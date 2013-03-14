@@ -61,7 +61,7 @@ fxMotionBlur iGlobalTime iResolution img = renderScreen $ \_ -> FragmentOut $ ve
 
     q = xy_ fragCoord' @/ iResolution
     p = q @* floatF 2 @- floatF 1
-    total' = snd $ untup2 $ iter (intF 1) (tup2 (floatF 0,v3FF zero')) $ \wt -> let (w1,t1) = untup2 wt in tup2 (w1 @+ floatF 0.01,t1 @+ deform p w1)
+    total' = snd $ untup2 $ iter (intF 20) (tup2 (floatF 0,v3FF zero')) $ \wt -> let (w1,t1) = untup2 wt in tup2 (w1 @+ floatF 0.01,t1 @+ deform p w1)
     total = total' @/ floatF 20
     V2 qx qy = unpack' q
     w = floatF 2 @* (floatF 0.5 @+ floatF 0.5 @* pow' (floatF 16 @* qx @* qy @* (floatF 1 @- qx) @* (floatF 1 @- qy)) (floatF 0.25))

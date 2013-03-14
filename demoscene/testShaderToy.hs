@@ -37,18 +37,12 @@ n_background = "background"
 smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 background tex = renderScreen $ \uv -> FragmentOut $ smp tex uv :. ZT
 
-testloop = renderScreen $ \uv -> FragmentOut $ vec4' val (floatF 1):. ZT
-  where
-    --val = snd $ untup2 $ iter (intF 1) (tup2 (floatF 0,v3FF zero')) $ \wt -> let (w1,t1) = untup2 wt in tup2 (w1 @+ floatF 0.01,t1 @+ v3FF one')
-    val = iter (intF 10) (v3FF zero') $ \t1 -> t1 @+ v3FF one'
-
 main :: IO ()
 main = do
     let lcnet :: Exp Obj (Image N1 V4F)
         --lcnet = fxFakeRipple (Uni $ IFloat n_time) (Uni $ IV2F n_size) (background n_background)
         --lcnet = fxWarping (Uni $ IFloat n_time) (Uni $ IV2F n_size) (background n_background)
-        --lcnet = fxMotionBlur (Uni $ IFloat n_time) (Uni $ IV2F n_size) (background n_background)
-        lcnet = testloop
+        lcnet = fxMotionBlur (Uni $ IFloat n_time) (Uni $ IV2F n_size) (background n_background)
 
     windowSize <- initCommon "LC DSL 2D Demo"
 
