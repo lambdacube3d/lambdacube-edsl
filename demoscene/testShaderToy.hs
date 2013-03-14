@@ -61,7 +61,7 @@ main = do
         setBackground   = uniformFTexture2D n_background slotU
         draw _          = render renderer >> swapBuffers
         bgname   = case args of
-            []  -> "free_high_res_texture_30.jpg"
+            []  -> "IMG_0086.JPG"
             n:_ -> n
     Right img <- loadImage bgname
     setBackground =<< compileTexture2DRGBAF True False img
