@@ -125,7 +125,7 @@ main = do
         diffuse2 = uniformFTexture2D "ScreenQuad2" slotU
         draw _  = render renderer >> swapBuffers
         fname   = case args of
-            []  -> "Panels_Diffuse.png"
+            []  -> "textures/Panels_Diffuse.png"
             n:_ -> n
 
     let p   = perlin

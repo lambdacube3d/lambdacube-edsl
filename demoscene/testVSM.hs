@@ -140,9 +140,9 @@ main = do
     compiledQuad <- compileMesh quad
     addMesh renderer "postSlot" compiledQuad []
 
-    (t,mesh) <- C.time $ loadMesh "Monkey.lcmesh"
+    (t,mesh) <- C.time $ loadMesh "models/Monkey.lcmesh"
     putStrLn $ C.secs t ++ " - loadMesh Monkey.lcmesh"
-    (t,mesh2) <- C.time $ loadMesh "Scene.lcmesh"
+    (t,mesh2) <- C.time $ loadMesh "models/Scene.lcmesh"
     putStrLn $ C.secs t ++ " - loadMesh Scene.lcmesh"
 
     (t,obj) <- C.time $ addMesh renderer "streamSlot" mesh []

@@ -97,12 +97,12 @@ main = do
         background  = uniformFTexture2D "background" slotU
         draw _  = render renderer >> swapBuffers
         fname   = case args of
-            []  -> "Explosion.png"
+            []  -> "textures/Explosion.png"
             n:_ -> n
 
     Right img <- loadImage fname
     diffuse =<< compileTexture2DRGBAF False True img
-    Right img <- loadImage "space.jpg"
+    Right img <- loadImage "textures/space.jpg"
     background =<< compileTexture2DRGBAF False True img
 
     s <- fpsState

@@ -125,7 +125,7 @@ main = do
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
 
-    mesh <- loadMesh "Monkey.lcmesh"
+    mesh <- loadMesh "models/Monkey.lcmesh"
     obj <- compileMesh mesh { mPrimitive = P_Points, mGPUData = Nothing }
            >>= addMesh renderer n_postSlot `flip` []
     compileMesh quad
@@ -139,10 +139,10 @@ main = do
         backgroundTexture = uniformFTexture2D n_backgroundTex slotU
         draw _  = render renderer >> swapBuffers
         fname   = case args of
-            []  -> "particle_base.png"
+            []  -> "textures/particle_base.png"
             n:_ -> n
         bgname   = case args of
-            []  -> "background.jpg"
+            []  -> "textures/background.jpg"
             _:n:_ -> n
     Right img2 <- loadImage fname
     diffuse =<< compileTexture2DRGBAF False True img2
