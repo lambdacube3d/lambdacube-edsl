@@ -1,4 +1,4 @@
-module ThriftUtils (remoteMesh,sblToV,vToSB) where
+module ThriftUtils where
 
 import Control.Applicative
 import Control.Monad
@@ -20,6 +20,7 @@ import Thrift.ContentProvider_Client
 import Thrift.Content_Types
 
 import System.IO.Unsafe (unsafePerformIO)
+import GHC.IO.Handle (Handle)
 
 import qualified Data.Trie as T
 
@@ -58,21 +59,35 @@ unpackAttribute (VertexAttribute (Just an) (Just at) (Just ad)) = (,) (SB.pack a
     AT_Int   -> LC.A_Int   $ toV ad
     AT_Word  -> LC.A_Word  $ toV ad 
 
-remoteMesh :: ByteString -> IO LC.Mesh
-remoteMesh name = do
+
+type Slot = (BinaryProtocol Handle,BinaryProtocol Handle)
+protocol :: IO Slot
+protocol = do
+    p <- BinaryProtocol <$> hOpen ("localhost", PortNumber 9090)
+    return (p,p)
+
+remoteMesh :: Slot -> ByteString -> IO LC.Mesh
+remoteMesh slot name = do
+    Just mesh <- remoteMesh' slot name
+    return mesh
+
+remoteMesh' :: Slot -> ByteString -> IO (Maybe LC.Mesh)
+remoteMesh' slot name = do
     let toVInt :: V.Vector Int32 -> V.Vector Int
         toVInt = V.map fromIntegral
-    p <- BinaryProtocol <$> hOpen ("localhost", PortNumber 9090)
-    Mesh (Just attrs) (Just prim) idx <- downloadMesh (p,p) $ SB.unpack name
-    return $ LC.Mesh
-        { LC.mAttributes   = T.fromList $ map unpackAttribute attrs
-        , LC.mPrimitive    = case (prim,idx) of
-            (PT_Points,Nothing)        -> LC.P_Points
-            (PT_TriangleStrip,Nothing) -> LC.P_TriangleStrip
-            (PT_Triangles,Nothing)     -> LC.P_Triangles
-            (PT_TriangleStrip,Just i)  -> LC.P_TriangleStripI $ toV i
-            (PT_Triangles,Just i)      -> LC.P_TrianglesI $ toV i
-            _                          -> error "Invalid primitive!"
+    --proto <- protocol
+    mesh <- downloadMesh slot $ SB.unpack name
+    return $ case mesh of
+        Mesh (Just attrs) (Just prim) idx -> Just $ LC.Mesh
+            { LC.mAttributes    = T.fromList $ map unpackAttribute attrs
+            , LC.mPrimitive     = case (prim,idx) of
+                (PT_Points,Nothing)        -> LC.P_Points
+                (PT_TriangleStrip,Nothing) -> LC.P_TriangleStrip
+                (PT_Triangles,Nothing)     -> LC.P_Triangles
+                (PT_TriangleStrip,Just i)  -> LC.P_TriangleStripI $ toV i
+                (PT_Triangles,Just i)      -> LC.P_TrianglesI $ toV i
+                _                          -> error "Invalid primitive!"
+            , LC.mGPUData       = Nothing
+            }
 
-        , LC.mGPUData      = Nothing
-        }
+        _   -> Nothing

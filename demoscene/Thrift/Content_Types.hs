@@ -61,6 +61,34 @@ instance Enum PrimitiveType where
     1 -> PT_TriangleStrip
     2 -> PT_Triangles
     _ -> throw ThriftException
+data ImageType = IT_RGBA8|IT_RGBAF|IT_JPG|IT_PNG  deriving (Show,Eq, Typeable, Ord)
+instance Enum ImageType where
+  fromEnum t = case t of
+    IT_RGBA8 -> 0
+    IT_RGBAF -> 1
+    IT_JPG -> 2
+    IT_PNG -> 3
+  toEnum t = case t of
+    0 -> IT_RGBA8
+    1 -> IT_RGBAF
+    2 -> IT_JPG
+    3 -> IT_PNG
+    _ -> throw ThriftException
+data PropertyType = PT_Bool|PT_Float|PT_Int|PT_String|PT_Unsupported  deriving (Show,Eq, Typeable, Ord)
+instance Enum PropertyType where
+  fromEnum t = case t of
+    PT_Bool -> 0
+    PT_Float -> 1
+    PT_Int -> 2
+    PT_String -> 3
+    PT_Unsupported -> 4
+  toEnum t = case t of
+    0 -> PT_Bool
+    1 -> PT_Float
+    2 -> PT_Int
+    3 -> PT_String
+    4 -> PT_Unsupported
+    _ -> throw ThriftException
 data VertexAttribute = VertexAttribute{f_VertexAttribute_attrName :: Maybe String,f_VertexAttribute_attrType :: Maybe AttributeType,f_VertexAttribute_attrData :: Maybe [ByteString]} deriving (Show,Eq,Ord,Typeable)
 write_VertexAttribute oprot record = do
   writeStructBegin oprot "VertexAttribute"
@@ -155,5 +183,63 @@ read_Mesh_fields iprot record = do
 read_Mesh iprot = do
   _ <- readStructBegin iprot
   record <- read_Mesh_fields iprot (Mesh{f_Mesh_attributes=Nothing,f_Mesh_primitive=Nothing,f_Mesh_indexData=Nothing})
+  readStructEnd iprot
+  return record
+data Property = Property{f_Property_propertyTypeName :: Maybe String,f_Property_propertyType :: Maybe PropertyType,f_Property_propertySize :: Maybe Int16,f_Property_propertyData :: Maybe ByteString} deriving (Show,Eq,Ord,Typeable)
+write_Property oprot record = do
+  writeStructBegin oprot "Property"
+  case f_Property_propertyTypeName record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("propertyTypeName",T_STRING,1)
+    writeString oprot _v
+    writeFieldEnd oprot}
+  case f_Property_propertyType record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("propertyType",T_I32,2)
+    writeI32 oprot (fromIntegral $ fromEnum _v)
+    writeFieldEnd oprot}
+  case f_Property_propertySize record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("propertySize",T_I16,3)
+    writeI16 oprot _v
+    writeFieldEnd oprot}
+  case f_Property_propertyData record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("propertyData",T_STRING,4)
+    writeBinary oprot _v
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_Property_fields iprot record = do
+  (_,_t31,_id32) <- readFieldBegin iprot
+  if _t31 == T_STOP then return record else
+    case _id32 of 
+      1 -> if _t31 == T_STRING then do
+        s <- readString iprot
+        read_Property_fields iprot record{f_Property_propertyTypeName=Just s}
+        else do
+          skip iprot _t31
+          read_Property_fields iprot record
+      2 -> if _t31 == T_I32 then do
+        s <- (do {i <- readI32 iprot; return $ toEnum $ fromIntegral i})
+        read_Property_fields iprot record{f_Property_propertyType=Just s}
+        else do
+          skip iprot _t31
+          read_Property_fields iprot record
+      3 -> if _t31 == T_I16 then do
+        s <- readI16 iprot
+        read_Property_fields iprot record{f_Property_propertySize=Just s}
+        else do
+          skip iprot _t31
+          read_Property_fields iprot record
+      4 -> if _t31 == T_STRING then do
+        s <- readBinary iprot
+        read_Property_fields iprot record{f_Property_propertyData=Just s}
+        else do
+          skip iprot _t31
+          read_Property_fields iprot record
+      _ -> do
+        skip iprot _t31
+        readFieldEnd iprot
+        read_Property_fields iprot record
+read_Property iprot = do
+  _ <- readStructBegin iprot
+  record <- read_Property_fields iprot (Property{f_Property_propertyTypeName=Nothing,f_Property_propertyType=Nothing,f_Property_propertySize=Nothing,f_Property_propertyData=Nothing})
   readStructEnd iprot
   return record

@@ -41,17 +41,17 @@ write_DownloadMesh_args oprot record = do
   writeFieldStop oprot
   writeStructEnd oprot
 read_DownloadMesh_args_fields iprot record = do
-  (_,_t41,_id42) <- readFieldBegin iprot
-  if _t41 == T_STOP then return record else
-    case _id42 of 
-      1 -> if _t41 == T_STRING then do
+  (_,_t36,_id37) <- readFieldBegin iprot
+  if _t36 == T_STOP then return record else
+    case _id37 of 
+      1 -> if _t36 == T_STRING then do
         s <- readString iprot
         read_DownloadMesh_args_fields iprot record{f_DownloadMesh_args_name=Just s}
         else do
-          skip iprot _t41
+          skip iprot _t36
           read_DownloadMesh_args_fields iprot record
       _ -> do
-        skip iprot _t41
+        skip iprot _t36
         readFieldEnd iprot
         read_DownloadMesh_args_fields iprot record
 read_DownloadMesh_args iprot = do
@@ -69,22 +69,220 @@ write_DownloadMesh_result oprot record = do
   writeFieldStop oprot
   writeStructEnd oprot
 read_DownloadMesh_result_fields iprot record = do
-  (_,_t46,_id47) <- readFieldBegin iprot
-  if _t46 == T_STOP then return record else
-    case _id47 of 
-      0 -> if _t46 == T_STRUCT then do
+  (_,_t41,_id42) <- readFieldBegin iprot
+  if _t41 == T_STOP then return record else
+    case _id42 of 
+      0 -> if _t41 == T_STRUCT then do
         s <- (read_Mesh iprot)
         read_DownloadMesh_result_fields iprot record{f_DownloadMesh_result_success=Just s}
         else do
-          skip iprot _t46
+          skip iprot _t41
           read_DownloadMesh_result_fields iprot record
       _ -> do
-        skip iprot _t46
+        skip iprot _t41
         readFieldEnd iprot
         read_DownloadMesh_result_fields iprot record
 read_DownloadMesh_result iprot = do
   _ <- readStructBegin iprot
   record <- read_DownloadMesh_result_fields iprot (DownloadMesh_result{f_DownloadMesh_result_success=Nothing})
+  readStructEnd iprot
+  return record
+data DownloadTexture_args = DownloadTexture_args{f_DownloadTexture_args_name :: Maybe String,f_DownloadTexture_args_imageType :: Maybe ImageType,f_DownloadTexture_args_width :: Maybe Int16,f_DownloadTexture_args_height :: Maybe Int16} deriving (Show,Eq,Ord,Typeable)
+write_DownloadTexture_args oprot record = do
+  writeStructBegin oprot "DownloadTexture_args"
+  case f_DownloadTexture_args_name record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("name",T_STRING,1)
+    writeString oprot _v
+    writeFieldEnd oprot}
+  case f_DownloadTexture_args_imageType record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("imageType",T_I32,2)
+    writeI32 oprot (fromIntegral $ fromEnum _v)
+    writeFieldEnd oprot}
+  case f_DownloadTexture_args_width record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("width",T_I16,3)
+    writeI16 oprot _v
+    writeFieldEnd oprot}
+  case f_DownloadTexture_args_height record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("height",T_I16,4)
+    writeI16 oprot _v
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_DownloadTexture_args_fields iprot record = do
+  (_,_t46,_id47) <- readFieldBegin iprot
+  if _t46 == T_STOP then return record else
+    case _id47 of 
+      1 -> if _t46 == T_STRING then do
+        s <- readString iprot
+        read_DownloadTexture_args_fields iprot record{f_DownloadTexture_args_name=Just s}
+        else do
+          skip iprot _t46
+          read_DownloadTexture_args_fields iprot record
+      2 -> if _t46 == T_I32 then do
+        s <- (do {i <- readI32 iprot; return $ toEnum $ fromIntegral i})
+        read_DownloadTexture_args_fields iprot record{f_DownloadTexture_args_imageType=Just s}
+        else do
+          skip iprot _t46
+          read_DownloadTexture_args_fields iprot record
+      3 -> if _t46 == T_I16 then do
+        s <- readI16 iprot
+        read_DownloadTexture_args_fields iprot record{f_DownloadTexture_args_width=Just s}
+        else do
+          skip iprot _t46
+          read_DownloadTexture_args_fields iprot record
+      4 -> if _t46 == T_I16 then do
+        s <- readI16 iprot
+        read_DownloadTexture_args_fields iprot record{f_DownloadTexture_args_height=Just s}
+        else do
+          skip iprot _t46
+          read_DownloadTexture_args_fields iprot record
+      _ -> do
+        skip iprot _t46
+        readFieldEnd iprot
+        read_DownloadTexture_args_fields iprot record
+read_DownloadTexture_args iprot = do
+  _ <- readStructBegin iprot
+  record <- read_DownloadTexture_args_fields iprot (DownloadTexture_args{f_DownloadTexture_args_name=Nothing,f_DownloadTexture_args_imageType=Nothing,f_DownloadTexture_args_width=Nothing,f_DownloadTexture_args_height=Nothing})
+  readStructEnd iprot
+  return record
+data DownloadTexture_result = DownloadTexture_result{f_DownloadTexture_result_success :: Maybe [ByteString]} deriving (Show,Eq,Ord,Typeable)
+write_DownloadTexture_result oprot record = do
+  writeStructBegin oprot "DownloadTexture_result"
+  case f_DownloadTexture_result_success record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("success",T_LIST,0)
+    (let {f [] = return (); f (_viter50:t) = do {writeBinary oprot _viter50;f t}} in do {writeListBegin oprot (T_STRING,fromIntegral $ Prelude.length _v); f _v;writeListEnd oprot})
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_DownloadTexture_result_fields iprot record = do
+  (_,_t52,_id53) <- readFieldBegin iprot
+  if _t52 == T_STOP then return record else
+    case _id53 of 
+      0 -> if _t52 == T_LIST then do
+        s <- (let {f 0 = return []; f n = do {v <- readBinary iprot;r <- f (n-1); return $ v:r}} in do {(_etype57,_size54) <- readListBegin iprot; f _size54})
+        read_DownloadTexture_result_fields iprot record{f_DownloadTexture_result_success=Just s}
+        else do
+          skip iprot _t52
+          read_DownloadTexture_result_fields iprot record
+      _ -> do
+        skip iprot _t52
+        readFieldEnd iprot
+        read_DownloadTexture_result_fields iprot record
+read_DownloadTexture_result iprot = do
+  _ <- readStructBegin iprot
+  record <- read_DownloadTexture_result_fields iprot (DownloadTexture_result{f_DownloadTexture_result_success=Nothing})
+  readStructEnd iprot
+  return record
+data DownloadGroup_args = DownloadGroup_args{f_DownloadGroup_args_name :: Maybe String} deriving (Show,Eq,Ord,Typeable)
+write_DownloadGroup_args oprot record = do
+  writeStructBegin oprot "DownloadGroup_args"
+  case f_DownloadGroup_args_name record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("name",T_STRING,1)
+    writeString oprot _v
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_DownloadGroup_args_fields iprot record = do
+  (_,_t62,_id63) <- readFieldBegin iprot
+  if _t62 == T_STOP then return record else
+    case _id63 of 
+      1 -> if _t62 == T_STRING then do
+        s <- readString iprot
+        read_DownloadGroup_args_fields iprot record{f_DownloadGroup_args_name=Just s}
+        else do
+          skip iprot _t62
+          read_DownloadGroup_args_fields iprot record
+      _ -> do
+        skip iprot _t62
+        readFieldEnd iprot
+        read_DownloadGroup_args_fields iprot record
+read_DownloadGroup_args iprot = do
+  _ <- readStructBegin iprot
+  record <- read_DownloadGroup_args_fields iprot (DownloadGroup_args{f_DownloadGroup_args_name=Nothing})
+  readStructEnd iprot
+  return record
+data DownloadGroup_result = DownloadGroup_result{f_DownloadGroup_result_success :: Maybe [String]} deriving (Show,Eq,Ord,Typeable)
+write_DownloadGroup_result oprot record = do
+  writeStructBegin oprot "DownloadGroup_result"
+  case f_DownloadGroup_result_success record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("success",T_LIST,0)
+    (let {f [] = return (); f (_viter66:t) = do {writeString oprot _viter66;f t}} in do {writeListBegin oprot (T_STRING,fromIntegral $ Prelude.length _v); f _v;writeListEnd oprot})
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_DownloadGroup_result_fields iprot record = do
+  (_,_t68,_id69) <- readFieldBegin iprot
+  if _t68 == T_STOP then return record else
+    case _id69 of 
+      0 -> if _t68 == T_LIST then do
+        s <- (let {f 0 = return []; f n = do {v <- readString iprot;r <- f (n-1); return $ v:r}} in do {(_etype73,_size70) <- readListBegin iprot; f _size70})
+        read_DownloadGroup_result_fields iprot record{f_DownloadGroup_result_success=Just s}
+        else do
+          skip iprot _t68
+          read_DownloadGroup_result_fields iprot record
+      _ -> do
+        skip iprot _t68
+        readFieldEnd iprot
+        read_DownloadGroup_result_fields iprot record
+read_DownloadGroup_result iprot = do
+  _ <- readStructBegin iprot
+  record <- read_DownloadGroup_result_fields iprot (DownloadGroup_result{f_DownloadGroup_result_success=Nothing})
+  readStructEnd iprot
+  return record
+data Query_args = Query_args{f_Query_args_dataPaths :: Maybe [String]} deriving (Show,Eq,Ord,Typeable)
+write_Query_args oprot record = do
+  writeStructBegin oprot "Query_args"
+  case f_Query_args_dataPaths record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("dataPaths",T_LIST,1)
+    (let {f [] = return (); f (_viter77:t) = do {writeString oprot _viter77;f t}} in do {writeListBegin oprot (T_STRING,fromIntegral $ Prelude.length _v); f _v;writeListEnd oprot})
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_Query_args_fields iprot record = do
+  (_,_t79,_id80) <- readFieldBegin iprot
+  if _t79 == T_STOP then return record else
+    case _id80 of 
+      1 -> if _t79 == T_LIST then do
+        s <- (let {f 0 = return []; f n = do {v <- readString iprot;r <- f (n-1); return $ v:r}} in do {(_etype84,_size81) <- readListBegin iprot; f _size81})
+        read_Query_args_fields iprot record{f_Query_args_dataPaths=Just s}
+        else do
+          skip iprot _t79
+          read_Query_args_fields iprot record
+      _ -> do
+        skip iprot _t79
+        readFieldEnd iprot
+        read_Query_args_fields iprot record
+read_Query_args iprot = do
+  _ <- readStructBegin iprot
+  record <- read_Query_args_fields iprot (Query_args{f_Query_args_dataPaths=Nothing})
+  readStructEnd iprot
+  return record
+data Query_result = Query_result{f_Query_result_success :: Maybe [Property]} deriving (Show,Eq,Ord,Typeable)
+write_Query_result oprot record = do
+  writeStructBegin oprot "Query_result"
+  case f_Query_result_success record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("success",T_LIST,0)
+    (let {f [] = return (); f (_viter88:t) = do {write_Property oprot _viter88;f t}} in do {writeListBegin oprot (T_STRUCT,fromIntegral $ Prelude.length _v); f _v;writeListEnd oprot})
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_Query_result_fields iprot record = do
+  (_,_t90,_id91) <- readFieldBegin iprot
+  if _t90 == T_STOP then return record else
+    case _id91 of 
+      0 -> if _t90 == T_LIST then do
+        s <- (let {f 0 = return []; f n = do {v <- (read_Property iprot);r <- f (n-1); return $ v:r}} in do {(_etype95,_size92) <- readListBegin iprot; f _size92})
+        read_Query_result_fields iprot record{f_Query_result_success=Just s}
+        else do
+          skip iprot _t90
+          read_Query_result_fields iprot record
+      _ -> do
+        skip iprot _t90
+        readFieldEnd iprot
+        read_Query_result_fields iprot record
+read_Query_result iprot = do
+  _ <- readStructBegin iprot
+  record <- read_Query_result_fields iprot (Query_result{f_Query_result_success=Nothing})
   readStructEnd iprot
   return record
 process_downloadMesh (seqid, iprot, oprot, handler) = do
@@ -98,8 +296,44 @@ process_downloadMesh (seqid, iprot, oprot, handler) = do
   write_DownloadMesh_result oprot res
   writeMessageEnd oprot
   tFlush (getTransport oprot)
+process_downloadTexture (seqid, iprot, oprot, handler) = do
+  args <- read_DownloadTexture_args iprot
+  readMessageEnd iprot
+  rs <- return (DownloadTexture_result Nothing)
+  res <- (do
+    res <- Iface.downloadTexture handler (f_DownloadTexture_args_name args) (f_DownloadTexture_args_imageType args) (f_DownloadTexture_args_width args) (f_DownloadTexture_args_height args)
+    return rs{f_DownloadTexture_result_success= Just res})
+  writeMessageBegin oprot ("downloadTexture", M_REPLY, seqid);
+  write_DownloadTexture_result oprot res
+  writeMessageEnd oprot
+  tFlush (getTransport oprot)
+process_downloadGroup (seqid, iprot, oprot, handler) = do
+  args <- read_DownloadGroup_args iprot
+  readMessageEnd iprot
+  rs <- return (DownloadGroup_result Nothing)
+  res <- (do
+    res <- Iface.downloadGroup handler (f_DownloadGroup_args_name args)
+    return rs{f_DownloadGroup_result_success= Just res})
+  writeMessageBegin oprot ("downloadGroup", M_REPLY, seqid);
+  write_DownloadGroup_result oprot res
+  writeMessageEnd oprot
+  tFlush (getTransport oprot)
+process_query (seqid, iprot, oprot, handler) = do
+  args <- read_Query_args iprot
+  readMessageEnd iprot
+  rs <- return (Query_result Nothing)
+  res <- (do
+    res <- Iface.query handler (f_Query_args_dataPaths args)
+    return rs{f_Query_result_success= Just res})
+  writeMessageBegin oprot ("query", M_REPLY, seqid);
+  write_Query_result oprot res
+  writeMessageEnd oprot
+  tFlush (getTransport oprot)
 proc_ handler (iprot,oprot) (name,typ,seqid) = case name of
   "downloadMesh" -> process_downloadMesh (seqid,iprot,oprot,handler)
+  "downloadTexture" -> process_downloadTexture (seqid,iprot,oprot,handler)
+  "downloadGroup" -> process_downloadGroup (seqid,iprot,oprot,handler)
+  "query" -> process_query (seqid,iprot,oprot,handler)
   _ -> do
     skip iprot T_STRUCT
     readMessageEnd iprot

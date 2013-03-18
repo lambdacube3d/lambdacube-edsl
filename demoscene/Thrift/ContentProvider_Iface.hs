@@ -31,3 +31,6 @@ import Thrift.Content_Types
 
 class ContentProvider_Iface a where
   downloadMesh :: a -> Maybe String -> IO Mesh
+  downloadTexture :: a -> Maybe String -> Maybe ImageType -> Maybe Int16 -> Maybe Int16 -> IO [ByteString]
+  downloadGroup :: a -> Maybe String -> IO [String]
+  query :: a -> Maybe [String] -> IO [Property]

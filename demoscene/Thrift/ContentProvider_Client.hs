@@ -11,7 +11,7 @@
 -- DO NOT EDIT UNLESS YOU ARE SURE YOU KNOW WHAT YOU ARE DOING --
 -----------------------------------------------------------------
 
-module Thrift.ContentProvider_Client(downloadMesh) where
+module Thrift.ContentProvider_Client(downloadMesh,downloadTexture,downloadGroup,query) where
 import Data.IORef
 import Prelude ( Bool(..), Enum, Double, String, Maybe(..),
                  Eq, Show, Ord,
@@ -54,3 +54,72 @@ recv_downloadMesh ip = do
     Just v -> return v
     Nothing -> do
       throw (AppExn AE_MISSING_RESULT "downloadMesh failed: unknown result")
+downloadTexture (ip,op) arg_name arg_imageType arg_width arg_height = do
+  send_downloadTexture op arg_name arg_imageType arg_width arg_height
+  recv_downloadTexture ip
+send_downloadTexture op arg_name arg_imageType arg_width arg_height = do
+  seq <- seqid
+  seqn <- readIORef seq
+  writeMessageBegin op ("downloadTexture", M_CALL, seqn)
+  write_DownloadTexture_args op (DownloadTexture_args{f_DownloadTexture_args_name=Just arg_name,f_DownloadTexture_args_imageType=Just arg_imageType,f_DownloadTexture_args_width=Just arg_width,f_DownloadTexture_args_height=Just arg_height})
+  writeMessageEnd op
+  tFlush (getTransport op)
+recv_downloadTexture ip = do
+  (fname, mtype, rseqid) <- readMessageBegin ip
+  if mtype == M_EXCEPTION then do
+    x <- readAppExn ip
+    readMessageEnd ip
+    throw x
+    else return ()
+  res <- read_DownloadTexture_result ip
+  readMessageEnd ip
+  case f_DownloadTexture_result_success res of
+    Just v -> return v
+    Nothing -> do
+      throw (AppExn AE_MISSING_RESULT "downloadTexture failed: unknown result")
+downloadGroup (ip,op) arg_name = do
+  send_downloadGroup op arg_name
+  recv_downloadGroup ip
+send_downloadGroup op arg_name = do
+  seq <- seqid
+  seqn <- readIORef seq
+  writeMessageBegin op ("downloadGroup", M_CALL, seqn)
+  write_DownloadGroup_args op (DownloadGroup_args{f_DownloadGroup_args_name=Just arg_name})
+  writeMessageEnd op
+  tFlush (getTransport op)
+recv_downloadGroup ip = do
+  (fname, mtype, rseqid) <- readMessageBegin ip
+  if mtype == M_EXCEPTION then do
+    x <- readAppExn ip
+    readMessageEnd ip
+    throw x
+    else return ()
+  res <- read_DownloadGroup_result ip
+  readMessageEnd ip
+  case f_DownloadGroup_result_success res of
+    Just v -> return v
+    Nothing -> do
+      throw (AppExn AE_MISSING_RESULT "downloadGroup failed: unknown result")
+query (ip,op) arg_dataPaths = do
+  send_query op arg_dataPaths
+  recv_query ip
+send_query op arg_dataPaths = do
+  seq <- seqid
+  seqn <- readIORef seq
+  writeMessageBegin op ("query", M_CALL, seqn)
+  write_Query_args op (Query_args{f_Query_args_dataPaths=Just arg_dataPaths})
+  writeMessageEnd op
+  tFlush (getTransport op)
+recv_query ip = do
+  (fname, mtype, rseqid) <- readMessageBegin ip
+  if mtype == M_EXCEPTION then do
+    x <- readAppExn ip
+    readMessageEnd ip
+    throw x
+    else return ()
+  res <- read_Query_result ip
+  readMessageEnd ip
+  case f_Query_result_success res of
+    Just v -> return v
+    Nothing -> do
+      throw (AppExn AE_MISSING_RESULT "query failed: unknown result")
