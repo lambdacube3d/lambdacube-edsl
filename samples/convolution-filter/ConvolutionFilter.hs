@@ -17,14 +17,16 @@ import LC_Mesh
 import Utils
 import GraphicsUtils
 
-weights = gaussianSamples 100 51
+weights = gaussianSamples 1000 101
 dirH = V2 1 0
 dirV = V2 0 1
 
-projectBuffer = PrjFrameBuffer "" tix0
-
 finalImage :: Exp Obj (FrameBuffer N1 V4F)
-finalImage = convolve dirV weights (projectBuffer (convolve dirH weights (projectBuffer originalImage)))
+finalImage = filterPass dirV (filterPass dirH originalImage)
+  where
+    filterPass dir = convolve dir weights . projectBuffer
+    projectBuffer = PrjFrameBuffer "" tix0
+
 --finalImage = additiveSample "verticalFilter" (projectBuffer (additiveSample "horizontalFilter" (projectBuffer originalImage)))
 --finalImage = originalImage
 
@@ -96,29 +98,34 @@ readInput = do
 
 -- the threshold and offsetWeight optimisations can be commented out independently
 gaussianSamples :: Float -> Int -> [(Float, Float)]
-gaussianSamples tolerance = normalise . threshold tolerance . offsetWeight . withOffsets . gaussianWeights
+gaussianSamples tolerance = normalise . threshold tolerance . offsetWeight . withOffsets . binomialCoefficients
+
+binomialCoefficients :: Int -> [Float]
+binomialCoefficients n = iterate next [1] !! (n-1)
   where
-    gaussianWeights n = iterate next [1] !! (n-1)
-      where
-        next xs = [x+y | x <- xs ++ [0] | y <- 0:xs]
-    
-    withOffsets cs = [(o, c) | c <- cs | o <- [-lim..lim]]
-      where
-        lim = fromIntegral (length cs `quot` 2)
+    next xs = [x+y | x <- xs ++ [0] | y <- 0:xs]
 
-    offsetWeight [] = []
-    offsetWeight [ow] = [ow] 
-    offsetWeight ((o1,w1):(o2,w2):ows) = (o1+w2/w', w') : offsetWeight ows
-      where
-        w' = w1+w2
+withOffsets :: [Float] -> [(Float, Float)]
+withOffsets cs = [(o, c) | c <- cs | o <- [-lim..lim]]
+  where
+    lim = fromIntegral (length cs `quot` 2)
 
-    threshold t ocs = [oc | oc@(_, c) <- ocs, c*t >= m]
-      where
-        m = maximum [c | (_, c) <- ocs]
+offsetWeight :: [(Float, Float)] -> [(Float, Float)]
+offsetWeight [] = []
+offsetWeight [ow] = [ow] 
+offsetWeight ((o1,w1):(o2,w2):ows) = (o1+w2/w', w') : offsetWeight ows
+  where
+    w' = w1+w2
 
-    normalise ocs = [(o, c/s) | (o, c) <- ocs]
-      where
-        s = sum [c | (_, c) <- ocs]
+threshold :: Float -> [(Float, Float)] -> [(Float, Float)]
+threshold t ocs = [oc | oc@(_, c) <- ocs, c*t >= m]
+  where
+    m = maximum [c | (_, c) <- ocs]
+
+normalise :: [(Float, Float)] -> [(Float, Float)]
+normalise ocs = [(o, c/s) | (o, c) <- ocs]
+  where
+    s = sum [c | (_, c) <- ocs]
 
 originalImage :: Exp Obj (FrameBuffer N1 V4F)
 originalImage = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
@@ -127,19 +134,21 @@ originalImage = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) cle
     clearBuf = FrameBuffer (ColorImage n1 (V4 0 0 0 1) :. ZT)
     prims = Transform vert (Fetch "geometrySlot" Triangle (IV2F "position"))
     
-    vert :: Exp V V2F -> VertexOut V2F
-    vert pos = VertexOut pos' (floatV 1) (NoPerspective pos :. ZT)
+    vert :: Exp V V2F -> VertexOut ()
+    vert pos = VertexOut pos' (floatV 1) (ZT)
       where
         V2 x y = unpack' pos
         pos' = pack' (V4 x y (floatV 0) (floatV 1))
     
-    frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
-    frag pos = FragmentOut (col :. ZT)
+    frag :: Exp F () -> FragmentOut (Color V4F :+: ZZ)
+    frag _ = FragmentOut (col :. ZT)
       where
         V4 x y _ _ = unpack' fragCoord'
-        r = Cond ((x @+ y) @% (floatF 50) @< (floatF 25)) (floatF 0) (floatF 1)
+        x' = sqrt' x @* floatF 16
+        y' = sqrt' y @* floatF 16
+        r = Cond ((x' @+ y') @% (floatF 50) @< (floatF 25)) (floatF 0) (floatF 1)
         g = floatF 0
-        b = Cond ((x @- y) @% (floatF 50) @< (floatF 25)) (floatF 0) (floatF 1)
+        b = Cond ((x' @- y') @% (floatF 50) @< (floatF 25)) (floatF 0) (floatF 1)
         col = pack' (V4 r g b (floatF 1))
 
 convolve :: V2F -> [(Float, Float)] -> Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 V4F)
@@ -147,7 +156,8 @@ convolve (V2 dx dy) weights img = Accumulate accCtx PassAll frag (Rasterize tria
   where
     resX = windowWidth
     resY = windowHeight
-    dir' = V2 (dx / fromIntegral resX) (dy / fromIntegral resY)
+    dir' :: Exp F V2F
+    dir' = Const (V2 (dx / fromIntegral resX) (dy / fromIntegral resY))
     
     accCtx = AccumulationContext Nothing (ColorOp NoBlending (one' :: V4B) :. ZT)
     clearBuf = FrameBuffer (ColorImage n1 (V4 0 0 0 1) :. ZT)
@@ -163,7 +173,7 @@ convolve (V2 dx dy) weights img = Accumulate accCtx PassAll frag (Rasterize tria
     frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
     frag uv = FragmentOut (sample :. ZT)
       where
-        sample = foldr1 (@+) [ texture' smp (uv @+ (Const dir' :: Exp F V2F) @* floatF ofs) @* floatF coeff
+        sample = foldr1 (@+) [ texture' smp (uv @+ dir' @* floatF ofs) @* floatF coeff
                              | (ofs, coeff) <- weights]
         smp = Sampler LinearFilter Clamp tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 resX resY) NoMip [img]
