@@ -29,7 +29,6 @@ Library
 
         bytestring-trie,
         prettyclass,
-        type-level-numbers,
         OpenGLRaw,
         language-glsl,
         
@@ -78,6 +77,7 @@ Library
   Extensions:
         BangPatterns
         ConstraintKinds
+        DataKinds
         DeriveDataTypeable
         EmptyDataDecls
         FlexibleContexts

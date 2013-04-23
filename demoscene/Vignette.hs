@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Vignette where
 
 import LC_API
@@ -24,7 +25,7 @@ fVignette v uv fromColor = fromColor @* smoothstep' o i d
 
 -- Vignette from a texture, useable as a render pass.
 -- Use @fVignette@ to use it as part of a bigger fragment shader.
-fxVignette :: Vignette -> Exp Obj (Image N1 V4F) -> Exp F V2F -> Exp F V4F
+fxVignette :: Vignette -> Exp Obj (Image 1 V4F) -> Exp F V2F -> Exp F V4F
 fxVignette v img uv = fVignette v uv c
   where
     c = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv

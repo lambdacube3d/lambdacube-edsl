@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Blur where
 
 import LC_API
@@ -18,7 +19,7 @@ blur = Blur
     , blurStrength      = 0.2
     }
 
-fxBlur :: Blur -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F)
+fxBlur :: Blur -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F)
 fxBlur cfg img = renderScreen $ frag imgH uvV
   where
     imgH    = renderScreen $ frag img uvH

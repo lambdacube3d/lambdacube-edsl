@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -13,9 +13,6 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import System.Environment
-
-import TypeLevel.Number.Nat.Num
-import Data.Typeable
 
 import LC_API
 
@@ -56,7 +53,7 @@ floatF = Const
 intF :: Int32 -> Exp F Int32
 intF = Const
 
-screenQuad :: Exp Obj (FrameBuffer N1 V4F)
+screenQuad :: Exp Obj (FrameBuffer 1 V4F)
 screenQuad = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
@@ -84,7 +81,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
 
 main :: IO ()
 main = do
-    let lcnet :: Exp Obj (Image N1 V4F)
+    let lcnet :: Exp Obj (Image 1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 screenQuad
 
     windowSize <- initCommon "LC DSL 2D Demo"

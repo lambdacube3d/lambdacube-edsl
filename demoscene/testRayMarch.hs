@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, MultiParamTypeClasses, DataKinds #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -13,9 +13,6 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import System.Environment
-
-import TypeLevel.Number.Nat.Num
-import Data.Typeable
 
 import LC_API
 
@@ -34,7 +31,7 @@ n_size = "size"
 
 main :: IO ()
 main = do
-    let lcnet :: Exp Obj (Image N1 V4F)
+    let lcnet :: Exp Obj (Image 1 V4F)
         lcnet = fxRayMarch (Uni $ IFloat n_time) (Uni $ IV2F n_size)
 
     windowSize <- initCommon "LC DSL 2D Demo"

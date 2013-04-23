@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TypeOperators, ParallelListComp #-}
+{-# LANGUAGE OverloadedStrings, TypeOperators, ParallelListComp, DataKinds #-}
 module GameGraphics where
 
 import Data.ByteString.Char8 (ByteString)
@@ -88,7 +88,7 @@ opaque
 opaqueZBias
 transparent
 -}
-stuntsGFX :: Exp Obj (FrameBuffer N1 (Float,V4F))
+stuntsGFX :: Exp Obj (FrameBuffer 1 (Float,V4F))
 stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter fragPassed) frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
@@ -205,19 +205,19 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         
     shadowSampler slice = Sampler LinearFilter Clamp (shadowMap slice)
     
-    shadowMap :: Int -> Texture (Exp Obj) DIM2 SingleTex (Regular Float) Red
+    shadowMap :: Int -> Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
     shadowMap slice = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 (moments slice)]
 
-    shadowMapBlur :: Int -> Texture (Exp Obj) DIM2 SingleTex (Regular Float) Red
+    shadowMapBlur :: Int -> Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
     shadowMapBlur slice = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurDepth slice $ PrjFrameBuffer "blur" tix0 (moments slice)]
     
-    --shadowMapEnvelope :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    --shadowMapEnvelope :: Texture GP Tex2D SingleTex (Regular Float) RGBA
     --shadowMapEnvelope = Texture (Texture2D (Float RGBA) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ shadowEnvelope $ PrjFrameBuffer "envelope" tix0 moments]
 
-    --shadowMapBlur :: Texture GP DIM2 SingleTex (Regular Float) RGBA
+    --shadowMapBlur :: Texture GP Tex2D SingleTex (Regular Float) RGBA
     --shadowMapBlur = Texture (Texture2D (Float RGBA) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
 
-    moments :: Int -> Exp Obj (FrameBuffer N1 (Float, Float {-V4F-}))
+    moments :: Int -> Exp Obj (FrameBuffer 1 (Float, Float {-V4F-}))
     moments slice = Accumulate fragCtx (Filter fragPassed) storeDepth rast clear
       where
         fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: Bool {-V4B-}):.ZT
@@ -256,7 +256,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
             (depth,_pos,_pattern) = untup3 attr
         -}
 
-shadowEnvelope :: Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+shadowEnvelope :: Exp Obj (Image 1 V4F) -> Exp Obj (FrameBuffer 1 (Float,V4F))
 shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
@@ -289,7 +289,7 @@ shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
 
 -- blur
 
-blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer 1 (Float,V4F))
 blur' frag = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
@@ -338,7 +338,7 @@ gaussFilter9 =
     , (4.0,    0.05)
     ]
 
-blurVH :: Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+blurVH :: Exp Obj (Image 1 V4F) -> Exp Obj (FrameBuffer 1 (Float,V4F))
 blurVH img = blur' $ frag uvH $ PrjFrameBuffer "" tix0 $ blur' $ frag uvV img 
   where
     sizeT = shadowMapSize
@@ -357,7 +357,7 @@ blurVH img = blur' $ frag uvH $ PrjFrameBuffer "" tix0 $ blur' $ frag uvV img
         smp = Sampler LinearFilter Clamp tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]
 
-blurDepth :: Int -> Exp Obj (Image N1 Float) -> Exp Obj (FrameBuffer N1 (Float,Float))
+blurDepth :: Int -> Exp Obj (Image 1 Float) -> Exp Obj (FrameBuffer 1 (Float,Float))
 blurDepth slice img = blur $ frag uvH $ PrjFrameBuffer "" tix0 $ blur $ frag uvV img 
   where
     sizeT = shadowMapSize
@@ -375,7 +375,7 @@ blurDepth slice img = blur $ frag uvH $ PrjFrameBuffer "" tix0 $ blur $ frag uvV
         smp = Sampler LinearFilter Clamp tex
         tex = Texture (Texture2D (Float Red) n1) (V2 sizeI sizeI) NoMip [img]
 
-    blur :: (Exp F V2F -> FragmentOut (Depth Float :+: Color Float :+: ZZ)) -> Exp Obj (FrameBuffer N1 (Float,Float))
+    blur :: (Exp F V2F -> FragmentOut (Depth Float :+: Color Float :+: ZZ)) -> Exp Obj (FrameBuffer 1 (Float,Float))
     blur frag = Accumulate fragCtx PassAll frag rast clear
       where
         fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: Bool):.ZT
@@ -392,7 +392,7 @@ blurDepth slice img = blur $ frag uvH $ PrjFrameBuffer "" tix0 $ blur $ frag uvV
             uv'     = uv @* floatV 0.5 @+ floatV 0.5
         
 {-
-debugShader :: Exp Obj (FrameBuffer N1 (Float,V4F))
+debugShader :: Exp Obj (FrameBuffer 1 (Float,V4F))
 debugShader = Accumulate fragCtx PassAll frag rast stuntsGFX
   where
     offset  = NoOffset

@@ -3,12 +3,6 @@ module Swizzling where
 
 import LC_API
 
-class Freq a
-instance Freq V
-instance Freq G
-instance Freq F
-instance Freq Obj
-
 -- Some basic swizzling
 
 class PrjXY a b | a -> b where
@@ -23,27 +17,27 @@ class PrjXYZW a b c | a -> b, a -> c where
     xyz_ :: a -> b
     w_   :: a -> c
 
-instance (Freq f, GPU (V2 t), GPU t, IsComponent t) => PrjXY (Exp f (V2 t)) (Exp f t) where
+instance (GPU (V2 t), GPU t, IsComponent t) => PrjXY (Exp f (V2 t)) (Exp f t) where
     x_ a = let V2 x _ = unpack' a in x
     y_ a = let V2 _ y = unpack' a in y
 
-instance (Freq f, GPU (V3 t), GPU t, IsComponent t) => PrjXY (Exp f (V3 t)) (Exp f t) where
+instance (GPU (V3 t), GPU t, IsComponent t) => PrjXY (Exp f (V3 t)) (Exp f t) where
     x_ a = let V3 x _ _ = unpack' a in x
     y_ a = let V3 _ y _ = unpack' a in y
 
-instance (Freq f, GPU (V4 t), GPU t, IsComponent t) => PrjXY (Exp f (V4 t)) (Exp f t) where
+instance (GPU (V4 t), GPU t, IsComponent t) => PrjXY (Exp f (V4 t)) (Exp f t) where
     x_ a = let V4 x _ _ _ = unpack' a in x
     y_ a = let V4 _ y _ _ = unpack' a in y
 
-instance (Freq f, GPU (V3 t), GPU (V2 t), GPU t, IsComponent t) => PrjXYZ (Exp f (V3 t)) (Exp f (V2 t)) (Exp f t) where
+instance (GPU (V3 t), GPU (V2 t), GPU t, IsComponent t) => PrjXYZ (Exp f (V3 t)) (Exp f (V2 t)) (Exp f t) where
     xy_ a   = let V3 x y _ = unpack' a in pack' $ V2 x y
     z_ a    = let V3 _ _ z = unpack' a in z
 
-instance (Freq f, GPU (V4 t), GPU (V2 t), GPU t, IsComponent t) => PrjXYZ (Exp f (V4 t)) (Exp f (V2 t)) (Exp f t) where
+instance (GPU (V4 t), GPU (V2 t), GPU t, IsComponent t) => PrjXYZ (Exp f (V4 t)) (Exp f (V2 t)) (Exp f t) where
     xy_ a   = let V4 x y _ _ = unpack' a in pack' $ V2 x y
     z_ a    = let V4 _ _ z _ = unpack' a in z
 
-instance (Freq f, GPU (V4 t), GPU (V3 t), GPU t, IsComponent t) => PrjXYZW (Exp f (V4 t)) (Exp f (V3 t)) (Exp f t) where
+instance (GPU (V4 t), GPU (V3 t), GPU t, IsComponent t) => PrjXYZW (Exp f (V4 t)) (Exp f (V3 t)) (Exp f t) where
     xyz_ a  = let V4 x y z _ = unpack' a in pack' $ V3 x y z
     w_ a    = let V4 _ _ _ w = unpack' a in w
 

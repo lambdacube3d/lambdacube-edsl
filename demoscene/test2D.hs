@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -13,9 +13,6 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import System.Environment
-
-import TypeLevel.Number.Nat.Num
-import Data.Typeable
 
 import LC_API
 
@@ -32,9 +29,10 @@ import Geometry
 import Utility
 import Blur
 import Glow
+import OldFilm
 
 
-screenQuad :: Exp Obj (FrameBuffer N1 (V4F,V4F))
+screenQuad :: Exp Obj (FrameBuffer 1 (V4F,V4F))
 screenQuad = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B) :. ColorOp NoBlending (one' :: V4B) :. ZT
@@ -76,7 +74,7 @@ dummy512 img = renderScreen frag
         sizeI = 512 :: Word32
         smp i coord = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) coord
     
-renderRGB :: Exp Obj (FrameBuffer N1 (V4F,V4F,V4F))
+renderRGB :: Exp Obj (FrameBuffer 1 (V4F,V4F,V4F))
 renderRGB = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):. ColorOp NoBlending (one' :: V4B):.ColorOp NoBlending (one' :: V4B):.ZT
@@ -94,13 +92,14 @@ renderRGB = Accumulate fragCtx PassAll frag rast clear
     frag :: Exp F () -> FragmentOut (Color V4F :+: Color V4F :+: Color V4F :+: ZZ)
     frag _ = FragmentOut $ Const (V4 1 0 0 1) :. Const (V4 0 1 0 1) :. Const (V4 0 0 1 1) :. ZT
 
+n_time = "time"
 
 main :: IO ()
 main = do
-    let lcnet :: Exp Obj (Image N1 V4F)
+    let lcnet :: Exp Obj (Image 1 V4F)
         --lcnet = dummy512 $ fxBlur blur glowImg
-        lcnet = fxGlow glow sceneImg glowImg
-        --lcnet = fxBlur blur $ sceneImg
+        --lcnet = fxOldFilm oldFilm { ofTimeLapse = Uni (IFloat n_time) } sceneImg -- $ fxGlow glow sceneImg glowImg
+        lcnet = fxBlur blur $ sceneImg
         glowImg = dummy512 $ PrjFrameBuffer "" tix0 screenQuad
         sceneImg = PrjFrameBuffer "" tix1 screenQuad
 
@@ -190,12 +189,14 @@ scene setSize slotU objU windowSize mousePosition fblrPress = do
     time <- stateful 0 (+)
     let up      = uniformFloat "up" slotU
         down    = uniformFloat "down" slotU
+        setTime = uniformFloat n_time slotU
         setupGFX (w,h) t' = do
             setSize (fromIntegral w) (fromIntegral h)
             let s = sin t * 0.5 + 0.5
                 t = 1.5 * t'
             down s
             up (s+0.028)
+            setTime t
             return ()
     r <- effectful2 setupGFX windowSize time
     return r

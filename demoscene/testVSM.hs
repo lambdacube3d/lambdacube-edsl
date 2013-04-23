@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -12,8 +12,6 @@ import FRP.Elerea.Param
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as V
-
-import TypeLevel.Number.Nat.Num
 
 import LC_API
 --import LCLanguage
@@ -42,7 +40,7 @@ quad = Mesh
     a = -1
     b = 1
 
-post :: Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+post :: Exp Obj (Image 1 V4F) -> Exp Obj (FrameBuffer 1 (Float,V4F))
 post img = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V4B):.ZT
@@ -72,7 +70,7 @@ post img = Accumulate fragCtx PassAll frag rast clear
     smp = Sampler LinearFilter Clamp tex
     tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
 
-screenQuad :: Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 V4F)
+screenQuad :: Exp Obj (Image 1 V4F) -> Exp Obj (FrameBuffer 1 V4F)
 screenQuad img = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
@@ -113,12 +111,12 @@ screenQuad img = Accumulate fragCtx PassAll frag rast clear
         off = (pack' $ V2 r (r @* r)) @* (floatF 0.1 @+ floatF 0.32 @* (sin' (time @* floatF 6) :: Exp F Float))
         t = time @* floatF 10
         rot = pack' $ V2 (fract' (t @* floatF 0.1)) (floatF 0) :: Exp F V2F
-        smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+        smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) 1) uv
         smp' i uv = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [i]) uv
 
 main :: IO ()
 main = do
-    let lcnet :: Exp Obj (Image N1 V4F)
+    let lcnet :: Exp Obj (Image 1 V4F)
         --lcnet = PrjFrameBuffer "outFB" tix0 $ moments
         --lcnet = PrjFrameBuffer "outFB" tix0 vsm
         lcnet = PrjFrameBuffer "outFB" tix0 $ screenQuad $ PrjFrameBuffer "outFB" tix0 vsm
@@ -165,17 +163,17 @@ main = do
         [ Array ArrWord8 (3 * width * height) imagePixelData0
         , Array ArrWord8 (3 * width * height) imagePixelData1
         ]
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip $
+    texture <- compileTexture $ TextureData (Texture2D (Float RGB) n1) (V2 128 128) Mip $
         [ ImageData pixelBuffer 0 -- mip levels
         , ImageData pixelBuffer 1
         ]
   alternative B:
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip $
+    texture <- compileTexture $ TextureData (Texture2D (Float RGB) n1) (V2 128 128) Mip $
         [ Array ArrWord8 (3 * width * height) imagePixelData0
         , Array ArrWord8 (3 * width * height) imagePixelData1
         ]
   alternative C:
-    texture <- compileTexture $ TextureData (Texture2D (Float RGB) N1) (V2 128 128) Mip
+    texture <- compileTexture $ TextureData (Texture2D (Float RGB) n1) (V2 128 128) Mip
     updateTexture texture $
         [ Array ArrWord8 (3 * width * height) imagePixelData0
         , Array ArrWord8 (3 * width * height) imagePixelData1

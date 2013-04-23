@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Glow where
 
 import LC_API
@@ -20,7 +21,7 @@ glow = Glow
     , glowBlend = Screen
     }
 
-fxGlow :: Glow -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F)
+fxGlow :: Glow -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F)
 fxGlow cfg sceneImg glowImg = renderScreen frag
   where
     sizeI   = 512 :: Word32 -- FIXME: we should keep the original image size

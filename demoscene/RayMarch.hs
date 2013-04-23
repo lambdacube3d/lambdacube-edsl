@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module RayMarch (fxRayMarch) where
 
 import LC_API
@@ -9,7 +10,7 @@ iGlobalTime
 iResolution.xy
 -}
 -- port of: https://www.shadertoy.com/view/MsfGzr
-fxRayMarch :: Exp F Float -> Exp F V2F -> Exp Obj (Image N1 V4F)
+fxRayMarch :: Exp F Float -> Exp F V2F -> Exp Obj (Image 1 V4F)
 fxRayMarch iGlobalTime iResolution = renderScreen frag
   where
 {-

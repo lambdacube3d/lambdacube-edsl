@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Scanlines where
 
 import LC_API
@@ -25,7 +26,7 @@ fScanlines sl uv fromColor = fromColor @* mix' sl1 sl2 r
 
 -- Scanlines from a texture, useable as a render pass.
 -- Use @fScanlines@ to use it as part of a bigger fragment shader.
-fxScanlines :: Scanlines -> Exp Obj (Image N1 V4F) -> Exp F V2F -> Exp F V4F
+fxScanlines :: Scanlines -> Exp Obj (Image 1 V4F) -> Exp F V2F -> Exp F V4F
 fxScanlines sl img uv = fScanlines sl uv c
   where
     c = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv

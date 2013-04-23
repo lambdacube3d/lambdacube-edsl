@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -14,9 +14,6 @@ import qualified Data.ByteString.Lazy as LB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import System.Environment
-
-import TypeLevel.Number.Nat.Num
-import Data.Typeable
 
 import LC_API
 
@@ -66,7 +63,7 @@ background tex = Accumulate fragCtx PassAll frag rast clear
       where
         out = vec4' uv (floatV 1) (floatV 1)
 
-model :: Exp Obj (FrameBuffer N1 V4F)
+model :: Exp Obj (FrameBuffer 1 V4F)
 model = Accumulate fragCtx PassAll frag rast (background n_backgroundTex)
   where
     blend   = Blend (FuncAdd, FuncAdd) ((SrcAlpha, One), (SrcAlpha, OneMinusSrcAlpha)) zero'
@@ -155,7 +152,7 @@ objectUniforms =
 
 main :: IO ()
 main = do
-    let lcnet :: Exp Obj (Image N1 V4F)
+    let lcnet :: Exp Obj (Image 1 V4F)
         lcnet = postProcess $ PrjFrameBuffer "outFB" tix0 model
 
     windowSize <- initCommon "LC DSL 2D Demo"

@@ -1,11 +1,9 @@
 module LC_T_HOAS where
 
-import Data.ByteString.Char8
-import Data.Typeable
-import Data.Int
+import GHC.TypeLits
 
-import TypeLevel.Number.Nat
-import TypeLevel.Number.Nat.Num
+import Data.ByteString.Char8
+import Data.Int
 
 import LC_G_Type
 import LC_G_APIType (Filter(..),EdgeMode(..))
@@ -14,11 +12,11 @@ import LC_T_DSLType
 import LC_T_PrimFun
 
 -- Common Exp, describes shader functions
-data Exp stage t where
+data Exp :: Frequency -> * -> * where
     -- Needed for conversion to de Bruijn form
     Tag     :: GPU t
             => Int
-            -> TypeRep
+            -> String
             -> Exp stage t
                  -- environment size at defining occurrence
 {-
@@ -94,10 +92,10 @@ data Exp stage t where
     Transform       :: (GPU a, GPU b)
                     => (Exp V a -> VertexOut b)                       -- vertex shader
                     -> Exp Obj (VertexStream prim a)
-                    -> Exp Obj (PrimitiveStream prim N1 V b)
+                    -> Exp Obj (PrimitiveStream prim 1 V b)
 
     Reassemble      :: GeometryShader primIn primOut layerCount a b
-                    -> Exp Obj (PrimitiveStream primIn N1 V a)
+                    -> Exp Obj (PrimitiveStream primIn 1 V a)
                     -> Exp Obj (PrimitiveStream primOut layerCount G b)
 
     Rasterize       :: RasterContext prim
@@ -120,11 +118,11 @@ data Exp stage t where
                     -> Exp Obj (FrameBuffer layerCount b)
                     -> Exp Obj (Image layerCount t)
 
-    PrjImage        :: (Nat idx, LesserEq idx layerCount)
+    PrjImage        :: ((idx + 1) <= layerCount, SingI idx)
                     => ByteString                       -- internal image output (can be allocated on request)
-                    -> idx
+                    -> NatNum idx
                     -> Exp Obj (Image layerCount t)
-                    -> Exp Obj (Image N1 t)
+                    -> Exp Obj (Image 1 t)
 {-
     -- dynamic extension support
     AccumulateSet   :: GPU a
@@ -156,8 +154,8 @@ data VertexOut t where
 -- Geometry
 -- describes a geometry shader
 data GeometryShader primIn primOut layerNum a b where
-    GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, Nat layerNum)
-                        => layerNum                                                 -- geometry shader:
+    GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, SingI layerNum)
+                        => NatNum layerNum                                          -- geometry shader:
                         -> primOut                                                  -- output primitive
                         -> Int                                                      -- max amount of generated vertices
                         -> (Exp G (PrimitiveVertices primIn a) -> Exp G (i,Int32))  -- how many primitives?
@@ -215,5 +213,5 @@ data GPOutput where
                 -> Exp Obj (Image layerCount t)
                 -> GPOutput
 
-    ScreenOut   :: Exp Obj (Image N1 t)
+    ScreenOut   :: Exp Obj (Image 1 t)
                 -> GPOutput

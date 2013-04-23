@@ -1,7 +1,5 @@
 module LC_U_PrimFun where
 
-import Data.Data
-
 data PrimFun
     -- Vec/Mat (de)construction
     = PrimTupToV2
@@ -159,4 +157,4 @@ data PrimFun
     | PrimTextureGradOffset
     | PrimTextureProjGrad
     | PrimTextureProjGradOffset
-    deriving (Eq, Ord, Show, Data,Typeable)
+    deriving (Eq, Ord, Show)

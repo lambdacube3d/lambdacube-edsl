@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, OverloadedStrings #-}
+{-# LANGUAGE TypeOperators, OverloadedStrings, DataKinds #-}
 module Utility where
 
 import LC_API
@@ -37,10 +37,10 @@ iter n s0 fn = Loop st lc sr (tup2 (intF 0,s0))
         (_,s) = untup2 is
 
 -- screen quad rendering
-renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image N1 V4F)
+renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image 1 V4F)
 renderScreen = PrjFrameBuffer "" tix0 . renderScreen'
 
-renderScreen' :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer N1 V4F)
+renderScreen' :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer 1 V4F)
 renderScreen' frag = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, ParallelListComp #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, ParallelListComp, DataKinds #-}
 
 import Control.Monad
 import Control.Monad.Fix
@@ -21,7 +21,7 @@ weights = gaussianSamples 1000 101
 dirH = V2 1 0
 dirV = V2 0 1
 
-finalImage :: Exp Obj (FrameBuffer N1 V4F)
+finalImage :: Exp Obj (FrameBuffer 1 V4F)
 finalImage = filterPass dirV (filterPass dirH originalImage)
   where
     filterPass dir = convolve dir weights . projectBuffer
@@ -32,7 +32,7 @@ finalImage = filterPass dirV (filterPass dirH originalImage)
 
 main :: IO ()
 main = do
-    let pipeline :: Exp Obj (Image N1 V4F)
+    let pipeline :: Exp Obj (Image 1 V4F)
         pipeline = PrjFrameBuffer "outFB" tix0 finalImage
 
     initWindow "LambdaCube 3D Convolution Filter Demo"
@@ -127,7 +127,7 @@ normalise ocs = [(o, c/s) | (o, c) <- ocs]
   where
     s = sum [c | (_, c) <- ocs]
 
-originalImage :: Exp Obj (FrameBuffer N1 V4F)
+originalImage :: Exp Obj (FrameBuffer 1 V4F)
 originalImage = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     accCtx = AccumulationContext Nothing (ColorOp NoBlending (one' :: V4B) :. ZT)
@@ -151,7 +151,7 @@ originalImage = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) cle
         b = Cond ((x' @- y') @% (floatF 50) @< (floatF 25)) (floatF 0) (floatF 1)
         col = pack' (V4 r g b (floatF 1))
 
-convolve :: V2F -> [(Float, Float)] -> Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 V4F)
+convolve :: V2F -> [(Float, Float)] -> Exp Obj (Image 1 V4F) -> Exp Obj (FrameBuffer 1 V4F)
 convolve (V2 dx dy) weights img = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     resX = windowWidth
@@ -178,7 +178,7 @@ convolve (V2 dx dy) weights img = Accumulate accCtx PassAll frag (Rasterize tria
         smp = Sampler LinearFilter Clamp tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 resX resY) NoMip [img]
 
-additiveSample :: SB.ByteString -> Exp Obj (Image N1 V4F) -> Exp Obj (FrameBuffer N1 V4F)
+additiveSample :: SB.ByteString -> Exp Obj (Image 1 V4F) -> Exp Obj (FrameBuffer 1 V4F)
 additiveSample slot img = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     resX = windowWidth

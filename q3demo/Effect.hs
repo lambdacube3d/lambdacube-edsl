@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 module Effect where
 
 import Data.ByteString.Char8 (ByteString)
@@ -29,10 +29,10 @@ intF :: Int32 -> Exp F Int32
 intF = Const
 
 -- screen quad rendering
-renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image N1 V4F)
+renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image 1 V4F)
 renderScreen = PrjFrameBuffer "" tix0 . renderScreen'
 
-renderScreen' :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer N1 V4F)
+renderScreen' :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer 1 V4F)
 renderScreen' frag = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
@@ -69,7 +69,7 @@ gamma = Gamma
     , gammaInvGamma     = floatF (1 / 2.2)
     }
 
-fxGamma :: Gamma -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F)
+fxGamma :: Gamma -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F)
 fxGamma cfg img = renderScreen frag
   where
     sizeI   = 1024 -- FIXME

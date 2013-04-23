@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -13,9 +13,6 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import System.Environment
-
-import TypeLevel.Number.Nat.Num
-import Data.Typeable
 
 import LC_API
 
@@ -48,7 +45,7 @@ points = Mesh
     a = -0.5
     b = 0.5
 
-sprites :: Exp Obj (Image N1 V4F)
+sprites :: Exp Obj (Image 1 V4F)
 sprites = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp blend (one' :: V4B):.ZT
@@ -63,13 +60,13 @@ sprites = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
     vert uv = VertexOut (vec4' uv (floatV 1) (floatV 1)) (Const 20) ZT
 
     offset = Uni (IV2F "offset") :: Exp F V2F
-    smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+    smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) 1) uv
     frag :: Exp F () -> FragmentOut (Color V4F :+: ZZ)
     frag _ = FragmentOut $ (smp "explosion" $ (pointCoord' @* floatF 0.25 @+ offset)) :. ZT
 
 main :: IO ()
 main = do
-    let lcnet :: Exp Obj (Image N1 V4F)
+    let lcnet :: Exp Obj (Image 1 V4F)
         lcnet = renderScreen $ (FragmentOut.(:.ZT).fxScanlines sl sprites)
         sl    = scanlines { scanlinesFrequency = floatF 128
                           , scanlinesHigh = Const $ V4 0.9 1 1 1

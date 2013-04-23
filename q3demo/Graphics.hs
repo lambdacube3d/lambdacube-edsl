@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, OverloadedStrings #-}
+{-# LANGUAGE TypeOperators, OverloadedStrings, DataKinds #-}
 module Graphics where
 
 import Data.ByteString.Char8 (ByteString)
@@ -306,7 +306,7 @@ mkFilterFunction sa = case saAlphaFunc sa of
             A_Lt128 -> a @< floatF 0.5
             A_Ge128 -> a @>= floatF 0.5
 
-mkStage :: ByteString -> CommonAttrs -> Exp Obj (FrameBuffer N1 (Float,V4F)) -> StageAttrs -> Exp Obj (FrameBuffer N1 (Float,V4F))
+mkStage :: ByteString -> CommonAttrs -> Exp Obj (FrameBuffer 1 (Float,V4F)) -> StageAttrs -> Exp Obj (FrameBuffer 1 (Float,V4F))
 mkStage name ca prevFB sa = Accumulate aCtx fFun fSh (Rasterize rCtx (Transform vSh input)) prevFB
   where
     input   = Fetch name Triangle (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")
@@ -316,16 +316,16 @@ mkStage name ca prevFB sa = Accumulate aCtx fFun fSh (Rasterize rCtx (Transform 
     fSh     = mkFragmentShader sa
     fFun    = mkFilterFunction sa
 
-mkShader :: Exp Obj (FrameBuffer N1 (Float,V4F)) -> (ByteString,CommonAttrs) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+mkShader :: Exp Obj (FrameBuffer 1 (Float,V4F)) -> (ByteString,CommonAttrs) -> Exp Obj (FrameBuffer 1 (Float,V4F))
 mkShader fb (name,ca) = foldl' (mkStage name ca) fb $ caStages ca
 
-q3GFX :: [(ByteString,CommonAttrs)] -> Exp Obj (FrameBuffer N1 (Float,V4F))
+q3GFX :: [(ByteString,CommonAttrs)] -> Exp Obj (FrameBuffer 1 (Float,V4F))
 q3GFX shl = {-blurVH $ PrjFrameBuffer "" tix0 $ -}errorShader $ foldl' mkShader clear ordered
   where
     ordered = sortBy (\(_,a) (_,b) -> caSort a `compare` caSort b) shl
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
 
-errorShader :: Exp Obj (FrameBuffer N1 (Float,V4F)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+errorShader :: Exp Obj (FrameBuffer 1 (Float,V4F)) -> Exp Obj (FrameBuffer 1 (Float,V4F))
 errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
   where
     offset  = NoOffset--Offset (0) (-10)
@@ -350,7 +350,7 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
         one         = floatF 1
         v'          = pack' $ V4 (one @- r) (one @- g) (one @- b) one
 
-errorShaderFill :: Exp Obj (FrameBuffer N1 (Float,V4F)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+errorShaderFill :: Exp Obj (FrameBuffer 1 (Float,V4F)) -> Exp Obj (FrameBuffer 1 (Float,V4F))
 errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
   where
     blend   = Blend (FuncAdd,Min) ((One,One),(One,One)) one'

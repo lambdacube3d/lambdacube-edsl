@@ -1,20 +1,20 @@
 module LC_G_Type where
 
 import Data.Int
-import Data.Data
 import Data.Word
 import Foreign.Storable
 import Foreign.Ptr
 
 -- constructors are required for texture specification
-data DIM1 = DIM1 deriving (Eq,Ord,Typeable)
-data DIM2 = DIM2 deriving (Eq,Ord,Typeable)
-data DIM3 = DIM3 deriving (Eq,Ord,Typeable)
-data DIM4 deriving Typeable
+data Dimension
+    = DIM1
+    | DIM2
+    | DIM3
+    | DIM4
 
-data V2 a = V2 !a !a deriving (Eq,Ord,Show,Data,Typeable)
-data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Data,Typeable)
-data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Data,Typeable)
+data V2 a = V2 !a !a deriving (Eq,Ord,Show)
+data V3 a = V3 !a !a !a deriving (Eq,Ord,Show)
+data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show)
 
 -- matrices are stored in column major order
 type M22F = V2 V2F
@@ -41,7 +41,7 @@ type V3B = V3 Bool
 type V4B = V4 Bool
 
 -- vector types: V2, V3, V4
-class IsVec dim vec component | vec -> dim component, dim component -> vec
+class IsVec (dim :: Dimension) vec component | vec -> dim component, dim component -> vec
 instance IsVec DIM2 (V2 Float) Float
 instance IsVec DIM3 (V3 Float) Float
 instance IsVec DIM4 (V4 Float) Float
@@ -56,7 +56,7 @@ instance IsVec DIM3 (V3 Bool) Bool
 instance IsVec DIM4 (V4 Bool) Bool
 
 -- scalar and vector types: scalar, V2, V3, V4
-class IsVecScalar dim vec component | vec -> dim component, dim component -> vec
+class IsVecScalar (dim :: Dimension) vec component | vec -> dim component, dim component -> vec
 instance IsVecScalar DIM1 Float Float
 instance IsVecScalar DIM2 (V2 Float) Float
 instance IsVecScalar DIM3 (V3 Float) Float

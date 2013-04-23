@@ -28,13 +28,13 @@ type Sampler2DMSArray       = Sampler DIM2 A FloatMS        NoMip               
 type SamplerBuffer          = Sampler DIM1 Z BufferFloat    NoMip
 -}
 
-type GSampler1D t ar        = Sampler DIM1 SingleTex t ar
-type GSampler2D t ar        = Sampler DIM2 SingleTex t ar
-type GSampler3D t ar        = Sampler DIM3 SingleTex t ar
-type GSamplerCube t ar      = Sampler DIM2 CubeTex t ar
-type GSampler1DArray t ar   = Sampler DIM1 ArrayTex t ar
-type GSampler2DArray t ar   = Sampler DIM2 ArrayTex t ar
-type GSampler2DRect t ar    = Sampler Rect SingleTex t ar
+type GSampler1D t ar        = Sampler Tex1D SingleTex t ar
+type GSampler2D t ar        = Sampler Tex2D SingleTex t ar
+type GSampler3D t ar        = Sampler Tex3D SingleTex t ar
+type GSamplerCube t ar      = Sampler Tex2D CubeTex t ar
+type GSampler1DArray t ar   = Sampler Tex1D ArrayTex t ar
+type GSampler2DArray t ar   = Sampler Tex2D ArrayTex t ar
+type GSampler2DRect t ar    = Sampler TexRect SingleTex t ar
 
 type family TexelRepr sampler
 type instance TexelRepr (Sampler dim arr (v t) Red)     = t

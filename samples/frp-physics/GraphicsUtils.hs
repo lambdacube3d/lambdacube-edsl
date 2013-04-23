@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, NamedFieldPuns, ParallelListComp #-}
+{-# LANGUAGE OverloadedStrings, NamedFieldPuns, ParallelListComp, DataKinds #-}
 
 module GraphicsUtils where
 

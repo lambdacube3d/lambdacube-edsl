@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Gamma where
 
 import LC_API
@@ -18,7 +19,7 @@ gamma = Gamma
     , gammaInvGamma     = floatF (1 / 2.2)
     }
 
-fxGamma :: Gamma -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F)
+fxGamma :: Gamma -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F)
 fxGamma cfg img = renderScreen frag
   where
     sizeI   = 512 -- FIXME

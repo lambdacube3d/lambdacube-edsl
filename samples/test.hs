@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
@@ -7,8 +7,6 @@ import Data.Vect.Float
 import Data.Word
 import Foreign
 import qualified Data.Vector.Storable as V
-
-import TypeLevel.Number.Nat.Num
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 
@@ -31,7 +29,7 @@ drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 drop3 :: Exp s V3F -> Exp s V2F
 drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
 
-simple :: Exp Obj (VertexStream Triangle (V3F,V3F)) -> Exp Obj (FrameBuffer N1 V4F)
+simple :: Exp Obj (VertexStream Triangle (V3F,V3F)) -> Exp Obj (FrameBuffer 1 V4F)
 simple objs = Accumulate fragCtx PassAll frag rast clear
   where
     worldViewProj = Uni (IM44F "worldViewProj")
@@ -49,10 +47,10 @@ simple objs = Accumulate fragCtx PassAll frag rast clear
     frag :: Exp F V3F -> FragmentOut (Color V4F :+: ZZ)
     frag a = FragmentOut $ snoc a 1 :. ZT
 
-    diffuse     = TextureSlot "diffuse" $ Texture2D (Float RGB) n1
+    diffuse     = TextureSlot "diffuse" $ Texture2D (Float RGB) 1
     sampler     = Sampler PointFilter Wrap diffuse
     texSize     = textureSize' sampler $ Const 0
-    renderTex   = Texture (Texture2D (Float RGBA) n1) AutoMip (PrjFrameBuffer "" tix0 $ simple objs)
+    renderTex   = Texture (Texture2D (Float RGBA) 1) AutoMip (PrjFrameBuffer "" tix0 $ simple objs)
 
     frag' :: Exp F V3F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     frag' a = FragmentOutRastDepth $ snoc (texture' sampler (drop3 a)) 1 :. ZT
@@ -87,7 +85,7 @@ initGL title = do
 main :: IO ()
 main = do
     let --lcnet :: Exp Obj (FrameBuffer Z (Color :+: Z) (V4F :+: Z))
-        lcnet :: Exp Obj (Image N1 V4F)
+        lcnet :: Exp Obj (Image 1 V4F)
         lcnet  = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
         --lcnet' = convertGP lcnet
 {-

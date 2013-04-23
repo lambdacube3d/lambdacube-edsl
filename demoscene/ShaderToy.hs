@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module ShaderToy (fxFakeRipple, fxWarping, fxMotionBlur) where
 
 import LC_API
@@ -10,7 +11,7 @@ smp i c = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA)
     sizeI   = 512 :: Word32 -- FIXME: we should keep the original image size
 
 -- port of: https://www.shadertoy.com/view/lds3RH
-fxFakeRipple :: Exp F Float -> Exp F V2F -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F)
+fxFakeRipple :: Exp F Float -> Exp F V2F -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F)
 fxFakeRipple iGlobalTime iResolution img = renderScreen $ \_ -> FragmentOut $ color :. ZT
   where
     uv = (xy_ fragCoord') @/ iResolution
@@ -29,7 +30,7 @@ xyy_ v = pack' $ V3 x y y
 
 -- port of: https://www.shadertoy.com/view/Xsl3zn
 -- License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-fxWarping :: Exp F Float -> Exp F V2F -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F)
+fxWarping :: Exp F Float -> Exp F V2F -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F)
 fxWarping iGlobalTime iResolution img = renderScreen $ \_ -> FragmentOut $ vec4' col4 (floatF 1) :. ZT
   where
     uv = xy_ fragCoord' @/ iResolution @* floatF 0.5
@@ -43,7 +44,7 @@ fxWarping iGlobalTime iResolution img = renderScreen $ \_ -> FragmentOut $ vec4'
 
 -- port of: https://www.shadertoy.com/view/Xsf3Rn
 -- License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-fxMotionBlur :: Exp F Float -> Exp F V2F -> Exp Obj (Image N1 V4F) -> Exp Obj (Image N1 V4F)
+fxMotionBlur :: Exp F Float -> Exp F V2F -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F)
 fxMotionBlur iGlobalTime iResolution img = renderScreen $ \_ -> FragmentOut $ vec4' (total @* w) (floatF 1) :. ZT
   where
     deform :: Exp F V2F -> Exp F Float -> Exp F V3F

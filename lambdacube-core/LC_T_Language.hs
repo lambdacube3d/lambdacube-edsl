@@ -2,7 +2,6 @@
 module LC_T_Language where
 
 import Data.Int
-import Data.Typeable
 import Data.Word
 
 import LC_G_Type
@@ -393,10 +392,10 @@ instance IdentityMatrix M44F where
 -}
 
 class PkgVec v where
-    unpack' :: (GPU a, GPU (v a), IsComponent a, Typeable (EltRepr (v a)), Typeable (EltRepr' (v a)))
+    unpack' :: (GPU a, GPU (v a), IsComponent a)
             => Exp stage (v a) -> v (Exp stage a)
 
-    pack'   :: (GPU a, GPU (v a), IsComponent a, Typeable (EltRepr (v a)), Typeable (EltRepr' (v a)))
+    pack'   :: (GPU a, GPU (v a), IsComponent a)
             => v (Exp stage a) -> Exp stage (v a)
 
 instance PkgVec V2 where

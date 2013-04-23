@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 module VSM where
 
 import Data.ByteString.Char8 (ByteString)
@@ -34,7 +34,7 @@ intF = Const
 
 -- blur
 
-blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V2F :+: ZZ)) -> Exp Obj (FrameBuffer N1 (Float,V2F))
+blur' :: (Exp F V2F -> FragmentOut (Depth Float :+: Color V2F :+: ZZ)) -> Exp Obj (FrameBuffer 1 (Float,V2F))
 blur' frag = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Always False:.ColorOp NoBlending (one' :: V2B):.ZT
@@ -73,7 +73,7 @@ gaussFilter9 =
     , (4.0,    0.05)
     ]
 
-blurVH :: Exp Obj (Image N1 V2F) -> Exp Obj (FrameBuffer N1 (Float,V2F))
+blurVH :: Exp Obj (Image 1 V2F) -> Exp Obj (FrameBuffer 1 (Float,V2F))
 blurVH img = blur' fragH
   where
     sizeT = 512
@@ -103,7 +103,7 @@ blurVH img = blur' fragH
 ----------
 -- VSM ---
 ----------
-moments :: Exp Obj (FrameBuffer N1 (Float,V2F))
+moments :: Exp Obj (FrameBuffer 1 (Float,V2F))
 moments = Accumulate fragCtx PassAll storeDepth rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V2B):.ZT
@@ -128,7 +128,7 @@ moments = Accumulate fragCtx PassAll storeDepth rast clear
         moment1 = depth
         moment2 = depth @* depth @+ floatF 0.25 @* (dx @* dx @+ dy @* dy)
 
-vsm :: Exp Obj (FrameBuffer N1 (Float,V4F))
+vsm :: Exp Obj (FrameBuffer 1 (Float,V4F))
 vsm = Accumulate fragCtx PassAll calcLuminance rast clear
   where
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
@@ -181,21 +181,21 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
 
     sampler = Sampler LinearFilter Clamp shadowMapBlur
     --Texture (Exp Obj) dim arr t ar
-    shadowMap :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RG
+    shadowMap :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
     shadowMap = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
 
-    shadowMapBlur :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RG
+    shadowMapBlur :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
     shadowMapBlur = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
 {-
-tx :: Exp Obj (Image N1 (V2 Float))
+tx :: Exp Obj (Image 1 (V2 Float))
 tx = PrjFrameBuffer "" tix0 moments
 
-tex :: Exp Obj (Image N1 Float)
+tex :: Exp Obj (Image 1 Float)
 tex = undefined
 
-sm :: Texture (Exp Obj) DIM2 SingleTex (Regular Float) RG
-sm = Texture (Texture2D (Float RG) n1) AutoMip [tx]
+sm :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
+sm = Texture (Texture2D (Float RG) 1) AutoMip [tx]
 
-smp :: Exp stage (Sampler DIM2 SingleTex (Regular Float) RG)
+smp :: Exp stage (Sampler Tex2D SingleTex (Regular Float) RG)
 smp = Sampler LinearFilter Clamp sm
 -}

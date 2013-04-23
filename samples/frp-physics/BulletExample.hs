@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp #-}
+{-# LANGUAGE OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds #-}
 
 {-
 
@@ -339,7 +339,7 @@ main = do
           where
             involves b (b1,b2,_) = b == unsafeCoerce b1 || b == unsafeCoerce b2
 
-    let pipeline :: Exp Obj (Image N1 V4F)
+    let pipeline :: Exp Obj (Image 1 V4F)
         pipeline = PrjFrameBuffer "outFB" tix0 translucentShading --simpleShading
     
     (duration, renderer) <- measureDuration $ compileRenderer (ScreenOut pipeline)
@@ -561,7 +561,7 @@ rayTarget (Vec2 windowW windowH) (CameraInfo cameraPos targetPos cameraUp) (Vec2
     
     rayCenter = cameraPos &+ rayForward
 
-simpleShading :: Exp Obj (FrameBuffer N1 (Float, V4F))
+simpleShading :: Exp Obj (FrameBuffer 1 (Float, V4F))
 simpleShading = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
@@ -587,7 +587,7 @@ simpleShading = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) cle
         light = max' (floatF 0) (dot' worldNormal (normalize' (lightPosition @- worldPos)))
         (worldPos, worldNormal) = untup2 attr
 
-translucentShading :: Exp Obj (FrameBuffer N1 (Float, V4F))
+translucentShading :: Exp Obj (FrameBuffer 1 (Float, V4F))
 translucentShading = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) simpleShading
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp blending (one' :: V4B) :. ZT)

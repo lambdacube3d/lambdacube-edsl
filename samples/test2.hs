@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -13,8 +13,6 @@ import FRP.Elerea.Param
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import Data.Typeable
-
-import TypeLevel.Number.Nat.Num
 
 import LC_API
 --import LCLanguage
@@ -54,10 +52,10 @@ intF = Const
 v4F :: V4F -> Exp F V4F
 v4F = Const
 
-simple' :: Exp Obj (FrameBuffer N1 (Float,V4F))
+simple' :: Exp Obj (FrameBuffer 1 (Float,V4F))
 simple' = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (one'::V4F):.ZT)
 
-simple :: Exp Obj (VertexStream Triangle (V3F,V3F)) -> Exp Obj (FrameBuffer N1 (Float,V4F))
+simple :: Exp Obj (VertexStream Triangle (V3F,V3F)) -> Exp Obj (FrameBuffer 1 (Float,V4F))
 simple objs = Accumulate fragCtx (Filter filter) frag rast clear
   where
     rastCtx :: RasterContext Triangle
@@ -66,13 +64,13 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
     fragCtx :: AccumulationContext (Depth Float :+: (Color (V4 Float) :+: ZZ))
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     
-    clear :: Exp Obj (FrameBuffer N1 (Float,V4F))
+    clear :: Exp Obj (FrameBuffer 1 (Float,V4F))
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (zero'::V4F):.ZT)
     
-    rast :: Exp Obj (FragmentStream N1 V3F)
+    rast :: Exp Obj (FragmentStream 1 V3F)
     rast    = Rasterize rastCtx prims
 
-    prims :: Exp Obj (PrimitiveStream Triangle N1 V V3F)
+    prims :: Exp Obj (PrimitiveStream Triangle 1 V V3F)
     prims   = Transform vert objs
 
     worldViewProj :: Exp V M44F
@@ -97,9 +95,9 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
 
 main :: IO ()
 main = do
-    let lcnet :: Exp Obj (Image N1 V4F)
+    let lcnet :: Exp Obj (Image 1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
-        lcnet' :: Exp Obj (Image N1 V4F)
+        lcnet' :: Exp Obj (Image 1 V4F)
         lcnet' = PrjFrameBuffer "outFB" tix0 $ simple'
 
     windowSize <- initCommon "LC DSL Demo 2"

@@ -1,5 +1,5 @@
 {-# OPTIONS -cpp #-}
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
 
 import Control.Applicative hiding (Const)
 import Control.Monad
@@ -35,7 +35,7 @@ main = do
     ilInit
 #endif
     
-    let pipeline :: Exp Obj (Image N1 V4F)
+    let pipeline :: Exp Obj (Image 1 V4F)
         pipeline = PrjFrameBuffer "outFB" tix0 vsm
 
     windowSize <- initWindow "LambdaCube 3D Shadow Mapping Demo"

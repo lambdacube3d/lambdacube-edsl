@@ -1,21 +1,22 @@
 module LC_C_Convert (convertGPOutput) where
 
-import Data.Typeable
+import GHC.TypeLits
+
 import Debug.Trace
 
-import TypeLevel.Number.Nat
-import TypeLevel.Number.Nat.Num
-
-import LC_T_APIType (FlatTuple(..),V,G,F)
+import LC_T_APIType (FlatTuple(..),Frequency(..))
 import LC_T_DSLType (GPU,Tuple(..),TupleType(..),TupleIdx(..))
 import qualified LC_T_APIType as T
-import qualified LC_T_DSLType as T
+import qualified LC_T_DSLType as T hiding (Shadow)
 import qualified LC_T_PrimFun as T
 import qualified LC_T_HOAS as H
 import LC_U_DeBruijn
 import LC_U_APIType
 import LC_G_APIType
 import LC_C_PrimFun
+
+toInt :: SingI n => T.NatNum n -> Int
+toInt (a :: T.NatNum n) = fromInteger $ fromSing (sing :: Sing (n :: Nat))
 
 prjIdx i lyt = i--length lyt - i - 1
 
@@ -205,7 +206,7 @@ convertFun1 cvt lyt f = lam $ body $ cvt lyt' (f a)
   where
     lyt'    = []:lyt
     a       = case f of
-              (fv :: H.Exp stage t -> t2) -> H.Tag (length lyt) (typeOf (undefined :: t))
+              (fv :: H.Exp stage t -> t2) -> H.Tag (length lyt) (show $ T.tupleType (undefined :: t))
 
 convertExp :: ExpC exp
            => Layout      -- array environment
@@ -261,7 +262,7 @@ convertBlending (T.Blend a b c)     = Blend a b c
 convertAccumulationContext :: T.AccumulationContext b -> AccumulationContext
 convertAccumulationContext (T.AccumulationContext n ops) = AccumulationContext n $ cvt ops
   where
-    cvt :: FlatTuple Typeable T.FragmentOperation b -> [FragmentOperation]
+    cvt :: FlatTuple T.NoConstraint T.FragmentOperation b -> [FragmentOperation]
     cvt ZT                          = []
     cvt (T.DepthOp a b:.xs)         = DepthOp a b : cvt xs
     cvt (T.StencilOp a b c :. xs)   = StencilOp a b c : cvt xs

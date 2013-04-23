@@ -1,19 +1,41 @@
 module LC_T_APIType where
 
+import GHC.TypeLits
+
 import Data.ByteString.Char8
 import Data.Int
-import Data.Typeable
 import Data.Word
-
-import TypeLevel.Number.Nat
-import TypeLevel.Number.Nat.Num
 
 import LC_G_Type
 import LC_G_APIType hiding (InputType(..))
 import LC_G_APIType (InputType)
 import qualified LC_G_APIType as U
 import qualified LC_U_APIType as U
-import LC_T_DSLType
+import LC_T_DSLType hiding (Shadow)
+import qualified LC_T_DSLType as T
+
+data NatNum :: Nat -> * where
+    N0 :: NatNum 0
+    N1 :: NatNum 1
+    N2 :: NatNum 2
+    N3 :: NatNum 3
+    N4 :: NatNum 4
+    N5 :: NatNum 5
+    N6 :: NatNum 6
+    N7 :: NatNum 7
+    N8 :: NatNum 8
+    N9 :: NatNum 9
+
+n0 = N0
+n1 = N1
+n2 = N2
+n3 = N3
+n4 = N4
+n5 = N5
+n6 = N6
+n7 = N7
+n8 = N8
+n9 = N9
 
 -- user can define stream input using InputTuple type class
 class InputTuple tup where
@@ -144,18 +166,18 @@ blend = Blend (FuncAdd,FuncAdd) ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusS
 
 -- abstract types, used in language AST
 data VertexStream prim t
-data PrimitiveStream prim layerCount stage t
-data FragmentStream layerCount t
+data PrimitiveStream prim (layerCount :: Nat) (stage :: Frequency) t
+data FragmentStream (layerCount :: Nat) t
 
 
 -- flat tuple, another internal tuple representation
 
 -- means unit
-data ZZ = ZZ deriving (Typeable, Show)
+data ZZ = ZZ deriving (Show)
 
 -- used for tuple type description
 infixr 1 :+:
-data tail :+: head = !tail :+: !head deriving (Typeable, Show)
+data tail :+: head = !tail :+: !head deriving (Show)
 
 -- used for tuple value description
 infixr 1 :.
@@ -178,9 +200,9 @@ data Interpolated e a where
                     => e a -> Interpolated e a
 
 -- framebuffer data / fragment output semantic
-data Color a    deriving Typeable
-data Depth a    deriving Typeable
-data Stencil a  deriving Typeable
+data Color a
+data Depth a
+data Stencil a
 
 -- TODO: needed to describe geometry shader input 
 data PrimitiveVertices prim a
@@ -210,11 +232,14 @@ data RasterContext t where
 triangleCtx :: RasterContext Triangle
 triangleCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
 
-type FrameBuffer layerCount t = FlatTuple Typeable (Image layerCount) t
+class NoConstraint a
+instance NoConstraint a
+
+type FrameBuffer layerCount t = FlatTuple NoConstraint (Image layerCount) t
 data AccumulationContext t
     = AccumulationContext
     { accViewportName   :: Maybe ByteString
-    , accOperations     :: FlatTuple Typeable FragmentOperation t
+    , accOperations     :: FlatTuple NoConstraint FragmentOperation t
     }
 
 -- Fragment Operation
@@ -232,26 +257,24 @@ data FragmentOperation ty where
                     => Blending c   -- blending type
                     -> mask         -- write mask
                     -> FragmentOperation (Color color)
-    deriving Typeable
 
 -- specifies an empty image (pixel rectangle)
 -- hint: framebuffer is composed from images
-data Image layerCount t where
-    DepthImage      :: Nat layerCount
-                    => layerCount
+data Image (layerCount :: Nat) t where
+    DepthImage      :: SingI layerCount
+                    => NatNum layerCount
                     -> Float    -- initial value
                     -> Image layerCount (Depth Float)
 
-    StencilImage    :: Nat layerCount
-                    => layerCount
+    StencilImage    :: SingI layerCount
+                    => NatNum layerCount
                     -> Int32    -- initial value
                     -> Image layerCount (Stencil Int32)
 
-    ColorImage      :: (IsNum t, IsVecScalar d color t, Nat layerCount, IsScalar color)
-                    => layerCount
+    ColorImage      :: (IsNum t, IsVecScalar d color t, IsScalar color, SingI layerCount)
+                    => NatNum layerCount
                     -> color    -- initial value
                     -> Image layerCount (Color color)
-    deriving Typeable
 
 -- restriction for framebuffer structure according content semantic
 -- supported configurations: optional stencil + optional depth + [zero or more color]
@@ -304,63 +327,63 @@ type instance NoStencilRepr (Color a :+: b) = Color a :+: (NoStencilRepr b)
 type instance NoStencilRepr (Depth a :+: b) = Depth a :+: (NoStencilRepr b)
 
 -- sampler and texture specification
+data TextureMipMap
+    = TexMip
+    | TexNoMip
 
-data Mip
-data NoMip
-
-data MipMap t where
-    NoMip   :: MipMap NoMip
+data MipMap (t :: TextureMipMap) where
+    NoMip   :: MipMap TexNoMip
 
     Mip     :: Int  -- base level
             -> Int  -- max level
-            -> MipMap Mip
+            -> MipMap TexMip
 
     AutoMip :: Int  -- base level
             -> Int  -- max level
-            -> MipMap Mip
+            -> MipMap TexMip
 
 -- helper type level function, used in language AST
-type family TexDataRepr arity t
+type family TexDataRepr arity (t :: TextureKind *)
 type instance TexDataRepr Red  (v a) = a
 type instance TexDataRepr RG   (v a) = V2 a
 type instance TexDataRepr RGB  (v a) = V3 a
 type instance TexDataRepr RGBA (v a) = V4 a
 
 -- describes texel (texture component) type
-data TextureDataType t arity where
-    Float   :: (IsColorArity a)
+data TextureDataType (kind :: TextureKind *) arity where
+    Float   :: IsColorArity a
             => a
             -> TextureDataType (Regular Float) a
 
-    Int     :: (IsColorArity a)
+    Int     :: IsColorArity a
             => a
             -> TextureDataType (Regular Int) a
 
-    Word    :: (IsColorArity a)
+    Word    :: IsColorArity a
             => a
             -> TextureDataType (Regular Word) a
 
-    Shadow  :: TextureDataType (Shadow Float) Red   -- TODO: add params required by shadow textures
+    Shadow  :: TextureDataType (T.Shadow Float) Red   -- TODO: add params required by shadow textures
 
 
 -- helper type level function for texture specification
 -- tells whether a texture is a single or an array texture
-type family TexArrRepr a
-type instance TexArrRepr N1 = SingleTex
-type instance TexArrRepr (Greater t N1 => t) = ArrayTex
+type family TexArrRepr (a :: Nat) :: TextureArray
+type instance TexArrRepr 1 = SingleTex
+type instance TexArrRepr ((2 <= t) => t) = ArrayTex
 
 -- supported texture component arities
-
 class IsColorArity a where
     toColorArity :: a -> U.ColorArity
+
 instance IsColorArity Red where
-    toColorArity _ = U.Red
+    toColorArity _  = U.Red
 instance IsColorArity RG where
-    toColorArity _ = U.RG
+    toColorArity _  = U.RG
 instance IsColorArity RGB where
-    toColorArity _ = U.RGB
+    toColorArity _  = U.RGB
 instance IsColorArity RGBA where
-    toColorArity _ = U.RGBA
+    toColorArity _  = U.RGBA
 
 -- component arity specification (Red,RG,RGB,RGBA)
 --          hint: there is an interference with Shadow component format
@@ -370,37 +393,37 @@ instance IsColorArity RGBA where
 --                      C: add color arity definition to TextureDataType, this will solve the problem (best solution)
 
 -- fully describes a texture type
-data TextureType dim mip arr layerCount t ar where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
-    Texture1D       :: (Nat layerCount)
+data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> TextureKind * -> * -> * where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
+    Texture1D       :: SingI layerCount
                     => TextureDataType t ar
-                    -> layerCount
-                    -> TextureType DIM1 Mip (TexArrRepr layerCount) layerCount t ar
+                    -> NatNum layerCount
+                    -> TextureType Tex1D TexMip (TexArrRepr layerCount) layerCount t ar
 
-    Texture2D       :: (Nat layerCount)
+    Texture2D       :: SingI layerCount
                     => TextureDataType t ar
-                    -> layerCount
-                    -> TextureType DIM2 Mip (TexArrRepr layerCount) layerCount t ar
+                    -> NatNum layerCount
+                    -> TextureType Tex2D TexMip (TexArrRepr layerCount) layerCount t ar
 
     Texture3D       :: TextureDataType (Regular t) ar
-                    -> TextureType DIM3 Mip SingleTex N1 (Regular t) ar
+                    -> TextureType Tex3D TexMip SingleTex 1 (Regular t) ar
 
     TextureCube     :: TextureDataType t ar
-                    -> TextureType DIM2 Mip CubeTex N1 t ar
+                    -> TextureType Tex2D TexMip CubeTex 1 t ar
 
     TextureRect     :: TextureDataType t ar
-                    -> TextureType Rect NoMip SingleTex N1 t ar
+                    -> TextureType TexRect TexNoMip SingleTex 1 t ar
 
-    Texture2DMS     :: (Nat layerCount)
+    Texture2DMS     :: SingI layerCount
                     => TextureDataType (Regular t) ar
-                    -> layerCount
-                    -> TextureType DIM2 NoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
+                    -> NatNum layerCount
+                    -> TextureType Tex2D TexNoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
 
     TextureBuffer   :: TextureDataType (Regular t) ar
-                    -> TextureType DIM1 NoMip SingleTex N1 (Buffer t) ar
+                    -> TextureType Tex1D TexNoMip SingleTex 1 (Buffer t) ar
 
 
 -- defines a texture
-data Texture (gp :: * -> *) dim arr t ar where
+data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: TextureKind *) ar where
     TextureSlot     :: (IsValidTextureSlot t)
                     => ByteString -- texture slot name
                     -> TextureType dim mip arr layerCount t ar
@@ -423,23 +446,23 @@ data Texture (gp :: * -> *) dim arr t ar where
 -}
 
 -- MipMap validation
-class IsMipValid canMip mip
-instance IsMipValid Mip Mip
-instance IsMipValid Mip NoMip
-instance IsMipValid NoMip NoMip
+class IsMipValid (canMip :: TextureMipMap) (mip :: TextureMipMap)
+instance IsMipValid TexMip TexMip
+instance IsMipValid TexMip TexNoMip
+instance IsMipValid TexNoMip TexNoMip
 
 -- restriction for texture types what can be specified as texture slots, e.g. multisample textures cannot be created im this way
-class IsValidTextureSlot a
+class IsValidTextureSlot (a :: TextureKind *)
 instance IsValidTextureSlot (Regular a)
-instance IsValidTextureSlot (Shadow a)
+instance IsValidTextureSlot (T.Shadow a)
 instance IsValidTextureSlot (Buffer a)
 
 -- type level hepler function, used for texture specification
-type family TexSizeRepr a
-type instance TexSizeRepr (DIM1) = Word32
-type instance TexSizeRepr (DIM2) = V2U
-type instance TexSizeRepr (Rect) = V2U
-type instance TexSizeRepr (DIM3) = V3U
+type family TexSizeRepr (a :: TextureShape)
+type instance TexSizeRepr (Tex1D)   = Word32
+type instance TexSizeRepr (Tex2D)   = V2U
+type instance TexSizeRepr (TexRect) = V2U
+type instance TexSizeRepr (Tex3D)   = V3U
 {-
 -- type level hepler function, used for texture specification
 type family TexRepr dim mip (gp :: * -> *) layerCount t :: *
@@ -458,7 +481,8 @@ type instance TexRepr DIM3 Mip     gp layerCount t = [[gp (Image layerCount t)]]
 
 -- shader stage tags: vertex, geometry, fragment
 -- used in language AST, for primfun restriction and in shader codegen
-data Obj
-data V
-data G
-data F
+data Frequency
+    = Obj
+    | V
+    | G
+    | F

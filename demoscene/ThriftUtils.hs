@@ -61,10 +61,13 @@ unpackAttribute (VertexAttribute (Just an) (Just at) (Just ad)) = (,) (SB.pack a
 
 
 type Slot = (BinaryProtocol Handle,BinaryProtocol Handle)
-protocol :: IO Slot
-protocol = do
-    p <- BinaryProtocol <$> hOpen ("localhost", PortNumber 9090)
+protocol' :: String -> IO Slot
+protocol' n = do
+    p <- BinaryProtocol <$> hOpen (n, PortNumber 50001)
     return (p,p)
+
+protocol :: IO Slot
+protocol = protocol' "localhost"
 
 remoteMesh :: Slot -> ByteString -> IO LC.Mesh
 remoteMesh slot name = do

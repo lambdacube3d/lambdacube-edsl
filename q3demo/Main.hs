@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TupleSections, CPP #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TupleSections, CPP, DataKinds #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
@@ -26,7 +26,6 @@ import qualified Data.Vector.Storable as SV
 
 import Debug.Trace
 
-import TypeLevel.Number.Nat.Num
 import Graphics.Rendering.OpenGL.Raw.Core32
 
 import Data.Bitmap
@@ -145,7 +144,7 @@ main = do
             - shader descriptor
             - image file: tga or jpg
         -}
-        lcnet :: Exp Obj (Image N1 V4F)
+        lcnet :: Exp Obj (Image 1 V4F)
         lcnet = PrjFrameBuffer "outFB" tix0 $ q3GFX $ T.toList shMap
 
         -- extract spawn points

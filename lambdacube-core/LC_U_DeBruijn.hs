@@ -1,6 +1,5 @@
 module LC_U_DeBruijn where
 
-import Data.Typeable
 import Debug.Trace
 import Control.Monad.State
 import Data.ByteString.Char8 (ByteString)
@@ -79,7 +78,7 @@ data Exp
     -- Fun
     = Lam                   !ExpId
     | Body                  !ExpId
-    | Var                   Int TypeRep   -- index, layout counter
+    | Var                   Int String   -- index, layout counter
     | Apply                 !ExpId !ExpId
 
     -- Exp
@@ -133,7 +132,7 @@ class ExpC exp where
     -- exp constructors
     lam         :: exp -> exp
     body        :: exp -> exp
-    var         :: Ty -> Int -> TypeRep -> exp -- type, index, layout counter (this needed for proper sharing)
+    var         :: Ty -> Int -> String -> exp -- type, index, layout counter (this needed for proper sharing)
     apply       :: Ty -> exp -> exp -> exp
     const_      :: Ty -> Value -> exp
     primVar     :: Ty -> ByteString -> exp
