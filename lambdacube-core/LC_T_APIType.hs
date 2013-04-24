@@ -343,14 +343,14 @@ data MipMap (t :: TextureMipMap) where
             -> MipMap TexMip
 
 -- helper type level function, used in language AST
-type family TexDataRepr arity (t :: TextureKind *)
+type family TexDataRepr arity (t :: TextureSemantics *)
 type instance TexDataRepr Red  (v a) = a
 type instance TexDataRepr RG   (v a) = V2 a
 type instance TexDataRepr RGB  (v a) = V3 a
 type instance TexDataRepr RGBA (v a) = V4 a
 
 -- describes texel (texture component) type
-data TextureDataType (kind :: TextureKind *) arity where
+data TextureDataType (kind :: TextureSemantics *) arity where
     Float   :: IsColorArity a
             => a
             -> TextureDataType (Regular Float) a
@@ -393,7 +393,7 @@ instance IsColorArity RGBA where
 --                      C: add color arity definition to TextureDataType, this will solve the problem (best solution)
 
 -- fully describes a texture type
-data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> TextureKind * -> * -> * where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
+data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> TextureSemantics * -> * -> * where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
     Texture1D       :: SingI layerCount
                     => TextureDataType t ar
                     -> NatNum layerCount
@@ -423,7 +423,7 @@ data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> Text
 
 
 -- defines a texture
-data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: TextureKind *) ar where
+data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: TextureSemantics *) ar where
     TextureSlot     :: (IsValidTextureSlot t)
                     => ByteString -- texture slot name
                     -> TextureType dim mip arr layerCount t ar
@@ -452,7 +452,7 @@ instance IsMipValid TexMip TexNoMip
 instance IsMipValid TexNoMip TexNoMip
 
 -- restriction for texture types what can be specified as texture slots, e.g. multisample textures cannot be created im this way
-class IsValidTextureSlot (a :: TextureKind *)
+class IsValidTextureSlot (a :: TextureSemantics *)
 instance IsValidTextureSlot (Regular a)
 instance IsValidTextureSlot (T.Shadow a)
 instance IsValidTextureSlot (Buffer a)

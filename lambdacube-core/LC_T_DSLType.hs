@@ -19,7 +19,7 @@ data RG     = RG   deriving (Eq,Ord)
 data RGB    = RGB  deriving (Eq,Ord)
 data RGBA   = RGBA deriving (Eq,Ord)
 
-data TextureKind a
+data TextureSemantics a
     = Regular a
     | Shadow a
     | MultiSample a
@@ -31,7 +31,7 @@ data TextureArray
     | CubeTex       -- cube texture = array with size 6
 
 --data Sampler dim layerCount t ar
-data Sampler :: TextureShape -> TextureArray -> TextureKind * -> * -> *
+data Sampler :: TextureShape -> TextureArray -> TextureSemantics * -> * -> *
     
 -- IsScalar means here that the related type is not a tuple, but a GPU primitive type
 class GPU a => IsScalar a where
