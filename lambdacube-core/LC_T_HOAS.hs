@@ -153,7 +153,7 @@ data VertexOut t where
 
 -- Geometry
 -- describes a geometry shader
-data GeometryShader primIn primOut layerNum a b where
+data GeometryShader primIn primOut (layerNum :: Nat) a b where
     GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, SingI layerNum)
                         => NatNum layerNum                                          -- geometry shader:
                         -> primOut                                                  -- output primitive

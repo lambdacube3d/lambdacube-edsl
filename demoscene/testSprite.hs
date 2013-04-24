@@ -60,7 +60,7 @@ sprites = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
     vert uv = VertexOut (vec4' uv (floatV 1) (floatV 1)) (Const 20) ZT
 
     offset = Uni (IV2F "offset") :: Exp F V2F
-    smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) 1) uv
+    smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
     frag :: Exp F () -> FragmentOut (Color V4F :+: ZZ)
     frag _ = FragmentOut $ (smp "explosion" $ (pointCoord' @* floatF 0.25 @+ offset)) :. ZT
 
