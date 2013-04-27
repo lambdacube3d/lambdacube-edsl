@@ -1,16 +1,11 @@
 module LC_G_Type where
 
+import GHC.TypeLits
+
 import Data.Int
 import Data.Word
 import Foreign.Storable
 import Foreign.Ptr
-
--- constructors are required for texture specification
-data Dimension
-    = DIM1
-    | DIM2
-    | DIM3
-    | DIM4
 
 data V2 a = V2 !a !a deriving (Eq,Ord,Show)
 data V3 a = V3 !a !a !a deriving (Eq,Ord,Show)
@@ -41,38 +36,38 @@ type V3B = V3 Bool
 type V4B = V4 Bool
 
 -- vector types: V2, V3, V4
-class IsVec (dim :: Dimension) vec component | vec -> dim component, dim component -> vec
-instance IsVec DIM2 (V2 Float) Float
-instance IsVec DIM3 (V3 Float) Float
-instance IsVec DIM4 (V4 Float) Float
-instance IsVec DIM2 (V2 Int32) Int32
-instance IsVec DIM3 (V3 Int32) Int32
-instance IsVec DIM4 (V4 Int32) Int32
-instance IsVec DIM2 (V2 Word32) Word32
-instance IsVec DIM3 (V3 Word32) Word32
-instance IsVec DIM4 (V4 Word32) Word32
-instance IsVec DIM2 (V2 Bool) Bool
-instance IsVec DIM3 (V3 Bool) Bool
-instance IsVec DIM4 (V4 Bool) Bool
+class IsVec (dim :: Nat) vec component | vec -> dim component, dim component -> vec
+instance IsVec 2 (V2 Float) Float
+instance IsVec 3 (V3 Float) Float
+instance IsVec 4 (V4 Float) Float
+instance IsVec 2 (V2 Int32) Int32
+instance IsVec 3 (V3 Int32) Int32
+instance IsVec 4 (V4 Int32) Int32
+instance IsVec 2 (V2 Word32) Word32
+instance IsVec 3 (V3 Word32) Word32
+instance IsVec 4 (V4 Word32) Word32
+instance IsVec 2 (V2 Bool) Bool
+instance IsVec 3 (V3 Bool) Bool
+instance IsVec 4 (V4 Bool) Bool
 
 -- scalar and vector types: scalar, V2, V3, V4
-class IsVecScalar (dim :: Dimension) vec component | vec -> dim component, dim component -> vec
-instance IsVecScalar DIM1 Float Float
-instance IsVecScalar DIM2 (V2 Float) Float
-instance IsVecScalar DIM3 (V3 Float) Float
-instance IsVecScalar DIM4 (V4 Float) Float
-instance IsVecScalar DIM1 Int32 Int32
-instance IsVecScalar DIM2 (V2 Int32) Int32
-instance IsVecScalar DIM3 (V3 Int32) Int32
-instance IsVecScalar DIM4 (V4 Int32) Int32
-instance IsVecScalar DIM1 Word32 Word32
-instance IsVecScalar DIM2 (V2 Word32) Word32
-instance IsVecScalar DIM3 (V3 Word32) Word32
-instance IsVecScalar DIM4 (V4 Word32) Word32
-instance IsVecScalar DIM1 Bool Bool
-instance IsVecScalar DIM2 (V2 Bool) Bool
-instance IsVecScalar DIM3 (V3 Bool) Bool
-instance IsVecScalar DIM4 (V4 Bool) Bool
+class IsVecScalar (dim :: Nat) vec component | vec -> dim component, dim component -> vec
+instance IsVecScalar 1 Float Float
+instance IsVecScalar 2 (V2 Float) Float
+instance IsVecScalar 3 (V3 Float) Float
+instance IsVecScalar 4 (V4 Float) Float
+instance IsVecScalar 1 Int32 Int32
+instance IsVecScalar 2 (V2 Int32) Int32
+instance IsVecScalar 3 (V3 Int32) Int32
+instance IsVecScalar 4 (V4 Int32) Int32
+instance IsVecScalar 1 Word32 Word32
+instance IsVecScalar 2 (V2 Word32) Word32
+instance IsVecScalar 3 (V3 Word32) Word32
+instance IsVecScalar 4 (V4 Word32) Word32
+instance IsVecScalar 1 Bool Bool
+instance IsVecScalar 2 (V2 Bool) Bool
+instance IsVecScalar 3 (V3 Bool) Bool
+instance IsVecScalar 4 (V4 Bool) Bool
 
 -- matrix types of dimension [2..4] x [2..4]
 class IsMat mat h w | mat -> h w
