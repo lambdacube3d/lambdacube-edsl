@@ -113,7 +113,7 @@ data PrimFun stage sig where
     PrimLength              :: IsVecScalar d a Float                          => PrimFun stage (a       -> Float)
     PrimDistance            :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> Float)
     PrimDot                 :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> Float)
-    PrimCross               :: IsVecScalar DIM3 a Float                       => PrimFun stage ((a,a)   -> a)
+    PrimCross               :: IsVecScalar 3 a Float                       => PrimFun stage ((a,a)   -> a)
     PrimNormalize           :: IsVecScalar d a Float                          => PrimFun stage (a       -> a)
     PrimFaceForward         :: IsVecScalar d a Float                          => PrimFun stage ((a,a,a) -> a)
     PrimReflect             :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> a)
@@ -145,9 +145,9 @@ data PrimFun stage sig where
 
     -- Noise Functions
     PrimNoise1              :: IsVecScalar d a Float                                => PrimFun stage (a -> Float)
-    PrimNoise2              :: (IsVecScalar d a Float, IsVecScalar DIM2 b Float)    => PrimFun stage (a -> b)
-    PrimNoise3              :: (IsVecScalar d a Float, IsVecScalar DIM3 b Float)    => PrimFun stage (a -> b)
-    PrimNoise4              :: (IsVecScalar d a Float, IsVecScalar DIM4 b Float)    => PrimFun stage (a -> b)
+    PrimNoise2              :: (IsVecScalar d a Float, IsVecScalar 2 b Float)    => PrimFun stage (a -> b)
+    PrimNoise3              :: (IsVecScalar d a Float, IsVecScalar 3 b Float)    => PrimFun stage (a -> b)
+    PrimNoise4              :: (IsVecScalar d a Float, IsVecScalar 4 b Float)    => PrimFun stage (a -> b)
 
     -- Texture Lookup Functions
     PrimTextureSize             :: IsTextureSize sampler lod size                           => PrimFun stage ((sampler,lod)                       -> size)
