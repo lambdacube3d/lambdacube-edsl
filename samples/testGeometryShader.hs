@@ -20,15 +20,29 @@ import Graphics.Rendering.OpenGL.Raw.Core32
 import LC_Mesh
 import Codec.Image.STB hiding (Image)
 
+import Math.Noise
+import Math.Noise.Modules.Billow
+import Data.Maybe
+import Data.Bitmap.Pure
+
 quad :: Mesh
 quad = Mesh
-    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
-    , mPrimitive    = P_Triangles
+    { mAttributes   = T.fromList
+        [ ("position", A_V2F $ SV.fromList
+            [ V2 a b, V2 a a, V2 b a, V2 b b
+            , V2 a2 b2, V2 a2 a2, V2 b2 a2, V2 b2 b2
+            ]
+          )
+        , ("vid", A_Int $ SV.fromList [0..7])
+        ]
+    , mPrimitive    = P_Points
     , mGPUData      = Nothing
     }
   where
     a = -1
     b = 1
+    a2 = -0.4
+    b2 = 0.4
 
 floatV :: Float -> Exp V Float
 floatV = Const
@@ -36,29 +50,47 @@ floatV = Const
 floatF :: Float -> Exp F Float
 floatF = Const
 
+intF :: Int32 -> Exp F Int32
+intF = Const
+
+intG :: Int32 -> Exp G Int32
+intG = Const
+
 screenQuad :: Exp Obj (FrameBuffer 1 V4F)
 screenQuad = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (ColorImage n1 (V4 1 0 0 1):.ZT)
-    rast    = Rasterize triangleCtx prims
+    rast    = Rasterize rCtx prims'
+    rCtx    = PointCtx ProgramPointSize 10 UpperLeft
     prims   = Transform vert input
-    input   = Fetch "postSlot" Triangles (IV2F "position")
+    prims'  = Reassemble geom prims
+    input   = Fetch "postSlot" Points (IV2F "position")
 
-    vert :: Exp V V2F -> VertexOut () V2F
-    vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv:.ZT)
+    vert :: Exp V V2F -> VertexOut () ()
+    vert uv = VertexOut v4 (Const 200) ZT ZT
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
 
-    frag :: Exp F V2F -> FragmentOut (Color V4F :+: ZZ)
-    frag uv' = FragmentOut $ color :. ZT
+    geom = GeometryShader n1 PointsOutput 4 funCnt funPrim funVert
       where
-        color = texture' smp uv
-        V2 u v = unpack' uv
-        uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter ClampToEdge tex
-        tex = TextureSlot "ScreenQuad" $ Texture2D (Float RGBA) n1
+        --funCnt :: Exp G (V4F,Float,(),()) -> Exp G ((),Int32)
+        funCnt a    = tup2 (a,intG 1)
+        funPrim a   = tup5 (primitiveIDIn', intG 0, a, a, intG 3)
+        funVert a   = GeometryOut a p s ZT ZT
+          where
+            (p,s,c,v) = untup4 a
+
+    up = Uni (IFloat "up")
+    down = Uni (IFloat "down")
+    frag :: Exp F () -> FragmentOut (Color V4F :+: ZZ)
+    frag _ = FragmentOut $ c :. ZT
+      where
+        c = Cond (primitiveID' @% intF 2 @== intF 0)
+                (smp "ScreenQuad" $ pointCoord')
+                (smp "ScreenQuad2" $ pointCoord')
+        smp n uv = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 
 main :: IO ()
 main = do
@@ -82,14 +114,53 @@ main = do
     let objU    = objectUniformSetter obj
         slotU   = uniformSetter renderer
         diffuse = uniformFTexture2D "ScreenQuad" slotU
+        diffuse2 = uniformFTexture2D "ScreenQuad2" slotU
         draw _  = render renderer >> swapBuffers
         fname   = case args of
             []  -> "Panels_Diffuse.png"
             n:_ -> n
 
-    Right img <- loadImage fname
+    let p   = perlin
+        clamp :: Double -> Word8
+        clamp = floor . max 0 . min 255
+        calc w h i j = (\v ->  (v + 1.0) * 127.5 ) $ noiseClampedVal
+          where
+            boundBottomX :: Double
+            boundBottomX = 0.0
+            boundBottomY :: Double
+            boundBottomY = 0.0
+            boundUpperX :: Double
+            boundUpperX = 10.0
+            boundUpperY :: Double
+            boundUpperY = 10.0
+            xsize = w
+            ysize = h
+            xIncrement :: Double
+            xIncrement = (boundUpperX - boundBottomX) / (fromIntegral xsize)
+            yIncrement :: Double
+            yIncrement = (boundUpperY - boundBottomY) / (fromIntegral ysize)
+            xPos x = ((fromIntegral x) * xIncrement)  +  boundBottomX
+            yPos y = ((fromIntegral y) * yIncrement)  +  boundBottomY
+
+            noiseF :: NoiseModule
+            noiseF = gen perlin { perlinFrequency = 1.1, perlinOctaves = 9 }
+            --noiseF = gen billow { billowFrequency = 0.6, billowOctaves = 5 }
+
+            -- Actual noise computation, getValue returns Maybe Double
+            noiseValue = fromMaybe (-1.0) $ getValue noiseF (xPos i, yPos j, 2.123)
+            -- Make sure the noiseValue is in the [-1.0, 1.0] range
+            noiseClampedVal = if noiseValue > 1.0 
+                                 then 1.0
+                                 else if noiseValue < (-1.0) then (-1.0)
+                                                             else noiseValue
+        
+        ch  = createSingleChannelBitmap (512,512) Nothing (\i j -> clamp $ calc 512 512 i j)-- $ \x y ->
+        img = combineChannels [ch,ch,ch] Nothing
+
     diffuse =<< compileTexture2DRGBAF False True img
-    
+    Right img2 <- loadImage fname
+    diffuse2 =<< compileTexture2DRGBAF False True img2
+
     s <- fpsState
     sc <- start $ do
         u <- scene (setScreenSize renderer) slotU objU windowSize mousePosition fblrPress
@@ -108,10 +179,17 @@ scene :: (Word -> Word -> IO ())
       -> Signal (Bool, Bool, Bool, Bool, Bool)
       -> SignalGen Float (Signal ())
 scene setSize slotU objU windowSize mousePosition fblrPress = do
-    let setupGFX (w,h) = do
+    time <- stateful 0 (+)
+    let up      = uniformFloat "up" slotU
+        down    = uniformFloat "down" slotU
+        setupGFX (w,h) t' = do
             setSize (fromIntegral w) (fromIntegral h)
+            let s = sin t * 0.5 + 0.5
+                t = 1.5 * t'
+            --down s
+            --up (s+0.028)
             return ()
-    r <- effectful1 setupGFX windowSize
+    r <- effectful2 setupGFX windowSize time
     return r
 
 vec4ToV4F :: Vec4 -> V4F

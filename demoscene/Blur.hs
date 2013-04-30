@@ -30,7 +30,7 @@ fxBlur cfg img = renderScreen $ frag imgH uvV
 
     frag i uvFun uv = FragmentOut $ (sample gaussFilter) :. ZT
       where
-        smp coord           = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) coord
+        smp coord           = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) coord
         sample ((o,c):[])   = smp (uv @+ uvFun o) @* floatF c @* blurScale cfg
         sample ((o,c):xs)   = (smp (uv @+ uvFun o) @* floatF c @* blurScale cfg) @+ sample xs
 

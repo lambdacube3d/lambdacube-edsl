@@ -87,7 +87,7 @@ blurVH img = blur' fragH
         sampleH ((o,c):xs)  = (texture' smp (uv @+ uvH o) @* floatF c) @+ sampleH xs
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter Clamp tex
+        smp = Sampler LinearFilter ClampToEdge tex
         tex = Texture (Texture2D (Float RG) n1) (V2 sizeI sizeI) NoMip [PrjFrameBuffer "" tix0 (blur' fragV)]
 
     fragV :: Exp F V2F -> FragmentOut (Depth Float :+: Color V2F :+: ZZ)
@@ -97,7 +97,7 @@ blurVH img = blur' fragH
         sampleV ((o,c):xs)  = (texture' smp (uv @+ uvV o) @* floatF c) @+ sampleV xs
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter Clamp tex
+        smp = Sampler LinearFilter ClampToEdge tex
         tex = Texture (Texture2D (Float RG) n1) (V2 sizeI sizeI) NoMip [img]
 
 ----------
@@ -179,7 +179,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
         p_max = pack' (V4 ltr ltg intensity (floatF 1)) @* (variance @/ (variance @+ d @* d))
         (l,n) = untup2 attr
 
-    sampler = Sampler LinearFilter Clamp shadowMapBlur
+    sampler = Sampler LinearFilter ClampToEdge shadowMapBlur
     --Texture (Exp Obj) dim arr t ar
     shadowMap :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
     shadowMap = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
@@ -197,5 +197,5 @@ sm :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
 sm = Texture (Texture2D (Float RG) 1) AutoMip [tx]
 
 smp :: Exp stage (Sampler Tex2D SingleTex (Regular Float) RG)
-smp = Sampler LinearFilter Clamp sm
+smp = Sampler LinearFilter ClampToEdge sm
 -}

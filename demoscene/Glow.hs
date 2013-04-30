@@ -25,7 +25,7 @@ fxGlow :: Glow -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F) -> Exp Obj (Ima
 fxGlow cfg sceneImg glowImg = renderScreen frag
   where
     sizeI   = 512 :: Word32 -- FIXME: we should keep the original image size
-    smp i c = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) c
+    smp i c = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) c
     setA c  = pack' $ V4 r g b (floatF 1)
       where
         V4 r g b _ = unpack' c

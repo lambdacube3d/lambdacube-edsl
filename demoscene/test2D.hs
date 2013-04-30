@@ -64,7 +64,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
         V4 _ _ tB _ = unpack' $ smp "ScreenQuad2" $ uv @+ (Const (V2 0.117 0) :: Exp F V2F) @* (up @+ r @* floatF 0.1)
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+        smp n uv = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 
 dummy512 img = renderScreen frag
   where
@@ -72,7 +72,7 @@ dummy512 img = renderScreen frag
     frag uv = FragmentOut $ smp img uv :. ZT
       where
         sizeI = 512 :: Word32
-        smp i coord = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) coord
+        smp i coord = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) coord
     
 renderRGB :: Exp Obj (FrameBuffer 1 (V4F,V4F,V4F))
 renderRGB = Accumulate fragCtx PassAll frag rast clear

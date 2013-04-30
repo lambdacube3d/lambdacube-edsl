@@ -6,7 +6,7 @@ import Utility
 import Swizzling
 import BuiltinVec
 
-smp i c = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) c
+smp i c = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) c
   where
     sizeI   = 512 :: Word32 -- FIXME: we should keep the original image size
 

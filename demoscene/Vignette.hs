@@ -28,4 +28,4 @@ fVignette v uv fromColor = fromColor @* smoothstep' o i d
 fxVignette :: Vignette -> Exp Obj (Image 1 V4F) -> Exp F V2F -> Exp F V4F
 fxVignette v img uv = fVignette v uv c
   where
-    c = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv
+    c = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv

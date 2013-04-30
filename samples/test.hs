@@ -48,7 +48,7 @@ simple objs = Accumulate fragCtx PassAll frag rast clear
     frag a = FragmentOut $ snoc a 1 :. ZT
 
     diffuse     = TextureSlot "diffuse" $ Texture2D (Float RGB) 1
-    sampler     = Sampler PointFilter Wrap diffuse
+    sampler     = Sampler PointFilter Repeat diffuse
     texSize     = textureSize' sampler $ Const 0
     renderTex   = Texture (Texture2D (Float RGBA) 1) AutoMip (PrjFrameBuffer "" tix0 $ simple objs)
 

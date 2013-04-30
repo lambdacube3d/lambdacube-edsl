@@ -61,7 +61,7 @@ post img = Accumulate fragCtx PassAll frag rast clear
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
 
-    smp = Sampler LinearFilter Clamp tex
+    smp = Sampler LinearFilter ClampToEdge tex
     tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
 
 main :: IO ()

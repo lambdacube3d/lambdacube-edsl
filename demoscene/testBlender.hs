@@ -43,7 +43,7 @@ n_diffuseTex = "ScreenQuad"
 n_postSlot = "postSlot"
 
 smp :: ByteString -> Exp F V2F -> Exp F V4F
-smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+smp n uv = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 
 background tex = Accumulate fragCtx PassAll frag rast clear
   where
@@ -99,7 +99,7 @@ postProcess base = renderScreen $ FragmentOut . (:.ZT) . f
     vign = vignette { vignetteOuterRadius = floatF 0.9
                     , vignetteInnerRadius = floatF 0.4
                     }
-    smp' img uv = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv
+    smp' img uv = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv
 
 {-
 LC side:

@@ -391,4 +391,4 @@ data StencilTest
 
 -- sampler and texture specification
 data Filter = PointFilter | LinearFilter    deriving (Show,Eq,Ord)
-data EdgeMode = Wrap | Mirror | Clamp       deriving (Show,Eq,Ord)
+data EdgeMode = Repeat | MirroredRepeat | ClampToEdge | ClampToBorder       deriving (Show,Eq,Ord)

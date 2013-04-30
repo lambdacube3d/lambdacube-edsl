@@ -73,7 +73,7 @@ fxGamma :: Gamma -> Exp Obj (Image 1 V4F) -> Exp Obj (Image 1 V4F)
 fxGamma cfg img = renderScreen frag
   where
     sizeI   = 1024 -- FIXME
-    smp uv  = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]) uv
+    smp uv  = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]) uv
     frag uv = FragmentOut $ finalColor :. ZT
       where
         V2 u _          = unpack' uv

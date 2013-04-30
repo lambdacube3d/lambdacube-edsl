@@ -67,7 +67,7 @@ simpleTexturing = Accumulate fragCtx PassAll frag rast clear
         c = texture' smp uv
 
         smp :: Exp F (Sampler Tex2D SingleTex (Regular Float) RGBA)
-        smp = Sampler LinearFilter Clamp tex
+        smp = Sampler LinearFilter ClampToEdge tex
 
         tex :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RGBA
         tex = TextureSlot "diffuse" (Texture2D (Float RGBA) n1)

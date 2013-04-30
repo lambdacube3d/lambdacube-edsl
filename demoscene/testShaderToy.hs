@@ -31,7 +31,7 @@ n_time = "time"
 n_size = "size"
 n_background = "background"
 
-smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+smp n uv = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 background tex = renderScreen $ \uv -> FragmentOut $ smp tex uv :. ZT
 
 main :: IO ()

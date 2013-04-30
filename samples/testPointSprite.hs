@@ -77,7 +77,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
         c = Cond (primitiveID' @% intF 2 @== intF 0)
                 (smp "ScreenQuad" $ pointCoord')
                 (smp "ScreenQuad2" $ pointCoord')
-        smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+        smp n uv = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
 
 main :: IO ()
 main = do

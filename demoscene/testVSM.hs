@@ -67,7 +67,7 @@ post img = Accumulate fragCtx PassAll frag rast clear
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
 
-    smp = Sampler LinearFilter Clamp tex
+    smp = Sampler LinearFilter ClampToEdge tex
     tex = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
 
 screenQuad :: Exp Obj (Image 1 V4F) -> Exp Obj (FrameBuffer 1 V4F)
@@ -111,8 +111,8 @@ screenQuad img = Accumulate fragCtx PassAll frag rast clear
         off = (pack' $ V2 r (r @* r)) @* (floatF 0.1 @+ floatF 0.32 @* (sin' (time @* floatF 6) :: Exp F Float))
         t = time @* floatF 10
         rot = pack' $ V2 (fract' (t @* floatF 0.1)) (floatF 0) :: Exp F V2F
-        smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
-        smp' i uv = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [i]) uv
+        smp n uv = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+        smp' i uv = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [i]) uv
 
 main :: IO ()
 main = do

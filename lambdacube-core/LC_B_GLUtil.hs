@@ -81,8 +81,12 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_TEXTURE0
 
     -- texture parameters
+    , gl_CLAMP_TO_BORDER
+    , gl_CLAMP_TO_EDGE
     , gl_LINEAR
+    , gl_MIRRORED_REPEAT
     , gl_REPEAT
+
     , gl_TEXTURE_2D
     , gl_TEXTURE_MAG_FILTER
     , gl_TEXTURE_MIN_FILTER
@@ -861,6 +865,15 @@ data TextureType - gl texture target
 createGLTextureObject :: DAG -> Exp -> IO GLuint
 createGLTextureObject dag (Sampler txFilter txEdgeMode tx) = do
     let Texture txType txSize txMipMap txGPList = toExp dag tx
+        wrapMode = case txEdgeMode of
+            Repeat          -> gl_REPEAT
+            MirroredRepeat  -> gl_MIRRORED_REPEAT
+            ClampToEdge     -> gl_CLAMP_TO_EDGE
+            ClampToBorder   -> gl_CLAMP_TO_BORDER
+    {-
+data Filter = PointFilter | LinearFilter    deriving (Show,Eq,Ord)
+data EdgeMode = Wrap | Mirror | Clamp       deriving (Show,Eq,Ord)
+    -}
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     {-
         void glTexImage1D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, void *data );
@@ -911,8 +924,8 @@ createGLTextureObject dag (Sampler txFilter txEdgeMode tx) = do
                 VV2U (V2 w h)   = txSize
             glBindTexture gl_TEXTURE_2D to
             -- temp
-            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral gl_REPEAT
-            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral gl_REPEAT
+            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral wrapMode
+            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral wrapMode
             glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
             glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR
             --glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0

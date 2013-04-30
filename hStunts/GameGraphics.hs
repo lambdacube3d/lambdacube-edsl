@@ -203,7 +203,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         --light = min' (floatF 1) (max' inShadowTex (pow' (f m1 @/ f tz) (floatF 20)))
         -}
         
-    shadowSampler slice = Sampler LinearFilter Clamp (shadowMap slice)
+    shadowSampler slice = Sampler LinearFilter ClampToEdge (shadowMap slice)
     
     shadowMap :: Int -> Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
     shadowMap slice = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 (moments slice)]
@@ -284,7 +284,7 @@ shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
             V4 _ _ moment1' _ = unpack' $ texture' smp (uv @+ (Const (V2 (dh/sizeT) (dv/sizeT)) :: Exp F V2F))
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter Clamp tex
+        smp = Sampler LinearFilter ClampToEdge tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]
 
 -- blur
@@ -354,7 +354,7 @@ blurVH img = blur' $ frag uvH $ PrjFrameBuffer "" tix0 $ blur' $ frag uvV img
         mkEnv ((o,c):xs)  = max' (texture' smp (uv @+ dFn o)) (mkEnv xs)
         V4 m1 m2 _ _ = unpack' $ wsum gaussFilter5
         V4 _ _ env _ = unpack' $ mkEnv gaussFilter5
-        smp = Sampler LinearFilter Clamp tex
+        smp = Sampler LinearFilter ClampToEdge tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [img]
 
 blurDepth :: Int -> Exp Obj (Image 1 Float) -> Exp Obj (FrameBuffer 1 (Float,Float))
@@ -372,7 +372,7 @@ blurDepth slice img = blur $ frag uvH $ PrjFrameBuffer "" tix0 $ blur $ frag uvV
       where
         wsum ((o,c):[])  = texture' smp (uv @+ dFn o) @* floatF c
         wsum ((o,c):xs)  = (texture' smp (uv @+ dFn o) @* floatF c) @+ wsum xs
-        smp = Sampler LinearFilter Clamp tex
+        smp = Sampler LinearFilter ClampToEdge tex
         tex = Texture (Texture2D (Float Red) n1) (V2 sizeI sizeI) NoMip [img]
 
     blur :: (Exp F V2F -> FragmentOut (Depth Float :+: Color Float :+: ZZ)) -> Exp Obj (FrameBuffer 1 (Float,Float))

@@ -29,4 +29,4 @@ fScanlines sl uv fromColor = fromColor @* mix' sl1 sl2 r
 fxScanlines :: Scanlines -> Exp Obj (Image 1 V4F) -> Exp F V2F -> Exp F V4F
 fxScanlines sl img uv = fScanlines sl uv c
   where
-    c = texture' (Sampler LinearFilter Clamp $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv
+    c = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]) uv
