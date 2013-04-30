@@ -50,10 +50,10 @@ blur coefficients img = filter1D dirH (PrjFrameBuffer "" tix0 (filter1D dirV img
         accCtx = AccumulationContext Nothing
                                     (ColorOp NoBlending (one' :: V2B) :. ZT)
         clearBuf = FrameBuffer (ColorImage n1 (V2 0 0) :. ZT)
-        prims = Transform vert (Fetch "postSlot" Triangle (IV2F "position"))
+        prims = Transform vert (Fetch "postSlot" Triangles (IV2F "position"))
 
-        vert :: Exp V V2F -> VertexOut V2F
-        vert uv = VertexOut pos (Const 1) (NoPerspective uv' :. ZT)
+        vert :: Exp V V2F -> VertexOut () V2F
+        vert uv = VertexOut pos (Const 1) ZT (NoPerspective uv' :. ZT)
           where
             uv'    = uv @* floatV 0.5 @+ floatV 0.5
             pos    = pack' (V4 u v (floatV 1) (floatV 1))
@@ -74,13 +74,13 @@ moments = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V2B) :. ZT)
     clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 (V2 0 0) :. ZT)
-    prims = Transform vert (Fetch "geometrySlot" Triangle (IV3F "position"))
+    prims = Transform vert (Fetch "geometrySlot" Triangles (IV3F "position"))
     
     lightMatrix = Uni (IM44F "lightMatrix")
     modelMatrix = Uni (IM44F "modelMatrix")
 
-    vert :: Exp V V3F -> VertexOut Float
-    vert pos = VertexOut lightPos (floatV 1) (Smooth depth :. ZT)
+    vert :: Exp V V3F -> VertexOut () Float
+    vert pos = VertexOut lightPos (floatV 1) ZT (Smooth depth :. ZT)
       where
         lightPos = lightMatrix @*. modelMatrix @*. v3v4 pos
         V4 _ _ depth _ = unpack' lightPos
@@ -98,13 +98,13 @@ depth = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending True :. ZT)
     clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 0 :. ZT)
-    prims = Transform vert (Fetch "geometrySlot" Triangle (IV3F "position"))
+    prims = Transform vert (Fetch "geometrySlot" Triangles (IV3F "position"))
     
     lightMatrix = Uni (IM44F "lightMatrix")
     modelMatrix = Uni (IM44F "modelMatrix")
 
-    vert :: Exp V V3F -> VertexOut Float
-    vert pos = VertexOut lightPos (floatV 1) (Smooth depth :. ZT)
+    vert :: Exp V V3F -> VertexOut () Float
+    vert pos = VertexOut lightPos (floatV 1) ZT (Smooth depth :. ZT)
       where
         lightPos = lightMatrix @*. modelMatrix @*. v3v4 pos
         V4 _ _ depth _ = unpack' lightPos
@@ -119,15 +119,15 @@ vsm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
                 (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
     clearBuf = FrameBuffer (  DepthImage n1 1000
                            :. ColorImage n1 (V4 0.1 0.2 0.6 1) :. ZT)
-    prims = Transform vert (Fetch "geometrySlot" Triangle (IV3F "position", IV3F "normal"))
+    prims = Transform vert (Fetch "geometrySlot" Triangles (IV3F "position", IV3F "normal"))
 
     cameraMatrix = Uni (IM44F "cameraMatrix")
     lightMatrix = Uni (IM44F "lightMatrix")
     modelMatrix = Uni (IM44F "modelMatrix")
     lightPosition = Uni (IV3F "lightPosition")
 
-    vert :: Exp V (V3F, V3F) -> VertexOut (V3F, V4F, V3F)
-    vert attr = VertexOut viewPos (floatV 1) (Smooth (v4v3 worldPos) :. Smooth lightPos :. Smooth worldNormal :. ZT)
+    vert :: Exp V (V3F, V3F) -> VertexOut () (V3F, V4F, V3F)
+    vert attr = VertexOut viewPos (floatV 1) ZT (Smooth (v4v3 worldPos) :. Smooth lightPos :. Smooth worldNormal :. ZT)
       where
         worldPos = modelMatrix @*. v3v4 localPos
         viewPos = cameraMatrix @*. worldPos
@@ -176,15 +176,15 @@ sm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
     clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 (V4 0.1 0.2 0.6 1) :. ZT)
-    prims = Transform vert (Fetch "geometrySlot" Triangle (IV3F "position", IV3F "normal"))
+    prims = Transform vert (Fetch "geometrySlot" Triangles (IV3F "position", IV3F "normal"))
 
     cameraMatrix = Uni (IM44F "cameraMatrix")
     lightMatrix = Uni (IM44F "lightMatrix")
     modelMatrix = Uni (IM44F "modelMatrix")
     lightPosition = Uni (IV3F "lightPosition")
 
-    vert :: Exp V (V3F, V3F) -> VertexOut (V3F, V4F, V3F)
-    vert attr = VertexOut viewPos (floatV 1) (Smooth (v4v3 worldPos) :. Smooth lightPos :. Smooth worldNormal :. ZT)
+    vert :: Exp V (V3F, V3F) -> VertexOut () (V3F, V4F, V3F)
+    vert attr = VertexOut viewPos (floatV 1) ZT (Smooth (v4v3 worldPos) :. Smooth lightPos :. Smooth worldNormal :. ZT)
       where
         worldPos = modelMatrix @*. v3v4 localPos
         viewPos = cameraMatrix @*. worldPos

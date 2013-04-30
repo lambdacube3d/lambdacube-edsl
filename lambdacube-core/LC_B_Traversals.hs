@@ -36,10 +36,10 @@ instance HasExp Exp where
                                    in a : expUniverse dag a
         Loop ia ib ic id        -> let [a,b,c,d] = map (toExp dag) [ia,ib,ic,id]
                                    in a : b : c : d : expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c ++ expUniverse dag d
-        VertexOut ia ib ic      -> let [a,b] = map (toExp dag) [ia,ib]
-                                   in a : b : expUniverse dag a ++ expUniverse dag b ++ expUniverse dag ic
-        GeometryOut i j k l m n -> let [a,b,c,d,e] = map (toExp dag) [i,j,k,l,m]
-                                   in a : b : c : d : e : expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c ++ expUniverse dag d ++ expUniverse dag e ++ expUniverse dag n
+        VertexOut ia ib ic id   -> let [a,b] = map (toExp dag) [ia,ib]
+                                   in a : b : expUniverse dag a ++ expUniverse dag b ++ expUniverse dag ic ++ expUniverse dag id
+        GeometryOut i j k l m   -> let [a,b,c] = map (toExp dag) [i,j,k]
+                                   in a : b : c : expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c ++ expUniverse dag l ++ expUniverse dag m
         FragmentOut i           -> let a = map (toExp dag) i
                                    in a ++ expUniverse dag a
         FragmentOutDepth i j    -> let a:b = map (toExp dag) (i:j)

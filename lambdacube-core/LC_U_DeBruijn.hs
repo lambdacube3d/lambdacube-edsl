@@ -92,14 +92,14 @@ data Exp
     | Sampler               !Filter !EdgeMode !ExpId
     | Loop                  !ExpId !ExpId !ExpId !ExpId
     -- special tuple expressions
-    | VertexOut             !ExpId !ExpId [ExpId]
-    | GeometryOut           !ExpId !ExpId !ExpId !ExpId !ExpId [ExpId]
+    | VertexOut             !ExpId !ExpId [ExpId] [ExpId]
+    | GeometryOut           !ExpId !ExpId !ExpId [ExpId] [ExpId]
     | FragmentOut           [ExpId]
     | FragmentOutDepth      !ExpId [ExpId]
     | FragmentOutRastDepth  [ExpId]
 
     -- GP
-    | Fetch                 ByteString PrimitiveType [(ByteString,InputType)]
+    | Fetch                 ByteString FetchPrimitive [(ByteString,InputType)]
     | Transform             !ExpId !ExpId
     | Reassemble            !ExpId !ExpId
     | Rasterize             RasterContext !ExpId
@@ -117,7 +117,7 @@ data Exp
     | Smooth                !ExpId
     | NoPerspective         !ExpId
 
-    | GeometryShader        Int PrimitiveType Int !ExpId !ExpId !ExpId
+    | GeometryShader        Int OutputPrimitive Int !ExpId !ExpId !ExpId
 
     -- FragmentFilter
     | PassAll
@@ -130,7 +130,7 @@ data Exp
 
 class ExpC exp where
     -- exp constructors
-    lam         :: exp -> exp
+    lam         :: Ty -> exp -> exp
     body        :: exp -> exp
     var         :: Ty -> Int -> String -> exp -- type, index, layout counter (this needed for proper sharing)
     apply       :: Ty -> exp -> exp -> exp
@@ -144,13 +144,13 @@ class ExpC exp where
     sampler     :: Ty -> Filter -> EdgeMode -> exp -> exp
     loop        :: Ty -> exp -> exp -> exp -> exp -> exp
     -- special tuple expressions
-    vertexOut               :: exp -> exp -> [exp] -> exp
-    geometryOut             :: exp -> exp -> exp -> exp -> exp -> [exp] -> exp
+    vertexOut               :: exp -> exp -> [exp] -> [exp] -> exp
+    geometryOut             :: exp -> exp -> exp -> [exp] -> [exp] -> exp
     fragmentOut             :: [exp] -> exp
     fragmentOutDepth        :: exp -> [exp] -> exp
     fragmentOutRastDepth    :: [exp] -> exp
     -- gp constructors
-    fetch           :: ByteString -> PrimitiveType -> [(ByteString,InputType)] -> exp
+    fetch           :: ByteString -> FetchPrimitive -> [(ByteString,InputType)] -> exp
     transform       :: exp -> exp -> exp
     reassemble      :: exp -> exp -> exp
     rasterize       :: RasterContext -> exp -> exp
@@ -166,7 +166,7 @@ class ExpC exp where
     smooth          :: exp -> exp
     noPerspective   :: exp -> exp
     -- GeometryShader constructors
-    geometryShader  :: Int -> PrimitiveType -> Int -> exp -> exp -> exp -> exp
+    geometryShader  :: Int -> OutputPrimitive -> Int -> exp -> exp -> exp -> exp
     -- FragmentFilter constructors
     passAll         :: exp
     filter_         :: exp -> exp
@@ -177,12 +177,12 @@ class ExpC exp where
 newtype N = N {unN :: State DAG ExpId}
 
 instance ExpC N where
-    lam !a = N $ do
+    lam !t !a = N $ do
         !h1 <- unN a
-        hashcons Unknown $ Lam h1
+        hashcons t $ Lam h1
     body !a = N $ do
         !h1 <- unN a
-        hashcons Unknown $ Body h1
+        hashcons (Unknown "Body") $ Body h1
     var !t !a !b     = N $ hashcons t $ Var a b
     apply !t !a !b   = N $ do
         !h1 <- unN a
@@ -216,29 +216,29 @@ instance ExpC N where
         hashcons t $ Loop h1 h2 h3 h4
 
     -- special tuple expressions
-    vertexOut !a !b !c = N $ do
+    vertexOut !a !b !c !d = N $ do
         !h1 <- unN a
         !h2 <- unN b
         !h3 <- mapM unN c
-        hashcons Unknown $ VertexOut h1 h2 h3
-    geometryOut !a !b !c !d !e !f = N $ do
+        !h4 <- mapM unN d
+        hashcons (Unknown "VertexOut") $ VertexOut h1 h2 h3 h4
+    geometryOut !a !b !c !d !e = N $ do
         !h1 <- unN a
         !h2 <- unN b
         !h3 <- unN c
-        !h4 <- unN d
-        !h5 <- unN e
-        !h6 <- mapM unN f
-        hashcons Unknown $ GeometryOut h1 h2 h3 h4 h5 h6
+        !h4 <- mapM unN d
+        !h5 <- mapM unN e
+        hashcons (Unknown "GeometryOut") $ GeometryOut h1 h2 h3 h4 h5
     fragmentOut !a   = N $ do
         !h <- mapM unN a
-        hashcons Unknown $ FragmentOut h
+        hashcons (Unknown "FragmentOut") $ FragmentOut h
     fragmentOutDepth !a !b    = N $ do
         !h1 <- unN a
         !h2 <- mapM unN b
-        hashcons Unknown $ FragmentOutDepth h1 h2
+        hashcons (Unknown "FragmentOutDepth") $ FragmentOutDepth h1 h2
     fragmentOutRastDepth !a  = N $ do
         !h <- mapM unN a
-        hashcons Unknown $ FragmentOutRastDepth h
+        hashcons (Unknown "FragmentOutRastDepth") $ FragmentOutRastDepth h
     -- gp constructors
     fetch !a !b !c = N $ do
         hashcons VertexStream' $ Fetch a b c
@@ -268,35 +268,35 @@ instance ExpC N where
         !h1 <- unN c
         hashcons Image' $ PrjImage a b h1
     -- texture constructors
-    textureSlot !a !b = N $ hashcons Unknown $ TextureSlot a b
+    textureSlot !a !b = N $ hashcons (Unknown "TextureSlot") $ TextureSlot a b
     texture !a !b !c !d = N $ do
         !h1 <- mapM unN d
-        hashcons Unknown $ Texture a b c h1
+        hashcons (Unknown "Texture") $ Texture a b c h1
     -- Interpolated constructors
     flat !a = N $ do
         !h1 <- unN a
-        hashcons Unknown $ Flat h1
+        hashcons (Unknown "Flat") $ Flat h1
     smooth !a = N $ do
         !h1 <- unN a
-        hashcons Unknown $ Smooth h1
+        hashcons (Unknown "Smooth") $ Smooth h1
     noPerspective !a = N $ do
         !h1 <- unN a
-        hashcons Unknown $ NoPerspective h1
+        hashcons (Unknown "NoPerspective") $ NoPerspective h1
     -- GeometryShader constructors
     geometryShader !a !b !c !d !e !f = N $ do
         !h1 <- unN d
         !h2 <- unN e
         !h3 <- unN f
-        hashcons Unknown $ GeometryShader a b c h1 h2 h3
+        hashcons (Unknown "GeometryShader") $ GeometryShader a b c h1 h2 h3
     -- FragmentFilter constructors
-    passAll = N $ hashcons Unknown PassAll
+    passAll = N $ hashcons (Unknown "PassAll") PassAll
     filter_ !a = N $ do
         !h1 <- unN a
-        hashcons Unknown $ Filter h1
+        hashcons (Unknown "Filter") $ Filter h1
     -- GPOutput constructors
     imageOut !a !b = N $ do
         !h1 <- unN b
-        hashcons Unknown $ ImageOut a h1
+        hashcons (Unknown "ImageOut") $ ImageOut a h1
     screenOut !a = N $ do
         !h1 <- unN a
-        hashcons Unknown $ ScreenOut h1
+        hashcons (Unknown "ScreenOut") $ ScreenOut h1

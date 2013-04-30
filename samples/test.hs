@@ -38,8 +38,8 @@ simple objs = Accumulate fragCtx PassAll frag rast clear
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert objs
 
-    vert :: Exp V (V3F,V3F) -> VertexOut V3F
-    vert pn = VertexOut v4 (Const 1) (Flat (drop4 v4):.ZT)
+    vert :: Exp V (V3F,V3F) -> VertexOut () V3F
+    vert pn = VertexOut v4 (Const 1) ZT (Flat (drop4 v4):.ZT)
       where
         v4    = worldViewProj @*. snoc p 1
         (p,n) = untup2 pn
@@ -86,7 +86,7 @@ main :: IO ()
 main = do
     let --lcnet :: Exp Obj (FrameBuffer Z (Color :+: Z) (V4F :+: Z))
         lcnet :: Exp Obj (Image 1 V4F)
-        lcnet  = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
+        lcnet  = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangles (IV3F "position", IV3F "normal")
         --lcnet' = convertGP lcnet
 {-
     dumpGP lcnet'

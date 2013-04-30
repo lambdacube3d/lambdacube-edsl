@@ -70,14 +70,14 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
     rast :: Exp Obj (FragmentStream 1 V3F)
     rast    = Rasterize rastCtx prims
 
-    prims :: Exp Obj (PrimitiveStream Triangle 1 V V3F)
+    prims :: Exp Obj (PrimitiveStream Triangle () 1 V V3F)
     prims   = Transform vert objs
 
     worldViewProj :: Exp V M44F
     worldViewProj = Uni (IM44F "worldViewProj")
 
-    vert :: Exp V (V3F,V3F) -> VertexOut V3F
-    vert pn = VertexOut v4 (Const 1) (Flat (drop4 v4):.ZT)
+    vert :: Exp V (V3F,V3F) -> VertexOut () V3F
+    vert pn = VertexOut v4 (Const 1) ZT (Flat (drop4 v4):.ZT)
       where
         v4 :: Exp V V4F
         v4    = worldViewProj @*. snoc p 1
@@ -96,7 +96,7 @@ simple objs = Accumulate fragCtx (Filter filter) frag rast clear
 main :: IO ()
 main = do
     let lcnet :: Exp Obj (Image 1 V4F)
-        lcnet = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
+        lcnet = PrjFrameBuffer "outFB" tix0 $ simple $ Fetch "streamSlot" Triangles (IV3F "position", IV3F "normal")
         lcnet' :: Exp Obj (Image 1 V4F)
         lcnet' = PrjFrameBuffer "outFB" tix0 $ simple'
 

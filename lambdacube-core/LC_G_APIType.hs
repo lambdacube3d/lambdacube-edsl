@@ -13,7 +13,18 @@ data TextureData
     { textureObject :: GLuint
     }
 
-data Primitive  = TriangleStrip | TriangleList | TriangleFan | LineStrip | LineList | PointList deriving (Eq,Ord,Bounded,Enum,Show)
+data Primitive
+    = TriangleStrip
+    | TriangleList
+    | TriangleFan
+    | LineStrip
+    | LineList
+    | PointList
+    | TriangleStripAdjacency
+    | TriangleListAdjacency
+    | LineStripAdjacency
+    | LineListAdjacency
+    deriving (Eq,Ord,Bounded,Enum,Show)
 
 -- GPU type value reification, needed for shader codegen
 data Value
@@ -186,8 +197,12 @@ data Ty
     | PrimitiveStream'
     | VertexStream'
     | FragmentStream'
-    | Unknown
+    | Unknown String
     deriving (Show,Eq,Ord)
+
+tySize :: Ty -> Int
+tySize (Tuple a)  = sum $ map tySize a
+tySize _ = 1
 
 -- describes a stream type (in GPU side)
 data InputType

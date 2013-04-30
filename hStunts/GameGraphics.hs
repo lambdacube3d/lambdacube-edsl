@@ -94,7 +94,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
     fragCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
     rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
     clear   = FrameBuffer (DepthImage n1 100000:.ColorImage n1 (V4 0.36 0.99 0.99 1 :: V4F):.ZT)
-    rast    = Rasterize rastCtx $ Transform vert $ Fetch "streamSlot" Triangle input
+    rast    = Rasterize rastCtx $ Transform vert $ Fetch "streamSlot" Triangles input
     input   = (IV3F "position", IV3F "normal", IV4F "colour", IInt "pattern", IFloat "zBias", IFloat "shininess")
     worldPosition = Uni (IM44F "worldPosition")
     worldView = Uni (IM44F "worldView")
@@ -121,8 +121,8 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         solid3 = fract' (prod3 @+ rand @* smoothen diff3) @< thickness
         smoothen x = x @* x
 
-    vert :: Exp V (V3F,V3F,V4F,Int32,Float,Float) -> VertexOut (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float)
-    vert attr = VertexOut projPos (Const 1) (Smooth lightViewPos:.Flat colour:.Smooth pos:.Smooth eyePos:.Flat normal:.Flat pattern:.Flat zBias:.Flat shiny:.ZT)
+    vert :: Exp V (V3F,V3F,V4F,Int32,Float,Float) -> VertexOut () (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float)
+    vert attr = VertexOut projPos (Const 1) ZT (Smooth lightViewPos:.Flat colour:.Smooth pos:.Smooth eyePos:.Flat normal:.Flat pattern:.Flat zBias:.Flat shiny:.ZT)
       where
         viewPos = camMat @*. snoc pos 1
         projPos = projection @*. viewPos
@@ -224,13 +224,13 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         clear   = FrameBuffer (DepthImage n1 1:.ColorImage n1 0 {-(V4 0 0 1 1)-}:.ZT)
         rast    = Rasterize triangleCtx prims
         prims   = Transform vert input
-        input   = Fetch "streamSlot" Triangle (IV3F "position", IInt "pattern")
+        input   = Fetch "streamSlot" Triangles (IV3F "position", IInt "pattern")
         worldPosition = Uni (IM44F "worldPosition")
         lightViewProj = Uni (IM44F (SB.pack ("lightViewProj" ++ show slice)))
         gridThickness = Uni (IFloat (SB.pack ("gridThickness" ++ show slice)))
     
-        vert :: Exp V (V3F, Int32) -> VertexOut (Float, V3F, Int32)
-        vert attr = VertexOut v4 (floatV 1) (Smooth depth:.Smooth pos:.Flat pattern:.ZT)
+        vert :: Exp V (V3F, Int32) -> VertexOut () (Float, V3F, Int32)
+        vert attr = VertexOut v4 (floatV 1) ZT (Smooth depth:.Smooth pos:.Flat pattern:.ZT)
           where
             v4 = lightViewProj @*. worldPosition @*. snoc pos 1
             V4 _ _ depth _ = unpack' v4
@@ -263,10 +263,10 @@ shadowEnvelope img = Accumulate fragCtx PassAll frag rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "postSlot" Triangle (IV2F "position")
+    input   = Fetch "postSlot" Triangles (IV2F "position")
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+    vert :: Exp V V2F -> VertexOut () V2F
+    vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv:.ZT)
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
@@ -296,10 +296,10 @@ blur' frag = Accumulate fragCtx PassAll frag rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "postSlot" Triangle (IV2F "position")
+    input   = Fetch "postSlot" Triangles (IV2F "position")
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv':.ZT)
+    vert :: Exp V V2F -> VertexOut () V2F
+    vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv':.ZT)
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
@@ -382,10 +382,10 @@ blurDepth slice img = blur $ frag uvH $ PrjFrameBuffer "" tix0 $ blur $ frag uvV
         clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 0:.ZT)
         rast    = Rasterize triangleCtx prims
         prims   = Transform vert input
-        input   = Fetch "postSlot" Triangle (IV2F "position")
+        input   = Fetch "postSlot" Triangles (IV2F "position")
 
-        vert :: Exp V V2F -> VertexOut V2F
-        vert uv = VertexOut v4 (Const 1) (NoPerspective uv':.ZT)
+        vert :: Exp V V2F -> VertexOut () V2F
+        vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv':.ZT)
           where
             v4      = pack' $ V4 u v (floatV 1) (floatV 1)
             V2 u v  = unpack' uv
@@ -400,13 +400,13 @@ debugShader = Accumulate fragCtx PassAll frag rast stuntsGFX
     rastCtx = TriangleCtx CullNone (PolygonLine 2) offset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
-    input   = Fetch "wireSlot" Triangle (IV3F "position", IV4F "colour")
+    input   = Fetch "wireSlot" Triangles (IV3F "position", IV4F "colour")
     worldViewProj = projection @.*. worldView :: Exp a M44F
     worldView = Uni (IM44F "worldView")
     projection = Uni (IM44F "projection")
 
-    vert :: Exp V (V3F,V4F) -> VertexOut V4F
-    vert pc = VertexOut v4 (Const 1) (Smooth c:.ZT)
+    vert :: Exp V (V3F,V4F) -> VertexOut () V4F
+    vert pc = VertexOut v4 (Const 1) ZT (Smooth c:.ZT)
       where
         v4    = worldViewProj @*. snoc p 1
         (p,c) = untup2 pc

@@ -52,14 +52,14 @@ background tex = Accumulate fragCtx PassAll frag rast clear
     rast    = Rasterize rCtx prims
     rCtx    = triangleCtx
     prims   = Transform vert input
-    input   = Fetch n_backgroundSlot Triangle (IV2F n_position)
+    input   = Fetch n_backgroundSlot Triangles (IV2F n_position)
 
     frag uv' = FragmentOut $ smp tex uv :. ZT
       where
         uv = uv' @* floatF 0.5 @+ floatF 0.5
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut out (Const 1) (NoPerspective uv:.ZT)
+    vert :: Exp V V2F -> VertexOut () V2F
+    vert uv = VertexOut out (Const 1) ZT (NoPerspective uv:.ZT)
       where
         out = vec4' uv (floatV 1) (floatV 1)
 
@@ -71,10 +71,10 @@ model = Accumulate fragCtx PassAll frag rast (background n_backgroundTex)
     rast    = Rasterize rCtx prims
     rCtx    = PointCtx ProgramPointSize 10 UpperLeft
     prims   = Transform vert input
-    input   = Fetch n_postSlot Point (IV3F n_position)
+    input   = Fetch n_postSlot Points (IV3F n_position)
 
-    vert :: Exp V V3F -> VertexOut ()
-    vert uvw = VertexOut out (Const 20) ZT
+    vert :: Exp V V3F -> VertexOut () ()
+    vert uvw = VertexOut out (Const 20) ZT ZT
       where
         out = rotation @*. vec4' uvw (floatV 1)
 

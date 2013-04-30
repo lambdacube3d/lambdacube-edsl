@@ -83,23 +83,23 @@ data Exp :: Frequency -> * -> * where
             -> Exp stage a                      -- result
     -- GP
     -- hint: GP stands for Graphics Pipeline
-    Fetch           :: (InputTuple a, SGPU (InputTupleRepr a), IsPrimitive prim)
+    Fetch           :: (InputTuple a, SGPU (InputTupleRepr a))
                     => ByteString
-                    -> prim
+                    -> FetchPrimitive primitive
                     -> a
-                    -> Exp Obj (VertexStream prim (InputTupleRepr a))
+                    -> Exp Obj (VertexStream primitive (InputTupleRepr a))
 
     Transform       :: (GPU a, GPU b)
-                    => (Exp V a -> VertexOut b)                       -- vertex shader
-                    -> Exp Obj (VertexStream prim a)
-                    -> Exp Obj (PrimitiveStream prim 1 V b)
+                    => (Exp V a -> VertexOut clipDistances b)                       -- vertex shader
+                    -> Exp Obj (VertexStream primitive a)
+                    -> Exp Obj (PrimitiveStream primitive clipDistances 1 V b)
 
-    Reassemble      :: GeometryShader primIn primOut layerCount a b
-                    -> Exp Obj (PrimitiveStream primIn 1 V a)
-                    -> Exp Obj (PrimitiveStream primOut layerCount G b)
+    Reassemble      :: GeometryShader inputPrimitive outputPrimitive inputClipDistances outputClipDistances layerCount a b
+                    -> Exp Obj (PrimitiveStream inputPrimitive inputClipDistances 1 V a)
+                    -> Exp Obj (PrimitiveStream outputPrimitive outputClipDistances layerCount G b)
 
     Rasterize       :: RasterContext prim
-                    -> Exp Obj (PrimitiveStream prim layerCount stage a)
+                    -> Exp Obj (PrimitiveStream primitive clipDistances layerCount freq a)
                     -> Exp Obj (FragmentStream layerCount a)
 
     FrameBuffer     :: FrameBuffer layerCount t
@@ -143,17 +143,31 @@ type FlatExp stage a = FlatTuple GPU (Exp stage) a
                 float gl_ClipDistance[]
             }
 -}
--- TODO: add support for gl_ClipDistance setup
--- result of a vertex shader function
-data VertexOut t where
-    VertexOut   :: Exp V V4F      -- position
+-- result of a vertex or geometry shader function
+data VertexOut clipDistances t where
+    VertexOut   :: IsFloatTuple clipDistances
+                => Exp V V4F      -- position
                 -> Exp V Float    -- point size
+                -> FlatExp V clipDistances   -- clip distance []
                 -> InterpolatedFlatExp V a
-                -> VertexOut (FTRepr a)
+                -> VertexOut (FTRepr clipDistances) (FTRepr a)
 
 -- Geometry
 -- describes a geometry shader
-data GeometryShader primIn primOut (layerNum :: Nat) a b where
+data GeometryShader (inPrimitive :: PrimitiveType) (outPrimitive :: PrimitiveType) inClipDistances outClipDistances (layerCount :: Nat) a b where
+    GeometryShader  :: (GPU j, GPU i, GPU b, GPU outputClipDistances, GPU input, SingI layerCount
+                       , inputVertex ~ (V4F,Float,inputClipDistances,a)
+                       , input ~ PrimitiveVertices inputPrimitive inputVertex
+                       )
+                    => NatNum layerCount                                            -- geometry shader:
+                    -> OutputPrimitive outputPrimitive                              -- output primitive
+                    -> Int                                                          -- max amount of generated vertices
+                    -> (Exp G input -> Exp G (i,Int32))                             -- how many primitives?
+                    -> (Exp G i -> Exp G (Int32,Int32,i,j,Int32))                   -- how many vertices? primtive loop, out:
+                                                                                    --   gl_PrimitiveID; gl_Layer; loop var; vertex loop seed; vertex loop iteration count)
+                    -> (Exp G j -> GeometryOut j outputClipDistances b)             -- generate vertices
+                    -> GeometryShader inputPrimitive outputPrimitive inputClipDistances outputClipDistances layerCount a b
+{-
     GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, SingI layerNum)
                         => NatNum layerNum                                          -- geometry shader:
                         -> primOut                                                  -- output primitive
@@ -162,6 +176,7 @@ data GeometryShader primIn primOut (layerNum :: Nat) a b where
                         -> (Exp G i -> Exp G (i,j,Int32))                           -- how many vertices?
                         -> (Exp G j -> GeometryOut (j,b))                           -- generate vertices
                         -> GeometryShader primIn primOut layerNum a b
+-}
 
 {-
     Geometry shader builtin output:
@@ -174,14 +189,14 @@ data GeometryShader primIn primOut (layerNum :: Nat) a b where
             int gl_Layer
 -}
 -- result of a geometry shader function
-data GeometryOut t where
-    GeometryOut :: Exp G V4F      -- position
+data GeometryOut i clipDistances t where
+    GeometryOut :: IsFloatTuple clipDistances
+                => Exp G i
+                -> Exp G V4F      -- position
                 -> Exp G Float    -- point size
-                -> Exp G Int32    -- primitive ID
-                -> Exp G Int32    -- layer
-                -> Exp G j
+                -> FlatExp G clipDistances   -- clip distance []
                 -> InterpolatedFlatExp G a
-                -> GeometryOut (j,(FTRepr a))
+                -> GeometryOut i (FTRepr clipDistances) (FTRepr a)
 
 -- Fragment
 {-

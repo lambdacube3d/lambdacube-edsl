@@ -40,17 +40,17 @@ simpleTexturing = Accumulate fragCtx PassAll frag rast clear
     rast :: Exp Obj (FragmentStream 1 V2F)
     rast    = Rasterize rastCtx prims
 
-    prims :: Exp Obj (PrimitiveStream Triangle 1 V V2F)
+    prims :: Exp Obj (PrimitiveStream Triangle () 1 V V2F)
     prims   = Transform vert input
 
     input :: Exp Obj (VertexStream Triangle (V3F,V2F))
-    input   = Fetch "scene" Triangle (IV3F "position", IV2F "UVTex")
+    input   = Fetch "scene" Triangles (IV3F "position", IV2F "UVTex")
 
     worldViewProj :: Exp V M44F
     worldViewProj = Uni (IM44F "worldViewProj")
 
-    vert :: Exp V (V3F,V2F) -> VertexOut V2F
-    vert puv = VertexOut v4 (Const 1) (Smooth uv:.ZT)
+    vert :: Exp V (V3F,V2F) -> VertexOut () V2F
+    vert puv = VertexOut v4 (Const 1) ZT (Smooth uv:.ZT)
       where
         (p,uv)  = untup2 puv
         v4 :: Exp V V4F

@@ -254,8 +254,8 @@ mkTexCoord pos normal sa uvD uvL = foldl' (mkTCMod pos) uv $ saTCMod sa
                                                            t    = Const $ V3 tx ty tz :: Exp V V3F
                                                        in pack' $ V2 (pos @. s) (pos @. t)
 
-mkVertexShader :: CommonAttrs -> StageAttrs -> Exp V (V3F,V3F,V2F,V2F,V4F) -> VertexOut (V2F,V4F)
-mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) (Smooth uv:.Smooth color:.ZT)
+mkVertexShader :: CommonAttrs -> StageAttrs -> Exp V (V3F,V3F,V2F,V2F,V4F) -> VertexOut () (V2F,V4F)
+mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) ZT (Smooth uv:.Smooth color:.ZT)
   where
     worldMat    = Uni (IM44F "worldMat")
     viewMat     = Uni (IM44F "viewMat")
@@ -309,7 +309,7 @@ mkFilterFunction sa = case saAlphaFunc sa of
 mkStage :: ByteString -> CommonAttrs -> Exp Obj (FrameBuffer 1 (Float,V4F)) -> StageAttrs -> Exp Obj (FrameBuffer 1 (Float,V4F))
 mkStage name ca prevFB sa = Accumulate aCtx fFun fSh (Rasterize rCtx (Transform vSh input)) prevFB
   where
-    input   = Fetch name Triangle (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")
+    input   = Fetch name Triangles (IV3F "position", IV3F "normal", IV2F "diffuseUV", IV2F "lightmapUV", IV4F "color")
     rCtx    = mkRasterContext ca
     aCtx    = mkAccumulationContext sa
     vSh     = mkVertexShader ca sa
@@ -333,12 +333,12 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
     rastCtx = TriangleCtx CullNone (PolygonLine 2) offset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
-    input   = Fetch "missing shader" Triangle (IV3F "position", IV4F "color")
+    input   = Fetch "missing shader" Triangles (IV3F "position", IV4F "color")
     worldMat = Uni (IM44F "worldMat")
     viewProj = Uni (IM44F "viewProj")
 
-    vert :: Exp V (V3F,V4F) -> VertexOut V4F
-    vert pc = VertexOut v4 (Const 1) (Smooth c:.ZT)
+    vert :: Exp V (V3F,V4F) -> VertexOut () V4F
+    vert pc = VertexOut v4 (Const 1) ZT (Smooth c:.ZT)
       where
         v4    = viewProj @*. worldMat @*. snoc p 1
         (p,c) = untup2 pc
@@ -358,12 +358,12 @@ errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
     rastCtx = TriangleCtx CullNone PolygonFill NoOffset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
-    input   = Fetch "missing shader" Triangle (IV3F "position", IV4F "color")
+    input   = Fetch "missing shader" Triangles (IV3F "position", IV4F "color")
     worldMat = Uni (IM44F "worldMat")
     viewProj = Uni (IM44F "viewProj")
 
-    vert :: Exp V (V3F,V4F) -> VertexOut V4F
-    vert pc = VertexOut v4 (Const 1) (Smooth c':.ZT)
+    vert :: Exp V (V3F,V4F) -> VertexOut () V4F
+    vert pc = VertexOut v4 (Const 1) ZT (Smooth c':.ZT)
       where
         v4    = viewProj @*. worldMat @*. snoc p 1
         (p,c) = untup2 pc

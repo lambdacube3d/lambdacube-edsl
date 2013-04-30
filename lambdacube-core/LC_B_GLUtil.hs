@@ -880,6 +880,29 @@ createGLTextureObject dag (Sampler txFilter txEdgeMode tx) = do
         Texture2DMS dTy n   -> return ()
         TextureBuffer dTy   -> return ()
         -}
+{-
+    let (width,height) = bitmapSize bitmap
+        wrapMode = case isClamped of
+            True    -> gl_CLAMP_TO_EDGE
+            False   -> gl_REPEAT
+        (minFilter,maxLevel) = case isMip of
+            False   -> (gl_LINEAR,0)
+            True    -> (gl_LINEAR_MIPMAP_LINEAR, floor $ log (fromIntegral $ max width height) / log 2)
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral wrapMode
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral wrapMode
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral minFilter
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL $ fromIntegral maxLevel
+    withBitmap bitmap $ \(w,h) nchn 0 ptr -> do
+        let internalFormat  = fromIntegral gl_RGBA8
+            dataFormat      = fromIntegral $ case nchn of
+                3   -> gl_RGB
+                4   -> gl_RGBA
+                _   -> error "unsupported texture format!"
+        glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
+    when isMip $ glGenerateMipmap gl_TEXTURE_2D
+-}
         -- temporary texture support: 2D NoMip Float/Int/Word Red/RG/RGBA
         Texture2D dTy 1     -> if txMipMap /= NoMip then error "FIXME: Only NoMip textures are supported yet!" else 
                                if length txGPList /= 1 then error "Invalid texture source specification!" else do

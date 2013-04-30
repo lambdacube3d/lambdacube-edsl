@@ -8,7 +8,19 @@ import LC_G_Type
 import LC_G_APIType
 
 -- primitive types
-data PrimitiveType  = Triangle | Line | Point deriving (Show, Eq, Ord)
+data FetchPrimitive
+    = Points
+    | Lines
+    | Triangles
+    | LinesAdjacency
+    | TrianglesAdjacency
+    deriving (Show,Eq,Ord)
+
+data OutputPrimitive
+    = TrianglesOutput
+    | LinesOutput
+    | PointsOutput
+    deriving (Show,Eq,Ord)
 
 data ColorArity = Red | RG | RGB | RGBA deriving (Show,Eq,Ord)
 

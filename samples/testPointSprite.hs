@@ -61,10 +61,10 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
     rast    = Rasterize rCtx prims
     rCtx    = PointCtx ProgramPointSize 10 UpperLeft
     prims   = Transform vert input
-    input   = Fetch "postSlot" Point (IV2F "position")
+    input   = Fetch "postSlot" Points (IV2F "position")
 
-    vert :: Exp V V2F -> VertexOut ()
-    vert uv = VertexOut v4 (Const 200) ZT
+    vert :: Exp V V2F -> VertexOut () ()
+    vert uv = VertexOut v4 (Const 200) ZT ZT
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv

@@ -132,10 +132,10 @@ originalImage = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) cle
   where
     accCtx = AccumulationContext Nothing (ColorOp NoBlending (one' :: V4B) :. ZT)
     clearBuf = FrameBuffer (ColorImage n1 (V4 0 0 0 1) :. ZT)
-    prims = Transform vert (Fetch "geometrySlot" Triangle (IV2F "position"))
+    prims = Transform vert (Fetch "geometrySlot" Triangles (IV2F "position"))
     
-    vert :: Exp V V2F -> VertexOut ()
-    vert pos = VertexOut pos' (floatV 1) (ZT)
+    vert :: Exp V V2F -> VertexOut () ()
+    vert pos = VertexOut pos' (floatV 1) ZT ZT
       where
         V2 x y = unpack' pos
         pos' = pack' (V4 x y (floatV 0) (floatV 1))
@@ -161,10 +161,10 @@ convolve (V2 dx dy) weights img = Accumulate accCtx PassAll frag (Rasterize tria
     
     accCtx = AccumulationContext Nothing (ColorOp NoBlending (one' :: V4B) :. ZT)
     clearBuf = FrameBuffer (ColorImage n1 (V4 0 0 0 1) :. ZT)
-    prims = Transform vert (Fetch "postSlot" Triangle (IV2F "position"))
+    prims = Transform vert (Fetch "postSlot" Triangles (IV2F "position"))
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut pos (Const 1) (NoPerspective uv' :. ZT)
+    vert :: Exp V V2F -> VertexOut () V2F
+    vert uv = VertexOut pos (Const 1) ZT (NoPerspective uv' :. ZT)
       where
         uv'    = uv @* floatV 0.5 @+ floatV 0.5
         pos    = pack' (V4 u v (floatV 1) (floatV 1))
@@ -187,10 +187,10 @@ additiveSample slot img = Accumulate accCtx PassAll frag (Rasterize triangleCtx 
     accCtx = AccumulationContext Nothing (ColorOp blendEquation (one' :: V4B) :. ZT)
     blendEquation = Blend (FuncAdd, FuncAdd) ((SrcAlpha, One), (SrcAlpha, One)) (V4 1 1 1 1)
     clearBuf = FrameBuffer (ColorImage n1 (V4 0 0 0 1) :. ZT)
-    prims = Transform vert (Fetch slot Triangle (IV2F "position", IV2F "uv", IFloat "alpha"))
+    prims = Transform vert (Fetch slot Triangles (IV2F "position", IV2F "uv", IFloat "alpha"))
 
-    vert :: Exp V (V2F, V2F, Float) -> VertexOut (V2F, Float)
-    vert attr = VertexOut pos' (Const 1) (NoPerspective uv :. Flat alpha :. ZT)
+    vert :: Exp V (V2F, V2F, Float) -> VertexOut () (V2F, Float)
+    vert attr = VertexOut pos' (Const 1) ZT (NoPerspective uv :. Flat alpha :. ZT)
       where
         pos'   = pack' (V4 x y (floatV 1) (floatV 1))
         V2 x y = unpack' pos

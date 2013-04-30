@@ -54,10 +54,10 @@ sprites = PrjFrameBuffer "" tix0 $ Accumulate fragCtx PassAll frag rast clear
     rast    = Rasterize rCtx prims
     rCtx    = PointCtx ProgramPointSize 10 UpperLeft
     prims   = Transform vert input
-    input   = Fetch "points" Point (IV2F "position")
+    input   = Fetch "points" Points (IV2F "position")
 
-    vert :: Exp V V2F -> VertexOut ()
-    vert uv = VertexOut (vec4' uv (floatV 1) (floatV 1)) (Const 20) ZT
+    vert :: Exp V V2F -> VertexOut () ()
+    vert uv = VertexOut (vec4' uv (floatV 1) (floatV 1)) (Const 20) ZT ZT
 
     offset = Uni (IV2F "offset") :: Exp F V2F
     smp n uv = texture' (Sampler LinearFilter Clamp $ TextureSlot n $ Texture2D (Float RGBA) n1) uv

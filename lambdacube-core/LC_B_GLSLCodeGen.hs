@@ -513,26 +513,169 @@ codeGenVertexShader dag smpName inVars = cvt
         , pp [inVar     (unpack n)    (toGLSLType t) | (n,t) <- inVars]
         , pp [outVarIQ  (unpack n) iq (toGLSLType t) | n <- oNames | iq <- oQ | [t] <- oT]
         , "void main ()"
-        , ppE (posE:sizeE:concat oE) ("gl_Position":"gl_PointSize":oNames)
+        , ppE (posE:sizeE:concat oE ++ clipE) ("gl_Position":"gl_PointSize":oNames ++ take clipCount clipNames)
         ], [(n,q,t) | n <- oNames | q <- oQ | [t] <- oT])
       where
-        VertexOut pos size outs = toExp dag bodyExp
+        clipCount = length clipE
+        clipNames = [pack $ "gl_ClipDistance[" ++ show i ++ "]" | i <- [0..]]
+        VertexOut pos size clips outs = toExp dag bodyExp
         ppE e a = pack $! show $! pPrint $! Compound $ reverse stmt ++ [assign (Variable (unpack n)) ex | ex <- e | n <- a]
         pp a    = pack $! show $! pPrint $! TranslationUnit a
         uniVars = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- expUniverse' dag (toExp dag bodyExp), let Single t = expType dag u]
         smpVars = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- expUniverse' dag (toExp dag bodyExp), let Single t = expType dag s, let Just n = Map.lookup s smpName]
-        ((posE,sizeE,oQ,oE,oT),(stmt,_)) = runState genSrc ([],IntMap.empty)
+        ((clipE,posE,sizeE,oQ,oE,oT),(stmt,_)) = runState genSrc ([],IntMap.empty)
         genSrc = do
             --[posE']      <- genExp pos
             a <- genExp pos
             let [posE'] = {-trace ("let [posE'] = " ++ show a)-} a
-            [sizeE']     <- genExp size
+            [sizeE'] <- genExp size
+            clipE' <- concat <$> mapM genExp clips
             (oQ',oE',oT')  <- unzip3 <$> mapM genIExp (map (toExp dag) outs)
-            return (posE',sizeE',oQ',oE',oT')
+            return (clipE',posE',sizeE',oQ',oE',oT')
         oNames      = [pack $ "v" ++ show i | i <- [0..]]
 
--- TODO
-codeGenGeometryShader samplerNameMap inVars _ = ("", inVars)
+codeGenGeometryShader :: DAG
+                      -> Map Exp String
+                      -> FetchPrimitive
+                      -> [(ByteString,GLSL.InterpolationQualifier,InputType)]
+                      -> Exp
+                      -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
+codeGenGeometryShader dag samplerNameMap inPrim inVars geomSh@(GeometryShader layerCount outPrim maxGenVertices funPrimCnt funPrim funVert) = (SB.concat [srcPre, src], outVars)
+  where
+{-
+    done - uniforms
+    done - samplers
+    done - input variables
+    - output variables
+    
+    - primitive count expression
+    - primitive loop
+        - vertex loop
+-}
+    srcPre = pack $ unlines $
+        [ "#version 150 core"
+        , "layout(" ++ cvtInputPrim inPrim ++ ") in;"
+        , "layout (" ++ cvtOutputPrim outPrim ++ ", max_vertices=" ++ show maxGenVertices ++ ") out;"
+        ]
+    src = SB.unlines $
+        [ pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
+        , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
+        , pp [inVarArr  (unpack n)    (toGLSLType t) | (n,_,t) <- inVars]
+        , pp [outVarIQ  n iq          (toGLSLType t) | n <- oNames | iq <- oQ | [t] <- oT]
+        , pack "void main ()"
+        -- , pack "{ for(int i = 0; i < gl_in.length(); i++) { gl_Position = gl_in[i].gl_Position; gl_PointSize = gl_in[i].gl_PointSize; EmitVertex(); } }"
+        , pack $! show $! pPrint $! Compound $ reverse stmt
+        ]
+
+    pp a    = pack $! show $! pPrint $! TranslationUnit a
+    uniVars = Set.toList $ Set.fromList [(n,t) | u@(Uni n) <- expUniverse' dag geomSh, let Single t = expType dag u]
+    smpVars = Set.toList $ Set.fromList [(n,t) | s@Sampler {} <- expUniverse' dag geomSh, let Single t = expType dag s, let Just n = Map.lookup s samplerNameMap]
+
+    cvtInputPrim a = case a of
+        Points              -> "points"
+        Lines               -> "lines"
+        Triangles           -> "triangles"
+        LinesAdjacency      -> "lines_adjacency"
+        TrianglesAdjacency  -> "triangles_adjacency"
+
+    cvtOutputPrim a = case a of
+        TrianglesOutput -> "triangle_strip"
+        LinesOutput     -> "line_strip"
+        PointsOutput    -> "points"
+
+    genExp :: Env -> ExpId -> CGen [Expr]
+    genExp = codeGenExp' dag samplerNameMap
+
+    genIExp :: Env -> Exp -> CGen (GLSL.InterpolationQualifier,[Expr],[InputType])
+    genIExp env (Flat e)            = (GLSL.Flat,,codeGenType $ expIdType dag e) <$> genExp env e
+    genIExp env (Smooth e)          = (GLSL.Smooth,,codeGenType $ expIdType dag e) <$> genExp env e
+    genIExp env (NoPerspective e)   = (GLSL.NoPerspective,,codeGenType $ expIdType dag e) <$> genExp env e
+
+    oNames      = ["g" ++ show i | i <- [0..]]
+    ((oQ,oT),(stmt,_)) = runState genSrc ([],IntMap.empty)
+    outVars = zip3 (map pack oNames) oQ (concat oT)
+    genSrc = do
+        --  calculate how many primitives should we generate
+        --  create primitive loop (ends with EndPrimitive())
+        --  create vertex loop (EmitVertex())
+        let primCntBody = getBody funPrimCnt
+            primCntLam  = funPrimCnt
+            primBody    = getBody funPrim
+            vertBody    = getBody funVert
+            vertLam     = funVert
+            GeometryOut stE pE sE cE oE = toExp dag vertBody
+            --Tuple [iTy,Single Int]  = expIdType dag primCntBody
+            Tuple iTyInt = expIdType dag primCntBody
+            iTy = Tuple $ take (length iTyInt-1) iTyInt
+            (inputTy,clipsTy) = case expIdType dag primCntLam of
+                Tuple it@((Tuple [Single V4F,Single Float,ct,_]):_)    -> (it,ct)
+                it@(Tuple [Single V4F,Single Float,ct,_])              -> ([it],ct)
+                t -> error $ "clipsTy error: " ++ show t
+            vertStTy                = expIdType dag vertLam
+            -- create expressions for input primitive vertices
+            primVert i = [pre ++ "gl_Position", pre ++ "gl_PointSize"] ++
+                         [pre ++ "gl_ClipDistance[" ++ show n ++ "]" | n <- [0..tySize clipsTy-1]] ++
+                         [unpack n ++ post | (n,_,_) <- inVars]
+              where
+                pre     = "gl_in[" ++ i ++ "]."
+                post    = "[" ++ i ++ "]"
+            inputVerts = map Variable $ concat [primVert (show i) | i <- [0..length inputTy-1]]
+        eCnt <- codeGenExp' dag samplerNameMap (V.singleton inputVerts) primCntBody
+        (_,varMapP) <- get
+        let (primStateE,[primCntE]) = splitAt (length eCnt - 1) eCnt
+            (stPS,stPE)   = unzip $ [(varStmt n (toGLSLType ty) e, Variable n) | (e,ty,i) <- zip3 primStateE (codeGenType iTy) [0..], let n = "statePrim_" ++ show i]
+            primCntVar  = Variable "primCnt"
+            primIdVar   = Variable "gl_PrimitiveID"
+            layerVar    = Variable "gl_Layer"
+            clipVars = [Variable $ "gl_ClipDistance[" ++ show i ++ "]" | i <- [0..]]
+            (resP,(sP,_)) = runState primLoop ([],varMapP)
+            primLoop = do
+                (primIdE:layerE:stPrimStVertCntVert) <- genExp (V.singleton stPE) primBody
+                let (stPrimE',xsE) = splitAt (length primStateE) stPrimStVertCntVert
+                    (stVertE,[vertCntE]) = splitAt (length xsE - 1) xsE
+                    (stVS,stVE)   = unzip $ [(varStmt n (toGLSLType ty) e, Variable n) | (e,ty,i) <- zip3 stVertE (codeGenType vertStTy) [0..], let n = "stateVert_" ++ show i]
+                    vertCntVar  = GLSL.Variable "vertCnt"
+                mapM addStmt stVS
+                (_,varMapV) <- get
+                let (resV,(sV,_)) = runState genVertFun ([],varMapV)
+                    genVertFun = do
+                        let env = V.singleton stVE
+                            genVert = genExp env
+                        stVE' <- genVert stE
+                        [posE] <- genVert pE
+                        [sizeE] <- genVert sE
+                        clipsE <- concat <$> mapM genVert cE
+                        (oQ',oE',oT') <- unzip3 <$> mapM (genIExp env) (map (toExp dag) oE)
+                        -- set vertex variables - position, size, clip distances, outputs
+                        addStmt $ assign (Variable "gl_Position") posE
+                        addStmt $ assign (Variable "gl_PointSize") sizeE
+                        mapM_ addStmt $ zipWith assign clipVars clipsE
+                        mapM_ addStmt $ zipWith assign (map Variable oNames) (concat oE')
+                        addStmt $ ExpressionStatement $ Just $ functionCall "EmitVertex" []
+                        mapM_ addStmt $ zipWith assign stVE stVE'
+                        return (oQ',oT')
+                addStmt $ varStmt "vertCnt" GLSL.Int vertCntE
+                addStmt $ assign primIdVar primIdE
+                addStmt $ assign layerVar layerE
+                addStmt $ GLSL.For  (Left Nothing)
+                                    (Just $ GLSL.Condition $ GLSL.Gt vertCntVar (GLSL.IntConstant GLSL.Decimal 0))
+                                    (Just $ GLSL.PostDec vertCntVar)
+                                    (CompoundStatement $ Compound $ reverse sV)
+                addStmt $ ExpressionStatement $ Just $ functionCall "EndPrimitive" []
+                mapM_ addStmt $ zipWith assign stPE stPrimE'
+                return resV
+        mapM addStmt stPS
+        addStmt $ varStmt "primCnt" GLSL.Int primCntE
+        addStmt $ GLSL.For  (Left Nothing)
+                            (Just $ GLSL.Condition $ GLSL.Gt primCntVar (GLSL.IntConstant GLSL.Decimal 0))
+                            (Just $ GLSL.PostDec primCntVar)
+                            (CompoundStatement $ Compound $ reverse sP)
+        return resP
+
+    getBody a = b
+      where
+        Lam l   = toExp dag a
+        Body b  = toExp dag l
 
 codeGenFragmentShader :: DAG
                       -> Map Exp String
@@ -603,6 +746,7 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
 codeGenType :: Ty -> [InputType]
 codeGenType (Single ty) = [ty]
 codeGenType (Tuple l)   = concatMap codeGenType l
+codeGenType t = error $ "codeGenType error: " ++ show t
 
 -- Utility functions
 toGLSLType :: InputType -> TypeSpecifierNonArray
@@ -688,6 +832,14 @@ uniform name ty = Declaration $ var name ty (Just $ TypeQualSto Uniform)
 
 inVar :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 inVar name ty = Declaration $ var name ty (Just $ TypeQualSto In)
+
+inVarArr :: String -> TypeSpecifierNonArray -> ExternalDeclaration
+inVarArr name ty = Declaration $ InitDeclaration (TypeDeclarator varType) [InitDecl name Nothing Nothing]
+  where
+    tq = (Just $ TypeQualSto In)
+    varTySpecNoPrec = TypeSpecNoPrecision ty (Just Nothing)
+    varTySpec = TypeSpec Nothing varTySpecNoPrec
+    varType = FullType tq varTySpec
 
 inVarIQ :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
 inVarIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just In)

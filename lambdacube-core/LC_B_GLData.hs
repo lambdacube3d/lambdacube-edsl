@@ -7,7 +7,7 @@ import Data.IORef
 import Data.List as L
 import Data.Maybe
 import Data.Trie as T
-import Foreign
+import Foreign 
 --import qualified Data.IntMap as IM
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -23,11 +23,15 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , glDrawArrays
     , glDrawElements
     , gl_LINES
+    , gl_LINES_ADJACENCY
     , gl_LINE_STRIP
+    , gl_LINE_STRIP_ADJACENCY
     , gl_POINTS
     , gl_TRIANGLES
+    , gl_TRIANGLES_ADJACENCY
     , gl_TRIANGLE_FAN
     , gl_TRIANGLE_STRIP
+    , gl_TRIANGLE_STRIP_ADJACENCY
 
     -- * BUFFER related *
     -- buffer data
@@ -124,19 +128,27 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
     let Just (slotType,sType) = T.lookup slotName $ slotStream renderer
         objSType = fmap streamToInputType objAttributes
         primType = case prim of
-            TriangleStrip   -> Triangle
-            TriangleList    -> Triangle
-            TriangleFan     -> Triangle
-            LineStrip       -> Line
-            LineList        -> Line
-            PointList       -> Point
+            TriangleStrip           -> Triangles
+            TriangleList            -> Triangles
+            TriangleFan             -> Triangles
+            LineStrip               -> Lines
+            LineList                -> Lines
+            PointList               -> Points
+            TriangleStripAdjacency  -> TrianglesAdjacency
+            TriangleListAdjacency   -> TrianglesAdjacency
+            LineStripAdjacency      -> LinesAdjacency
+            LineListAdjacency       -> LinesAdjacency
         primGL = case prim of
-            TriangleStrip   -> gl_TRIANGLE_STRIP
-            TriangleList    -> gl_TRIANGLES
-            TriangleFan     -> gl_TRIANGLE_FAN
-            LineStrip       -> gl_LINE_STRIP
-            LineList        -> gl_LINES
-            PointList       -> gl_POINTS
+            TriangleStrip           -> gl_TRIANGLE_STRIP
+            TriangleList            -> gl_TRIANGLES
+            TriangleFan             -> gl_TRIANGLE_FAN
+            LineStrip               -> gl_LINE_STRIP
+            LineList                -> gl_LINES
+            PointList               -> gl_POINTS
+            TriangleStripAdjacency  -> gl_TRIANGLE_STRIP_ADJACENCY
+            TriangleListAdjacency   -> gl_TRIANGLES_ADJACENCY
+            LineStripAdjacency      -> gl_LINE_STRIP_ADJACENCY
+            LineListAdjacency       -> gl_LINES_ADJACENCY
         streamCounts = [c | Stream _ _ _ _ c <- T.elems objAttributes]
         count = head streamCounts
 

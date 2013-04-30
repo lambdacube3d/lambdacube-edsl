@@ -566,15 +566,15 @@ simpleShading = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) cle
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
     clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 (V4 0 0 0 1) :. ZT)
-    prims = LC.Transform vert (Fetch "solidGeometry" Triangle (IV3F "position", IV3F "normal"))
+    prims = LC.Transform vert (Fetch "solidGeometry" Triangles (IV3F "position", IV3F "normal"))
     
     cameraMatrix = Uni (IM44F "cameraMatrix")
     modelMatrix = Uni (IM44F "modelMatrix")
     lightPosition = Uni (IV3F "lightPosition")
     colour = Uni (IV3F "solidColour")
 
-    vert :: Exp V (V3F, V3F) -> VertexOut (V3F, V3F)
-    vert attr = VertexOut viewPos (floatV 1) (Smooth (v4v3 worldPos) :. Smooth worldNormal :. ZT)
+    vert :: Exp V (V3F, V3F) -> VertexOut () (V3F, V3F)
+    vert attr = VertexOut viewPos (floatV 1) ZT (Smooth (v4v3 worldPos) :. Smooth worldNormal :. ZT)
       where
         worldPos = modelMatrix @*. v3v4 localPos
         viewPos = cameraMatrix @*. worldPos
@@ -592,15 +592,15 @@ translucentShading = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims
   where
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp blending (one' :: V4B) :. ZT)
     blending = Blend (FuncAdd, FuncAdd) ((SrcAlpha, OneMinusSrcAlpha), (SrcAlpha, OneMinusSrcAlpha)) zero'
-    prims = LC.Transform vert (Fetch "translucentGeometry" Triangle (IV3F "position", IV3F "normal"))
+    prims = LC.Transform vert (Fetch "translucentGeometry" Triangles (IV3F "position", IV3F "normal"))
     
     cameraMatrix = Uni (IM44F "cameraMatrix")
     modelMatrix = Uni (IM44F "modelMatrix")
     lightPosition = Uni (IV3F "lightPosition")
     colour = Uni (IV4F "alphaColour")
 
-    vert :: Exp V (V3F, V3F) -> VertexOut (V3F, V3F)
-    vert attr = VertexOut viewPos (floatV 1) (Smooth (v4v3 worldPos) :. Smooth worldNormal :. ZT)
+    vert :: Exp V (V3F, V3F) -> VertexOut () (V3F, V3F)
+    vert attr = VertexOut viewPos (floatV 1) ZT (Smooth (v4v3 worldPos) :. Smooth worldNormal :. ZT)
       where
         worldPos = modelMatrix @*. v3v4 localPos
         viewPos = cameraMatrix @*. worldPos

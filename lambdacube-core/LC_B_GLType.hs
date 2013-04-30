@@ -92,7 +92,7 @@ data Renderer -- internal type
     = Renderer
     -- public
     { slotUniform           :: Trie (Trie InputType)
-    , slotStream            :: Trie (PrimitiveType, Trie InputType)
+    , slotStream            :: Trie (FetchPrimitive, Trie InputType)
     , uniformSetter         :: Trie InputSetter         -- global uniform
     , render                :: IO ()
     , dispose               :: IO ()

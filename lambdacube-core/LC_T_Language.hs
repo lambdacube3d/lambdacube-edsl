@@ -412,6 +412,8 @@ instance PkgVec V4 where
 
 -- Smart constructor and destructors for tuples
 --
+tup0 :: Exp freq ()
+tup0 = Tup NilTup
 
 tup2 :: (GPU a, GPU b)
      => (Exp stage a, Exp stage b) -> Exp stage (a, b)

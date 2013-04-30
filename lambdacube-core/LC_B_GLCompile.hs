@@ -451,17 +451,25 @@ compileRenderFrameBuffer :: DAG -> [(Exp,String)] -> [(Exp,String)] -> IORef Obj
 compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate aCtx ffilter fsh rastExp fb) = do
     --rndr <- compileFrameBuffer fb rndr'
     po <- glCreateProgram
-    let Rasterize rCtx transExp     = toExp dag rastExp
-        Transform vsh fetchExp      = toExp dag transExp
-        Fetch slotName _ slotInput  = toExp dag fetchExp
-        (shl,fragOuts) = {-case gs of
-            NoGeometryShader    -> -}([VertexShaderSrc srcV, FragmentShaderSrc srcF], (map fst outF)) {-
-            _                   -> ([VertexShaderSrc srcV, GeometryShaderSrc srcG, FragmentShaderSrc srcF], (map fst outF)) -}
+    let Rasterize rCtx primsExp     = toExp dag rastExp
+        (vsh,gsh,fetchExp)          = case toExp dag primsExp of
+            Transform vsh fetchExp  -> (vsh,Nothing,fetchExp)
+            Reassemble gsh transExp -> case toExp dag transExp of
+                Transform vsh fetchExp  -> (vsh,Just gsh,fetchExp)
+                _ -> error "internal error: compileRenderFrameBuffer"
+            _ -> error "internal error: compileRenderFrameBuffer"
+        Fetch slotName slotPrim slotInput  = toExp dag fetchExp
+        (shl,fragOuts,outColorCnt) = case gsh of
+            Nothing -> ([VertexShaderSrc srcV, FragmentShaderSrc srcF], (map fst outF), outColorCnt)
+              where
+                (srcF,outF,outColorCnt) = codeGenFragmentShader dag samplerNameMap outV (toExp dag ffilter) $ toExp dag fsh
+            Just gs -> ([VertexShaderSrc srcV, GeometryShaderSrc srcG, FragmentShaderSrc srcF], (map fst outF), outColorCnt)
+              where
+                (srcG,outG) = codeGenGeometryShader dag samplerNameMap slotPrim outV $ toExp dag gs
+                (srcF,outF,outColorCnt) = codeGenFragmentShader dag samplerNameMap outG (toExp dag ffilter) $ toExp dag fsh
+        (srcV,outV) = codeGenVertexShader dag samplerNameMap slotInput $ toExp dag vsh
         allSamplerNames = samplerNames ++ slotSamplerNames 
         samplerNameMap  = Map.fromList allSamplerNames
-        (srcV,outV) = codeGenVertexShader dag samplerNameMap slotInput $ toExp dag vsh
-        (srcG,outG) = ("",outV)--codeGenGeometryShader samplerNameMap outV gs
-        (srcF,outF,outColorCnt) = codeGenFragmentShader dag samplerNameMap outG (toExp dag ffilter) $ toExp dag fsh
         printGLStatus = checkGL >>= print
         createAndAttach [] _ = return $! Nothing
         createAndAttach sl t = do

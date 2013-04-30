@@ -41,10 +41,10 @@ blur' frag = Accumulate fragCtx PassAll frag rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V2 0 0):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "postSlot" Triangle (IV2F "position")
+    input   = Fetch "postSlot" Triangles (IV2F "position")
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+    vert :: Exp V V2F -> VertexOut () V2F
+    vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv:.ZT)
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
@@ -110,11 +110,11 @@ moments = Accumulate fragCtx PassAll storeDepth rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V2 0 0):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "streamSlot" Triangle (IV3F "position")
+    input   = Fetch "streamSlot" Triangles (IV3F "position")
     lightViewProj = Uni (IM44F "lightViewProj")
 
-    vert :: Exp V V3F -> VertexOut Float
-    vert p = VertexOut v4 (floatV 1) (Smooth depth:.ZT)
+    vert :: Exp V V3F -> VertexOut () Float
+    vert p = VertexOut v4 (floatV 1) ZT (Smooth depth:.ZT)
       where
         v4    = lightViewProj @*. snoc p 1
         V4 _ _ depth _ = unpack' v4
@@ -135,7 +135,7 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 0.1 0 0.9 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "streamSlot" Triangle (IV3F "position", IV3F "normal")
+    input   = Fetch "streamSlot" Triangles (IV3F "position", IV3F "normal")
     worldViewProj = Uni (IM44F "worldViewProj")
     lightViewProj = Uni (IM44F "lightViewProj")
     scaleU  = Uni (IFloat "scaleU")
@@ -147,8 +147,8 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
     trimM4 :: Exp s M44F -> Exp s M33F
     trimM4 v = let V4 i j k _ = unpack' v in pack' $ V3 (trimV4 i) (trimV4 j) (trimV4 k)
     
-    vert :: Exp V (V3F, V3F) -> VertexOut (V4F, V3F)
-    vert attr = VertexOut v4 (floatV 1) (Smooth v4l:.Smooth n:.ZT)
+    vert :: Exp V (V3F, V3F) -> VertexOut () (V4F, V3F)
+    vert attr = VertexOut v4 (floatV 1) ZT (Smooth v4l:.Smooth n:.ZT)
       where
         v4 = worldViewProj @*. snoc p 1
         v4l = lightViewProj @*. snoc p 1

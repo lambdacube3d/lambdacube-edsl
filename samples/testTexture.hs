@@ -40,12 +40,12 @@ post img = Accumulate fragCtx PassAll frag rast clear
     clear   = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 1 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "postSlot" Triangle (IV2F "position")
+    input   = Fetch "postSlot" Triangles (IV2F "position")
     --input = FetchData Triangle (AV2F pos)
     --pos   = V.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv:.ZT)
+    vert :: Exp V V2F -> VertexOut () V2F
+    vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv:.ZT)
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv

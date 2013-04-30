@@ -135,19 +135,24 @@ toInput (IM43F  n) = (n, U.M43F)
 toInput (IM44F  n) = (n, U.M44F)
 
 -- primitive types
-data Triangle   = Triangle deriving (Show, Eq, Ord)
-data Line       = Line     deriving (Show, Eq, Ord)
-data Point      = Point    deriving (Show, Eq, Ord)
+data PrimitiveType
+    = Triangle
+    | Line
+    | Point
+    | TriangleAdjacency
+    | LineAdjacency
 
-class Show p => IsPrimitive p where
-    toPrimitive :: p -> U.PrimitiveType
+data FetchPrimitive :: PrimitiveType -> * where
+    Points                  :: FetchPrimitive Point
+    Lines                   :: FetchPrimitive Line
+    Triangles               :: FetchPrimitive Triangle
+    LinesAdjacency          :: FetchPrimitive LineAdjacency
+    TrianglesAdjacency      :: FetchPrimitive TriangleAdjacency
 
-instance IsPrimitive Triangle where
-    toPrimitive _ = U.Triangle
-instance IsPrimitive Line where
-    toPrimitive _ = U.Line
-instance IsPrimitive Point where
-    toPrimitive _ = U.Point
+data OutputPrimitive :: PrimitiveType -> * where
+    TrianglesOutput :: OutputPrimitive Triangle
+    LinesOutput     :: OutputPrimitive Line
+    PointsOutput    :: OutputPrimitive Point
 
 data Blending c where
     NoBlending      :: Blending c
@@ -165,8 +170,8 @@ data Blending c where
 blend = Blend (FuncAdd,FuncAdd) ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4 1 1 1 1)
 
 -- abstract types, used in language AST
-data VertexStream prim t
-data PrimitiveStream prim (layerCount :: Nat) (stage :: Frequency) t
+data VertexStream (primitive :: PrimitiveType) t
+data PrimitiveStream (primitive :: PrimitiveType) clipDistances (layerCount :: Nat) (freq :: Frequency) t
 data FragmentStream (layerCount :: Nat) t
 
 
@@ -189,6 +194,10 @@ data FlatTuple c a t where
             -> FlatTuple c a t'
             -> FlatTuple c a (t :+: t')
 
+class IsFloatTuple a
+instance IsFloatTuple ZZ
+instance IsFloatTuple l => IsFloatTuple (Float :+: l)
+
 -- vertex attribute interpolation
 data Interpolated e a where
     Flat            :: e a -> Interpolated e a
@@ -204,9 +213,13 @@ data Color a
 data Depth a
 data Stencil a
 
--- TODO: needed to describe geometry shader input 
-data PrimitiveVertices prim a
-
+-- describe geometry shader input 
+type family PrimitiveVertices (primitive :: PrimitiveType) a
+type instance PrimitiveVertices Point a             = a
+type instance PrimitiveVertices Line a              = (a,a)
+type instance PrimitiveVertices LineAdjacency a     = (a,a,a,a)
+type instance PrimitiveVertices Triangle a          = (a,a,a)
+type instance PrimitiveVertices TriangleAdjacency a = (a,a,a,a,a,a)
 
 -- raster context description
 data RasterContext t where

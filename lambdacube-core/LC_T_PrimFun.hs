@@ -113,7 +113,7 @@ data PrimFun stage sig where
     PrimLength              :: IsVecScalar d a Float                          => PrimFun stage (a       -> Float)
     PrimDistance            :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> Float)
     PrimDot                 :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> Float)
-    PrimCross               :: IsVecScalar 3 a Float                       => PrimFun stage ((a,a)   -> a)
+    PrimCross               :: IsVecScalar 3 a Float                          => PrimFun stage ((a,a)   -> a)
     PrimNormalize           :: IsVecScalar d a Float                          => PrimFun stage (a       -> a)
     PrimFaceForward         :: IsVecScalar d a Float                          => PrimFun stage ((a,a,a) -> a)
     PrimReflect             :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> a)
@@ -134,9 +134,9 @@ data PrimFun stage sig where
     PrimGreaterThan         :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
     PrimGreaterThanEqual    :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
     PrimEqualV              :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
-    PrimEqual               :: IsMatVecScalar a t                             => PrimFun stage ((a,a) -> Bool)
+    PrimEqual               :: IsMatVecScalar a t                                   => PrimFun stage ((a,a) -> Bool)
     PrimNotEqualV           :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
-    PrimNotEqual            :: IsMatVecScalar a t                             => PrimFun stage ((a,a) -> Bool)
+    PrimNotEqual            :: IsMatVecScalar a t                                   => PrimFun stage ((a,a) -> Bool)
 
     -- Fragment Processing Functions
     PrimDFdx                :: IsVecScalar d a Float                          => PrimFun F (a -> a)
@@ -144,7 +144,7 @@ data PrimFun stage sig where
     PrimFWidth              :: IsVecScalar d a Float                          => PrimFun F (a -> a)
 
     -- Noise Functions
-    PrimNoise1              :: IsVecScalar d a Float                                => PrimFun stage (a -> Float)
+    PrimNoise1              :: IsVecScalar d a Float                             => PrimFun stage (a -> Float)
     PrimNoise2              :: (IsVecScalar d a Float, IsVecScalar 2 b Float)    => PrimFun stage (a -> b)
     PrimNoise3              :: (IsVecScalar d a Float, IsVecScalar 3 b Float)    => PrimFun stage (a -> b)
     PrimNoise4              :: (IsVecScalar d a Float, IsVecScalar 4 b Float)    => PrimFun stage (a -> b)

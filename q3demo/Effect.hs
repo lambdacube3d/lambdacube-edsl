@@ -39,10 +39,10 @@ renderScreen' frag = Accumulate fragCtx PassAll frag rast clear
     clear   = FrameBuffer (ColorImage n1 (V4 0 0 0 1):.ZT)
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
-    input   = Fetch "ScreenQuad" Triangle (IV2F "position")
+    input   = Fetch "ScreenQuad" Triangles (IV2F "position")
 
-    vert :: Exp V V2F -> VertexOut V2F
-    vert uv = VertexOut v4 (Const 1) (NoPerspective uv':.ZT)
+    vert :: Exp V V2F -> VertexOut () V2F
+    vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv':.ZT)
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
