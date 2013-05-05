@@ -175,7 +175,7 @@ convolve (V2 dx dy) weights img = Accumulate accCtx PassAll frag (Rasterize tria
       where
         sample = foldr1 (@+) [ texture' smp (uv @+ dir' @* floatF ofs) @* floatF coeff
                              | (ofs, coeff) <- weights]
-        smp = Sampler LinearFilter Clamp tex
+        smp = Sampler LinearFilter ClampToEdge tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 resX resY) NoMip [img]
 
 additiveSample :: SB.ByteString -> Exp Obj (Image 1 V4F) -> Exp Obj (FrameBuffer 1 V4F)
@@ -200,7 +200,7 @@ additiveSample slot img = Accumulate accCtx PassAll frag (Rasterize triangleCtx 
     frag attr = FragmentOut (pack' (V4 r g b alpha) :. ZT)
       where
         V4 r g b _ = unpack' (texture' smp uv)
-        smp = Sampler LinearFilter Clamp tex
+        smp = Sampler LinearFilter ClampToEdge tex
         tex = Texture (Texture2D (Float RGBA) n1) (V2 resX resY) NoMip [img]
         (uv, alpha) = untup2 attr
 

@@ -64,7 +64,7 @@ blur coefficients img = filter1D dirH (PrjFrameBuffer "" tix0 (filter1D dirV img
           where
             sample = foldr1 (@+) [ texture' smp (uv @+ dir ofs) @* floatF coeff
                                  | (ofs, coeff) <- coefficients]
-            smp = Sampler LinearFilter Clamp tex
+            smp = Sampler LinearFilter ClampToEdge tex
             tex = Texture (Texture2D (Float RG) n1)
                           (V2 shadowMapSize shadowMapSize) NoMip [img]
     
@@ -161,7 +161,7 @@ vsm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
         
         (worldPos, lightPos, worldNormal) = untup3 attr
 
-    sampler = Sampler LinearFilter Clamp shadowMapBlur
+    sampler = Sampler LinearFilter ClampToEdge shadowMapBlur
     
     shadowMap :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
     shadowMap = Texture (Texture2D (Float RG) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
@@ -219,7 +219,7 @@ sm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
         
         (worldPos, lightPos, worldNormal) = untup3 attr
 
-    sampler = Sampler PointFilter Clamp shadowMap
+    sampler = Sampler PointFilter ClampToEdge shadowMap
     
     shadowMap :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
     shadowMap = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 depth]
