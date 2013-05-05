@@ -25,8 +25,8 @@ import Math.Noise.Modules.Billow
 import Data.Maybe
 import Data.Bitmap.Pure
 
-quad :: Mesh
-quad = Mesh
+points :: Mesh
+points = Mesh
     { mAttributes   = T.fromList
         [ ("position", A_V2F $ SV.fromList
             [ V2 a b, V2 a a, V2 b a, V2 b b
@@ -44,6 +44,16 @@ quad = Mesh
     a2 = -0.4
     b2 = 0.4
 
+quad :: Mesh
+quad = Mesh
+    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
+    , mPrimitive    = P_Triangles
+    , mGPUData      = Nothing
+    }
+  where
+    a = -1
+    b = 1
+
 floatV :: Float -> Exp V Float
 floatV = Const
 
@@ -56,15 +66,61 @@ intF = Const
 intG :: Int32 -> Exp G Int32
 intG = Const
 
-screenQuad :: Exp Obj (FrameBuffer 1 V4F)
+v4FG :: V4F -> Exp G V4F
+v4FG = Const
+
+screenQuad :: Exp Obj (FrameBuffer 6 V4F)
 screenQuad = Accumulate fragCtx PassAll frag rast clear
+  where
+    clear   = FrameBuffer (ColorImage n6 (V4 0 0.1 0.2 1):.ZT)
+    fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
+    rast    = Rasterize rCtx prims'
+    rCtx    = triangleCtx--PointCtx ProgramPointSize 10 UpperLeft
+    prims   = Transform vert input
+    prims'  = Reassemble geom prims
+    input   = Fetch "quadSlot" Triangles (IV2F "position")
+
+    vert :: Exp V V2F -> VertexOut () ()
+    vert uv = VertexOut v4 (Const 1) ZT ZT
+      where
+        v4      = pack' $ V4 u v (floatV 1) (floatV 1)
+        V2 u v  = unpack' uv
+
+    geom = GeometryShader n6 TrianglesOutput 18 funCnt funPrim funVert
+      where
+        --funCnt :: Exp G (V4F,Float,(),()) -> Exp G ((),Int32)
+        funCnt a    = tup2 (s,intG 6)
+          where
+            s = tup2 (intG 0,a)
+        funPrim s   = tup5 (layer, layer, tup2 (layer @+ intG 1,a), tup3 (c,intG 0,a), intG 3)
+          where
+            (layer,a) = untup2 s
+            b = 0.7
+            c0 = v4FG $ V4 b 0 0 1
+            c1 = v4FG $ V4 0 b 0 1
+            c2 = v4FG $ V4 0 0 b 1
+            c3 = v4FG $ V4 b b 0 1
+            c4 = v4FG $ V4 b 0 b 1
+            c5 = v4FG $ V4 0 b b 1
+            j n v o = Cond (layer @== intG n) v o
+            c = j 0 c0 $ j 1 c1 $ j 2 c2 $ j 3 c3 $ j 4 c4 c5
+        funVert st  = GeometryOut (tup3 (c,i @+ intG 1, a3)) p s ZT (Flat c:.ZT)
+          where
+            (c,i,a3) = untup3 st
+            (a0,a1,a2) = untup3 a3
+            (p,s,_,_) = untup4 $ Cond (i @== intG 0) a0 (Cond (i @== intG 1) a1 a2)
+
+    frag :: Exp F V4F -> FragmentOut (Color V4F :+: ZZ)
+    frag c = FragmentOut $ c :. ZT
+
+screenQuad2 :: Exp Obj (FrameBuffer 1 V4F)
+screenQuad2 = Accumulate fragCtx PassAll frag rast clear
   where
     fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (ColorImage n1 (V4 1 0 0 1):.ZT)
-    rast    = Rasterize rCtx prims'
+    rast    = Rasterize rCtx prims
     rCtx    = PointCtx ProgramPointSize 10 UpperLeft
     prims   = Transform vert input
-    prims'  = Reassemble geom prims
     input   = Fetch "postSlot" Points (IV2F "position")
 
     vert :: Exp V V2F -> VertexOut () ()
@@ -73,29 +129,21 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
 
-    geom = GeometryShader n1 PointsOutput 4 funCnt funPrim funVert
-      where
-        --funCnt :: Exp G (V4F,Float,(),()) -> Exp G ((),Int32)
-        funCnt a    = tup2 (a,intG 1)
-        funPrim a   = tup5 (primitiveIDIn', intG 0, a, a, intG 3)
-        funVert a   = GeometryOut a p s ZT ZT
-          where
-            (p,s,c,v) = untup4 a
-
-    up = Uni (IFloat "up")
-    down = Uni (IFloat "down")
     frag :: Exp F () -> FragmentOut (Color V4F :+: ZZ)
     frag _ = FragmentOut $ c :. ZT
       where
+        V2 u v = unpack' pointCoord'
         c = Cond (primitiveID' @% intF 2 @== intF 0)
-                (smp "ScreenQuad" $ pointCoord')
-                (smp "ScreenQuad2" $ pointCoord')
-        smp n uv = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+                (smp $ pack' $ V3 u v (floatF 0))
+                (smp $ pack' $ V3 u v (floatF 1))
+        smp uv = texture' (Sampler LinearFilter ClampToEdge tex) uv
+        tex = Texture (Texture2D (Float RGBA) n6) (V2 128 128) NoMip [PrjFrameBuffer "" tix0 screenQuad]
+        --tex = Texture (TextureCube (Float RGBA)) (V2 128 128) NoMip [PrjFrameBuffer "" tix0 screenQuad]
 
 main :: IO ()
 main = do
     let lcnet :: Exp Obj (Image 1 V4F)
-        lcnet = PrjFrameBuffer "outFB" tix0 screenQuad
+        lcnet = PrjFrameBuffer "outFB" tix0 screenQuad2
 
     windowSize <- initCommon "LC DSL 2D Demo"
 
@@ -107,59 +155,16 @@ main = do
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
 
+    compiledPoints <- compileMesh points
+    obj <- addMesh renderer "postSlot" compiledPoints []
+
     compiledQuad <- compileMesh quad
-    obj <- addMesh renderer "postSlot" compiledQuad []
+    obj <- addMesh renderer "quadSlot" compiledQuad []
 
     args <- getArgs
     let objU    = objectUniformSetter obj
         slotU   = uniformSetter renderer
-        diffuse = uniformFTexture2D "ScreenQuad" slotU
-        diffuse2 = uniformFTexture2D "ScreenQuad2" slotU
         draw _  = render renderer >> swapBuffers
-        fname   = case args of
-            []  -> "Panels_Diffuse.png"
-            n:_ -> n
-
-    let p   = perlin
-        clamp :: Double -> Word8
-        clamp = floor . max 0 . min 255
-        calc w h i j = (\v ->  (v + 1.0) * 127.5 ) $ noiseClampedVal
-          where
-            boundBottomX :: Double
-            boundBottomX = 0.0
-            boundBottomY :: Double
-            boundBottomY = 0.0
-            boundUpperX :: Double
-            boundUpperX = 10.0
-            boundUpperY :: Double
-            boundUpperY = 10.0
-            xsize = w
-            ysize = h
-            xIncrement :: Double
-            xIncrement = (boundUpperX - boundBottomX) / (fromIntegral xsize)
-            yIncrement :: Double
-            yIncrement = (boundUpperY - boundBottomY) / (fromIntegral ysize)
-            xPos x = ((fromIntegral x) * xIncrement)  +  boundBottomX
-            yPos y = ((fromIntegral y) * yIncrement)  +  boundBottomY
-
-            noiseF :: NoiseModule
-            noiseF = gen perlin { perlinFrequency = 1.1, perlinOctaves = 9 }
-            --noiseF = gen billow { billowFrequency = 0.6, billowOctaves = 5 }
-
-            -- Actual noise computation, getValue returns Maybe Double
-            noiseValue = fromMaybe (-1.0) $ getValue noiseF (xPos i, yPos j, 2.123)
-            -- Make sure the noiseValue is in the [-1.0, 1.0] range
-            noiseClampedVal = if noiseValue > 1.0 
-                                 then 1.0
-                                 else if noiseValue < (-1.0) then (-1.0)
-                                                             else noiseValue
-        
-        ch  = createSingleChannelBitmap (512,512) Nothing (\i j -> clamp $ calc 512 512 i j)-- $ \x y ->
-        img = combineChannels [ch,ch,ch] Nothing
-
-    diffuse =<< compileTexture2DRGBAF False True img
-    Right img2 <- loadImage fname
-    diffuse2 =<< compileTexture2DRGBAF False True img2
 
     s <- fpsState
     sc <- start $ do
@@ -180,14 +185,8 @@ scene :: (Word -> Word -> IO ())
       -> SignalGen Float (Signal ())
 scene setSize slotU objU windowSize mousePosition fblrPress = do
     time <- stateful 0 (+)
-    let up      = uniformFloat "up" slotU
-        down    = uniformFloat "down" slotU
-        setupGFX (w,h) t' = do
+    let setupGFX (w,h) t' = do
             setSize (fromIntegral w) (fromIntegral h)
-            let s = sin t * 0.5 + 0.5
-                t = 1.5 * t'
-            --down s
-            --up (s+0.028)
             return ()
     r <- effectful2 setupGFX windowSize time
     return r
