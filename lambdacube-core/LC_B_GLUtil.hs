@@ -77,21 +77,33 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , glBindTexture
     , glGenTextures
     , glTexImage2D
+    , glTexImage3D
     , glTexParameteri
     , gl_TEXTURE0
 
     -- texture parameters
     , gl_CLAMP_TO_BORDER
     , gl_CLAMP_TO_EDGE
-    , gl_LINEAR
     , gl_MIRRORED_REPEAT
     , gl_REPEAT
+    , gl_LINEAR
+    , gl_NEAREST
 
+    , gl_TEXTURE_CUBE_MAP
+    , gl_TEXTURE_CUBE_MAP_POSITIVE_X
+    , gl_TEXTURE_CUBE_MAP_NEGATIVE_X
+    , gl_TEXTURE_CUBE_MAP_POSITIVE_Y
+    , gl_TEXTURE_CUBE_MAP_NEGATIVE_Y
+    , gl_TEXTURE_CUBE_MAP_POSITIVE_Z
+    , gl_TEXTURE_CUBE_MAP_NEGATIVE_Z
     , gl_TEXTURE_2D
+    , gl_TEXTURE_2D_ARRAY
     , gl_TEXTURE_MAG_FILTER
     , gl_TEXTURE_MIN_FILTER
     , gl_TEXTURE_WRAP_S
     , gl_TEXTURE_WRAP_T
+    , gl_TEXTURE_BASE_LEVEL
+    , gl_TEXTURE_MAX_LEVEL
 
     -- texture format
     , gl_R32F
@@ -870,10 +882,9 @@ createGLTextureObject dag (Sampler txFilter txEdgeMode tx) = do
             MirroredRepeat  -> gl_MIRRORED_REPEAT
             ClampToEdge     -> gl_CLAMP_TO_EDGE
             ClampToBorder   -> gl_CLAMP_TO_BORDER
-    {-
-data Filter = PointFilter | LinearFilter    deriving (Show,Eq,Ord)
-data EdgeMode = Wrap | Mirror | Clamp       deriving (Show,Eq,Ord)
-    -}
+        filterMode = case txFilter of
+            PointFilter     -> gl_NEAREST
+            LinearFilter    -> gl_LINEAR
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     {-
         void glTexImage1D( GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, void *data );
@@ -916,22 +927,46 @@ data EdgeMode = Wrap | Mirror | Clamp       deriving (Show,Eq,Ord)
         glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
     when isMip $ glGenerateMipmap gl_TEXTURE_2D
 -}
-        -- temporary texture support: 2D NoMip Float/Int/Word Red/RG/RGBA
-        Texture2D dTy 1     -> if txMipMap /= NoMip then error "FIXME: Only NoMip textures are supported yet!" else 
+        TextureCube dTy -> if txMipMap /= NoMip then error "FIXME: Only NoMip textures are supported yet!" else 
                                if length txGPList /= 1 then error "Invalid texture source specification!" else do
             let internalFormat  = fromIntegral $ textureDataTypeToGLType dTy
                 dataFormat      = fromIntegral $ textureDataTypeToGLArityType dTy
                 VV2U (V2 w h)   = txSize
-            glBindTexture gl_TEXTURE_2D to
+            glBindTexture gl_TEXTURE_CUBE_MAP to
+            glTexParameteri gl_TEXTURE_CUBE_MAP gl_TEXTURE_WRAP_S $ fromIntegral wrapMode
+            glTexParameteri gl_TEXTURE_CUBE_MAP gl_TEXTURE_WRAP_T $ fromIntegral wrapMode
+            glTexParameteri gl_TEXTURE_CUBE_MAP gl_TEXTURE_MAG_FILTER $ fromIntegral filterMode
+            glTexParameteri gl_TEXTURE_CUBE_MAP gl_TEXTURE_MIN_FILTER $ fromIntegral filterMode
+            glTexParameteri gl_TEXTURE_CUBE_MAP gl_TEXTURE_BASE_LEVEL 0
+            glTexParameteri gl_TEXTURE_CUBE_MAP gl_TEXTURE_MAX_LEVEL 0
+            let l = [ gl_TEXTURE_CUBE_MAP_POSITIVE_X 
+                    , gl_TEXTURE_CUBE_MAP_NEGATIVE_X
+                    , gl_TEXTURE_CUBE_MAP_POSITIVE_Y
+                    , gl_TEXTURE_CUBE_MAP_NEGATIVE_Y
+                    , gl_TEXTURE_CUBE_MAP_POSITIVE_Z
+                    , gl_TEXTURE_CUBE_MAP_NEGATIVE_Z
+                    ]
+            forM_ l $ \t -> glTexImage2D t 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
+
+        -- temporary texture support: 2D NoMip Float/Int/Word Red/RG/RGBA
+        Texture2D dTy layerCnt -> if txMipMap /= NoMip then error "FIXME: Only NoMip textures are supported yet!" else 
+                               if length txGPList /= 1 then error "Invalid texture source specification!" else do
+            let internalFormat  = fromIntegral $ textureDataTypeToGLType dTy
+                dataFormat      = fromIntegral $ textureDataTypeToGLArityType dTy
+                VV2U (V2 w h)   = txSize
+                txTarget        = if layerCnt > 1 then gl_TEXTURE_2D_ARRAY else gl_TEXTURE_2D
+            glBindTexture txTarget to
             -- temp
-            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral wrapMode
-            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral wrapMode
-            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
-            glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR
-            --glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
-            --glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL 0
+            glTexParameteri txTarget gl_TEXTURE_WRAP_S $ fromIntegral wrapMode
+            glTexParameteri txTarget gl_TEXTURE_WRAP_T $ fromIntegral wrapMode
+            glTexParameteri txTarget gl_TEXTURE_MAG_FILTER $ fromIntegral filterMode
+            glTexParameteri txTarget gl_TEXTURE_MIN_FILTER $ fromIntegral filterMode
+            glTexParameteri txTarget gl_TEXTURE_BASE_LEVEL 0
+            glTexParameteri txTarget gl_TEXTURE_MAX_LEVEL 0
             -- temp end
-            glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
+            case layerCnt > 1 of
+                True    -> glTexImage3D gl_TEXTURE_2D_ARRAY 0 internalFormat (fromIntegral w) (fromIntegral h) (fromIntegral layerCnt) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
+                False   -> glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
             return ()
         _ -> error $ "FIXME: This texture format is not yet supported: " ++ show txType
     return to

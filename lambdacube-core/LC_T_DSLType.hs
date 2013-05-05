@@ -234,261 +234,213 @@ instance IsScalar V4B where
     toValue v    = VV4B v
     toType _     = U.V4B
 
-singletonScalarType :: IsScalar a => a -> TupleType ((), a)
-singletonScalarType a = PairTuple UnitTuple (SingleTuple a)
-
 instance Show (Sampler dim layerCount t ar) where
     show _ = "Sampler dim layerCount t ar"
 
 -- GPU type restriction, the functions are used in shader codegen
 class (Show a) => GPU a where
-    tupleType   :: a -> TupleType (EltRepr a)
-    tupleType'  :: a -> TupleType (EltRepr' a)
+    tupleType   :: a -> Ty
 
 -- Float
 instance GPU (Sampler Tex1D SingleTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D SingleTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex3D SingleTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D CubeTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex1D ArrayTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D ArrayTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D SingleTex (MultiSample Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D ArrayTex (MultiSample Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex1D SingleTex (Buffer Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler TexRect SingleTex (Regular Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 
 -- Int
 instance GPU (Sampler Tex1D SingleTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D SingleTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex3D SingleTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D CubeTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex1D ArrayTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D ArrayTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D SingleTex (MultiSample Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D ArrayTex (MultiSample Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex1D SingleTex (Buffer Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler TexRect SingleTex (Regular Int) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 
 -- Word
 instance GPU (Sampler Tex1D SingleTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D SingleTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex3D SingleTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D CubeTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex1D ArrayTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D ArrayTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D SingleTex (MultiSample Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D ArrayTex (MultiSample Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex1D SingleTex (Buffer Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler TexRect SingleTex (Regular Word) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 
 -- Shadow
 instance GPU (Sampler Tex1D SingleTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D SingleTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D CubeTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex1D ArrayTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler Tex2D ArrayTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU (Sampler TexRect SingleTex (Shadow Float) a) where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 
 instance GPU () where
-    tupleType _  = UnitTuple
-    tupleType' _ = UnitTuple
+    tupleType v = Tuple []
 instance GPU Bool where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU Float where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU Int32 where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU Word32 where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V2B where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V2F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V2I where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V2U where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V3B where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V3F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V3I where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V3U where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V4B where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V4F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V4I where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU V4U where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M22F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M23F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M24F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M32F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M33F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M34F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M42F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M43F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance GPU M44F where
-    tupleType v  = singletonScalarType v
-    tupleType' v = SingleTuple v
+    tupleType v = Single $ toType v
 instance (GPU a, GPU b) => GPU (a, b) where
-    tupleType (_::(a, b)) 
-        = PairTuple (tupleType (undefined :: a)) (tupleType' (undefined :: b))
-    tupleType' (_::(a, b)) 
-        = PairTuple (tupleType (undefined :: a)) (tupleType' (undefined :: b))
+    tupleType (v :: (a,b)) = Tuple
+        [ tupleType (undefined :: a)
+        , tupleType (undefined :: b)
+        ]
 instance (GPU a, GPU b, GPU c) => GPU (a, b, c) where
-    tupleType (_::(a, b, c)) 
-        = PairTuple (tupleType (undefined :: (a, b))) (tupleType' (undefined :: c))
-    tupleType' (_::(a, b, c)) 
-        = PairTuple (tupleType (undefined :: (a, b))) (tupleType' (undefined :: c))
+    tupleType (v :: (a,b,c)) = Tuple
+        [ tupleType (undefined :: a)
+        , tupleType (undefined :: b)
+        , tupleType (undefined :: c)
+        ]
 instance (GPU a, GPU b, GPU c, GPU d) => GPU (a, b, c, d) where
-    tupleType (_::(a, b, c, d)) 
-        = PairTuple (tupleType (undefined :: (a, b, c))) (tupleType' (undefined :: d))
-    tupleType' (_::(a, b, c, d)) 
-        = PairTuple (tupleType (undefined :: (a, b, c))) (tupleType' (undefined :: d))
+    tupleType (v :: (a,b,c,d)) = Tuple
+        [ tupleType (undefined :: a)
+        , tupleType (undefined :: b)
+        , tupleType (undefined :: c)
+        , tupleType (undefined :: d)
+        ]
 instance (GPU a, GPU b, GPU c, GPU d, GPU e) => GPU (a, b, c, d, e) where
-    tupleType (_::(a, b, c, d, e)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d))) 
-                (tupleType' (undefined :: e))
-    tupleType' (_::(a, b, c, d, e)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d))) 
-                (tupleType' (undefined :: e))
+    tupleType (v :: (a,b,c,d,e)) = Tuple
+        [ tupleType (undefined :: a)
+        , tupleType (undefined :: b)
+        , tupleType (undefined :: c)
+        , tupleType (undefined :: d)
+        , tupleType (undefined :: e)
+        ]
 instance (GPU a, GPU b, GPU c, GPU d, GPU e, GPU f) => GPU (a, b, c, d, e, f) where
-    tupleType (_::(a, b, c, d, e, f)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d, e))) 
-                (tupleType' (undefined :: f))
-    tupleType' (_::(a, b, c, d, e, f)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d, e))) 
-                (tupleType' (undefined :: f))
+    tupleType (v :: (a,b,c,d,e,f)) = Tuple
+        [ tupleType (undefined :: a)
+        , tupleType (undefined :: b)
+        , tupleType (undefined :: c)
+        , tupleType (undefined :: d)
+        , tupleType (undefined :: e)
+        , tupleType (undefined :: f)
+        ]
 instance (GPU a, GPU b, GPU c, GPU d, GPU e, GPU f, GPU g) => GPU (a, b, c, d, e, f, g) where
-    tupleType (_::(a, b, c, d, e, f, g)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d, e, f))) 
-                (tupleType' (undefined :: g))
-    tupleType' (_::(a, b, c, d, e, f, g)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d, e, f))) 
-                (tupleType' (undefined :: g))
+    tupleType (v :: (a,b,c,d,e,f,g)) = Tuple
+        [ tupleType (undefined :: a)
+        , tupleType (undefined :: b)
+        , tupleType (undefined :: c)
+        , tupleType (undefined :: d)
+        , tupleType (undefined :: e)
+        , tupleType (undefined :: f)
+        , tupleType (undefined :: g)
+        ]
 instance (GPU a, GPU b, GPU c, GPU d, GPU e, GPU f, GPU g, GPU h) => GPU (a, b, c, d, e, f, g, h) where
-    tupleType (_::(a, b, c, d, e, f, g, h)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d, e, f, g))) 
-                (tupleType' (undefined :: h))
-    tupleType' (_::(a, b, c, d, e, f, g, h)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d, e, f, g))) 
-                (tupleType' (undefined :: h))
+    tupleType (v :: (a,b,c,d,e,f,g,h)) = Tuple
+        [ tupleType (undefined :: a)
+        , tupleType (undefined :: b)
+        , tupleType (undefined :: c)
+        , tupleType (undefined :: d)
+        , tupleType (undefined :: e)
+        , tupleType (undefined :: f)
+        , tupleType (undefined :: g)
+        , tupleType (undefined :: h)
+        ]
 instance (GPU a, GPU b, GPU c, GPU d, GPU e, GPU f, GPU g, GPU h, GPU i) => GPU (a, b, c, d, e, f, g, h, i) where
-    tupleType (_::(a, b, c, d, e, f, g, h, i)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d, e, f, g, h))) 
-                (tupleType' (undefined :: i))
-    tupleType' (_::(a, b, c, d, e, f, g, h, i)) 
-        = PairTuple (tupleType (undefined :: (a, b, c, d, e, f, g, h))) 
-                (tupleType' (undefined :: i))
+    tupleType (v :: (a,b,c,d,e,f,g,h,i)) = Tuple
+        [ tupleType (undefined :: a)
+        , tupleType (undefined :: b)
+        , tupleType (undefined :: c)
+        , tupleType (undefined :: d)
+        , tupleType (undefined :: e)
+        , tupleType (undefined :: f)
+        , tupleType (undefined :: g)
+        , tupleType (undefined :: h)
+        , tupleType (undefined :: i)
+        ]
 
 -- stream type restriction, these types can be used in vertex shader input
 class GPU a => SGPU a
@@ -688,14 +640,3 @@ tix7 :: GPU s => TupleIdx ((((((((t, s), s1), s2), s3), s4), s5), s6), s7) s
 tix7 = SuccTupIdx tix6
 tix8 :: GPU s => TupleIdx (((((((((t, s), s1), s2), s3), s4), s5), s6), s7), s8) s
 tix8 = SuccTupIdx tix7
-
--- used in shader codegen
-data TupleType a where
-  UnitTuple   ::                               TupleType ()
-  SingleTuple :: IsScalar a =>            a -> TupleType a
-  PairTuple   :: !(TupleType a) -> !(TupleType b) -> TupleType (a, b)
-
-instance Show (TupleType a) where
-    show UnitTuple = "UnitTuple"
-    show (SingleTuple v) = "SingleTuple '"++ show (toType v) ++"'"
-    show (PairTuple a b) = "PairTuple (" ++ show a ++ ") (" ++ show b ++ ")"

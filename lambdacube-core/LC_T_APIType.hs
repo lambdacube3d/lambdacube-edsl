@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module LC_T_APIType where
 
 import GHC.TypeLits
@@ -382,8 +383,20 @@ data TextureDataType (kind :: TextureSemantics *) arity where
 -- helper type level function for texture specification
 -- tells whether a texture is a single or an array texture
 type family TexArrRepr (a :: Nat) :: TextureArray
+{-
 type instance TexArrRepr 1 = SingleTex
 type instance TexArrRepr ((2 <= t) => t) = ArrayTex
+-}
+-- FIXME: implement properly
+type instance TexArrRepr 1 = SingleTex
+type instance TexArrRepr 2 = ArrayTex
+type instance TexArrRepr 3 = ArrayTex
+type instance TexArrRepr 4 = ArrayTex
+type instance TexArrRepr 5 = ArrayTex
+type instance TexArrRepr 6 = ArrayTex
+type instance TexArrRepr 7 = ArrayTex
+type instance TexArrRepr 8 = ArrayTex
+type instance TexArrRepr 9 = ArrayTex
 
 -- supported texture component arities
 class IsColorArity a where
@@ -421,7 +434,7 @@ data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> Text
                     -> TextureType Tex3D TexMip SingleTex 1 (Regular t) ar
 
     TextureCube     :: TextureDataType t ar
-                    -> TextureType Tex2D TexMip CubeTex 1 t ar
+                    -> TextureType Tex2D TexMip CubeTex 6 t ar
 
     TextureRect     :: TextureDataType t ar
                     -> TextureType TexRect TexNoMip SingleTex 1 t ar

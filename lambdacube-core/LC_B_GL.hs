@@ -35,6 +35,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , glDrawBuffer
     , glDrawBuffers
     , glFramebufferRenderbuffer
+    , glFramebufferTexture
     , glFramebufferTexture2D
     , glGenRenderbuffers
     , glRenderbufferStorage
@@ -49,6 +50,22 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_RENDERBUFFER
     , gl_TEXTURE0
     , gl_TEXTURE_2D
+    , gl_UNSIGNED_BYTE
+    , glTexImage2D
+    , gl_TEXTURE_2D_ARRAY
+    , glTexImage3D
+    , gl_TEXTURE_MAX_LEVEL
+    , glTexParameteri
+    , gl_TEXTURE_BASE_LEVEL
+    , gl_NEAREST
+    , gl_TEXTURE_MIN_FILTER
+    , gl_TEXTURE_MAG_FILTER
+    , gl_CLAMP_TO_EDGE
+    , gl_TEXTURE_WRAP_S
+    , gl_TEXTURE_WRAP_T
+    , gl_DEPTH_COMPONENT32
+    , gl_DEPTH_COMPONENT
+    , glGenTextures
     )
 
 import LC_G_Type
@@ -127,7 +144,7 @@ mkRenderTextures dag allGPs = do
 
 mkRenderDescriptor :: DAG -> RenderState -> Map Exp String -> Map Exp String -> Map Exp GLuint -> Exp -> IO RenderDescriptor
 mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj f = case f of
-    FrameBuffer {}  -> RenderDescriptor T.empty T.empty (compileClearFrameBuffer f) (return ()) <$> newIORef (ObjectSet (return ()) Map.empty) <*> pure 0
+    FrameBuffer imgs  -> RenderDescriptor T.empty T.empty (compileClearFrameBuffer f) (return ()) <$> newIORef (ObjectSet (return ()) Map.empty) <*> pure (length [() | ColorImage {} <- imgs])
     Accumulate {}   -> do
         {- 
             setup texture input, before each slot's render operation we should setup texture unit mapping
@@ -185,18 +202,27 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
         glBindFramebuffer gl_DRAW_FRAMEBUFFER glFBO
         putStr "    - bind: " >> printGLStatus
         let depSamplers = dependentSamplers fb
+            hasDepthOp = case fb of
+                Accumulate (AccumulationContext _ ops) _ _ _ _  -> not $ L.null [() | DepthOp {} <- ops]
+                FrameBuffer imgs -> not $ L.null [() | DepthImage {} <- imgs]
         ----------
         -- FIXME: samplers must contain the fragment value's output index!
         ----------
-        (texSizes,fboMapping) <- fmap unzip $ forM (zip [0..] depSamplers) $ \(i,smp) -> do
+        (layerCnts,texSizes,fboMapping) <- fmap unzip3 $ forM (zip [0..] depSamplers) $ \(i,smp) -> do
             let Sampler _ _ txExp  = smp
-                Texture _ ts _ [prjFBExp] = toExp dag txExp
+                Texture txType ts NoMip [prjFBExp] = toExp dag txExp
                 PrjFrameBuffer _ prjIdx _               = toExp dag prjFBExp
                 Just txObj  = Map.lookup smp renderTexGLObj
                 colorNumber = outCnt - prjIdx - 1
-            glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D txObj 0
+                attachSingleLayer = glFramebufferTexture2D gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) gl_TEXTURE_2D txObj 0
+                attachMultiLayer = glFramebufferTexture gl_DRAW_FRAMEBUFFER (gl_COLOR_ATTACHMENT0 + fromIntegral i) txObj 0
+            lc <- case txType of
+                Texture2D _ ln
+                    | ln <= 1   -> attachSingleLayer >> return ln
+                    | otherwise -> attachMultiLayer >> return ln
+                TextureCube _   -> attachMultiLayer >> return 6
             putStr ("    - attach to color slot #" ++ show i ++ "  texture object #" ++ show txObj ++ " with color number #" ++ show colorNumber ++ ": ") >> printGLStatus
-            return (ts, (colorNumber,gl_COLOR_ATTACHMENT0 + fromIntegral i)) -- FIXME: calculate FBO attachment index properly, index reffered from right
+            return (lc, ts, (colorNumber,gl_COLOR_ATTACHMENT0 + fromIntegral i)) -- FIXME: calculate FBO attachment index properly, index reffered from right
         let fboMappingMap   = IntMap.fromList fboMapping
             fboMappingList  = [IntMap.findWithDefault gl_NONE i fboMappingMap | i <- [0..outCnt-1]]
         withArray fboMappingList $ glDrawBuffers $ fromIntegral outCnt
@@ -207,14 +233,42 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
         unless (all (== head texSizes) texSizes) $ error ("Framebuffer attachment size mismatch! \n" ++ "  - sizes: " ++ show texSizes)
         -- create and attach depth buffer
         let VV2U (V2 depthW depthH) = head texSizes
-        depthTex <- alloca $! \pto -> glGenRenderbuffers 1 pto >> peek pto
-        putStr "    - alloc depth texture: " >> printGLStatus
-        glBindRenderbuffer gl_RENDERBUFFER depthTex
-        putStr "    - bind depth texture: " >> printGLStatus
-        glRenderbufferStorage gl_RENDERBUFFER gl_DEPTH_COMPONENT32 (fromIntegral depthW) (fromIntegral depthH)
-        putStr "    - define depth texture: " >> printGLStatus
-        glFramebufferRenderbuffer gl_DRAW_FRAMEBUFFER gl_DEPTH_ATTACHMENT gl_RENDERBUFFER depthTex
-        putStr "    - attach depth texture: " >> printGLStatus
+        when hasDepthOp $ do
+            {-
+            depthTex <- alloca $! \pto -> glGenRenderbuffers 1 pto >> peek pto
+            putStr "    - alloc depth texture: " >> printGLStatus
+            glBindRenderbuffer gl_RENDERBUFFER depthTex
+            putStr "    - bind depth texture: " >> printGLStatus
+            glRenderbufferStorage gl_RENDERBUFFER gl_DEPTH_COMPONENT32 (fromIntegral depthW) (fromIntegral depthH)
+            putStr "    - define depth texture: " >> printGLStatus
+            glFramebufferRenderbuffer gl_DRAW_FRAMEBUFFER gl_DEPTH_ATTACHMENT gl_RENDERBUFFER depthTex
+            putStr "    - attach depth texture: " >> printGLStatus
+            -}
+            depthTex <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
+            putStr "    - alloc depth texture: " >> printGLStatus
+            let layerCnt = head layerCnts
+                txTarget = if layerCnt > 1 then gl_TEXTURE_2D_ARRAY else gl_TEXTURE_2D
+                internalFormat = fromIntegral gl_DEPTH_COMPONENT32
+                dataFormat = fromIntegral gl_DEPTH_COMPONENT
+            glBindTexture txTarget depthTex
+            putStr "    - bind depth texture: " >> printGLStatus
+            -- temp
+            glTexParameteri txTarget gl_TEXTURE_WRAP_S $ fromIntegral gl_CLAMP_TO_EDGE
+            glTexParameteri txTarget gl_TEXTURE_WRAP_T $ fromIntegral gl_CLAMP_TO_EDGE
+            glTexParameteri txTarget gl_TEXTURE_MAG_FILTER $ fromIntegral gl_NEAREST
+            glTexParameteri txTarget gl_TEXTURE_MIN_FILTER $ fromIntegral gl_NEAREST
+            glTexParameteri txTarget gl_TEXTURE_BASE_LEVEL 0
+            glTexParameteri txTarget gl_TEXTURE_MAX_LEVEL 0
+            -- temp end
+            case layerCnt > 1 of
+                True    -> glTexImage3D gl_TEXTURE_2D_ARRAY 0 internalFormat (fromIntegral depthW) (fromIntegral depthH) (fromIntegral layerCnt) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
+                False   -> glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral depthW) (fromIntegral depthH) 0 dataFormat gl_UNSIGNED_BYTE nullPtr
+            putStr "    - define depth texture: " >> printGLStatus
+            case layerCnt > 1 of
+                True    -> glFramebufferTexture gl_DRAW_FRAMEBUFFER gl_DEPTH_ATTACHMENT depthTex 0
+                False   -> glFramebufferTexture2D gl_DRAW_FRAMEBUFFER gl_DEPTH_ATTACHMENT gl_TEXTURE_2D depthTex 0
+            putStr "    - attach depth texture: " >> printGLStatus
+
 
         putStr "    - check FBO completeness: " >> printFBOStatus
 
@@ -225,7 +279,7 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
                 --putStr " -- FBO status: " >> printFBOStatus
             disposeAct = do
                 with glFBO $ \pbo -> glDeleteFramebuffers 1 pbo
-                with depthTex $ \pto -> glDeleteTextures 1 pto
+                --with depthTex $ \pto -> glDeleteTextures 1 pto
         return (renderAct,disposeAct)
 
 mkRenderState :: IO RenderState

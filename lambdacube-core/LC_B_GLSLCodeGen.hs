@@ -507,6 +507,7 @@ codeGenVertexShader dag smpName inVars = cvt
     cvt (Lam lam) = cvt $ toExp dag lam
     cvt (Body bodyExp) = (SB.unlines $!
         [ "#version 150 core"
+        , "#extension GL_EXT_gpu_shader4 : enable"
         -- , "#pragma optimize(off)"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
@@ -554,6 +555,7 @@ codeGenGeometryShader dag samplerNameMap inPrim inVars geomSh@(GeometryShader la
 -}
     srcPre = pack $ unlines $
         [ "#version 150 core"
+        , "#extension GL_EXT_gpu_shader4 : enable"
         , "layout(" ++ cvtInputPrim inPrim ++ ") in;"
         , "layout (" ++ cvtOutputPrim outPrim ++ ", max_vertices=" ++ show maxGenVertices ++ ") out;"
         ]
@@ -710,6 +712,7 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
     src :: [ExpId] -> [(ByteString,ExpId)] -> (ByteString, [(ByteString,InputType)],Int)
     src outs outs' = (SB.unlines $!
         [ "#version 150 core"
+        , "#extension GL_EXT_gpu_shader4 : enable"
         -- , "#pragma optimize(off)"
         , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]

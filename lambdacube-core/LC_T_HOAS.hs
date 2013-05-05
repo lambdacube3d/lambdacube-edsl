@@ -98,7 +98,7 @@ data Exp :: Frequency -> * -> * where
                     -> Exp Obj (PrimitiveStream inputPrimitive inputClipDistances 1 V a)
                     -> Exp Obj (PrimitiveStream outputPrimitive outputClipDistances layerCount G b)
 
-    Rasterize       :: RasterContext prim
+    Rasterize       :: RasterContext primitive
                     -> Exp Obj (PrimitiveStream primitive clipDistances layerCount freq a)
                     -> Exp Obj (FragmentStream layerCount a)
 

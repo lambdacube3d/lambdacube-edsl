@@ -5,7 +5,7 @@ import GHC.TypeLits
 import Debug.Trace
 
 import LC_T_APIType (FlatTuple(..),Frequency(..))
-import LC_T_DSLType (GPU,Tuple(..),TupleType(..),TupleIdx(..))
+import LC_T_DSLType (GPU,Tuple(..),TupleIdx(..))
 import qualified LC_T_APIType as T
 import qualified LC_T_DSLType as T hiding (Shadow)
 import qualified LC_T_PrimFun as T
@@ -14,6 +14,7 @@ import LC_U_DeBruijn
 import LC_U_APIType
 import LC_G_APIType
 import LC_C_PrimFun
+import LC_G_Type as G
 
 toInt :: SingI n => T.NatNum n -> Int
 toInt (a :: T.NatNum n) = fromInteger $ fromSing (sing :: Sing (n :: Nat))
@@ -34,15 +35,7 @@ genTupLen i a = sum $ map tySize $ take i rt
 type Layout = [[Ty]]
 
 genTy :: GPU a => a -> Ty
-genTy a = case cvt $ T.tupleType a of
-    [e] -> {-trace (show e)-} e
-    e   -> {-trace (show (Tuple e)) $-} Tuple $ e
-  where
-    cvt :: TupleType a -> [Ty]
-    cvt UnitTuple         = []--[Tuple []]
-    cvt (SingleTuple a)   = [Single (T.toType a)]
-    cvt (PairTuple a (SingleTuple b))   = cvt a ++ [Single (T.toType b)]
-    cvt (PairTuple a b )                = cvt a ++ [Tuple (cvt b)]
+genTy = T.tupleType
 
 convertGPOutput :: ExpC exp => H.GPOutput -> exp
 convertGPOutput (H.ImageOut a b)    = imageOut a $ convertGP b
