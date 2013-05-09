@@ -118,7 +118,7 @@ data Exp :: Frequency -> * -> * where
                     -> Exp Obj (FrameBuffer layerCount b)
                     -> Exp Obj (Image layerCount t)
 
-    PrjImage        :: ((idx + 1) <= layerCount, SingI idx)
+    PrjImage        :: ((idx + 1) <= layerCount, 2 <= layerCount, SingI idx)
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> NatNum idx
                     -> Exp Obj (Image layerCount t)
@@ -223,10 +223,14 @@ data FragmentFilter a where
             -> FragmentFilter a
 
 
-data GPOutput where
+data GPOutput (o :: OutputType) where
     ImageOut    :: ByteString
-                -> Exp Obj (Image layerCount t)
-                -> GPOutput
+                -> V2U
+                -> Exp Obj (Image 1 t)
+                -> GPOutput SingleOutput
 
     ScreenOut   :: Exp Obj (Image 1 t)
-                -> GPOutput
+                -> GPOutput SingleOutput
+
+    MultiOut    :: [GPOutput SingleOutput]
+                -> GPOutput MultiOutput

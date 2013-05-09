@@ -4,6 +4,7 @@ import Debug.Trace
 import Control.Monad.State
 import Data.ByteString.Char8 (ByteString)
 
+import LC_G_Type
 import LC_G_APIType
 import LC_U_APIType
 import LC_U_PrimFun
@@ -124,8 +125,9 @@ data Exp
     | Filter                !ExpId
 
     -- GPOutput
-    | ImageOut              ByteString !ExpId
+    | ImageOut              ByteString V2U !ExpId
     | ScreenOut             !ExpId
+    | MultiOut              [ExpId]
     deriving (Eq, Ord, Show)
 
 class ExpC exp where
@@ -171,8 +173,9 @@ class ExpC exp where
     passAll         :: exp
     filter_         :: exp -> exp
     -- GPOutput constructors
-    imageOut        :: ByteString -> exp -> exp
+    imageOut        :: ByteString -> V2U -> exp -> exp
     screenOut       :: exp -> exp
+    multiOut        :: [exp] -> exp
 
 newtype N = N {unN :: State DAG ExpId}
 
@@ -294,9 +297,12 @@ instance ExpC N where
         !h1 <- unN a
         hashcons (Unknown "Filter") $ Filter h1
     -- GPOutput constructors
-    imageOut !a !b = N $ do
-        !h1 <- unN b
-        hashcons (Unknown "ImageOut") $ ImageOut a h1
+    imageOut !a !b !c = N $ do
+        !h1 <- unN c
+        hashcons (Unknown "ImageOut") $ ImageOut a b h1
     screenOut !a = N $ do
         !h1 <- unN a
         hashcons (Unknown "ScreenOut") $ ScreenOut h1
+    multiOut !a = N $ do
+        !h1 <- mapM unN a
+        hashcons (Unknown "MultiOut") $ MultiOut h1

@@ -512,3 +512,7 @@ data Frequency
     | V
     | G
     | F
+
+data OutputType
+    = SingleOutput
+    | MultiOutput

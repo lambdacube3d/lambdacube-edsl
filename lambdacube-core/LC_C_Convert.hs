@@ -37,9 +37,10 @@ type Layout = [[Ty]]
 genTy :: GPU a => a -> Ty
 genTy = T.tupleType
 
-convertGPOutput :: ExpC exp => H.GPOutput -> exp
-convertGPOutput (H.ImageOut a b)    = imageOut a $ convertGP b
-convertGPOutput (H.ScreenOut a)   = screenOut $ convertGP a
+convertGPOutput :: ExpC exp => H.GPOutput o -> exp
+convertGPOutput (H.ImageOut a b c)  = imageOut a b $ convertGP c
+convertGPOutput (H.ScreenOut a)     = screenOut $ convertGP a
+convertGPOutput (H.MultiOut a)      = multiOut $ map convertGPOutput a
 
 -- GP
 convertGP :: ExpC exp => H.Exp T.Obj t -> exp

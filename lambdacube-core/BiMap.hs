@@ -13,7 +13,7 @@
 -- both parts of the association.
 
 module BiMap (
-	      BiMap, empty,
+	      BiMap(..), empty,
 	      lookup_key, 
 	      lookup_val, 
 	      insert,

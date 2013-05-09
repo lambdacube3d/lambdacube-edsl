@@ -95,7 +95,7 @@ import Data.ByteString.Char8 (ByteString)
 import Data.ByteString.Char8 as SB
 import Data.Trie as T
 
-compileRenderer :: H.GPOutput -> IO Renderer
+compileRenderer :: H.GPOutput H.SingleOutput -> IO Renderer
 compileRenderer l = GL.compileRenderer dag $ U.toExp dag l'
   where
     (l', dag) = runState (U.unN $ convertGPOutput l) U.emptyDAG
