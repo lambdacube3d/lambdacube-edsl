@@ -116,6 +116,7 @@ scene setSize sceneSlots (sphereSlot:planeSlot:cubeSlots) windowSize = do
                 lightPosition = Vec3 (15 * sin time) 2 10
                 spherePosition = Vec3 (-8) (5 * sin (time * 0.25)) 0
                 
+                cubeCameraProjection = perspective 0.1 50 (pi/2) 1
                 cubeCameraMatrix 1 = fromProjective (lookat spherePosition (Vec3 1 0 0) (Vec3 0 1 0))
                 cubeCameraMatrix 2 = fromProjective (lookat spherePosition (Vec3 (-1) 0 0) (Vec3 0 1 0))
                 cubeCameraMatrix 3 = fromProjective (lookat spherePosition (Vec3 0 1 0) (Vec3 0 0 1))
@@ -133,7 +134,7 @@ scene setSize sceneSlots (sphereSlot:planeSlot:cubeSlots) windowSize = do
             
             setCubeCameraPosition spherePosition
             setSphereModelMatrix (fromProjective (translation spherePosition))
-            forM_ [1..6] $ \index -> setCubeCameraMatrix index (cubeCameraMatrix index .*. cameraProjection)
+            forM_ [1..6] $ \index -> setCubeCameraMatrix index (cubeCameraMatrix index .*. cubeCameraProjection)
     
             setPlaneModelMatrix (fromProjective $ scaling (Vec3 12 12 1) .*. translation (Vec3 0 (-2) (-12)))
             forM_ (zip setCubeModelMatrices [0..]) $ \(setCubeModelMatrix, i) -> do
