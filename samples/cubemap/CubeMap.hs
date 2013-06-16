@@ -157,12 +157,13 @@ readInput = do
     return $ if k then Nothing else Just (realToFrac t)
 
 sceneRender :: Exp Obj (FrameBuffer 1 (Float, V4F))
-sceneRender = Accumulate accCtx PassAll reflectFrag (Rasterize triangleCtx reflectPrims) directRender
+sceneRender = Accumulate accCtx PassAll reflectFrag (Rasterize rastCtx reflectPrims) directRender
   where
-    directRender = Accumulate accCtx PassAll frag (Rasterize triangleCtx directPrims) clearBuf
-    cubeMapRender = Accumulate accCtx PassAll frag (Rasterize triangleCtx cubePrims) clearBuf6
+    directRender = Accumulate accCtx PassAll frag (Rasterize rastCtx directPrims) clearBuf
+    cubeMapRender = Accumulate accCtx PassAll frag (Rasterize rastCtx cubePrims) clearBuf6
     
     accCtx = AccumulationContext Nothing (DepthOp Less True :. ColorOp NoBlending (one' :: V4B) :. ZT)
+    rastCtx = triangleCtx { ctxCullMode = CullFront CCW }
     clearBuf = FrameBuffer (DepthImage n1 1000 :. ColorImage n1 (V4 0.1 0.2 0.6 1) :. ZT)
     clearBuf6 = FrameBuffer (DepthImage n6 1000 :. ColorImage n6 (V4 0.05 0.1 0.3 1) :. ZT)
     worldInput = Fetch "geometrySlot" Triangles (IV3F "position", IV3F "normal")
