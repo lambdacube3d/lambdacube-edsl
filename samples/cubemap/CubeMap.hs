@@ -117,12 +117,12 @@ scene setSize sceneSlots (sphereSlot:planeSlot:cubeSlots) windowSize = do
                 spherePosition = Vec3 (-8) (5 * sin (time * 0.25)) 0
                 
                 cubeCameraProjection = perspective 0.1 50 (pi/2) 1
-                cubeCameraMatrix 1 = fromProjective (lookat spherePosition (Vec3 1 0 0) (Vec3 0 1 0))
-                cubeCameraMatrix 2 = fromProjective (lookat spherePosition (Vec3 (-1) 0 0) (Vec3 0 1 0))
-                cubeCameraMatrix 3 = fromProjective (lookat spherePosition (Vec3 0 1 0) (Vec3 0 0 1))
-                cubeCameraMatrix 4 = fromProjective (lookat spherePosition (Vec3 0 (-1) 0) (Vec3 0 0 (-1)))
-                cubeCameraMatrix 5 = fromProjective (lookat spherePosition (Vec3 0 0 1) (Vec3 0 1 0))
-                cubeCameraMatrix 6 = fromProjective (lookat spherePosition (Vec3 0 0 (-1)) (Vec3 0 1 0))
+                cubeCameraMatrix 1 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 1 0 0) (Vec3 0 (-1) 0))
+                cubeCameraMatrix 2 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 (-1) 0 0) (Vec3 0 (-1) 0))
+                cubeCameraMatrix 3 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 0 1 0) (Vec3 0 0 1))
+                cubeCameraMatrix 4 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 0 (-1) 0) (Vec3 0 0 (-1)))
+                cubeCameraMatrix 5 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 0 0 1) (Vec3 0 (-1) 0))
+                cubeCameraMatrix 6 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 0 0 (-1)) (Vec3 0 (-1) 0))
             
             case fps of
                 Just value -> putStrLn $ "FPS: " ++ show value
@@ -229,7 +229,7 @@ sceneRender = Accumulate accCtx PassAll reflectFrag (Rasterize triangleCtx refle
     reflectFrag :: Exp F (V3F, V3F, V3F) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     reflectFrag attr = FragmentOutRastDepth (luminance :. ZT)
       where
-        reflectedRay = normalize' (reflect' (worldPos @- (cameraPosition :: Exp F V3F)) worldNormal)
+        reflectedRay = reflect' (worldPos @- (cameraPosition :: Exp F V3F)) worldNormal
         luminance = reflectionSample reflectedRay
         (worldPos, worldNormal, cameraPosition) = untup3 attr
         reflectionSample dir = texture' (Sampler LinearFilter ClampToEdge reflectionMap) dir
