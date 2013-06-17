@@ -62,8 +62,8 @@ box (Vec3 scaleX scaleY scaleZ) = addFlatNormals $ Mesh
 capsule :: Float -> Float -> Int -> Mesh
 capsule height radius n = complexMesh
                           [ (idmtx, cylinderLateralArea height' radius (n * 2))
-                          , (translation (Vec3 0 (-height') 0), halfSphere radius n)
-                          , (scaling (Vec3 (-1) (-1) 1) .*. translation (Vec3 0 height' 0), halfSphere radius n)
+                          , (translation (Vec3 0 height' 0), halfSphere radius n)
+                          , (scaling (Vec3 (-1) (-1) 1) .*. translation (Vec3 0 (-height') 0), halfSphere radius n)
                           ]
   where
     height' = height - radius * 2
@@ -134,7 +134,7 @@ cylinderLateralArea height radius n = Mesh
     is = [t `mod` n | t <- [0..n]]
     vertices = V.zipWith3 (\x y z -> V3 (radius*x) y (radius*z)) xs ys zs
     normals = V.zipWith3 V3 xs (V.replicate (n*2) 0) zs
-    indices = V.fromList (map fromIntegral (concat [[i,i+n,i'+n,i'+n,i',i] | i <- is | i' <- tail is]))
+    indices = V.fromList (map fromIntegral (concat [[i,i'+n,i+n,i'+n,i,i'] | i <- is | i' <- tail is]))
 
 addFlatNormals :: Mesh -> Mesh
 addFlatNormals mesh@Mesh { mAttributes, mPrimitive = P_Triangles } =

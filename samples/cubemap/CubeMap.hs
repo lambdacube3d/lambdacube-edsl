@@ -47,13 +47,13 @@ main = do
     (duration, cubeObjects) <- measureDuration $ replicateM 6 $ addMesh renderer "geometrySlot" cubeMesh ["modelMatrix"]
     putStrLn $ "Cube meshes added - " ++ show duration
     
-    sphereMesh <- compileMesh (sphere 5 25)
-    (duration, sphereObject) <- measureDuration $ addMesh renderer "reflectSlot" sphereMesh ["modelMatrix"]
+    reflectorMesh <- compileMesh (capsule 3.5 2.5 25) -- (sphere 5 25)
+    (duration, reflectorObject) <- measureDuration $ addMesh renderer "reflectSlot" reflectorMesh ["modelMatrix"]
 
-    putStrLn $ "Sphere mesh added - " ++ show duration
+    putStrLn $ "Reflector mesh added - " ++ show duration
     
-    let objectSlots = sphereSlot : map objectUniformSetter cubeObjects
-        sphereSlot = objectUniformSetter sphereObject
+    let objectSlots = reflectorSlot : map objectUniformSetter cubeObjects
+        reflectorSlot = objectUniformSetter reflectorObject
         sceneSlots = uniformSetter renderer
 
         draw command = do
@@ -71,7 +71,7 @@ main = do
 
     closeWindow
 
-scene setSize sceneSlots (sphereSlot:planeSlot:cubeSlots) windowSize = do
+scene setSize sceneSlots (reflectorSlot:planeSlot:cubeSlots) windowSize = do
     pause <- toggle =<< risingEdge =<< effectful (keyIsPressed (CharKey 'P'))
     time <- transfer 0 (\dt paused time -> time + if paused then 0 else dt) pause 
     
@@ -105,7 +105,7 @@ scene setSize sceneSlots (sphereSlot:planeSlot:cubeSlots) windowSize = do
         setLightPosition = uniformV3F "lightPosition" sceneSlots . fromVec3
         setPlaneModelMatrix = uniformM44F "modelMatrix" planeSlot . fromMat4
         setCubeModelMatrices = [uniformM44F "modelMatrix" cubeSlot . fromMat4 | cubeSlot <- cubeSlots]
-        setSphereModelMatrix = uniformM44F "modelMatrix" sphereSlot . fromMat4
+        setReflectorModelMatrix = uniformM44F "modelMatrix" reflectorSlot . fromMat4
         
         setupRendering ((_, _, fps), frameCount, capture) (windowWidth, windowHeight) (cameraPosition, cameraDirection, cameraUp, _) time = do
             let aspect = fromIntegral windowWidth / fromIntegral windowHeight
@@ -114,15 +114,16 @@ scene setSize sceneSlots (sphereSlot:planeSlot:cubeSlots) windowSize = do
                 cameraProjection = perspective 0.1 50 (pi/2) aspect
 
                 lightPosition = Vec3 (15 * sin time) 2 10
-                spherePosition = Vec3 (-8) (5 * sin (time * 0.25)) 0
+                reflectorPosition = Vec3 (-8) (5 * sin (time * 0.25)) 0
                 
                 cubeCameraProjection = perspective 0.1 50 (pi/2) 1
-                cubeCameraMatrix 1 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 1 0 0) (Vec3 0 (-1) 0))
-                cubeCameraMatrix 2 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 (-1) 0 0) (Vec3 0 (-1) 0))
-                cubeCameraMatrix 3 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 0 1 0) (Vec3 0 0 1))
-                cubeCameraMatrix 4 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 0 (-1) 0) (Vec3 0 0 (-1)))
-                cubeCameraMatrix 5 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 0 0 1) (Vec3 0 (-1) 0))
-                cubeCameraMatrix 6 = fromProjective (lookat spherePosition (spherePosition &+ Vec3 0 0 (-1)) (Vec3 0 (-1) 0))
+                cubeLookAt dir up = fromProjective (lookat reflectorPosition (reflectorPosition &+ dir) up)
+                cubeCameraMatrix 1 = cubeLookAt (Vec3 1 0 0) (Vec3 0 (-1) 0)
+                cubeCameraMatrix 2 = cubeLookAt (Vec3 (-1) 0 0) (Vec3 0 (-1) 0)
+                cubeCameraMatrix 3 = cubeLookAt (Vec3 0 1 0) (Vec3 0 0 1)
+                cubeCameraMatrix 4 = cubeLookAt (Vec3 0 (-1) 0) (Vec3 0 0 (-1))
+                cubeCameraMatrix 5 = cubeLookAt (Vec3 0 0 1) (Vec3 0 (-1) 0)
+                cubeCameraMatrix 6 = cubeLookAt (Vec3 0 0 (-1)) (Vec3 0 (-1) 0)
             
             case fps of
                 Just value -> putStrLn $ "FPS: " ++ show value
@@ -132,8 +133,8 @@ scene setSize sceneSlots (sphereSlot:planeSlot:cubeSlots) windowSize = do
             setViewCameraPosition cameraPosition
             setLightPosition lightPosition
             
-            setCubeCameraPosition spherePosition
-            setSphereModelMatrix (fromProjective (translation spherePosition))
+            setCubeCameraPosition reflectorPosition
+            setReflectorModelMatrix (fromProjective (translation reflectorPosition))
             forM_ [1..6] $ \index -> setCubeCameraMatrix index (cubeCameraMatrix index .*. cubeCameraProjection)
     
             setPlaneModelMatrix (fromProjective $ scaling (Vec3 12 12 1) .*. translation (Vec3 0 (-2) (-12)))
