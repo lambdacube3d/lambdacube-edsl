@@ -17,8 +17,24 @@ import LC_Mesh
 import Utils
 import GraphicsUtils
 
+#ifdef CAPTURE
+import Graphics.Rendering.OpenGL.Raw.Core32
+import Codec.Image.DevIL
+import Text.Printf
+import Foreign
+
+withFrameBuffer :: Int -> Int -> Int -> Int -> (Ptr Word8 -> IO ()) -> IO ()
+withFrameBuffer x y w h fn = allocaBytes (w*h*4) $ \p -> do
+    glReadPixels (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h) gl_RGBA gl_UNSIGNED_BYTE $ castPtr p
+    fn p
+#endif
+
 main :: IO ()
 main = do
+#ifdef CAPTURE
+    ilInit
+#endif
+    
     let pipeline :: Exp Obj (Image 1 V4F)
         pipeline = PrjFrameBuffer "outFB" tix0 sceneRender
 
@@ -75,7 +91,7 @@ scene setSize sceneSlots (reflectorSlot:planeSlot:cubeSlots) windowSize = do
     pause <- toggle =<< risingEdge =<< effectful (keyIsPressed (CharKey 'P'))
     time <- transfer 0 (\dt paused time -> time + if paused then 0 else dt) pause 
     
-    capture <- risingEdge =<< effectful (keyIsPressed (CharKey 'C'))
+    capture <- toggle =<< risingEdge =<< effectful (keyIsPressed (CharKey 'C'))
     frameCount <- stateful (0 :: Int) (const (+1))
     
     fpsTracking <- stateful (0, 0, Nothing) $ \dt (time, count, _) -> 
@@ -145,7 +161,13 @@ scene setSize sceneSlots (reflectorSlot:planeSlot:cubeSlots) windowSize = do
                 setCubeModelMatrix (fromProjective trans)
             setSize (fromIntegral windowWidth) (fromIntegral windowHeight)
             
-            return $ return ()
+            return $ do
+#ifdef CAPTURE
+                when capture $ do
+                    glFinish
+                    withFrameBuffer 0 0 windowWidth windowHeight $ writeImageFromPtr (printf "frame%08d.jpg" frameCount) (windowHeight, windowWidth)
+#endif
+                return ()
     
     effectful4 setupRendering ((,,) <$> fpsTracking <*> frameCount <*> capture) windowSize camera time
 
@@ -180,6 +202,7 @@ sceneRender = Accumulate accCtx PassAll reflectFrag (Rasterize rastCtx reflectPr
     cubeCameraPosition = Uni (IV3F "cubeCameraPosition")
     modelMatrix = Uni (IM44F "modelMatrix")
     
+    transformGeometry :: Exp f V4F -> Exp f V3F -> Exp f M44F -> (Exp f V4F, Exp f V4F, Exp f V3F)
     transformGeometry localPos localNormal viewMatrix = (viewPos, worldPos, worldNormal)
       where
         worldPos = modelMatrix @*. localPos
