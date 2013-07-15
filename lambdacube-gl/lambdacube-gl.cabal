@@ -1,0 +1,76 @@
+Name:           lambdacube-gl
+Version:        0.5.0
+Cabal-Version:  >= 1.6 && < 2
+Build-Type:     Simple
+License:        BSD3
+License-File:   LICENSE
+Author:         Csaba Hruska, Gergely Patai
+Maintainer:     csaba (dot) hruska (at) gmail (dot) com
+Stability:      experimental
+Homepage:       http://www.haskell.org/haskellwiki/LambdaCubeEngine
+Bug-Reports:    https://github.com/csabahruska/lc-dsl/issues
+Category:       Graphics
+Tested-With:    GHC == 7.6.2
+Synopsis:       OpenGL backend for LambdaCube graphics language
+
+Library
+  Build-Depends: 
+        base,
+        binary,
+        bytestring,
+        containers,
+        mtl,
+        vector,
+
+        bytestring-trie,
+        OpenGLRaw,
+        bitmap,
+        
+        lambdacube-core
+
+  Exposed-modules:
+        LC_GL
+        LC_GL_API
+        LC_GL_Data
+        LC_GL_Input
+        LC_GL_Mesh
+        LC_GL_Type
+        LC_GL_Util
+                  
+  GHC-options:
+--        -Werror
+        -Wall
+        -fno-warn-missing-signatures
+        -fno-warn-name-shadowing
+        -fno-warn-orphans
+        -fno-warn-unused-binds
+        -fno-warn-unused-do-bind
+        -fspec-constr-count=10
+        -funbox-strict-fields
+        -O2
+-- for profiling
+--        -auto-all
+--        -caf-all
+
+  Extensions:
+        BangPatterns
+        ConstraintKinds
+        DataKinds
+        DeriveDataTypeable
+        EmptyDataDecls
+        FlexibleContexts
+        FlexibleInstances
+        FunctionalDependencies
+        GADTs
+        ImpredicativeTypes
+        KindSignatures
+        MultiParamTypeClasses
+        OverloadedStrings
+        ParallelListComp
+        Rank2Types
+        ScopedTypeVariables
+        StandaloneDeriving
+        TupleSections
+        TypeFamilies
+        TypeOperators
+        TypeSynonymInstances
