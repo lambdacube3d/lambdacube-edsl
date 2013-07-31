@@ -43,7 +43,7 @@ Executable q3demo
                   filepath,
                   vector,
 
-                  GLFW-b,
+                  GLFW-b == 0.1.0.5,
                   OpenGLRaw,
                   attoparsec,
                   bitmap,
