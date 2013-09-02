@@ -386,7 +386,7 @@ store dag expId exp = do
         [ty]    = {-trace (show expId ++ " [ty]    = " ++ show t)-} t
         newStmt = varStmt name (toGLSLType ty) exp
         cnt     = expIdCount dag expId
-    case cnt > 0 of
+    case cnt > 1 of
         True    -> do
             (stmt,varMap) <- get
             put (newStmt:stmt,IntMap.insert expId [newVar] varMap)
@@ -456,7 +456,7 @@ codeGenExp' dag smpName env expId = do
                     e       = codeGenPrim f ty argTy arg'
                 if length e > 1 then return e else
                     store dag expId $ head e
-            s@(Sampler f e t)   -> case Map.lookup s smpName of
+            s@(Sampler {})   -> case Map.lookup s smpName of
                 Just name   -> return [Variable name]
                 Nothing     -> error "Internal error: Unknown sampler value!"
             Cond p t e          -> do

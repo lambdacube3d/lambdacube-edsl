@@ -442,6 +442,8 @@ data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> Text
     Texture2DMS     :: SingI layerCount
                     => TextureDataType (Regular t) ar
                     -> NatNum layerCount
+                    -> Int  -- sample count
+                    -> Bool -- fixed sample locations
                     -> TextureType Tex2D TexNoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
 
     TextureBuffer   :: TextureDataType (Regular t) ar
@@ -449,11 +451,11 @@ data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> Text
 
 
 -- defines a texture
-data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: TextureSemantics *) ar where
+data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: TextureSemantics *) ar (mip :: TextureMipMap) where
     TextureSlot     :: (IsValidTextureSlot t)
                     => ByteString -- texture slot name
                     -> TextureType dim mip arr layerCount t ar
-                    -> Texture gp dim arr t ar
+                    -> Texture gp dim arr t ar mip
     -- TODO:
     --  add texture internal format specification
     Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip)
@@ -462,7 +464,7 @@ data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: Te
                     -> MipMap mip
 --                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
                     -> [gp (Image layerCount (TexDataRepr ar t))]
-                    -> Texture gp dim arr t ar
+                    -> Texture gp dim arr t ar mip
 {-
     -- TODO:
     --  swizzling (arity conversion)
@@ -516,3 +518,48 @@ data Frequency
 data OutputType
     = SingleOutput
     | MultiOutput
+
+data Filter (a :: TextureMipMap) where
+    Nearest                 :: Filter TexNoMip
+    Linear                  :: Filter TexNoMip
+    NearestMipmapNearest    :: Filter TexMip
+    NearestMipmapLinear     :: Filter TexMip
+    LinearMipmapNearest     :: Filter TexMip
+    LinearMipmapLinear      :: Filter TexMip
+
+class IsEdgeMode (t :: TextureShape) a | t -> a where
+instance IsEdgeMode Tex1D (EdgeMode a)
+instance IsEdgeMode Tex2D (EdgeMode a,EdgeMode b)
+instance IsEdgeMode TexRect (EdgeMode Clamp',EdgeMode Clamp')
+instance IsEdgeMode Tex3D (EdgeMode a,EdgeMode b,EdgeMode c)
+
+class ConvertEdgeMode a where
+    convertEdgeMode :: a -> (U.EdgeMode, Maybe U.EdgeMode, Maybe U.EdgeMode)
+instance ConvertEdgeMode (EdgeMode a) where
+    convertEdgeMode a = (cvtEdgeMode a, Nothing, Nothing)
+instance ConvertEdgeMode (EdgeMode a,EdgeMode b) where
+    convertEdgeMode (a,b) = (cvtEdgeMode a, Just $ cvtEdgeMode b, Nothing)
+instance ConvertEdgeMode (EdgeMode a,EdgeMode b,EdgeMode c) where
+    convertEdgeMode (a,b,c) = (cvtEdgeMode a, Just $ cvtEdgeMode b, Just $ cvtEdgeMode c)
+
+cvtEdgeMode :: EdgeMode a -> U.EdgeMode
+cvtEdgeMode a = case a of
+    Repeat          -> U.Repeat
+    MirroredRepeat  -> U.MirroredRepeat
+    ClampToEdge     -> U.ClampToEdge
+    ClampToBorder   -> U.ClampToBorder
+
+data EdgeType
+    = Repeat'
+    | Clamp'
+
+data EdgeMode (a :: EdgeType) where
+    Repeat          :: EdgeMode Repeat'
+    MirroredRepeat  :: EdgeMode Repeat'
+    ClampToEdge     :: EdgeMode Clamp'
+    ClampToBorder   :: EdgeMode Clamp'
+deriving instance Show (EdgeMode e)
+
+data CompareMode (a :: TextureSemantics *) where
+    NoCompare   :: CompareMode a
+    Compare     :: ComparisonFunction -> CompareMode (T.Shadow a)

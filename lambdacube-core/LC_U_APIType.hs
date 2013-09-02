@@ -70,7 +70,7 @@ data TextureType
     | Texture3D     TextureDataType
     | TextureCube   TextureDataType
     | TextureRect   TextureDataType
-    | Texture2DMS   TextureDataType Int
+    | Texture2DMS   TextureDataType Int Int Bool
     | TextureBuffer TextureDataType
     deriving (Show, Eq, Ord)
 
@@ -78,4 +78,20 @@ data MipMap
     = Mip           Int Int -- Base level, Max level
     | NoMip 
     | AutoMip       Int Int -- Base level, Max level
+    deriving (Show,Eq,Ord)
+
+data Filter
+    = Nearest
+    | Linear
+    | NearestMipmapNearest
+    | NearestMipmapLinear
+    | LinearMipmapNearest
+    | LinearMipmapLinear
+    deriving (Show,Eq,Ord)
+
+data EdgeMode
+    = Repeat
+    | MirroredRepeat
+    | ClampToEdge
+    | ClampToBorder
     deriving (Show,Eq,Ord)

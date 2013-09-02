@@ -7,9 +7,9 @@ import Data.Word
 import Foreign.Storable
 import Foreign.Ptr
 
-data V2 a = V2 !a !a deriving (Eq,Ord,Show)
-data V3 a = V3 !a !a !a deriving (Eq,Ord,Show)
-data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show)
+data V2 a = V2 !a !a deriving (Eq,Ord,Show,Functor)
+data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Functor)
+data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Functor)
 
 -- matrices are stored in column major order
 type M22F = V2 V2F

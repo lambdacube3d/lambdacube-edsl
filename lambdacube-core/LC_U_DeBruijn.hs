@@ -3,11 +3,13 @@ module LC_U_DeBruijn where
 import Debug.Trace
 import Control.Monad.State
 import Data.ByteString.Char8 (ByteString)
+import Data.List (foldl')
 
 import LC_G_Type
 import LC_G_APIType
 import LC_U_APIType
 import LC_U_PrimFun
+import LC_B2_IR (SamplerDescriptor)
 
 import BiMap
 import qualified Data.IntMap as IM
@@ -22,6 +24,28 @@ data DAG
     , dagCount  :: IM.IntMap Int
     } deriving Show
 
+addCount :: DAG -> DAG
+addCount (DAG bm@(BiMap _ m) tm _) = DAG bm tm cm
+  where
+    cm = IM.foldlWithKey' go IM.empty m
+    go c i e = foldl' (\c' i' -> IM.adjust (1+) i' c') (IM.insert i 0 c) $ case e of
+        Tup a                   -> a
+        Prj _ a                 -> [a]
+        Cond a b c              -> [a,b,c]
+        PrimApp _ a             -> [a]
+        Loop a b c d            -> [a,b,c,d]
+        Body a                  -> [a]
+        VertexOut a b c d       -> a : b : c ++ d
+        GeometryOut a b c d e   -> a : b : c : d ++ e
+        FragmentOut a           -> a
+        FragmentOutDepth a b    -> a : b
+        FragmentOutRastDepth a  -> a
+        Flat a                  -> [a]
+        Smooth a                -> [a]
+        NoPerspective a         -> [a]
+        Filter a                -> [a]
+        _                       -> []
+
 emptyDAG :: DAG
 emptyDAG = DAG empty IM.empty IM.empty
 
@@ -31,13 +55,8 @@ hashcons !t !e = do
   case lookup_key e m of
     Nothing -> let (!k,!m') = insert e m
                    !tm'     = IM.insert k t tm
-                   !cm'     = IM.insert k 1 cm
-               in put (DAG m' tm' cm') >> return k
-    Just !k  -> do
-        {-trace ("sharing : " ++ show k ++ " :: " ++ show (tm IM.! k)) $ -}
-        let !cm'    = IM.adjust (1+) k cm
-        put (DAG m tm cm')
-        return k
+               in put (DAG m' tm' cm) >> return k
+    Just !k  -> return k
 {-
 --hashcons = dontShare
 dontShare :: Ty -> Exp -> State DAG ExpId
@@ -90,7 +109,7 @@ data Exp
     | Prj                   Int !ExpId
     | Cond                  !ExpId !ExpId !ExpId
     | PrimApp               !PrimFun !ExpId
-    | Sampler               !Filter !EdgeMode !ExpId
+    | Sampler               !SamplerDescriptor !ExpId
     | Loop                  !ExpId !ExpId !ExpId !ExpId
     -- special tuple expressions
     | VertexOut             !ExpId !ExpId [ExpId] [ExpId]
@@ -143,7 +162,7 @@ class ExpC exp where
     prj         :: Ty -> Int -> exp -> exp
     cond        :: Ty -> exp -> exp -> exp -> exp
     primApp     :: Ty -> PrimFun -> exp -> exp
-    sampler     :: Ty -> Filter -> EdgeMode -> exp -> exp
+    sampler     :: Ty -> SamplerDescriptor -> exp -> exp
     loop        :: Ty -> exp -> exp -> exp -> exp -> exp
     -- special tuple expressions
     vertexOut               :: exp -> exp -> [exp] -> [exp] -> exp
@@ -208,9 +227,9 @@ instance ExpC N where
     primApp !t !a !b = N $ do
         !h1 <- unN b
         hashcons t $ PrimApp a h1
-    sampler !t !a !b !c = N $ do
-        !h1 <- unN c
-        hashcons t $ Sampler a b h1
+    sampler !t !a !b = N $ do
+        !h1 <- unN b
+        hashcons t $ Sampler a h1
     loop !t !a !b !c !d = N $ do
         !h1 <- unN a
         !h2 <- unN b
@@ -271,10 +290,10 @@ instance ExpC N where
         !h1 <- unN c
         hashcons Image' $ PrjImage a b h1
     -- texture constructors
-    textureSlot !a !b = N $ hashcons (Unknown "TextureSlot") $ TextureSlot a b
+    textureSlot !a !b = N $ hashcons Texture' $ TextureSlot a b
     texture !a !b !c !d = N $ do
         !h1 <- mapM unN d
-        hashcons (Unknown "Texture") $ Texture a b c h1
+        hashcons Texture' $ Texture a b c h1
     -- Interpolated constructors
     flat !a = N $ do
         !h1 <- unN a

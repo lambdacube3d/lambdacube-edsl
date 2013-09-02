@@ -8,9 +8,9 @@ Author:         Csaba Hruska, Gergely Patai
 Maintainer:     csaba (dot) hruska (at) gmail (dot) com
 Stability:      experimental
 Homepage:       http://www.haskell.org/haskellwiki/LambdaCubeEngine
-Bug-Reports:    http://code.google.com/p/lambdacube/issues
+Bug-Reports:    https://github.com/csabahruska/lc-dsl/issues
 Category:       Graphics
-Tested-With:    GHC == 7.4.1
+Tested-With:    GHC == 7.6.2
 Synopsis:       3D rendering engine written entirely in Haskell
 Description:
     LambdaCube is a 3D rendering engine written entirely in Haskell.
@@ -29,26 +29,29 @@ Library
 
         bytestring-trie,
         prettyclass,
-        OpenGLRaw,
-        language-glsl,
+        --OpenGLRaw,
+        language-glsl
         
-        bitmap
+        --bitmap
 
   Exposed-modules:
         BiMap
-        LC_API
-        LC_B_GL
-        LC_B_GLCompile
-        LC_B_GLData
+        --LC_API
+        LC_API2
+        --LC_B_GL
+        --LC_B_GLCompile
+        --LC_B_GLData
         LC_B_GLSLCodeGen
-        LC_B_GLType
-        LC_B_GLUtil
+        --LC_B_GLType
+        --LC_B_GLUtil
         LC_B_Traversals
+        LC_B2_IR
+        LC_B2_Compile3
         LC_C_Convert
         LC_C_PrimFun
         LC_G_APIType
         LC_G_Type
-        LC_Mesh
+        --LC_Mesh
         LC_T_APIType
         LC_T_DSLType
         LC_T_HOAS
@@ -96,3 +99,4 @@ Library
         TypeFamilies
         TypeOperators
         TypeSynonymInstances
+        DeriveFunctor

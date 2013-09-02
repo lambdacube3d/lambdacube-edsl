@@ -6,7 +6,6 @@ import Data.ByteString.Char8
 import Data.Int
 
 import LC_G_Type
-import LC_G_APIType (Filter(..),EdgeMode(..))
 import LC_T_APIType
 import LC_T_DSLType
 import LC_T_PrimFun
@@ -68,10 +67,17 @@ data Exp :: Frequency -> * -> * where
             -> Exp stage e
 
     -- sampler support
-    Sampler :: GPU (Sampler dim arr t ar)
-            => Filter
-            -> EdgeMode
-            -> Texture (Exp Obj) dim arr t ar
+    Sampler :: (GPU (Sampler dim arr t ar), IsMipValid canMip mip, IsEdgeMode dim edgeMode, ConvertEdgeMode edgeMode, borderColor ~ TexDataRepr ar t, IsScalar borderColor)
+            => { smpMinFilter   :: Filter mip
+               , smpMagFilter   :: Filter TexNoMip
+               , smpEdgeMode    :: edgeMode     -- Wrap S,T,R
+               , smpBorderColor :: borderColor
+               , smpMinLod      :: Maybe Float
+               , smpMaxLod      :: Maybe Float
+               , smpLodBias     :: Float
+               , smpCompareFunc :: CompareMode t
+               , smpTexture     :: Texture (Exp Obj) dim arr t ar canMip
+               }
             -> Exp stage (Sampler dim arr t ar)
 
     -- loop support

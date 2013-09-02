@@ -15,6 +15,7 @@ import LC_U_APIType
 import LC_G_APIType
 import LC_C_PrimFun
 import LC_G_Type as G
+import LC_B2_IR (SamplerDescriptor(..))
 
 toInt :: SingI n => T.NatNum n -> Int
 toInt (a :: T.NatNum n) = fromInteger $ fromSing (sing :: Sing (n :: Nat))
@@ -160,7 +161,7 @@ convertOpenExp lyt = cvt
     cvt (H.Prj idx (e :: H.Exp stage e') :: H.Exp stage' t')       = prj (genTy (undefined :: t')) (genTupLen (prjToInt idx) (undefined :: e')) $ cvt e
     cvt (H.Cond e1 e2 e3 :: H.Exp stage t')   = cond (genTy (undefined :: t')) (cvt e1) (cvt e2) (cvt e3)
     cvt (H.PrimApp p e :: H.Exp stage t')     = primApp (genTy (undefined :: t')) (convertPrimFun p) $ cvt e
-    cvt (H.Sampler f em t :: H.Exp stage t')  = sampler (genTy (undefined :: t')) f em $ convertTexture t
+    cvt s@(H.Sampler {H.smpTexture = t} :: H.Exp stage t') = sampler (genTy (undefined :: t')) (convertSampler s) $ convertTexture t
     cvt (H.Loop e1 e2 e3 s :: H.Exp stage t') = loop (genTy (undefined :: t')) (convertFun1Exp lyt e1) (convertFun1Exp lyt e2) (convertFun1Exp lyt e3) (cvt s)
 
 convertFun1Vert :: ExpC exp => forall a b clipDistances. GPU a
@@ -209,9 +210,34 @@ convertTuple _lyt NilTup          = []
 convertTuple lyt (es `SnocTup` e) = convertTuple lyt es ++ [convertOpenExp lyt e]
 
 -- data type conversion
+convertSampler :: H.Exp stage (T.Sampler dim arr t ar) -> SamplerDescriptor
+convertSampler smp@(H.Sampler minF magF eMod bCol minL maxL lBias cmpF _) =
+      SamplerDescriptor
+        { samplerWrapS          = wrapS
+        , samplerWrapT          = wrapT
+        , samplerWrapR          = wrapR
+        , samplerMinFilter      = cvtFilter minF
+        , samplerMagFilter      = cvtFilter magF
+        , samplerBorderColor    = T.toValue bCol
+        , samplerMinLod         = minL
+        , samplerMaxLod         = maxL
+        , samplerLodBias        = lBias
+        , samplerCompareFunc    = case cmpF of
+                                    T.NoCompare -> Nothing
+                                    T.Compare a -> Just a
+        }
+      where
+        (wrapS,wrapT,wrapR) = T.convertEdgeMode eMod
+        cvtFilter f = case f of
+            T.Nearest               -> Nearest
+            T.Linear                -> Linear
+            T.NearestMipmapNearest  -> NearestMipmapNearest
+            T.NearestMipmapLinear   -> NearestMipmapLinear
+            T.LinearMipmapNearest   -> LinearMipmapNearest
+            T.LinearMipmapLinear    -> LinearMipmapLinear
 
 convertTexture :: ExpC exp
-               => T.Texture (H.Exp T.Obj) dim arr t ar
+               => T.Texture (H.Exp T.Obj) dim arr t ar mip
                -> exp
 convertTexture (T.TextureSlot n t) = textureSlot n (convertTextureType t)
 convertTexture (T.Texture t s m d) = texture (convertTextureType t) (T.toValue s) (convertMipMap m) (map convertGP d)
@@ -228,7 +254,7 @@ convertTextureType (T.Texture2D a b)    = Texture2D (convertTextureDataType a) (
 convertTextureType (T.Texture3D a)      = Texture3D (convertTextureDataType a)
 convertTextureType (T.TextureCube a)    = TextureCube (convertTextureDataType a)
 convertTextureType (T.TextureRect a)    = TextureRect (convertTextureDataType a)
-convertTextureType (T.Texture2DMS a b)  = Texture2DMS (convertTextureDataType a) (toInt b)
+convertTextureType (T.Texture2DMS a b c d)  = Texture2DMS (convertTextureDataType a) (toInt b) c d
 convertTextureType (T.TextureBuffer a)  = TextureBuffer (convertTextureDataType a)
 
 convertMipMap :: T.MipMap t -> MipMap
@@ -277,3 +303,12 @@ convertFrameBuffer = cvt
     cvt (T.DepthImage a b:.xs)      = DepthImage (toInt a) b : cvt xs
     cvt (T.StencilImage a b:.xs)    = StencilImage (toInt a) b : cvt xs
     cvt (T.ColorImage a b:.xs)      = ColorImage (toInt a) (T.toValue b) : cvt xs
+
+convertFilter :: T.Filter mip -> Filter
+convertFilter f = case f of
+    T.Nearest               -> Nearest
+    T.Linear                -> Linear
+    T.NearestMipmapNearest  -> NearestMipmapNearest
+    T.NearestMipmapLinear   -> NearestMipmapLinear
+    T.LinearMipmapNearest   -> LinearMipmapNearest
+    T.LinearMipmapLinear    -> LinearMipmapLinear
