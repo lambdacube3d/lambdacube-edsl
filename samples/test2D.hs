@@ -13,11 +13,12 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import System.Environment
+import Text.Show.Pretty (ppShow)
 
-import LC_API
+import LC_API2
+import LC_GL_API
 
 import Graphics.Rendering.OpenGL.Raw.Core32
-import LC_Mesh
 import Codec.Image.STB hiding (Image)
 
 quad :: Mesh
@@ -36,11 +37,25 @@ floatV = Const
 floatF :: Float -> Exp F Float
 floatF = Const
 
+{-
+            => { smpMinFilter   :: Filter mip
+               , smpMagFilter   :: Filter TexNoMip
+               , smpEdgeMode    :: edgeMode     -- Wrap S,T,R
+               , smpBorderColor :: borderColor
+               , smpMinLod      :: Maybe Float
+               , smpMaxLod      :: Maybe Float
+               , smpLodBias     :: Float
+               , smpCompareFunc :: CompareMode t
+               , smpTexture     :: Texture (Exp Obj) dim arr t ar canMip
+               }
+-}
+simpleSmp minF magF edgeMode tex = Sampler minF magF edgeMode zero' Nothing Nothing 0 NoCompare tex
+
 screenQuad :: Exp Obj (FrameBuffer 1 V4F)
 screenQuad = Accumulate fragCtx PassAll frag rast clear
   where
-    fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
     clear   = FrameBuffer (ColorImage n1 (V4 1 0 0 1):.ZT)
+    fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
     rast    = Rasterize triangleCtx prims
     prims   = Transform vert input
     input   = Fetch "postSlot" Triangles (IV2F "position")
@@ -57,8 +72,11 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
         color = texture' smp uv
         V2 u v = unpack' uv
         uv = uv' @* floatF 0.5 @+ floatF 0.5
-        smp = Sampler LinearFilter ClampToEdge tex
+        smp = simpleSmp Linear Linear (ClampToEdge,ClampToEdge) tex
         tex = TextureSlot "ScreenQuad" $ Texture2D (Float RGBA) n1
+
+lcout :: GPOutput SingleOutput
+lcout = ScreenOut $ PrjFrameBuffer "outFB" tix0 screenQuad
 
 main :: IO ()
 main = do
@@ -67,22 +85,31 @@ main = do
 
     windowSize <- initCommon "LC DSL 2D Demo"
 
-    renderer <- compileRenderer $ ScreenOut lcnet
-    print $ slotUniform renderer
-    print $ slotStream renderer
+    let Right ppl = compilePipeline $ ScreenOut lcnet
+        schema = schemaFromPipeline ppl
+    putStrLn $ ppShow ppl
+    putStrLn ""
+    putStrLn $ ppShow schema
+    renderer <- allocPipeline ppl
+    --print $ slotUniform renderer
+    --print $ slotStream renderer
     print "renderer created"
 
     (mousePosition,mousePositionSink) <- external (0,0)
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
 
+    input <- mkGLPipelineInput schema
     compiledQuad <- compileMesh quad
-    obj <- addMesh renderer "postSlot" compiledQuad []
+    obj <- addMesh input "postSlot" compiledQuad []
+
+    setPipelineInput renderer $ Just input
+    sortSlotObjects input
 
     args <- getArgs
     let objU    = objectUniformSetter obj
-        slotU   = uniformSetter renderer
+        slotU   = uniformSetter input
         diffuse = uniformFTexture2D "ScreenQuad" slotU
-        draw _  = render renderer >> swapBuffers
+        draw _  = renderPipeline renderer >> swapBuffers >> putStrLn "[end frame]"
         fname   = case args of
             []  -> "Panels_Diffuse.png"
             n:_ -> n
@@ -92,11 +119,11 @@ main = do
     
     s <- fpsState
     sc <- start $ do
-        u <- scene (setScreenSize renderer) slotU objU windowSize mousePosition fblrPress
+        u <- scene (setScreenSize input) slotU objU windowSize mousePosition fblrPress
         return $ draw <$> u
     driveNetwork sc (readInput s mousePositionSink fblrPressSink)
 
-    dispose renderer
+    disposePipeline renderer
     print "renderer destroyed"
     closeWindow
 
@@ -169,7 +196,6 @@ initCommon title = do
 
     (windowSize,windowSizeSink) <- external (0,0)
     setWindowSizeCallback $ \w h -> do
-        glViewport 0 0 (fromIntegral w) (fromIntegral h)
         putStrLn $ "window size changed " ++ show (w,h)
         windowSizeSink (fromIntegral w, fromIntegral h)
 
