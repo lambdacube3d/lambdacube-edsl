@@ -1,15 +1,17 @@
 module LC_GL_Type where
 
-import Data.IntMap (IntMap)
-import Data.Trie (Trie)
-import Data.IORef
 import Data.ByteString.Char8 (ByteString)
-import Data.Vector (Vector)
+import Data.IORef
 import Data.Int
+import Data.IntMap (IntMap)
+import Data.Set (Set)
+import Data.Trie (Trie)
+import Data.Vector (Vector)
 import Data.Word
 import Foreign.Ptr
+import Foreign.Storable
 
-import Graphics.Rendering.OpenGL.Raw.Core32 (GLint, GLuint, GLenum)
+import Graphics.Rendering.OpenGL.Raw.Core32 (GLint, GLuint, GLenum, GLboolean, GLsizei)
 
 import LC_G_Type
 import LC_G_APIType
@@ -78,26 +80,38 @@ data PipelineSchema
     }
     deriving Show
 
-data GLUniform
-    = GLUniform
-    { uniSeparated  :: GLint -> IO ()
-    , uniBuffer     :: Ptr () -> IO ()
+data GLUniform = forall a. Storable a => GLUniform !InputType !(IORef a)
+
+instance Show GLUniform where
+    show (GLUniform t _) = "GLUniform " ++ show t
+
+data OrderJob
+    = Generate
+    | Reorder
+    | Ordered
+
+data GLSlot
+    = GLSlot
+    { objectMap     :: IntMap Object
+    , sortedObjects :: Vector (Int,Object)
+    , orderJob      :: OrderJob
     }
 
 data GLPipelineInput
     = GLPipelineInput
     { schema        :: PipelineSchema
-    , slotMap       :: Trie Int
-    , objects       :: IORef (Vector (IntMap Object)) -- objects for each slot
+    , slotMap       :: Trie SlotName
+    , slotVector    :: Vector (IORef GLSlot)
     , objSeed       :: IORef Int
     , uniformSetter :: Trie InputSetter
     , uniformSetup  :: Trie GLUniform
     , screenSize    :: IORef (Word,Word)
+    , pipelines     :: IORef (Vector (Maybe GLPipeline)) -- attached pipelines
     }
 
 data Object -- internal type
     = Object
-    { objSlot       :: ByteString
+    { objSlot       :: SlotName
     , objPrimitive  :: Primitive
     , objIndices    :: Maybe (IndexStream Buffer)
     , objAttributes :: Trie (Stream Buffer)
@@ -106,6 +120,7 @@ data Object -- internal type
     , objOrder      :: IORef Int
     , objEnabled    :: IORef Bool
     , objId         :: Int
+    , objCommands   :: IORef (Vector (Vector [GLObjectCommand]))  -- pipeline id, program name, commands
     }
 
 --------------
@@ -114,17 +129,26 @@ data Object -- internal type
 
 data GLProgram
     = GLProgram
-    { shaderObjects :: [GLuint]
-    , programObject :: GLuint
-    , inputUniforms :: Trie GLint
-    , inputStreams  :: Trie GLuint
-    , attributeMap  :: Trie ByteString
+    { shaderObjects         :: [GLuint]
+    , programObject         :: GLuint
+    , inputUniforms         :: Trie GLint
+    , inputTextures         :: Trie GLint   -- all input textures (render texture + uniform texture)
+    , inputTextureUniforms  :: Set UniformName
+    , inputStreams          :: Trie (GLuint,ByteString)
     }
 
 data GLTexture
     = GLTexture
     { glTextureObject   :: GLuint
     , glTextureTarget   :: GLenum
+    }
+
+data InputConnection
+    = InputConnection
+    { icId                      :: Int              -- identifier (vector index) for attached pipeline
+    , icInput                   :: GLPipelineInput
+    , icSlotMapPipelineToInput  :: Vector SlotName  -- GLPipeline to GLPipelineInput slot name mapping
+    , icSlotMapInputToPipeline  :: Vector (Maybe SlotName)  -- GLPipelineInput to GLPipeline slot name mapping
     }
 
 data GLPipeline
@@ -134,9 +158,11 @@ data GLPipeline
     , glSamplers        :: Vector GLSampler
     , glTargets         :: Vector GLRenderTarget
     , glCommands        :: [GLCommand]
-    , glSlotCommands    :: IORef (Vector (Vector [GLRenderCommand])) -- Slot X Program -> commands
-    , glSlotPrograms    :: Vector [Int] -- programs depend on a slot
-    , glInput           :: IORef (Maybe GLPipelineInput)
+    , glSlotPrograms    :: Vector [ProgramName] -- programs depend on a slot
+    , glInput           :: IORef (Maybe InputConnection)
+    , glSlotNames       :: Vector ByteString
+    , glVAO             :: GLuint
+    , glTexUnitMapping  :: Trie (IORef GLint)   -- maps texture uniforms to texture units
     }
 
 data GLSampler
@@ -146,27 +172,37 @@ data GLSampler
 
 data GLRenderTarget
     = GLRenderTarget
-    { framebufferObject :: GLuint
+    { framebufferObject         :: GLuint
+    , framebufferDrawbuffers    :: Maybe [GLenum]
     }
 
 data GLCommand
     = GLSetRasterContext        !RasterContext
     | GLSetAccumulationContext  !AccumulationContext
-    | GLSetRenderTarget         !GLuint
+    | GLSetRenderTarget         !GLuint !(Maybe [GLenum])
     | GLSetProgram              !GLuint
-    | GLSetSamplerUniform       !GLint !GLint
+    | GLSetSamplerUniform       !GLint !GLint (IORef GLint)                     -- sampler index, texture unit, IORef stores the actual texture unit mapping
     | GLSetTexture              !GLenum !GLuint !GLuint
     | GLSetSampler              !GLuint !GLuint
     | GLRenderSlot              !SlotName !ProgramName
     | GLClearRenderTarget       [(ImageSemantic,Value)]
     | GLGenerateMipMap          !GLenum !GLenum
-    | GLSaveImage               FrameBufferComponent ImageIndex                          -- from framebuffer component to texture (image)
-    | GLLoadImage               ImageIndex FrameBufferComponent                          -- from texture (image) to framebuffer component
+    | GLSaveImage               FrameBufferComponent ImageIndex                 -- from framebuffer component to texture (image)
+    | GLLoadImage               ImageIndex FrameBufferComponent                 -- from texture (image) to framebuffer component
+    deriving Show
 
-data GLRenderCommand
-    = GLBindBuffer
-    | GLDrawArrays
-    | GLDrawElements
+instance Show (IORef GLint) where
+    show _ = "(IORef GLint)"
+
+data GLObjectCommand
+    = GLSetUniform              !GLint !GLUniform
+    | GLBindTexture             !GLenum !(IORef GLint) !GLUniform               -- binds the texture from the gluniform to the specified texture unit and target
+    | GLSetVertexAttribArray    !GLuint !GLuint !GLint !GLenum !(Ptr ())        -- index buffer size type pointer
+    | GLSetVertexAttribIArray   !GLuint !GLuint !GLint !GLenum !(Ptr ())        -- index buffer size type pointer
+    | GLSetVertexAttrib         !GLuint !(Stream Buffer)                        -- index value
+    | GLDrawArrays              !GLenum !GLint !GLsizei                         -- mode first count
+    | GLDrawElements            !GLenum !GLsizei !GLenum !GLuint !(Ptr ())      -- mode count type buffer indicesPtr
+    deriving Show
 
 type SetterFun a = a -> IO ()
 
@@ -380,6 +416,7 @@ data Stream b
         , streamStart   :: Int
         , streamLength  :: Int
         }
+    deriving Show
 
 streamToStreamType :: Stream a -> StreamType
 streamToStreamType s = case s of
@@ -415,10 +452,11 @@ data IndexStream b
     , indexLength   :: Int
     }
 
-data TextureData
+newtype TextureData
     = TextureData
     { textureObject :: GLuint
     }
+    deriving Storable
 
 data Primitive
     = TriangleStrip

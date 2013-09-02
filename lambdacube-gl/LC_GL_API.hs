@@ -40,7 +40,40 @@ module LC_GL_API (
     enableObject,
     setObjectOrder,
     objectUniformSetter,
-    setScreenSize
+    setScreenSize,
+    sortSlotObjects,
+
+    uniformBool,
+    uniformV2B,
+    uniformV3B,
+    uniformV4B,
+
+    uniformWord,
+    uniformV2U,
+    uniformV3U,
+    uniformV4U,
+
+    uniformInt,
+    uniformV2I,
+    uniformV3I,
+    uniformV4I,
+
+    uniformFloat,
+    uniformV2F,
+    uniformV3F,
+    uniformV4F,
+
+    uniformM22F,
+    uniformM23F,
+    uniformM24F,
+    uniformM32F,
+    uniformM33F,
+    uniformM34F,
+    uniformM42F,
+    uniformM43F,
+    uniformM44F,
+
+    uniformFTexture2D
 ) where
 
 import LC_GL_Type

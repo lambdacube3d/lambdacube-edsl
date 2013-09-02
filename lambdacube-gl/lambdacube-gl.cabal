@@ -21,6 +21,7 @@ Library
         containers,
         mtl,
         vector,
+        vector-algorithms,
 
         bytestring-trie,
         OpenGLRaw,
@@ -74,3 +75,5 @@ Library
         TypeFamilies
         TypeOperators
         TypeSynonymInstances
+        MonadComprehensions
+        GeneralizedNewtypeDeriving

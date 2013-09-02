@@ -17,30 +17,12 @@ import qualified Data.Vector as V
 
 import Graphics.Rendering.OpenGL.Raw.Core32
     ( GLuint
-    
-    -- * FUNCTION APPLICATION related *
-    -- render call
-    , glDrawArrays
-    , glDrawElements
-    , gl_LINES
-    , gl_LINES_ADJACENCY
-    , gl_LINE_STRIP
-    , gl_LINE_STRIP_ADJACENCY
-    , gl_POINTS
-    , gl_TRIANGLES
-    , gl_TRIANGLES_ADJACENCY
-    , gl_TRIANGLE_FAN
-    , gl_TRIANGLE_STRIP
-    , gl_TRIANGLE_STRIP_ADJACENCY
-
     -- * BUFFER related *
     -- buffer data
     , glBindBuffer
-    , glBindVertexArray
     , glBufferData
     , glBufferSubData
     , glGenBuffers
-    , glGenVertexArrays
     , gl_ARRAY_BUFFER
     , gl_ELEMENT_ARRAY_BUFFER
     , gl_STATIC_DRAW
@@ -73,9 +55,6 @@ import Graphics.Rendering.OpenGL.Raw.Core32
 
 import Data.Word
 import Data.Bitmap.Pure
-
---import LC_G_APIType
---import LC_U_APIType
 
 import LC_GL_Type
 import LC_GL_Util
