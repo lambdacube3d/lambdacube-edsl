@@ -6,6 +6,7 @@ module LC_API (
     module LC_T_DSLType,
     module LC_T_HOAS,
     module LC_T_Language,
+    module LC_B2_IR,
     Int32,
     Word32,
     uniformBool,
@@ -64,7 +65,20 @@ module LC_API (
     enableObject,
 
     -- texture (temporary)
-    compileTexture2DRGBAF
+    compileTexture2DRGBAF,
+
+    compilePipeline,
+
+    -- current monolithic GL backend
+    Array(..),
+    ArrayType(..),
+    BufferSetter,
+    IndexStream(..),
+    InputSetter(..),
+    Primitive(..),
+    SetterFun,
+    Stream(..),
+    StreamType(..)
 ) where
 
 import Data.Int
@@ -89,16 +103,25 @@ import LC_B_GLData
 import LC_B_GLType
 import LC_B_GLUtil (Buffer)
 import qualified LC_B_GL as GL
+import LC_B2_IR
+import qualified LC_B2_Compile3 as B2
 
 import Control.Monad.State
 import Data.ByteString.Char8 (ByteString)
 import Data.ByteString.Char8 as SB
 import Data.Trie as T
 
+compilePipeline :: H.GPOutput H.SingleOutput -> Either String Pipeline
+compilePipeline l = B2.compile dag
+  where
+    (_, dag') = runState (U.unN $ convertGPOutput l) U.emptyDAG
+    dag = U.addCount dag'
+
 compileRenderer :: H.GPOutput H.SingleOutput -> IO Renderer
 compileRenderer l = GL.compileRenderer dag $ U.toExp dag l'
   where
-    (l', dag) = runState (U.unN $ convertGPOutput l) U.emptyDAG
+    (l', dag') = runState (U.unN $ convertGPOutput l) U.emptyDAG
+    dag = U.addCount dag'
 
 nullSetter :: ByteString -> String -> a -> IO ()
 nullSetter n t _ = Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t

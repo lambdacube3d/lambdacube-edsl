@@ -185,12 +185,13 @@ mkPassSetup :: IORef (Word,Word) -> DAG -> Map Exp GLuint -> (Exp -> [Exp]) -> (
 mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,outCnt) fb = case isLast of
     True    -> do
         putStrLn $ " -- last pass output count: " ++ show outCnt ++ "  outIdx: " ++ show outIdx
+        glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
+        let fboMapping = [if i == outIdx then gl_BACK_LEFT else gl_NONE | i <- [1..outCnt]]
+        withArray fboMapping $ glDrawBuffers (fromIntegral $ length fboMapping)
         let setup = do
+                glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
                 (screenW,screenH) <- readIORef screenSizeIORef
                 glViewport 0 0 (fromIntegral screenW) (fromIntegral screenH)
-                glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
-                let fboMapping = [if i == outIdx then gl_BACK_LEFT else gl_NONE | i <- [1..outCnt]]
-                withArray fboMapping $ glDrawBuffers (fromIntegral $ length fboMapping)
                 --putStr " -- default FB bind: " >> printGLStatus
         return (setup,return ())
     False   -> do
