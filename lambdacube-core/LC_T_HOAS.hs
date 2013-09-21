@@ -10,6 +10,8 @@ import LC_T_APIType
 import LC_T_DSLType
 import LC_T_PrimFun
 
+import qualified LC_U_DeBruijn as U (N)
+
 -- Common Exp, describes shader functions
 data Exp :: Frequency -> * -> * where
     -- Needed for conversion to de Bruijn form
@@ -18,6 +20,9 @@ data Exp :: Frequency -> * -> * where
             -> String
             -> Exp stage t
                  -- environment size at defining occurrence
+    -- Needed for Let conversion
+    Shr     :: U.N
+            -> Exp stage t
 {-
     -- function support
     Lam     :: (GPU a, GPU b)
@@ -29,6 +34,11 @@ data Exp :: Frequency -> * -> * where
             -> Exp stage (a -> b)
             -> Exp stage b
 -}
+    Let     :: (GPU a, GPU b)
+            => Exp stage a
+            -> (Exp stage a -> Exp stage b)
+            -> Exp stage b
+
     -- constant value
     Const   :: (GPU t,IsScalar t)
             => t

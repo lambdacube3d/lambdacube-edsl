@@ -151,6 +151,7 @@ data Exp
 
 class ExpC exp where
     -- exp constructors
+    let_        :: exp -> (exp -> exp) -> exp
     lam         :: Ty -> exp -> exp
     body        :: exp -> exp
     var         :: Ty -> Int -> String -> exp -- type, index, layout counter (this needed for proper sharing)
@@ -199,6 +200,9 @@ class ExpC exp where
 newtype N = N {unN :: State DAG ExpId}
 
 instance ExpC N where
+    let_ !e !f = N(do
+        x <- unN e
+        unN $ f (N (return x)))
     lam !t !a = N $ do
         !h1 <- unN a
         hashcons t $ Lam h1
