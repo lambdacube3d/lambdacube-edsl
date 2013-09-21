@@ -17,7 +17,7 @@ type TextureUnit = Int
 type RenderTargetName = Int
 type TextureUnitMapping = Trie TextureUnit
 
-data ImageIndex
+data ImageRef
     = TextureImage  TextureName Int (Maybe Int)  -- Texture name, mip index, array index
     | Framebuffer   ImageSemantic
     deriving Show
@@ -43,8 +43,8 @@ data Command
     | RenderSlot                SlotName
     | ClearRenderTarget         [(ImageSemantic,Value)]
     | GenerateMipMap            TextureUnit
-    | SaveImage                 FrameBufferComponent ImageIndex                          -- from framebuffer component to texture (image)
-    | LoadImage                 ImageIndex FrameBufferComponent                          -- from texture (image) to framebuffer component
+    | SaveImage                 FrameBufferComponent ImageRef                            -- from framebuffer component to texture (image)
+    | LoadImage                 ImageRef FrameBufferComponent                            -- from texture (image) to framebuffer component
     deriving Show
     -- | CopyImage                 ImageIndex ImageIndex               -- copy texture data from source to destination
     -- | Foreach                   ByteString [Command]            -- slot name, command to apply for each object
@@ -123,7 +123,7 @@ data Slot       -- input, primitive type
 
 data RenderTarget
     = RenderTarget
-    { renderTargets :: [(ImageSemantic,Maybe ImageIndex)]   -- render texture or default framebuffer (semantic, render texture for the program output)
+    { renderTargets :: [(ImageSemantic,Maybe ImageRef)] -- render texture or default framebuffer (semantic, render texture for the program output)
     }
     deriving Show
 

@@ -187,8 +187,8 @@ data GLCommand
     | GLRenderSlot              !SlotName !ProgramName
     | GLClearRenderTarget       [(ImageSemantic,Value)]
     | GLGenerateMipMap          !GLenum !GLenum
-    | GLSaveImage               FrameBufferComponent ImageIndex                 -- from framebuffer component to texture (image)
-    | GLLoadImage               ImageIndex FrameBufferComponent                 -- from texture (image) to framebuffer component
+    | GLSaveImage               FrameBufferComponent ImageRef                   -- from framebuffer component to texture (image)
+    | GLLoadImage               ImageRef FrameBufferComponent                   -- from texture (image) to framebuffer component
     deriving Show
 
 instance Show (IORef GLint) where
