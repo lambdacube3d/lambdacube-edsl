@@ -562,7 +562,7 @@ codeGenGeometryShader dag samplerNameMap inPrim inVars geomSh@(GeometryShader la
     src = SB.unlines $
         [ pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
-        , pp [inVarArr  (unpack n)    (toGLSLType t) | (n,_,t) <- inVars]
+        , pp [inVarArr  (unpack n) iq (toGLSLType t) | (n,iq,t) <- inVars]
         , pp [outVarIQ  n iq          (toGLSLType t) | n <- oNames | iq <- oQ | [t] <- oT]
         , pack "void main ()"
         -- , pack "{ for(int i = 0; i < gl_in.length(); i++) { gl_Position = gl_in[i].gl_Position; gl_PointSize = gl_in[i].gl_PointSize; EmitVertex(); } }"
@@ -836,10 +836,10 @@ uniform name ty = Declaration $ var name ty (Just $ TypeQualSto Uniform)
 inVar :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 inVar name ty = Declaration $ var name ty (Just $ TypeQualSto In)
 
-inVarArr :: String -> TypeSpecifierNonArray -> ExternalDeclaration
-inVarArr name ty = Declaration $ InitDeclaration (TypeDeclarator varType) [InitDecl name Nothing Nothing]
+inVarArr :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
+inVarArr name iq ty = Declaration $ InitDeclaration (TypeDeclarator varType) [InitDecl name Nothing Nothing]
   where
-    tq = (Just $ TypeQualSto In)
+    tq = Just $ TypeQualInt iq $ Just In
     varTySpecNoPrec = TypeSpecNoPrecision ty (Just Nothing)
     varTySpec = TypeSpec Nothing varTySpecNoPrec
     varType = FullType tq varTySpec
