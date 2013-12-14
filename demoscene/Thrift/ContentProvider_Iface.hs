@@ -34,3 +34,4 @@ class ContentProvider_Iface a where
   downloadTexture :: a -> Maybe String -> Maybe ImageType -> Maybe Int16 -> Maybe Int16 -> IO [ByteString]
   downloadGroup :: a -> Maybe String -> IO [String]
   query :: a -> Maybe [String] -> IO [Property]
+  downloadFCurve :: a -> Maybe String -> Maybe String -> IO [FCurve]

@@ -89,6 +89,26 @@ instance Enum PropertyType where
     3 -> PT_String
     4 -> PT_Unsupported
     _ -> throw ThriftException
+data Extrapolation = E_Constant|E_Linear  deriving (Show,Eq, Typeable, Ord)
+instance Enum Extrapolation where
+  fromEnum t = case t of
+    E_Constant -> 0
+    E_Linear -> 1
+  toEnum t = case t of
+    0 -> E_Constant
+    1 -> E_Linear
+    _ -> throw ThriftException
+data Interpolation = I_Constant|I_Linear|I_Bezier  deriving (Show,Eq, Typeable, Ord)
+instance Enum Interpolation where
+  fromEnum t = case t of
+    I_Constant -> 0
+    I_Linear -> 1
+    I_Bezier -> 2
+  toEnum t = case t of
+    0 -> I_Constant
+    1 -> I_Linear
+    2 -> I_Bezier
+    _ -> throw ThriftException
 data VertexAttribute = VertexAttribute{f_VertexAttribute_attrName :: Maybe String,f_VertexAttribute_attrType :: Maybe AttributeType,f_VertexAttribute_attrData :: Maybe [ByteString]} deriving (Show,Eq,Ord,Typeable)
 write_VertexAttribute oprot record = do
   writeStructBegin oprot "VertexAttribute"
@@ -241,5 +261,131 @@ read_Property_fields iprot record = do
 read_Property iprot = do
   _ <- readStructBegin iprot
   record <- read_Property_fields iprot (Property{f_Property_propertyTypeName=Nothing,f_Property_propertyType=Nothing,f_Property_propertySize=Nothing,f_Property_propertyData=Nothing})
+  readStructEnd iprot
+  return record
+data Segment = Segment{f_Segment_interpolation :: Maybe Interpolation,f_Segment_leftTime :: Maybe Double,f_Segment_leftValue :: Maybe Double,f_Segment_time :: Maybe Double,f_Segment_value :: Maybe Double,f_Segment_rightTime :: Maybe Double,f_Segment_rightValue :: Maybe Double} deriving (Show,Eq,Ord,Typeable)
+write_Segment oprot record = do
+  writeStructBegin oprot "Segment"
+  case f_Segment_interpolation record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("interpolation",T_I32,1)
+    writeI32 oprot (fromIntegral $ fromEnum _v)
+    writeFieldEnd oprot}
+  case f_Segment_leftTime record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("leftTime",T_DOUBLE,2)
+    writeDouble oprot _v
+    writeFieldEnd oprot}
+  case f_Segment_leftValue record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("leftValue",T_DOUBLE,3)
+    writeDouble oprot _v
+    writeFieldEnd oprot}
+  case f_Segment_time record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("time",T_DOUBLE,4)
+    writeDouble oprot _v
+    writeFieldEnd oprot}
+  case f_Segment_value record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("value",T_DOUBLE,5)
+    writeDouble oprot _v
+    writeFieldEnd oprot}
+  case f_Segment_rightTime record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("rightTime",T_DOUBLE,6)
+    writeDouble oprot _v
+    writeFieldEnd oprot}
+  case f_Segment_rightValue record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("rightValue",T_DOUBLE,7)
+    writeDouble oprot _v
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_Segment_fields iprot record = do
+  (_,_t36,_id37) <- readFieldBegin iprot
+  if _t36 == T_STOP then return record else
+    case _id37 of 
+      1 -> if _t36 == T_I32 then do
+        s <- (do {i <- readI32 iprot; return $ toEnum $ fromIntegral i})
+        read_Segment_fields iprot record{f_Segment_interpolation=Just s}
+        else do
+          skip iprot _t36
+          read_Segment_fields iprot record
+      2 -> if _t36 == T_DOUBLE then do
+        s <- readDouble iprot
+        read_Segment_fields iprot record{f_Segment_leftTime=Just s}
+        else do
+          skip iprot _t36
+          read_Segment_fields iprot record
+      3 -> if _t36 == T_DOUBLE then do
+        s <- readDouble iprot
+        read_Segment_fields iprot record{f_Segment_leftValue=Just s}
+        else do
+          skip iprot _t36
+          read_Segment_fields iprot record
+      4 -> if _t36 == T_DOUBLE then do
+        s <- readDouble iprot
+        read_Segment_fields iprot record{f_Segment_time=Just s}
+        else do
+          skip iprot _t36
+          read_Segment_fields iprot record
+      5 -> if _t36 == T_DOUBLE then do
+        s <- readDouble iprot
+        read_Segment_fields iprot record{f_Segment_value=Just s}
+        else do
+          skip iprot _t36
+          read_Segment_fields iprot record
+      6 -> if _t36 == T_DOUBLE then do
+        s <- readDouble iprot
+        read_Segment_fields iprot record{f_Segment_rightTime=Just s}
+        else do
+          skip iprot _t36
+          read_Segment_fields iprot record
+      7 -> if _t36 == T_DOUBLE then do
+        s <- readDouble iprot
+        read_Segment_fields iprot record{f_Segment_rightValue=Just s}
+        else do
+          skip iprot _t36
+          read_Segment_fields iprot record
+      _ -> do
+        skip iprot _t36
+        readFieldEnd iprot
+        read_Segment_fields iprot record
+read_Segment iprot = do
+  _ <- readStructBegin iprot
+  record <- read_Segment_fields iprot (Segment{f_Segment_interpolation=Nothing,f_Segment_leftTime=Nothing,f_Segment_leftValue=Nothing,f_Segment_time=Nothing,f_Segment_value=Nothing,f_Segment_rightTime=Nothing,f_Segment_rightValue=Nothing})
+  readStructEnd iprot
+  return record
+data FCurve = FCurve{f_FCurve_extrapolation :: Maybe Extrapolation,f_FCurve_keyframes :: Maybe [Segment]} deriving (Show,Eq,Ord,Typeable)
+write_FCurve oprot record = do
+  writeStructBegin oprot "FCurve"
+  case f_FCurve_extrapolation record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("extrapolation",T_I32,1)
+    writeI32 oprot (fromIntegral $ fromEnum _v)
+    writeFieldEnd oprot}
+  case f_FCurve_keyframes record of {Nothing -> return (); Just _v -> do
+    writeFieldBegin oprot ("keyframes",T_LIST,2)
+    (let {f [] = return (); f (_viter40:t) = do {write_Segment oprot _viter40;f t}} in do {writeListBegin oprot (T_STRUCT,fromIntegral $ Prelude.length _v); f _v;writeListEnd oprot})
+    writeFieldEnd oprot}
+  writeFieldStop oprot
+  writeStructEnd oprot
+read_FCurve_fields iprot record = do
+  (_,_t42,_id43) <- readFieldBegin iprot
+  if _t42 == T_STOP then return record else
+    case _id43 of 
+      1 -> if _t42 == T_I32 then do
+        s <- (do {i <- readI32 iprot; return $ toEnum $ fromIntegral i})
+        read_FCurve_fields iprot record{f_FCurve_extrapolation=Just s}
+        else do
+          skip iprot _t42
+          read_FCurve_fields iprot record
+      2 -> if _t42 == T_LIST then do
+        s <- (let {f 0 = return []; f n = do {v <- (read_Segment iprot);r <- f (n-1); return $ v:r}} in do {(_etype47,_size44) <- readListBegin iprot; f _size44})
+        read_FCurve_fields iprot record{f_FCurve_keyframes=Just s}
+        else do
+          skip iprot _t42
+          read_FCurve_fields iprot record
+      _ -> do
+        skip iprot _t42
+        readFieldEnd iprot
+        read_FCurve_fields iprot record
+read_FCurve iprot = do
+  _ <- readStructBegin iprot
+  record <- read_FCurve_fields iprot (FCurve{f_FCurve_extrapolation=Nothing,f_FCurve_keyframes=Nothing})
   readStructEnd iprot
   return record

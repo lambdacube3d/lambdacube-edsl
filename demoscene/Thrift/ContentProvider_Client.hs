@@ -11,7 +11,7 @@
 -- DO NOT EDIT UNLESS YOU ARE SURE YOU KNOW WHAT YOU ARE DOING --
 -----------------------------------------------------------------
 
-module Thrift.ContentProvider_Client(downloadMesh,downloadTexture,downloadGroup,query) where
+module Thrift.ContentProvider_Client(downloadMesh,downloadTexture,downloadGroup,query,downloadFCurve) where
 import Data.IORef
 import Prelude ( Bool(..), Enum, Double, String, Maybe(..),
                  Eq, Show, Ord,
@@ -123,3 +123,26 @@ recv_query ip = do
     Just v -> return v
     Nothing -> do
       throw (AppExn AE_MISSING_RESULT "query failed: unknown result")
+downloadFCurve (ip,op) arg_objectName arg_dataPath = do
+  send_downloadFCurve op arg_objectName arg_dataPath
+  recv_downloadFCurve ip
+send_downloadFCurve op arg_objectName arg_dataPath = do
+  seq <- seqid
+  seqn <- readIORef seq
+  writeMessageBegin op ("downloadFCurve", M_CALL, seqn)
+  write_DownloadFCurve_args op (DownloadFCurve_args{f_DownloadFCurve_args_objectName=Just arg_objectName,f_DownloadFCurve_args_dataPath=Just arg_dataPath})
+  writeMessageEnd op
+  tFlush (getTransport op)
+recv_downloadFCurve ip = do
+  (fname, mtype, rseqid) <- readMessageBegin ip
+  if mtype == M_EXCEPTION then do
+    x <- readAppExn ip
+    readMessageEnd ip
+    throw x
+    else return ()
+  res <- read_DownloadFCurve_result ip
+  readMessageEnd ip
+  case f_DownloadFCurve_result_success res of
+    Just v -> return v
+    Nothing -> do
+      throw (AppExn AE_MISSING_RESULT "downloadFCurve failed: unknown result")

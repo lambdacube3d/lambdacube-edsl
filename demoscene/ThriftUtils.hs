@@ -12,6 +12,7 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Vector.Storable as V
 import qualified Data.Vector.Storable.Mutable as MV
+import qualified Data.Vector as Vector
 
 import Thrift.Protocol.Binary
 import Thrift.Transport.Handle
@@ -25,6 +26,7 @@ import GHC.IO.Handle (Handle)
 import qualified Data.Trie as T
 
 import qualified LC_Mesh as LC
+import qualified FCurve as FC
 import LC_API
 
 sblToV :: Storable a => [SB.ByteString] -> V.Vector a
@@ -94,3 +96,33 @@ remoteMesh' slot name = do
             }
 
         _   -> Nothing
+
+remoteFCurve :: Slot -> ByteString -> ByteString -> IO FC.Value
+remoteFCurve slot objName dataPath = do
+    Just fcurve <- remoteFCurve' slot objName dataPath
+    return fcurve
+
+remoteFCurve' :: Slot -> ByteString -> ByteString -> IO (Maybe FC.Value)
+remoteFCurve' slot objName dataPath = do
+    fcurve <- downloadFCurve slot (SB.unpack objName) (SB.unpack dataPath)
+    let cvtI a = case a of
+            I_Constant  -> FC.IConstant
+            I_Linear    -> FC.ILinear
+            I_Bezier    -> FC.IBezier
+
+        cvtE a = case a of
+            E_Constant  -> FC.EConstant
+            E_Linear    -> FC.ELinear
+
+        d2f :: Double -> Float
+        d2f = realToFrac
+
+        cvtS (Segment (Just i) (Just lt) (Just lv) (Just t) (Just v) (Just rt) (Just rv)) =
+            FC.Segment (cvtI i) (d2f lt) (d2f lv) (d2f t) (d2f v) (d2f rt) (d2f rv)
+        cvtS a = error $ "missing data: " ++ show a
+
+        cvtFC (FCurve (Just e) (Just l)) = FC.FCurve (cvtE e) (Vector.fromList $ map cvtS l)
+        cvtFC a = error $ "missing data: " ++ show a
+    return $ case fcurve of
+        []  -> Nothing
+        l   -> Just $ FC.Value (SB.unpack dataPath) (map cvtFC l)
