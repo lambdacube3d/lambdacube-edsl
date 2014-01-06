@@ -1,5 +1,5 @@
 Name:           lambdacube-core
-Version:        0.5.0
+Version:        0.1.0
 Cabal-Version:  >= 1.6 && < 2
 Build-Type:     Simple
 License:        BSD3
@@ -7,33 +7,28 @@ License-File:   LICENSE
 Author:         Csaba Hruska, Gergely Patai
 Maintainer:     csaba (dot) hruska (at) gmail (dot) com
 Stability:      experimental
-Homepage:       http://www.haskell.org/haskellwiki/LambdaCubeEngine
-Bug-Reports:    http://code.google.com/p/lambdacube/issues
+Homepage:       http://lambdacube3d.wordpress.com/
+Bug-Reports:    https://github.com/csabahruska/lc-dsl/issues
 Category:       Graphics
-Tested-With:    GHC == 7.4.1
-Synopsis:       3D rendering engine written entirely in Haskell
+Tested-With:    GHC == 7.6.3
+Synopsis:       LambdaCube 3D is a domain specific language and library that makes it possible to program GPUs in a purely functional style.
 Description:
-    LambdaCube is a 3D rendering engine written entirely in Haskell.
-    It targets newer graphics hardware.The main goal of this project
-    is to provide a modern and feature rich graphical backend for
-    various Haskell projects (e.g. FRP libraries).
+    LambdaCube 3D is a domain specific language and library that makes
+    it possible to program GPUs in a purely functional style.
+    Programming with LambdaCube constitutes of composing a data-flow
+    description, which is compiled into a specialised library. The
+    language provides a uniform way to define shaders and compositor
+    chains by treating both streams and framebuffers as first-class
+    values.
+    .
+    As a user of the library you only need to import the "LC_API" and
+    "LC_Mesh" modules. You should check out the pointers at <http://lambdacube3d.wordpress.com/getting-started/>
+    to understand the principle behind the library, and also have a good look
+    at the @lambdacube-samples@ package.
 
 Library
-  Build-Depends: 
-        base,
-        binary,
-        bytestring,
-        containers,
-        mtl,
-        vector,
-
-        bytestring-trie,
-        prettyclass,
-        OpenGLRaw,
-        language-glsl,
-        
-        bitmap
-
+  Build-Depends:
+        base >=4.6 && <4.7, containers >=0.5 && <0.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vector >=0.10 && <0.11, OpenGLRaw >=1.4 && <1.5, bitmap >=0.0 && <0.1, prettyclass >=1.0 && <1.1, language-glsl >=0.0 && <0.1, binary >=0.7 && <0.8
   Exposed-modules:
         BiMap
         LC_API

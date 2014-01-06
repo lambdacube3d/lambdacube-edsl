@@ -48,7 +48,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_TRUE
     , glGetIntegerv
 
-    -- * ERROR CHECKING related *
+    -- ERROR CHECKING related
     -- error handling
     , glGetError
     , glCheckFramebufferStatus
@@ -71,7 +71,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_NO_ERROR
     , gl_OUT_OF_MEMORY
 
-    -- * TEXTURE related *
+    -- TEXTURE related
     -- texture data
     , glActiveTexture
     , glBindTexture
@@ -119,7 +119,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_RGBA32I
     , gl_RGBA32UI
 
-    -- * SHADER related *
+    -- SHADER related
     -- shader program
     , glCompileShader
     , glGetActiveAttrib
@@ -250,7 +250,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_UNSIGNED_INT_VEC3
     , gl_UNSIGNED_INT_VEC4
 
-    -- * CONTEXT PARAMETER realted *
+    -- CONTEXT PARAMETER realted
     -- depth and stencil operation
     , gl_ALWAYS
     , gl_EQUAL

@@ -18,7 +18,7 @@ import qualified Data.Vector as V
 import Graphics.Rendering.OpenGL.Raw.Core32
     ( GLuint
     
-    -- * FUNCTION APPLICATION related *
+    -- FUNCTION APPLICATION related *
     -- render call
     , glDrawArrays
     , glDrawElements
@@ -33,7 +33,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_TRIANGLE_STRIP
     , gl_TRIANGLE_STRIP_ADJACENCY
 
-    -- * BUFFER related *
+    -- BUFFER related *
     -- buffer data
     , glBindBuffer
     , glBindVertexArray
@@ -45,7 +45,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_ELEMENT_ARRAY_BUFFER
     , gl_STATIC_DRAW
 
-    -- * TEXTURE related *
+    -- TEXTURE related *
     -- texture data
     , glBindTexture
     , glGenTextures

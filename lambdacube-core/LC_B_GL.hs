@@ -22,7 +22,7 @@ import qualified Data.Vector.Unboxed.Mutable as MV
 
 import Graphics.Rendering.OpenGL.Raw.Core32
     ( GLuint
-    -- * FRAMEBUFFER related *
+    -- FRAMEBUFFER related *
     -- create
     , glBindFramebuffer
     , glDeleteFramebuffers

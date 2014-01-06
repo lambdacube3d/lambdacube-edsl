@@ -25,7 +25,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , glEnable
     , gl_TRUE
 
-    -- * SHADER PROGRAM related *
+    -- SHADER PROGRAM related *
     , glAttachShader
     , glBindFragDataLocation
     , glCreateProgram
@@ -39,7 +39,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_LINK_STATUS
     , gl_VERTEX_SHADER
 
-    -- * ACCUMULATION CONTEXT related *
+    -- ACCUMULATION CONTEXT related *
     -- blending
     , glBlendColor
     , glBlendEquationSeparate
@@ -61,7 +61,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_DEPTH_TEST
     , gl_STENCIL_TEST
 
-    -- * RASTER CONTEXT related *
+    -- RASTER CONTEXT related *
     , glProvokingVertex
     , gl_FIRST_VERTEX_CONVENTION
     , gl_LAST_VERTEX_CONVENTION
