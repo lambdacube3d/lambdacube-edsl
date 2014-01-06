@@ -1,0 +1,81 @@
+name:                lambdacube-samples
+version:             0.1.0
+synopsis:            Samples for LambdaCube 3D
+description:
+    Executable samples to showcase the capabilities of LambdaCube
+    3D. Each sample is a separate executable called
+    @lambdacube-\<samplename\>@. The following samples are included
+    (each is described in a separate blog post):
+    .
+    * 'hello': the canonical rotating cube
+    .
+    * 'convolutionfilter': a simple Gaussian blur (<http://lambdacube3d.wordpress.com/2013/04/11/optimising-convolution-filters/>)
+    .
+    * 'shadowmapping': variance shadow mapping (<http://lambdacube3d.wordpress.com/2012/10/14/variance-shadow-mapping/>)
+    .
+    * 'cubemap': cube mapped reflection using geometry shaders (<http://lambdacube3d.wordpress.com/2012/10/14/variance-shadow-mapping/>)
+    .
+    * 'bulletexample': integration with Bullet physics through Elerea;
+    this sample is optional due to its dependence on Bullet, and you
+    need to install the package with -fBulletInstalled to enable it.
+    (first post: <http://lambdacube3d.wordpress.com/2012/12/20/using-bullet-physics-with-an-frp-approach-part-1/>,
+    second post: <http://lambdacube3d.wordpress.com/2012/12/20/using-bullet-physics-with-an-frp-approach-part-2/>,
+    third post: <http://lambdacube3d.wordpress.com/2012/12/20/using-bullet-physics-with-an-frp-approach-part-3/>)
+ 
+homepage:            http://lambdacube3d.wordpress.com/
+license:             BSD3
+license-file:        LICENSE
+author:              Csaba Hruska, Gergely Patai
+maintainer:          csaba.hruska@gmail.com, patai.gergely@gmail.com
+-- copyright:
+category:            Graphics
+build-type:          Simple
+cabal-version:       >=1.10
+
+extra-source-files:
+    Common/Utils.hs
+    Common/GraphicsUtils.hs
+
+data-files:       hello.png
+
+flag BulletInstalled
+  description:    Enable samples that depend on Bullet
+  default:        False
+
+executable lambdacube-hello
+  main-is:             Hello.hs
+  -- other-modules:
+  other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
+  build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5, stb-image ==0.2.1
+  default-language:    Haskell2010
+
+executable lambdacube-shadowmapping
+  main-is:             ShadowMapping.hs
+  -- other-modules:
+  other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
+  build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
+  default-language:    Haskell2010
+
+executable lambdacube-cubemap
+  main-is:             CubeMap.hs
+  -- other-modules:
+  other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
+  build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
+  default-language:    Haskell2010
+
+executable lambdacube-convolutionfilter
+  main-is:             ConvolutionFilter.hs
+  -- other-modules:
+  other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
+  build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
+  default-language:    Haskell2010
+
+executable lambdacube-bulletexample
+  main-is:             BulletExample.hs
+  -- other-modules:
+  other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
+  if flag(BulletInstalled)
+    build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, bullet >=0.2 && <0.3, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
+  else
+    buildable: False
+  default-language:    Haskell2010
