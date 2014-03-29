@@ -10,10 +10,12 @@ import Data.Vect
 import Data.Vect.Float.Instances ()
 import FRP.Elerea.Param
 import qualified Data.ByteString.Char8 as SB
+import qualified Data.ByteString.Lazy.Char8 as LB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import System.Environment
 import Text.Show.Pretty (ppShow)
+import Data.Aeson.Encode.Pretty (encodePretty)
 
 import LC_API2
 import LC_GL_API
@@ -87,6 +89,7 @@ main = do
 
     let Right ppl = compilePipeline $ ScreenOut lcnet
         schema = schemaFromPipeline ppl
+    LB.writeFile "2dpipeline.ppl" $ encodePretty ppl
     putStrLn $ ppShow ppl
     putStrLn ""
     putStrLn $ ppShow schema

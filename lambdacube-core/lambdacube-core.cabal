@@ -30,7 +30,8 @@ Library
         bytestring-trie,
         prettyclass,
         --OpenGLRaw,
-        language-glsl
+        language-glsl,
+        aeson
         
         --bitmap
 
@@ -100,3 +101,5 @@ Library
         TypeOperators
         TypeSynonymInstances
         DeriveFunctor
+        TemplateHaskell
+

@@ -1,9 +1,13 @@
 module LC_B2_IR where
 
-import Data.ByteString.Char8 (ByteString)
-import Data.Trie (Trie)
+import Data.ByteString.Char8 (ByteString,pack,unpack)
+import Data.Trie (Trie,toList,fromList)
 import Data.Vector (Vector)
+import Data.Aeson hiding (Value)-- (ToJSON(..),FromJSON(..))
+import Data.Aeson.TH
+import Control.Applicative
 
+import LC_G_Type
 import LC_G_APIType
 import LC_U_APIType
 
@@ -145,3 +149,54 @@ data Pipeline
         - batched stream update:    vertex array buffer (VAO)
         - batched rendering:        instancing
 -}
+instance FromJSON ByteString where
+    parseJSON v = pack <$> parseJSON v
+
+instance ToJSON ByteString where
+    toJSON v = toJSON $ unpack v
+
+instance FromJSON a => FromJSON (Trie a) where
+    parseJSON v = fromList <$> parseJSON v
+
+instance ToJSON a => ToJSON (Trie a) where
+    toJSON v = toJSON $ toList v
+
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''V2)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''V3)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''V4)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''BlendEquation)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''BlendingFactor)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''LogicOperation)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''StencilOperation)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''StencilTest)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''FrontFace)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''ColorArity)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''StencilTests)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''CullMode)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''StencilOps)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Blending)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''PolygonMode)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''EdgeMode)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''TextureDataType)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''FragmentOperation)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''PointSize)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''PolygonOffset)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Filter)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''PointSpriteCoordOrigin)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''ProvokingVertex)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''ImageSemantic)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''TextureType)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''ComparisonFunction)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Value)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''InputType)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''FetchPrimitive)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''AccumulationContext)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''RasterContext)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''ImageRef)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''TextureDescriptor)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''SamplerDescriptor)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''RenderTarget)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Program)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Slot)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Command)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Pipeline)
