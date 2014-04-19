@@ -90,7 +90,8 @@ getTextures :: [(Int,Exp)] -> Trie TextureDescriptor
 getTextures expL = undefined --T.fromList [(textureName i, TextureDescriptor a b c) | (i, Texture a b c _) <- expL]
 -}
 
-codeGenGLSL :: DAG
+codeGenGLSL :: TargetPlatform
+            -> DAG
             -> M.Map Exp String
             -> FetchPrimitive
             -> [(ByteString,InputType)]
@@ -99,15 +100,15 @@ codeGenGLSL :: DAG
             -> Int
             -> Int
             -> (ByteString, Maybe ByteString, ByteString, [(ByteString,InputType)])
-codeGenGLSL dag smpMap prim attrIn vShader gShader fFilter fShader = (vSrc, gSrc, fSrc, fOut)
+codeGenGLSL tp dag smpMap prim attrIn vShader gShader fFilter fShader = (vSrc, gSrc, fSrc, fOut)
   where
-    (vSrc,vOut) = codeGenVertexShader dag smpMap attrIn (toExp dag vShader)
+    (vSrc,vOut) = codeGenVertexShader tp dag smpMap attrIn (toExp dag vShader)
     (gSrc,fIn)  = case gShader of
         Nothing -> (Nothing,vOut)
         Just g  -> (Just s, o)
           where
-            (s,o) = codeGenGeometryShader dag smpMap prim vOut (toExp dag g)
-    (fSrc,fOut,_) = codeGenFragmentShader dag smpMap fIn (toExp dag fFilter) (toExp dag fShader)
+            (s,o) = codeGenGeometryShader tp dag smpMap prim vOut (toExp dag g)
+    (fSrc,fOut,_) = codeGenFragmentShader tp dag smpMap fIn (toExp dag fFilter) (toExp dag fShader)
 
 {-
     program name is derived from accumilate node id
@@ -127,8 +128,8 @@ data ProgramContext
     , pcSlotIndex       :: SlotName
     }
 
-getSlotsAndPrograms :: DAG -> [(Int,Exp)] -> V.Vector [(Int,Ty,Exp)] -> (Vector Slot, Vector Program, IntMap ProgramContext)
-getSlotsAndPrograms dag expL expU = (slotsV,progsV,ctxMap)
+getSlotsAndPrograms :: TargetPlatform -> DAG -> [(Int,Exp)] -> V.Vector [(Int,Ty,Exp)] -> (Vector Slot, Vector Program, IntMap ProgramContext)
+getSlotsAndPrograms tp dag expL expU = (slotsV,progsV,ctxMap)
   where
     {-
         - produce a Slot and Program and ExecutionContext triple for each accumulation node
@@ -201,7 +202,7 @@ getSlotsAndPrograms dag expL expU = (slotsV,progsV,ctxMap)
             , let attrName = SB.pack $ "vAttributeIn_" ++ show j]
 
         -- generate GLSL shader source
-        (vSrc,gSrc,fSrc,progOut) = codeGenGLSL dag inTexturesMap primitive inAttributes vShader gShader fFilter fShader
+        (vSrc,gSrc,fSrc,progOut) = codeGenGLSL tp dag inTexturesMap primitive inAttributes vShader gShader fFilter fShader
 
         -- create final program
         prog = Program
@@ -567,8 +568,8 @@ data CompileOptions
     { 
     }
 
-compile :: DAG -> Either String Pipeline
-compile dag = if L.null errors then Right pipeline else Left (unlines errors)
+compile :: TargetPlatform -> DAG -> Either String Pipeline
+compile tp dag = if L.null errors then Right pipeline else Left (unlines errors)
   where
     BiMap _ expIds = dagExp dag
     -- expL contains all expressions in a list, useful for global traversal
@@ -585,7 +586,7 @@ compile dag = if L.null errors then Right pipeline else Left (unlines errors)
     rootExpId = IM.size expIds - 1
 
     -- generate programs and slots
-    (slotsV, progsV, progCmds) = getSlotsAndPrograms dag expL expU
+    (slotsV, progsV, progCmds) = getSlotsAndPrograms tp dag expL expU
 
     -- generate commands
     allocState = allocate progCmds dag expU rootExpId
@@ -598,6 +599,7 @@ compile dag = if L.null errors then Right pipeline else Left (unlines errors)
         , programs      = progsV
         , slots         = slotsV
         , commands      = reverse (sCommands allocState)
+        , platform      = tp
         }
 
 {-

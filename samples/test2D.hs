@@ -63,7 +63,7 @@ screenQuad = Accumulate fragCtx PassAll frag rast clear
     input   = Fetch "postSlot" Triangles (IV2F "position")
 
     vert :: Exp V V2F -> VertexOut () V2F
-    vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv:.ZT)
+    vert uv = VertexOut v4 (Const 1) ZT (Smooth uv:.ZT)
       where
         v4      = pack' $ V4 u v (floatV 1) (floatV 1)
         V2 u v  = unpack' uv
@@ -87,9 +87,11 @@ main = do
 
     windowSize <- initCommon "LC DSL 2D Demo"
 
-    let Right ppl = compilePipeline $ ScreenOut lcnet
+    let Right pplWebGL = compilePipeline WebGL $ ScreenOut lcnet
+        Right ppl = compilePipeline OpenGL33 $ ScreenOut lcnet
         schema = schemaFromPipeline ppl
-    LB.writeFile "2dpipeline.ppl" $ encodePretty ppl
+    LB.writeFile "2dpipelineWebGL.ppl" $ encodePretty pplWebGL
+    LB.writeFile "2dpipelineGL33.ppl" $ encodePretty ppl
     putStrLn $ ppShow ppl
     putStrLn ""
     putStrLn $ ppShow schema

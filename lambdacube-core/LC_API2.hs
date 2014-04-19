@@ -34,8 +34,8 @@ import qualified LC_B2_Compile3 as B2
 
 import Control.Monad.State
 
-compilePipeline :: H.GPOutput H.SingleOutput -> Either String Pipeline
-compilePipeline l = B2.compile dag
+compilePipeline :: TargetPlatform -> H.GPOutput H.SingleOutput -> Either String Pipeline
+compilePipeline t l = B2.compile t dag
   where
     (_, dag') = runState (U.unN $ convertGPOutput l) U.emptyDAG
     dag = U.addCount dag'

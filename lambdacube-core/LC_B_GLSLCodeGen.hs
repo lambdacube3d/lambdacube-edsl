@@ -29,6 +29,7 @@ import LC_G_APIType hiding (LogicOperation(..), ComparisonFunction(..))
 import LC_U_APIType
 import LC_U_PrimFun
 import LC_U_DeBruijn hiding (ExpC(..))
+import LC_B2_IR (TargetPlatform(..))
 
 import Language.GLSL.Syntax hiding (Const,InterpolationQualifier(..),TypeSpecifierNonArray(..))
 import Language.GLSL.Syntax (TypeSpecifierNonArray)
@@ -488,17 +489,17 @@ codeGenExp' dag smpName env expId = do
   if we disable inline functions, it simplifies variable name gen
 -}
 
-codeGenVertexShader :: DAG
+codeGenVertexShader :: TargetPlatform
+                    -> DAG
                     -> Map Exp String
                     -> [(ByteString,InputType)]
                     -> Exp
                     -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
-codeGenVertexShader dag smpName inVars = cvt
+codeGenVertexShader tp dag smpName inVars = cvt
   where
     genExp :: ExpId -> CGen [Expr]
     genExp = codeGenExp' dag smpName $ V.singleton [Variable (unpack n) | n <- map fst inVars]
 
-    genIExp :: Exp -> CGen (GLSL.InterpolationQualifier,[Expr],[InputType])
     genIExp (Flat e)            = (GLSL.Flat,,codeGenType $ expIdType dag e) <$> genExp e
     genIExp (Smooth e)          = (GLSL.Smooth,,codeGenType $ expIdType dag e) <$> genExp e
     genIExp (NoPerspective e)   = (GLSL.NoPerspective,,codeGenType $ expIdType dag e) <$> genExp e
@@ -506,17 +507,26 @@ codeGenVertexShader dag smpName inVars = cvt
     cvt :: Exp -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
     cvt (Lam lam) = cvt $ toExp dag lam
     cvt (Body bodyExp) = (SB.unlines $!
-        [ "#version 150 core"
-        , "#extension GL_EXT_gpu_shader4 : enable"
+        header ++
         -- , "#pragma optimize(off)"
-        , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
+        [ pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
-        , pp [inVar     (unpack n)    (toGLSLType t) | (n,t) <- inVars]
-        , pp [outVarIQ  (unpack n) iq (toGLSLType t) | n <- oNames | iq <- oQ | [t] <- oT]
+        , pp [fInVar    (unpack n)    (toGLSLType t) | (n,t) <- inVars]
+        , pp [fOutVarIQ (unpack n) iq (toGLSLType t) | n <- oNames | iq <- oQ | [t] <- oT]
         , "void main ()"
         , ppE (posE:sizeE:concat oE ++ clipE) ("gl_Position":"gl_PointSize":oNames ++ take clipCount clipNames)
         ], [(n,q,t) | n <- oNames | q <- oQ | [t] <- oT])
       where
+        (header,fInVar,fOutVarIQ) = case tp of
+            OpenGL33    -> (gl33Header,inVar,outVarIQ)
+            WebGL       -> ([],attribute,esOutVarIQ)
+          where
+            gl33Header =
+                [ "#version 150 core"
+                , "#extension GL_EXT_gpu_shader4 : enable"
+                ]
+            esOutVarIQ n GLSL.Smooth t = varying n t
+            esOutVarIQ _ _ _ = error "unsupported interpolation!"
         clipCount = length clipE
         clipNames = [pack $ "gl_ClipDistance[" ++ show i ++ "]" | i <- [0..]]
         VertexOut pos size clips outs = toExp dag bodyExp
@@ -535,13 +545,14 @@ codeGenVertexShader dag smpName inVars = cvt
             return (clipE',posE',sizeE',oQ',oE',oT')
         oNames      = [pack $ "v" ++ show i | i <- [0..]]
 
-codeGenGeometryShader :: DAG
+codeGenGeometryShader :: TargetPlatform
+                      -> DAG
                       -> Map Exp String
                       -> FetchPrimitive
                       -> [(ByteString,GLSL.InterpolationQualifier,InputType)]
                       -> Exp
                       -> (ByteString, [(ByteString,GLSL.InterpolationQualifier,InputType)])
-codeGenGeometryShader dag samplerNameMap inPrim inVars geomSh@(GeometryShader layerCount outPrim maxGenVertices funPrimCnt funPrim funVert) = (SB.concat [srcPre, src], outVars)
+codeGenGeometryShader tp dag samplerNameMap inPrim inVars geomSh@(GeometryShader layerCount outPrim maxGenVertices funPrimCnt funPrim funVert) = (SB.concat [srcPre, src], outVars)
   where
 {-
     done - uniforms
@@ -679,13 +690,14 @@ codeGenGeometryShader dag samplerNameMap inPrim inVars geomSh@(GeometryShader la
         Lam l   = toExp dag a
         Body b  = toExp dag l
 
-codeGenFragmentShader :: DAG
+codeGenFragmentShader :: TargetPlatform
+                      -> DAG
                       -> Map Exp String
                       -> [(ByteString,GLSL.InterpolationQualifier,InputType)]
                       -> Exp
                       -> Exp
                       -> (ByteString, [(ByteString,InputType)],Int)
-codeGenFragmentShader dag smpName inVars ffilter = cvt
+codeGenFragmentShader tp dag smpName inVars ffilter = cvt
   where
     cvtF :: Exp -> CGen Expr
     cvtF (Lam lam) = cvtF $ toExp dag lam
@@ -706,18 +718,26 @@ codeGenFragmentShader dag smpName inVars ffilter = cvt
     genFExp :: ExpId -> CGen ([Expr],[InputType])
     genFExp e = (,codeGenType $ expIdType dag e) <$> genExp e
 
-    oNames :: [ByteString]
-    oNames = [pack $ "f" ++ show i | i <- [0..]]
+    (oNames,header,fOutVar,fInVarIQ) = case tp of
+        OpenGL33    -> (gl33ONames,gl33Header,\n t -> Just $ outVar n t,inVarIQ)
+        WebGL       -> (["gl_FragColor"],[],\_ _ -> Nothing,esInVarIQ)
+      where
+        gl33ONames = [pack $ "f" ++ show i | i <- [0..]]
+        gl33Header =
+            [ "#version 150 core"
+            , "#extension GL_EXT_gpu_shader4 : enable"
+            ]
+        esInVarIQ n GLSL.Smooth t = varying n t
+        esInVarIQ _ _ _ = error "unsupported interpolation!"
 
     src :: [ExpId] -> [(ByteString,ExpId)] -> (ByteString, [(ByteString,InputType)],Int)
     src outs outs' = (SB.unlines $!
-        [ "#version 150 core"
-        , "#extension GL_EXT_gpu_shader4 : enable"
+        header ++
         -- , "#pragma optimize(off)"
-        , pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
+        [ pp [uniform   (unpack n)    (toGLSLType t) | (n,t) <- uniVars]
         , pp [uniform           n     (toGLSLType t) | (n,t) <- smpVars]
-        , pp [inVarIQ   (unpack n) iq (toGLSLType t) | (n,iq,t) <- inVars]
-        , pp [outVar    (unpack n)    (toGLSLType t) | n <- oNames | [t] <- oT]
+        , pp [fInVarIQ  (unpack n) iq (toGLSLType t) | (n,iq,t) <- inVars]
+        , pp $ catMaybes [fOutVar   (unpack n)    (toGLSLType t) | n <- oNames | [t] <- oT]
         , "void main ()"
         , ppBody $ case ffilter of
             PassAll     -> reverse stmt ++ body
@@ -833,8 +853,18 @@ var name ty tq = varInit name ty tq Nothing
 uniform :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 uniform name ty = Declaration $ var name ty (Just $ TypeQualSto Uniform)
 
+assign :: Expr -> Expr -> Statement
+assign l r = ExpressionStatement $ Just $ Equal l r
+
+varStmt :: String -> TypeSpecifierNonArray -> Expr -> Statement
+varStmt name ty val = DeclarationStatement $ varInit name ty Nothing $ Just val
+
+-- OpenGL 3.3
 inVar :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 inVar name ty = Declaration $ var name ty (Just $ TypeQualSto In)
+
+inVarIQ :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
+inVarIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just In)
 
 inVarArr :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 inVarArr name ty = Declaration $ InitDeclaration (TypeDeclarator varType) [InitDecl name Nothing Nothing]
@@ -844,15 +874,13 @@ inVarArr name ty = Declaration $ InitDeclaration (TypeDeclarator varType) [InitD
     varTySpec = TypeSpec Nothing varTySpecNoPrec
     varType = FullType tq varTySpec
 
-inVarIQ :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
-inVarIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just In)
-
 outVar :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 outVar name ty = Declaration $ var name ty (Just $ TypeQualSto Out)
 
 outVarIQ :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
 outVarIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just Out)
-{-
+
+-- WebGL / OpenGL ES 2.0
 attribute :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 attribute name ty = Declaration $ var name ty (Just $ TypeQualSto Attribute)
 
@@ -861,9 +889,3 @@ varying name ty = Declaration $ var name ty (Just $ TypeQualSto Varying)
 
 varyingIQ :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
 varyingIQ name iq ty = Declaration $ var name ty (Just $ TypeQualInt iq $ Just Varying)
--}
-assign :: Expr -> Expr -> Statement
-assign l r = ExpressionStatement $ Just $ Equal l r
-
-varStmt :: String -> TypeSpecifierNonArray -> Expr -> Statement
-varStmt name ty val = DeclarationStatement $ varInit name ty Nothing $ Just val

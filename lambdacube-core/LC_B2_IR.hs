@@ -21,6 +21,11 @@ type TextureUnit = Int
 type RenderTargetName = Int
 type TextureUnitMapping = Trie TextureUnit
 
+data TargetPlatform
+    = OpenGL33
+    | WebGL
+    deriving (Show, Eq, Ord)
+
 data ImageRef
     = TextureImage  TextureName Int (Maybe Int)  -- Texture name, mip index, array index
     | Framebuffer   ImageSemantic
@@ -139,6 +144,7 @@ data Pipeline
     , programs      :: Vector Program
     , slots         :: Vector Slot
     , commands      :: [Command]
+    , platform      :: TargetPlatform
     }
     deriving Show
 
@@ -199,4 +205,5 @@ $(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''RenderTarget)
 $(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Program)
 $(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Slot)
 $(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Command)
+$(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''TargetPlatform)
 $(deriveJSON defaultOptions {sumEncoding = TwoElemArray} ''Pipeline)
