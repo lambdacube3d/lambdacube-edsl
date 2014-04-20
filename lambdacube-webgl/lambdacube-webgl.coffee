@@ -1,14 +1,4 @@
-# WebGL backend based on OpenGL 3.3 Haskell LambdaCube backend
-
-# utility functions
-
-# Usage: zip(arr1, arr2, arr3, ...)
-zip = () ->
-  lengthArray = (arr.length for arr in arguments)
-  length = Math.min(lengthArray...)
-  for i in [0...length]
-    arr[i] for arr in arguments
-
+# WebGL 1.0 backend based on OpenGL 3.3 Haskell LambdaCube backend
 
 class Pipeline
     desc:               null    # Pipeline
@@ -73,6 +63,27 @@ class Pipeline
         @gl.linkProgram(p)
         console.log('prog info: ' + @gl.getProgramInfoLog(p))
 
+        ###
+    -- check program input
+    (uniforms,uniformsType) <- queryUniforms po
+    (attributes,attributesType) <- queryStreams po
+    print uniforms
+    print attributes
+    when (uniformsType /= programUniforms p `unionL` programInTextures p) $ fail "shader program uniform input mismatch!"
+    when (attributesType /= fmap snd (programStreams p)) $ fail "shader program stream input mismatch!"
+    -- the public (user) pipeline and program input is encoded by the slots, therefore the programs does not distinct the render and slot textures input
+    let inUniNames = programUniforms p
+        (inUniforms,inTextures) = L.partition (\(n,v) -> T.member n inUniNames) $ T.toList $ uniforms
+        texUnis = [n | (n,_) <- inTextures, T.member n uniTrie]
+    return $ GLProgram
+        { shaderObjects         = objs
+        , programObject         = po
+        , inputUniforms         = T.fromList inUniforms
+        , inputTextures         = T.fromList inTextures
+        , inputTextureUniforms  = S.fromList texUnis
+        , inputStreams          = T.fromList [(n,(idx,attrName)) | ((n,idx),(_,(attrName,_))) <- zip (T.toList attributes) (T.toList $ programStreams p)]
+        }
+        ###
         prg =
             shaderObjects:          [vs,fs]
             programObject:          p
@@ -103,8 +114,8 @@ class Pipeline
             internalFormat  = textureDataTypeToGLType(txSemantic, dTy)
             dataFormat      = textureDataTypeToGLArityType(txSemantic, dTy)
             @gl.bindTexture(txTarget, texObj);
-            @gl.texParameteri(txTarget, @gl.TEXTURE_BASE_LEVEL, txBaseLevel)
-            @gl.texParameteri(txTarget, @gl.TEXTURE_MAX_LEVEL, txMaxLevel)
+            #@gl.texParameteri(txTarget, @gl.TEXTURE_BASE_LEVEL, txBaseLevel)
+            #@gl.texParameteri(txTarget, @gl.TEXTURE_MAX_LEVEL, txMaxLevel)
             setTextureSamplerParameters(txTarget, txSampler)
             [internalFormat,dataFormat]
 
@@ -152,9 +163,147 @@ class Pipeline
             glTextureObject:    texObj
             glTextureTarget:    target
 
+    #textureDataTypeToGLType :: ImageSemantic -> TextureDataType -> GLenum
+    textureDataTypeToGLType = (s, t) ->
+        error = () -> console.log('error - invalid texture data type: ' + s + ' ' + t)
+        switch s
+            when 'Color' then switch t.tag
+                when 'FloatT' then switch t.contents
+                    #when 'Red'  then @gl.R32F
+                    #when 'RG'   then @gl.RG32F
+                    when 'RGBA' then @gl.RGBA
+                    else error()
+                #when 'IntT' then switch t.contents
+                #    when 'Red'  then @gl.R32I
+                #    when 'RG'   then @gl.RG32I
+                #    when 'RGBA' then @gl.RGBA32I
+                #    else error()
+                #when 'WordT' then switch t.contents
+                #    when 'Red'  then @gl.R32UI
+                #    when 'RG'   then @gl.RG32UI
+                #    when 'RGBA' then @gl.RGBA32UI
+                #    else error()
+                else error()
+            #when 'Depth' then switch t.tag
+            #    when 'FloatT' then switch t.contents
+            #        when 'Red'  then @gl.DEPTH_COMPONENT32F
+            #        else error()
+            #    when 'WordT' then switch t.contents
+            #        when 'Red'  then @gl.DEPTH_COMPONENT32
+            #        else error()
+            #    else error()
+            else error()
+
+    #textureDataTypeToGLArityType :: ImageSemantic -> TextureDataType -> GLenum
+    textureDataTypeToGLArityType = (s, t) ->
+        error = () -> console.log('error - invalid texture data type: ' + s + ' ' + t)
+        switch s
+            when 'Color' then switch t.tag
+                when 'FloatT' then switch t.contents
+                    #when 'Red'  then @gl.LUMINANCE
+                    #when 'RG'   then @gl.LUMINANCE_ALPHA
+                    when 'RGBA' then @gl.RGBA
+                    else error()
+                #when 'IntT' then switch t.contents
+                #    when 'Red'  then @gl.LUMINANCE
+                #    when 'RG'   then @gl.LUMINANCE_ALPHA
+                #    when 'RGBA' then @gl.RGBA
+                #    else error()
+                #when 'WordT' then switch t.contents
+                #    when 'Red'  then @gl.LUMINANCE
+                #    when 'RG'   then @gl.LUMINANCE_ALPHA
+                #    when 'RGBA' then @gl.RGBA
+                #    else error()
+                else error()
+            #when 'Depth' then switch t.tag
+            #    when 'FloatT' then switch t.contents
+            #        when 'Red'  then @gl.DEPTH_COMPONENT
+            #        else error()
+            #    when 'WordT' then switch t.contents
+            #        when 'Red'  then @gl.DEPTH_COMPONENT
+            #        else error()
+            #    else error()
+            else error()
+
+    #edgeModeToGLType :: EdgeMode -> GLenum
+    edgeModeToGLType = (a) -> switch a
+        when 'Repeat'           then @gl.REPEAT
+        when 'MirroredRepeat'   then @gl.MIRRORED_REPEAT
+        when 'ClampToEdge'      then @gl.CLAMP_TO_EDGE
+        else console.log('error - invalid texture edge mode: ' + a)
+
+    #filterToGLType :: Filter -> GLenum
+    filterToGLType = (a) -> switch a
+        when 'Nearest'              then @gl.NEAREST
+        when 'Linear'               then @gl.LINEAR
+        when 'NearestMipmapNearest' then @gl.NEAREST_MIPMAP_NEAREST
+        when 'NearestMipmapLinear'  then @gl.NEAREST_MIPMAP_LINEAR
+        when 'LinearMipmapNearest'  then @gl.LINEAR_MIPMAP_NEAREST
+        when 'LinearMipmapLinear'   then @gl.LINEAR_MIPMAP_LINEAR
+
+    #comparisonFunctionToGLType :: ComparisonFunction -> GLenum
+    comparisonFunctionToGLType = (a) -> switch a
+        when 'Always'   then @gl.ALWAYS
+        when 'Equal'    then @gl.EQUAL
+        when 'Gequal'   then @gl.GEQUAL
+        when 'Greater'  then @gl.GREATER
+        when 'Lequal'   then @gl.LEQUAL
+        when 'Less'     then @gl.LESS
+        when 'Never'    then @gl.NEVER
+        when 'Notequal' then @gl.NOTEQUAL
+
+
+    #setTextureSamplerParameters :: GLenum -> SamplerDescriptor -> IO ()
+    setTextureSamplerParameters = (t,s) ->
+        @gl.texParameteri(t, @gl.TEXTURE_WRAP_S, edgeModeToGLType(s.samplerWrapS))
+        if s.samplerWrapT?
+            @gl.texParameteri(t, @gl.TEXTURE_WRAP_T, edgeModeToGLType(s.samplerWrapT))
+        else
+            console.log('error - TEXTURE_WRAP_T is missing: ' + s + ' ' + t)
+
+        @gl.texParameteri(t, @gl.TEXTURE_MIN_FILTER, filterToGLType(s.samplerMinFilter))
+        @gl.texParameteri(t, @gl.TEXTURE_MAG_FILTER, filterToGLType(s.samplerMagFilter))
+
+
     # pipeline command implementation
-    SetRasterContext: (args) ->
-        console.log('TODO: implement SetRasterContext')
+    SetRasterContext: (ctx) ->
+        cff = (a) -> switch a
+            when 'CCW'  then    @gl.CCW
+            when 'CW'   then    @gl.CW
+            else console.log('error - unknown FrontFace: ' + a)
+
+        switch ctx.tag
+            when 'PointCtx' then null
+            when 'LineCtx'
+                [lw, pv] = ctx.contents
+                @gl.LineWidth(lw)
+            when 'TriangleCtx'
+                [cm, pm, po, pv] = ctx.contents
+                # cull mode
+                switch cm.tag
+                    when 'CullNone'
+                        @gl.disable(@gl.CULL_FACE)
+                    when 'CullFront'
+                        [f] = cm.contents
+                        @gl.enable(@gl.CULL_FACE)
+                        @gl.cullFace(@gl.FRONT)
+                        @gl.frontFace(cff(f))
+                    when 'CullBack'
+                        [f] = cm.contents
+                        @gl.enable(@gl.CULL_FACE)
+                        @gl.cullFace(@gl.BACK)
+                        @gl.frontFace(cff(f))
+                    else console.log('error - invalid CullMode: ' + cm.tag)
+                # polygon offset
+                switch po.tag
+                    when 'NoOffset'
+                        @gl.disable(@gl.POLYGON_OFFSET_FILL)
+                    when 'Offset'
+                        [f,u] = po.contents
+                        @gl.polygonOffset(f,u)
+                        @gl.enable(@gl.POLYGON_OFFSET_FILL)
+                    else console.log('error - invalid PolygonOffset: ' + po.tag)
+            else console.log('error - invalid RasterContext: ' + ctx.tag)
 
     SetAccumulationContext: (args) ->
         console.log('TODO: implement SetAccumulationContext')
@@ -214,3 +363,78 @@ class Pipeline
 
 # export classes
 window.Pipeline = Pipeline
+
+# utility functions
+
+# Usage: zip(arr1, arr2, arr3, ...)
+zip = () ->
+  lengthArray = (arr.length for arr in arguments)
+  length = Math.min(lengthArray...)
+  for i in [0...length]
+    arr[i] for arr in arguments
+
+###
+compileRenderTarget :: Vector TextureDescriptor -> Vector GLTexture -> RenderTarget -> IO GLRenderTarget
+compileRenderTarget texs glTexs (RenderTarget targets) = do
+    let isFB (Framebuffer _)    = True
+        isFB _                  = False
+        images = [img | (_,Just img) <- targets]
+    case all isFB images of
+        True -> do
+            let bufs = [cvt img | (Color,img) <- targets]
+                cvt a = case a of
+                    Nothing                     -> gl_NONE
+                    Just (Framebuffer Color)    -> gl_BACK_LEFT
+                    _                           -> error "internal error (compileRenderTarget)!"
+            return $ GLRenderTarget
+                { framebufferObject         = 0
+                , framebufferDrawbuffers    = Just bufs
+                }
+        False -> do
+            when (any isFB images) $ fail "internal error (compileRenderTarget)!"
+            fbo <- alloca $! \pbo -> glGenFramebuffers 1 pbo >> peek pbo
+            glBindFramebuffer gl_DRAW_FRAMEBUFFER fbo
+            let attach attachment (TextureImage texIdx level (Just layer)) =
+                    glFramebufferTextureLayer gl_DRAW_FRAMEBUFFER attachment (glTextureTarget $ glTexs ! texIdx) (fromIntegral level) (fromIntegral layer)
+                attach attachment (TextureImage texIdx level Nothing) = do
+                    let glTex = glTexs ! texIdx
+                        tex = texs ! texIdx
+                        txLevel = fromIntegral level
+                        txTarget = glTextureTarget glTex
+                        txObj = glTextureObject glTex
+                        attachArray = glFramebufferTexture gl_DRAW_FRAMEBUFFER attachment txObj txLevel
+                        attach2D    = glFramebufferTexture2D gl_DRAW_FRAMEBUFFER attachment txTarget txObj txLevel
+                    case textureType tex of
+                        Texture1D     _ n
+                            | n > 1             -> attachArray
+                            | otherwise         -> glFramebufferTexture1D gl_DRAW_FRAMEBUFFER attachment txTarget txObj txLevel
+                        Texture2D     _ n
+                            | n > 1             -> attachArray
+                            | otherwise         -> attach2D
+                        Texture3D     _         -> attachArray
+                        TextureCube   _         -> attachArray
+                        TextureRect   _         -> attach2D
+                        Texture2DMS   _ n _ _
+                            | n > 1             -> attachArray
+                            | otherwise         -> attach2D
+                        TextureBuffer _         -> fail "internalError (compileRenderTarget/TextureBuffer)!"
+
+                go a (Stencil,Just img) = do
+                    fail "Stencil support is not implemented yet!"
+                    return a
+                go a (Depth,Just img) = do
+                    attach gl_DEPTH_ATTACHMENT img
+                    return a
+                go (bufs,colorIdx) (Color,Just img) = do
+                    let attachment = gl_COLOR_ATTACHMENT0 + fromIntegral colorIdx
+                    attach attachment img
+                    return (attachment : bufs, colorIdx + 1)
+                go (bufs,colorIdx) (Color,Nothing) = return (gl_NONE : bufs, colorIdx + 1)
+                go a _ = return a
+            (bufs,_) <- foldM go ([],0) targets
+            withArray (reverse bufs) $ glDrawBuffers (fromIntegral $ length bufs)
+            return $ GLRenderTarget
+                { framebufferObject         = fbo
+                , framebufferDrawbuffers    = Nothing
+                }
+###
