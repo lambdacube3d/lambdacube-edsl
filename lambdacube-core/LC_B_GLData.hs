@@ -8,6 +8,7 @@ import Data.List as L
 import Data.Maybe
 import Data.Trie as T
 import Foreign 
+import System.IO.Unsafe
 --import qualified Data.IntMap as IM
 import qualified Data.Map as Map
 import qualified Data.Set as Set
