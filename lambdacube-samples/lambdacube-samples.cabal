@@ -46,28 +46,28 @@ executable lambdacube-hello
   main-is:             Hello.hs
   -- other-modules:
   other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
-  build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5, stb-image ==0.2.1
+  build-depends:       base >=4.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5, stb-image ==0.2.1
   default-language:    Haskell2010
 
 executable lambdacube-shadowmapping
   main-is:             ShadowMapping.hs
   -- other-modules:
   other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
-  build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
+  build-depends:       base >=4.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
   default-language:    Haskell2010
 
 executable lambdacube-cubemap
   main-is:             CubeMap.hs
   -- other-modules:
   other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
-  build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
+  build-depends:       base >=4.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
   default-language:    Haskell2010
 
 executable lambdacube-convolutionfilter
   main-is:             ConvolutionFilter.hs
   -- other-modules:
   other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
-  build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
+  build-depends:       base >=4.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
   default-language:    Haskell2010
 
 executable lambdacube-bulletexample
@@ -75,7 +75,7 @@ executable lambdacube-bulletexample
   -- other-modules:
   other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
   if flag(BulletInstalled)
-    build-depends:       base >=4.6 && <4.7, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, bullet >=0.2 && <0.3, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
+    build-depends:       base >=4.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vect >=0.4 && <0.5, vector >=0.10 && <0.11, elerea >=2.7 && <2.8, bullet >=0.2 && <0.3, lambdacube-core >=0.1 && <0.2, time >=1.4 && <1.5, OpenGLRaw >=1.4 && <1.5, GLFW-b ==0.1.0.5
   else
     buildable: False
   default-language:    Haskell2010

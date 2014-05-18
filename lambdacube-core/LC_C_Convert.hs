@@ -16,8 +16,8 @@ import LC_G_APIType
 import LC_C_PrimFun
 import LC_G_Type as G
 
-toInt :: SingI n => T.NatNum n -> Int
-toInt (a :: T.NatNum n) = fromInteger $ fromSing (sing :: Sing (n :: Nat))
+toInt :: KnownNat n => T.NatNum n -> Int
+toInt (a :: T.NatNum n) = fromInteger $ natVal a
 
 prjIdx i lyt = i--length lyt - i - 1
 
