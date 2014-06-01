@@ -2,6 +2,7 @@
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans
+import Control.Concurrent
 import Data.Word
 import Data.IORef
 import Data.List hiding (transpose)
@@ -34,12 +35,18 @@ import GameGraphics
 import Utils
 import MeshUtil
 
+import qualified Graphics.Rasterific as R
+import qualified Graphics.Rasterific.Texture as R
+
 #ifdef CAPTURE
 import Graphics.Rendering.OpenGL.Raw.Core32
 import Codec.Image.DevIL
 import Text.Printf
 import Foreign
 #endif
+
+import Graphics.Text.TrueType( loadFontFile, Font )
+import Codec.Picture( PixelRGBA8( .. ), writePng, Image(..) )
 
 type Sink a = a -> IO ()
 
@@ -91,8 +98,12 @@ main = do
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
 
+    Right font1 <- loadFontFile "Prototype.ttf"
+    Right font2 <- loadFontFile "Capture_it.ttf"
+    cpuDrawThread <- newIORef True
+
     let gfxNet = PrjFrameBuffer "outFB" tix0 stuntsGFX
-    renderer <- compileRenderer $ ScreenOut gfxNet
+    renderer <- compileRenderer $ ScreenOut $ addHUD "hudTexture" gfxNet
     let draw captureA = render renderer >> captureA >> swapBuffers
 
         quad :: Mesh
@@ -104,8 +115,12 @@ main = do
           where
             a = -1
             b = 1
+
+        unis = uniformSetter renderer
+
     compiledQuad <- compileMesh quad
     addMesh renderer "postSlot" compiledQuad []
+    addMesh renderer "ScreenQuad" compiledQuad []
     {-
     forM_ (terrainMesh ++ trackMesh) $ \m -> do
         cm <- compileMesh m
@@ -141,7 +156,7 @@ main = do
     capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
-        u <- scene (setScreenSize renderer) cars carNum (uniformSetter renderer) physicsWorld windowSize mousePosition command capRef
+        u <- scene (setScreenSize renderer) cars cpuDrawThread [font1,font2] carNum (uniformSetter renderer) physicsWorld windowSize mousePosition command capRef
         return $ draw <$> u
 
     driveNetwork sc (readInput physicsWorld s mousePositionSink mousePressSink keyPressSink capRef)
@@ -160,6 +175,8 @@ scene :: (BtDynamicsWorldClass bc,
           BtRaycastVehicleClass v)
       => (Word -> Word -> IO ())
       -> [Car v]
+      -> IORef Bool
+      -> [Font]
       -> Int
       -> T.Trie InputSetter
       -> bc
@@ -168,7 +185,7 @@ scene :: (BtDynamicsWorldClass bc,
       -> (Command -> Signal Bool)
       -> IORef Bool
       -> SignalGen Float (Signal (IO ()))
-scene setSize cars initCarNum uniforms physicsWorld windowSize mousePosition command capRef = do
+scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSize mousePosition command capRef = do
     isFirstFrame <- stateful True $ const $ const False
     carId <- transfer2 (Nothing, (initCarNum + 10) `mod` 11) (\_ isFirstFrame isPressed (_, prev) ->
                          if isPressed || isFirstFrame
@@ -227,7 +244,7 @@ scene setSize cars initCarNum uniforms physicsWorld windowSize mousePosition com
         Just (SM44F positionSetter) = T.lookup "worldPosition" uniforms
         Just (SM44F projectionSetter) = T.lookup "projection" uniforms
         Just (SV3F lightDirectionSetter) = T.lookup "lightDirection" uniforms
-        setupGFX ((w, h), capturing, frameCount, dt) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
+        setupGFX ((w, h), capturing, frameCount, dt, updateHud) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
 
             let car = cars !! carId
                 fieldOfView = pi/2
@@ -265,7 +282,34 @@ scene setSize cars initCarNum uniforms physicsWorld windowSize mousePosition com
                   forM_ (zip (wheelsPositionU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! zero
 
             setSize (fromIntegral w) (fromIntegral h)
-    
+            
+            --uniformFloat "time" uniforms t
+            done <- readIORef cpuDrawThread
+            when (done || updateHud) $ do
+                writeIORef cpuDrawThread False
+                forkIO $ do
+                    let carNames =
+                            [ "Acura NSX"
+                            , "Lamborghini Countach"
+                            , "Jaguar XJR-9 IMSA"
+                            , "Lamborghini LM002"
+                            , "Porsche 911 Carrera 4"
+                            , "Chevrolet Corvette ZR1"
+                            , "Audi Quattro"
+                            , "Ferrari 288 GTO"
+                            , "Lancia Delta HF Integrale 16v"
+                            , "Porsche 962"
+                            , "Porsche March IndyCar"
+                            ]
+                    let hud = R.renderDrawing 512 512 (PixelRGBA8 0 0 0 0) $ do
+                                R.withTexture (R.uniformTexture $ PixelRGBA8 255 255 0 255) $ do
+                                    R.printTextAt (font !! 1) 42 (R.V2 150 7) "Stunts"
+                                R.withTexture (R.uniformTexture $ PixelRGBA8 255 69 0 255) $ do
+                                    R.printTextAt (font !! 0) 16 (R.V2 25 60) $ carNames !! carId
+                    uniformFTexture2D "hudTexture" uniforms =<< compileImageToTexture2DRGBAF False True hud
+                    threadDelay 100000
+                    --writeIORef cpuDrawThread True
+                return ()
             return $ do
 #ifdef CAPTURE
                 when capturing $ do
@@ -274,9 +318,8 @@ scene setSize cars initCarNum uniforms physicsWorld windowSize mousePosition com
                 writeIORef capRef capturing
 #endif
                 return ()
-
     effectful4 setupGFX
-                   ((,,,) <$> windowSize <*> capture <*> frameCount <*> dt)
+                   ((,,,,) <$> windowSize <*> capture <*> frameCount <*> dt <*> command SwitchCar)
                    camera
                    carId
                    carAndWheelsPos
