@@ -182,28 +182,36 @@ loadTrack trkFile = do
         return (scalingUniformProj4 (y*0.4+0.3) .*. rotMatrixProj4 a (Vec3 0 1 0) .*. translation (Vec3 x (y*1500+600) z), m)
     return (terrain ++ clouds ++ fence, track,startPos)
 
-data StuntsData
-    = StuntsData
+data CarData
+    = CarData
     { carMesh       :: [Mesh]
     , wheels        :: [(Vec3,Float,Float,[Mesh])]
+    , carSimModel   :: Car
+    }
+
+data StuntsData
+    = StuntsData
+    { cars          :: [CarData]
     , terrainMesh   :: [Mesh]
     , trackMesh     :: [Mesh]
     , startPosition :: (Float,Vec3)
-    , carSimModel   :: Car
     }
 
 readStuntsData :: Int -> SB.ByteString -> IO StuntsData
 readStuntsData carNum trkFile = do
     (terrain,track,startPos) <- loadTrack trkFile
-    let cars = map loadCar ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
-        (carModel,carSim,carWheels) = cars !! (carNum `mod` 11)
+    let cars = map (mkCarData.loadCar) ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
+        mkCarData (carModel,carSim,carWheels) =
+            CarData
+            { carMesh     = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- carModel ! "car0"]
+            , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- carWheels]
+            , carSimModel = carSim
+            }
     return $! StuntsData
-        { carMesh       = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- carModel ! "car0"]
-        , wheels        = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- carWheels]
+        { cars          = cars
         , terrainMesh   = [transformMesh' p m | (p,ml) <- terrain, m <- ml]
         , trackMesh     = [transformMesh' p m | (p,ml) <- track, m <- ml]
         , startPosition = startPos
-        , carSimModel   = carSim
         }
 
 takeExtensionCI = map toLower . takeExtension

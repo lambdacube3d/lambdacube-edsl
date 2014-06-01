@@ -85,7 +85,7 @@ main = do
             n:_ -> drop 8 n
 
     -- load game data
-    StuntsData carMesh wheels terrainMesh trackMesh startPos carSim <- readStuntsData carNum $ SB.pack trkFile
+    StuntsData carsData terrainMesh trackMesh startPos <- readStuntsData carNum $ SB.pack trkFile
 
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
@@ -113,11 +113,11 @@ main = do
     cm <- compileMesh $ joinMesh $ terrainMesh ++ trackMesh
     addMesh renderer "streamSlot" cm []
 
-    carUnis <- forM carMesh $ \m -> do
+    carUnis <- forM (map carMesh carsData) $ mapM $ \m -> do
         cm <- compileMesh m
         objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView", "worldPosition"]
 
-    wheelsUnis <- forM wheels $ \(_,_,_,ml) -> forM ml $ \m -> do
+    wheelsUnis <- forM (map wheels carsData) $ mapM $ \(_,_,_,ml) -> forM ml $ \m -> do
         cm <- compileMesh m
         objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView", "worldPosition"]
 
@@ -127,7 +127,9 @@ main = do
     addStaticShape physicsWorld trackMesh 1 1
     addStaticShape physicsWorld terrainMesh 1000 1000
     let (sO,Vec3 sX sY sZ) = startPos
-    car <- addCar physicsWorld carMesh wheels $ translateAfter4 (Vec3 sX (sY + 1) sZ) $ rotMatrixProj4 sO upwards
+    raycastVehicles <- forM carsData $ \carData ->
+                       createCar physicsWorld (carMesh carData) (wheels carData) $ translateAfter4 (Vec3 sX (sY + 1) sZ) $ rotMatrixProj4 sO upwards
+    let cars = zipWith3 Car raycastVehicles carUnis wheelsUnis
 
     -- setup FRP network
     (mousePosition,mousePositionSink) <- external (0,0)
@@ -136,40 +138,53 @@ main = do
     (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
     (cameraPress,cameraPressSink) <- external (False,False,False)
     (capturePress,capturePressSink) <- external False
-    (carPos,carPosSink) <- external idmtx
-    (wheelPos,wheelPosSink) <- external []
+    (carSwitchPress, carSwitchPressSink) <- external False
+    (carInputPress, carInputPressSink) <- external $ replicate 5 False
 
     capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
-        u <- scene (setScreenSize renderer) carUnis wheelsUnis (uniformSetter renderer) physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress capturePress debugPress capRef
+        u <- scene (setScreenSize renderer) cars (uniformSetter renderer) physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef
         return $ draw <$> u
 
-    driveNetwork sc (readInput physicsWorld car s carPosSink wheelPosSink
-        mousePositionSink mousePressSink fblrPressSink
-        cameraPressSink capturePressSink debugPressSink capRef)
+    driveNetwork sc (readInput physicsWorld s
+        mousePositionSink mousePressSink fblrPressSink carInputPressSink
+        cameraPressSink capturePressSink carSwitchPressSink debugPressSink capRef)
 
     dispose renderer
     closeWindow
     terminate
 
-scene :: BtDynamicsWorldClass bc
+data Car bc = Car
+    { raycastVehicle :: bc
+    , carUnis :: [T.Trie InputSetter]
+    , wheelsUnis :: [[T.Trie InputSetter]]
+    }
+
+scene :: (BtDynamicsWorldClass bc,
+          BtRaycastVehicleClass v)
       => (Word -> Word -> IO ())
-      -> [T.Trie InputSetter]
-      -> [[T.Trie InputSetter]]
+      -> [Car v]
       -> T.Trie InputSetter
       -> bc
-      -> Signal Proj4
-      -> Signal [Proj4]
       -> Signal (Int, Int)
       -> Signal (Float, Float)
       -> Signal (Bool, Bool, Bool, Bool, Bool)
+      -> Signal [Bool]
       -> Signal (Bool, Bool, Bool)
+      -> Signal Bool
       -> Signal Bool
       -> Signal Bool
       -> IORef Bool
       -> SignalGen Float (Signal (IO ()))
-scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSize mousePosition fblrPress cameraPress capturePress debugPress capRef = do
+scene setSize cars uniforms physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef = do
+    isFirstFrame <- stateful True $ const $ const False
+    carId <- transfer2 (Nothing, 10) (\_ isFirstFrame isPressed (_, prev) ->
+                         if isPressed || isFirstFrame
+                         then (Just prev, (prev + 1) `mod` 11)
+                         else (Nothing, prev))
+             isFirstFrame
+             =<< edge carSwitchPress
     time <- stateful 0 (+)
     frameCount <- stateful (0 :: Int) (\_ c -> c + 1)
 
@@ -187,6 +202,26 @@ scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSiz
         selectCam FollowFar   _ (cam,dir) _      = lookat cam (cam &+ dir) upwards
         selectCam UserControl _ _ (cam,dir,up,_) = lookat cam (cam &+ dir) up
 
+    dt <- input
+    carAndWheelsPos <- (\f -> effectful4 f carInputPress dt carId isFirstFrame) $ \carInput dt (prevId, currId) isFirstFrame -> do
+        let vehicle = raycastVehicle car
+            car = cars !! currId
+        case prevId of
+          Nothing -> return ()
+          Just prevId -> do
+              let prevCar = cars !! prevId
+              state <- getCarMotionState $ raycastVehicle prevCar
+              removeCar physicsWorld $ raycastVehicle prevCar
+              addCar physicsWorld $ raycastVehicle car
+              when (not isFirstFrame) $ do
+                  setCarMotionState (raycastVehicle car) state
+        steerCar dt vehicle carInput
+        btDynamicsWorld_stepSimulation physicsWorld dt 10 (1 / 200)
+        wheelsMat <- updateCar vehicle
+        carMat <- rigidBodyProj4 =<< btRaycastVehicle_getRigidBody vehicle
+        return (carMat, wheelsMat)
+    let carPos = fst <$> carAndWheelsPos
+
     followCamNear <- followCamera 2 4 6 carPos
     followCamFar <- followCamera 20 40 60 carPos
     userCam <- userCamera (Vec3 (-4) 0 0) mouseMove fblrPress
@@ -197,14 +232,16 @@ scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSiz
         Just (SM44F positionSetter) = T.lookup "worldPosition" uniforms
         Just (SM44F projectionSetter) = T.lookup "projection" uniforms
         Just (SV3F lightDirectionSetter) = T.lookup "lightDirection" uniforms
-        carPositionMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldPosition" u]
-        carViewMats = [s | u <- carUnis, let Just (SM44F s) = T.lookup "worldView" u]
-        wheelsPositionU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldPosition" u] | wu <- wheelsUnis]
-        wheelsViewU = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis]
-        setupGFX ((w, h), capturing, frameCount) worldViewMat carMat wheelsMats = do
-            let fieldOfView = pi/2
+        setupGFX ((w, h), capturing, frameCount, dt) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
+
+            let car = cars !! carId
+                fieldOfView = pi/2
                 aspectRatio = fromIntegral w / fromIntegral h
                 projection nearDepth farDepth = perspective nearDepth farDepth fieldOfView aspectRatio
+                carPositionMats car = [s | u <- carUnis car, let Just (SM44F s) = T.lookup "worldPosition" u]
+                carViewMats car = [s | u <- carUnis car, let Just (SM44F s) = T.lookup "worldView" u]
+                wheelsPositionU car = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldPosition" u] | wu <- wheelsUnis car]
+                wheelsViewU car = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis car]
             
             lightDirectionSetter $! vec3ToV3F $! lightDirection
             worldViewSetter $! mat4ToM44F $! fromProjective worldViewMat
@@ -215,10 +252,23 @@ scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSiz
                 uniformFloat (SB.pack ("gridThickness" ++ show slice)) uniforms $! gridThickness slice
                 uniformV3F (SB.pack ("lightViewScale" ++ show slice)) uniforms $! vec3ToV3F scale
                 uniformM44F (SB.pack ("lightViewProj" ++ show slice)) uniforms $! mat4ToM44F $! fromProjective lightViewProj
-            forM_ carPositionMats $ \s -> s $! mat4ToM44F $! fromProjective carMat 
-            forM_ carViewMats $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
-            forM_ (zip wheelsPositionU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu
-            forM_ (zip wheelsViewU wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
+
+            let setView car worldViewMat = do
+                  forM_ (carViewMats car) $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
+                  forM_ (zip (wheelsViewU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
+
+            forM_ (carPositionMats car) $ \s -> s $! mat4ToM44F $! fromProjective carMat 
+            forM_ (zip (wheelsPositionU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu
+
+            setView car worldViewMat
+            case prevCarId of
+              Nothing -> return ()
+              Just prevCarId -> do
+                  let car = cars !! prevCarId
+                  setView car $ scaling zero
+                  forM_ (carPositionMats car) $ \s -> s $! mat4ToM44F $! zero
+                  forM_ (zip (wheelsPositionU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! zero
+
             setSize (fromIntegral w) (fromIntegral h)
     
             return $ do
@@ -229,8 +279,12 @@ scene setSize carUnis wheelsUnis uniforms physicsWorld carPos wheelPos windowSiz
                 writeIORef capRef capturing
 #endif
                 return ()
-    
-    effectful4 setupGFX ((,,) <$> windowSize <*> capture <*> frameCount) camera carPos wheelPos
+
+    effectful4 setupGFX
+                   ((,,,) <$> windowSize <*> capture <*> frameCount <*> dt)
+                   camera
+                   carId
+                   carAndWheelsPos
 
 vec3ToV3F :: Vec3 -> V3F
 vec3ToV3F (Vec3 x y z) = V3 x y z
@@ -241,21 +295,20 @@ vec4ToV4F (Vec4 x y z w) = V4 x y z w
 mat4ToM44F :: Mat4 -> M44F
 mat4ToM44F (Mat4 a b c d) = V4 (vec4ToV4F a) (vec4ToV4F b) (vec4ToV4F c) (vec4ToV4F d)
 
-readInput :: (BtDynamicsWorldClass dw, BtRaycastVehicleClass v)
+readInput :: (BtDynamicsWorldClass dw)
           => dw
-          -> v
           -> State
-          -> Sink Proj4
-          -> Sink [Proj4]
           -> Sink (Float, Float)
           -> Sink Bool
           -> Sink (Bool, Bool, Bool, Bool, Bool)
+          -> Sink [Bool]
           -> Sink (Bool, Bool, Bool)
+          -> Sink Bool
           -> Sink Bool
           -> Sink Bool
           -> IORef Bool
           -> IO (Maybe Float)
-readInput physicsWorld car s carPos wheelPos mousePos mouseBut fblrPress cameraPress capturePress debugPress capRef = do
+readInput physicsWorld s mousePos mouseBut fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef = do
     t <- getTime
     resetTime
 
@@ -267,16 +320,13 @@ readInput physicsWorld car s carPos wheelPos mousePos mouseBut fblrPress cameraP
     cameraPress =<< (,,) <$> keyIsPressed (CharKey '1') <*> keyIsPressed (CharKey '2') <*> keyIsPressed (CharKey '3')
     debugPress =<< keyIsPressed KeySpace
     capturePress =<< keyIsPressed (CharKey 'P')
+    carSwitchPress =<< keyIsPressed (CharKey 'E')
     k <- keyIsPressed KeyEsc
+    carInputPress =<< forM "AWSDR" (\c -> keyIsPressed (CharKey c))
 
     -- step physics
     isCapturing <- readIORef capRef
     let dt = if isCapturing then recip captureRate else realToFrac t
 
-    steerCar dt car =<< forM "AWSDR" (\c -> keyIsPressed (CharKey c))
-    btDynamicsWorld_stepSimulation physicsWorld dt 10 (1 / 200)
-    wheelPos =<< updateCar car
-
-    carPos =<< rigidBodyProj4 =<< btRaycastVehicle_getRigidBody car
     updateFPS s t
     return $ if k then Nothing else Just dt

@@ -28,6 +28,12 @@ driveNetwork network driver = do
             driveNetwork network driver
         Nothing -> return ()
 
+edge :: Signal Bool -> SignalGen p (Signal Bool)
+edge input = do
+    input' <- delay True input
+    let rising prev curr = not prev && curr
+    return $ rising <$> input' <*> input
+
 -- OpenGL/GLFW boilerplate
 
 initCommon :: String -> IO (Signal (Int, Int))
