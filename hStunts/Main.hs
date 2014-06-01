@@ -11,6 +11,7 @@ import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as SB
 
+import qualified Data.Vector as VG
 import qualified Data.Vector.Storable as V
 import qualified Data.Trie as T
 --import Control.Concurrent.STM
@@ -134,8 +135,8 @@ main = do
     -- setup FRP network
     (mousePosition,mousePositionSink) <- external (0,0)
     (_mousePress,mousePressSink) <- external False
-    (keyPress, keyPressSink) <- external (map (const False) [minBound .. maxBound :: Command])
-    let command c = (!! fromEnum c) <$> keyPress
+    (keyPress, keyPressSink) <- external $ const False <$> VG.fromList [minBound .. maxBound :: Command]
+    let command c = (VG.! fromEnum c) <$> keyPress
 
     capRef <- newIORef False
     s <- fpsState
@@ -334,7 +335,7 @@ readInput :: (BtDynamicsWorldClass dw)
           -> State
           -> Sink (Float, Float)
           -> Sink Bool
-          -> Sink [Bool]
+          -> Sink (VG.Vector Bool)
           -> IORef Bool
           -> IO (Maybe Float)
 readInput physicsWorld s mousePos mouseBut keys capRef = do
@@ -346,7 +347,7 @@ readInput physicsWorld s mousePos mouseBut keys capRef = do
 
     mouseBut =<< mouseButtonIsPressed MouseButton0
 
-    keys =<< mapM (keyIsPressed.keyMapping) [minBound .. maxBound]
+    keys =<< VG.mapM (keyIsPressed.keyMapping) (VG.fromList [minBound .. maxBound])
     k <- keyIsPressed KeyEsc
 
     -- step physics
