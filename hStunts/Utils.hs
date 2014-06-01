@@ -14,6 +14,16 @@ import Graphics.Rendering.OpenGL.Raw.Core32
 
 import Data.Vect.Float
 
+import Graphics.Text.TrueType( loadFontFile, Font )
+import Codec.Picture( PixelRGBA8( .. ), writePng, Image(..) )
+import Graphics.Rasterific
+import Graphics.Rasterific.Texture
+import Data.Vector.Storable (unsafeWith)
+import Foreign 
+import System.IO.Unsafe
+
+import LC_API (TextureData(..))
+
 -- Reactive helper functions
 
 integral :: (Real p, Fractional t) => t -> Signal t -> SignalGen p (Signal t)
@@ -121,3 +131,37 @@ followCamera height minDist maxDist target = transfer (Vec3 (-maxDist) height 0,
             | dist < minDist = pos &+ (normalize tdir &* (dist-minDist))
             | dist > maxDist = pos &+ (normalize tdir &* (dist-maxDist))
             | otherwise      = pos
+
+renderText :: Int -> Int -> Float -> Float -> Font -> Int -> String -> IO TextureData
+renderText w h x y font fontSize text = do
+    let img = renderDrawing w h (PixelRGBA8 0 0 0 0)
+                . withTexture (uniformTexture $ PixelRGBA8 255 0 0 255) $
+                printTextAt font fontSize (V2 x y) text
+    compileImageToTexture2DRGBAF False True img
+
+compileImageToTexture2DRGBAF isMip isClamped (Image width height iData) = do
+    glPixelStorei gl_UNPACK_ALIGNMENT 1
+    to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
+    glBindTexture gl_TEXTURE_2D to
+    let wrapMode = case isClamped of
+            True    -> gl_CLAMP_TO_EDGE
+            False   -> gl_REPEAT
+        (minFilter,maxLevel) = case isMip of
+            False   -> (gl_LINEAR,0)
+            True    -> (gl_LINEAR_MIPMAP_LINEAR, floor $ log (fromIntegral $ max width height) / log 2)
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral wrapMode
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral wrapMode
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral minFilter
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL $ fromIntegral maxLevel
+    unsafeWith iData $ \ptr -> do
+        let nchn = 4
+            internalFormat  = fromIntegral gl_RGBA8
+            dataFormat      = fromIntegral $ case nchn of
+                3   -> gl_RGB
+                4   -> gl_RGBA
+                _   -> error "unsupported texture format!"
+        glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral width) (fromIntegral height) 0 dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
+    when isMip $ glGenerateMipmap gl_TEXTURE_2D
+    return $ TextureData to
