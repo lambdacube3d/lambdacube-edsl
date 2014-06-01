@@ -97,11 +97,12 @@ main = do
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
 
-    Right font <- loadFontFile "ProstoOne-Regular.ttf"
+    Right font1 <- loadFontFile "Prototype.ttf"
+    Right font2 <- loadFontFile "Capture_it.ttf"
     cpuDrawThread <- newIORef True
 
     let gfxNet = PrjFrameBuffer "outFB" tix0 stuntsGFX
-    renderer <- compileRenderer $ ScreenOut $ addHUD "timeTexture" $ addHUD "titleTexture" gfxNet
+    renderer <- compileRenderer $ ScreenOut $ addHUD "hudTexture" gfxNet
     let draw captureA = render renderer >> captureA >> swapBuffers
 
         quad :: Mesh
@@ -115,9 +116,6 @@ main = do
             b = 1
 
         unis = uniformSetter renderer
-
-    uniformFTexture2D "titleTexture" unis =<< renderText 512 512 50 0 font 32 "Stunts"
-    --titleSetter =<< renderText font 32 "Stunts"
 
     compiledQuad <- compileMesh quad
     addMesh renderer "postSlot" compiledQuad []
@@ -161,7 +159,7 @@ main = do
     capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
-        u <- cpuDrawThread font scene (setScreenSize renderer) cars (uniformSetter renderer) physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef
+        u <- scene (setScreenSize renderer) cars cpuDrawThread [font1,font2] (uniformSetter renderer) physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef
         return $ draw <$> u
 
     driveNetwork sc (readInput physicsWorld s
@@ -183,8 +181,8 @@ scene :: (BtDynamicsWorldClass bc,
       => (Word -> Word -> IO ())
       -> [Car v]
       -> IORef Bool
-      -> Font
-      -> [[T.Trie InputSetter]]
+      -> [Font]
+      -> T.Trie InputSetter
       -> bc
       -> Signal (Int, Int)
       -> Signal (Float, Float)
@@ -251,7 +249,7 @@ scene setSize cars cpuDrawThread font uniforms physicsWorld windowSize mousePosi
         Just (SM44F positionSetter) = T.lookup "worldPosition" uniforms
         Just (SM44F projectionSetter) = T.lookup "projection" uniforms
         Just (SV3F lightDirectionSetter) = T.lookup "lightDirection" uniforms
-        setupGFX ((w, h), capturing, frameCount, dt, t) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
+        setupGFX ((w, h), capturing, frameCount, dt, updateHud) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
 
             let car = cars !! carId
                 fieldOfView = pi/2
@@ -292,15 +290,30 @@ scene setSize cars cpuDrawThread font uniforms physicsWorld windowSize mousePosi
             
             --uniformFloat "time" uniforms t
             done <- readIORef cpuDrawThread
-            when done $ do
+            when (done || updateHud) $ do
                 writeIORef cpuDrawThread False
                 forkIO $ do
+                    let carNames =
+                            [ "Acura NSX"
+                            , "Lamborghini Countach"
+                            , "Jaguar XJR-9 IMSA"
+                            , "Lamborghini LM002"
+                            , "Porsche 911 Carrera 4"
+                            , "Chevrolet Corvette ZR1"
+                            , "Audi Quattro"
+                            , "Ferrari 288 GTO"
+                            , "Lancia Delta HF Integrale 16v"
+                            , "Porsche 962"
+                            , "Porsche March IndyCar"
+                            ]
                     let hud = R.renderDrawing 512 512 (PixelRGBA8 0 0 0 0) $ do
-                                R.withTexture (R.uniformTexture $ PixelRGBA8 255 0 0 255) $ do
-                                    R.printTextAt font 36 (R.V2 250 0) (show t)
-                    uniformFTexture2D "timeTexture" uniforms =<< compileImageToTexture2DRGBAF False True hud
+                                R.withTexture (R.uniformTexture $ PixelRGBA8 255 255 0 255) $ do
+                                    R.printTextAt (font !! 1) 42 (R.V2 150 7) "Stunts"
+                                R.withTexture (R.uniformTexture $ PixelRGBA8 255 69 0 255) $ do
+                                    R.printTextAt (font !! 0) 16 (R.V2 25 60) $ carNames !! carId
+                    uniformFTexture2D "hudTexture" uniforms =<< compileImageToTexture2DRGBAF False True hud
                     threadDelay 100000
-                    writeIORef cpuDrawThread True
+                    --writeIORef cpuDrawThread True
                 return ()
             return $ do
 #ifdef CAPTURE
@@ -311,7 +324,7 @@ scene setSize cars cpuDrawThread font uniforms physicsWorld windowSize mousePosi
 #endif
                 return ()
     effectful4 setupGFX
-                   ((,,,,) <$> windowSize <*> capture <*> frameCount <*> dt <*> time)
+                   ((,,,,) <$> windowSize <*> capture <*> frameCount <*> dt <*> carSwitchPress)
                    camera
                    carId
                    carAndWheelsPos
