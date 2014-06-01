@@ -134,22 +134,16 @@ main = do
     -- setup FRP network
     (mousePosition,mousePositionSink) <- external (0,0)
     (_mousePress,mousePressSink) <- external False
-    (debugPress,debugPressSink) <- external False
-    (fblrPress,fblrPressSink) <- external (False,False,False,False,False)
-    (cameraPress,cameraPressSink) <- external (False,False,False)
-    (capturePress,capturePressSink) <- external False
-    (carSwitchPress, carSwitchPressSink) <- external False
-    (carInputPress, carInputPressSink) <- external $ replicate 5 False
+    (keyPress, keyPressSink) <- external (map (const False) [minBound .. maxBound :: Command])
+    let command c = (!! fromEnum c) <$> keyPress
 
     capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
-        u <- scene (setScreenSize renderer) cars carNum (uniformSetter renderer) physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef
+        u <- scene (setScreenSize renderer) cars carNum (uniformSetter renderer) physicsWorld windowSize mousePosition command capRef
         return $ draw <$> u
 
-    driveNetwork sc (readInput physicsWorld s
-        mousePositionSink mousePressSink fblrPressSink carInputPressSink
-        cameraPressSink capturePressSink carSwitchPressSink debugPressSink capRef)
+    driveNetwork sc (readInput physicsWorld s mousePositionSink mousePressSink keyPressSink capRef)
 
     dispose renderer
     closeWindow
@@ -170,40 +164,36 @@ scene :: (BtDynamicsWorldClass bc,
       -> bc
       -> Signal (Int, Int)
       -> Signal (Float, Float)
-      -> Signal (Bool, Bool, Bool, Bool, Bool)
-      -> Signal [Bool]
-      -> Signal (Bool, Bool, Bool)
-      -> Signal Bool
-      -> Signal Bool
-      -> Signal Bool
+      -> (Command -> Signal Bool)
       -> IORef Bool
       -> SignalGen Float (Signal (IO ()))
-scene setSize cars initCarNum uniforms physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef = do
+scene setSize cars initCarNum uniforms physicsWorld windowSize mousePosition command capRef = do
     isFirstFrame <- stateful True $ const $ const False
     carId <- transfer2 (Nothing, (initCarNum + 10) `mod` 11) (\_ isFirstFrame isPressed (_, prev) ->
                          if isPressed || isFirstFrame
                          then (Just prev, (prev + 1) `mod` 11)
                          else (Nothing, prev))
              isFirstFrame
-             =<< edge carSwitchPress
+             =<< edge (command SwitchCar)
     time <- stateful 0 (+)
     frameCount <- stateful (0 :: Int) (\_ c -> c + 1)
 
-    capture <- transfer2 False (\_ cap cap' on -> on /= (cap && not cap')) capturePress =<< delay False capturePress
+    capture <- transfer2 False (\_ cap cap' on -> on /= (cap && not cap')) (command Capture) =<< delay False (command Capture)
 
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
 
-        pickMode _ (True,_,_) _ = FollowNear
-        pickMode _ (_,True,_) _ = FollowFar
-        pickMode _ (_,_,True) _ = UserControl
-        pickMode _ _ mode       = mode
+        pickMode _ True _ _ _ = FollowNear
+        pickMode _ _ True _ _ = FollowFar
+        pickMode _ _ _ True _ = UserControl
+        pickMode _ _ _ _ mode = mode
 
         selectCam FollowNear  (cam,dir) _ _      = lookat cam (cam &+ dir) upwards
         selectCam FollowFar   _ (cam,dir) _      = lookat cam (cam &+ dir) upwards
         selectCam UserControl _ _ (cam,dir,up,_) = lookat cam (cam &+ dir) up
 
     dt <- input
+    let carInputPress = mapM command [SteerLeft,Accelerate,Brake,SteerRight,RestoreCar]
     carAndWheelsPos <- (\f -> effectful4 f carInputPress dt carId isFirstFrame) $ \carInput dt (prevId, currId) isFirstFrame -> do
         let vehicle = raycastVehicle car
             car = cars !! currId
@@ -225,8 +215,11 @@ scene setSize cars initCarNum uniforms physicsWorld windowSize mousePosition fbl
 
     followCamNear <- followCamera 2 4 6 carPos
     followCamFar <- followCamera 20 40 60 carPos
+    let fblrPress = (,,,,) <$> command FreeCamLeft <*> command FreeCamUp
+                           <*> command FreeCamDown <*> command FreeCamRight <*> command FreeCamTurbo
     userCam <- userCamera (Vec3 (-4) 0 0) mouseMove fblrPress
-    camMode <- transfer FollowNear pickMode cameraPress
+    camMode <- transfer3 FollowNear pickMode
+               (command SwitchToNearCamera) (command SwitchToFarCamera) (command SwitchToFreeCamera)
     let camera = selectCam <$> camMode <*> followCamNear <*> followCamFar <*> userCam
 
     let Just (SM44F worldViewSetter) = T.lookup "worldView" uniforms
@@ -296,20 +289,55 @@ vec4ToV4F (Vec4 x y z w) = V4 x y z w
 mat4ToM44F :: Mat4 -> M44F
 mat4ToM44F (Mat4 a b c d) = V4 (vec4ToV4F a) (vec4ToV4F b) (vec4ToV4F c) (vec4ToV4F d)
 
+data Command
+    -- Car control
+    = Accelerate
+    | Brake
+    | SteerLeft
+    | SteerRight
+    | RestoreCar
+    | SwitchCar
+    -- Switch camera
+    | SwitchToNearCamera
+    | SwitchToFarCamera
+    | SwitchToFreeCamera
+    -- Free camera controls
+    | FreeCamLeft
+    | FreeCamRight
+    | FreeCamUp
+    | FreeCamDown
+    | FreeCamTurbo
+    -- Misc
+    | Capture
+    deriving (Enum, Bounded)
+
+keyMapping k =
+    case k of
+      Accelerate         -> CharKey 'W'
+      Brake              -> CharKey 'S'
+      SteerLeft          -> CharKey 'A'
+      SteerRight         -> CharKey 'D'
+      RestoreCar         -> CharKey 'R'
+      SwitchCar          -> CharKey 'E'
+      SwitchToNearCamera -> CharKey '1'
+      SwitchToFarCamera  -> CharKey '2'
+      SwitchToFreeCamera -> CharKey '3'
+      FreeCamLeft        -> KeyLeft
+      FreeCamRight       -> KeyRight
+      FreeCamUp          -> KeyUp
+      FreeCamDown        -> KeyDown
+      FreeCamTurbo       -> KeyRightShift
+      Capture            -> CharKey 'P'
+
 readInput :: (BtDynamicsWorldClass dw)
           => dw
           -> State
           -> Sink (Float, Float)
           -> Sink Bool
-          -> Sink (Bool, Bool, Bool, Bool, Bool)
           -> Sink [Bool]
-          -> Sink (Bool, Bool, Bool)
-          -> Sink Bool
-          -> Sink Bool
-          -> Sink Bool
           -> IORef Bool
           -> IO (Maybe Float)
-readInput physicsWorld s mousePos mouseBut fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef = do
+readInput physicsWorld s mousePos mouseBut keys capRef = do
     t <- getTime
     resetTime
 
@@ -317,13 +345,9 @@ readInput physicsWorld s mousePos mouseBut fblrPress carInputPress cameraPress c
     mousePos (fromIntegral x,fromIntegral y)
 
     mouseBut =<< mouseButtonIsPressed MouseButton0
-    fblrPress =<< (,,,,) <$> keyIsPressed KeyLeft <*> keyIsPressed KeyUp <*> keyIsPressed KeyDown <*> keyIsPressed KeyRight <*> keyIsPressed KeyRightShift
-    cameraPress =<< (,,) <$> keyIsPressed (CharKey '1') <*> keyIsPressed (CharKey '2') <*> keyIsPressed (CharKey '3')
-    debugPress =<< keyIsPressed KeySpace
-    capturePress =<< keyIsPressed (CharKey 'P')
-    carSwitchPress =<< keyIsPressed (CharKey 'E')
+
+    keys =<< mapM (keyIsPressed.keyMapping) [minBound .. maxBound]
     k <- keyIsPressed KeyEsc
-    carInputPress =<< forM "AWSDR" (\c -> keyIsPressed (CharKey c))
 
     -- step physics
     isCapturing <- readIORef capRef
