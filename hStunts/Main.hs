@@ -144,7 +144,7 @@ main = do
     capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
-        u <- scene (setScreenSize renderer) cars (uniformSetter renderer) physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef
+        u <- scene (setScreenSize renderer) cars carNum (uniformSetter renderer) physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef
         return $ draw <$> u
 
     driveNetwork sc (readInput physicsWorld s
@@ -165,6 +165,7 @@ scene :: (BtDynamicsWorldClass bc,
           BtRaycastVehicleClass v)
       => (Word -> Word -> IO ())
       -> [Car v]
+      -> Int
       -> T.Trie InputSetter
       -> bc
       -> Signal (Int, Int)
@@ -177,9 +178,9 @@ scene :: (BtDynamicsWorldClass bc,
       -> Signal Bool
       -> IORef Bool
       -> SignalGen Float (Signal (IO ()))
-scene setSize cars uniforms physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef = do
+scene setSize cars initCarNum uniforms physicsWorld windowSize mousePosition fblrPress carInputPress cameraPress capturePress carSwitchPress debugPress capRef = do
     isFirstFrame <- stateful True $ const $ const False
-    carId <- transfer2 (Nothing, 10) (\_ isFirstFrame isPressed (_, prev) ->
+    carId <- transfer2 (Nothing, (initCarNum + 10) `mod` 11) (\_ isFirstFrame isPressed (_, prev) ->
                          if isPressed || isFirstFrame
                          then (Just prev, (prev + 1) `mod` 11)
                          else (Nothing, prev))
