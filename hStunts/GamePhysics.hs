@@ -102,8 +102,10 @@ steerCar dt carVehicle [left,up,down,right,restore] = do
         btRigidBody_applyTorque carBody (Vec3 30000 30000 30000)
         return ()
 
+    currentSpeed <- btRaycastVehicle_getCurrentSpeedKmHour carVehicle
     let (gEngineForce, gBrakingForce) = case (up,down) of
-            (False,True)    -> (0,5*120)
+            (False,True) | currentSpeed > 0 -> (0,5*120)
+                         | otherwise        -> (-10*120,0)
             (True,False)    -> (15*120,0)
             _               -> (0,0)
     btRaycastVehicle_applyEngineForce carVehicle gEngineForce 2
