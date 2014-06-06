@@ -14,6 +14,7 @@ import qualified Data.IntMap as IM
 import Data.List
 import qualified Data.Trie as T
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable as SV
 
 import Stunts.Color
 
@@ -22,6 +23,9 @@ getString = fmap (SB8.unpack . SB8.takeWhile (/= '\0')) . getByteString
 
 getWord :: Get Word32
 getWord = getWord32le
+
+getWord16 :: Get Word16
+getWord16 = getWord16le
 
 getUByte :: Get Word8
 getUByte = B.get :: Get Word8
@@ -126,7 +130,9 @@ data Bitmap
     , height    :: Int
     , positionX :: Int
     , positionY :: Int
-    , image     :: SB.ByteString -- RGB data
+    , image     :: SV.Vector Word8 -- RGBA data
+    , unknown1  :: [Word16]
+    , unknown2  :: [Word8]
     }
 {-
 uint16 width
@@ -142,16 +148,29 @@ getBitmap :: Get Bitmap
 getBitmap = do
     width <- getInt16
     height <- getInt16
-    getInt16
-    getInt16
+    unknown1 <- replicateM 2 getWord16
     positionX <- getInt16
     positionY <- getInt16
-    getInt8
-    getInt8
-    getInt8
-    getInt8
-    image <- replicateM (width * height) ((vgaPal IM.!) <$> getInt8)
-    return $ Bitmap width height positionX positionY $ SB.pack $ concat image
+    unknown2 <- replicateM 4 getUByte
+    image <- case unknown2 of
+        [1,2,4,8]   -> replicateM (width * height) ((vgaPal IM.!) <$> getInt8)
+        [1,2,20,8]  -> do
+            img <- replicateM width $ 
+                replicateM height ((vgaPal IM.!) <$> getInt8)
+            return $ concat $ transpose img
+        [1,2,36,8]  -> do
+            img <- replicateM width $ do
+                col <- replicateM height ((vgaPal IM.!) <$> getInt8)
+                let (lo,hi) = splitAt ((height + 1) `div` 2) col
+                    go0 [] a = a
+                    go0 (a:xs) b = a : go1 xs b
+                    go1 a [] = a
+                    go1 a (b:xs) = b : go0 a xs
+                return $ go0 lo hi
+            return $ concat $ transpose img
+
+        _           -> replicateM (width * height) ((vgaPal IM.!) <$> getInt8)
+    return $ Bitmap width height positionX positionY (SV.fromList $ concat image) unknown1 unknown2
 
 data Car
     = Car

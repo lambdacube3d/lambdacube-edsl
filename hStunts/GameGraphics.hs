@@ -472,7 +472,7 @@ lightProjection nearDepth farDepth fieldOfView aspectRatio worldViewMat =
       where
         a = (y1-y0)/(x1-x0)
         b = y0-a*x0
-
+{-
 addHUD tex img = renderScreen blend
   where
     blend uv = FragmentOut $ mix' bg fg a :. ZT
@@ -504,4 +504,64 @@ addHUD tex img = renderScreen blend
             v4      = pack' $ V4 u v (floatV 1) (floatV 1)
             V2 u v  = unpack' uv
             uv'     = uv @* floatV 0.5 @+ floatV 0.5
+-}
+addHUD fb = renderScreen frag
+  where
+    frag uv = FragmentOutRastDepth $ smp :. ZT
+      where
+        uv' = pack' (V2 u (floatF 1 @- v))
+        V2 u v = unpack' uv
+        smp = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot "hudTexture" $ Texture2D (Float RGBA) n1) uv'
 
+    renderScreen = PrjFrameBuffer "" tix0 . renderScreen'
+
+    renderScreen' frag = Accumulate fragCtx PassAll frag rast fb
+      where
+        fragCtx = AccumulationContext Nothing $ DepthOp {-Less-}Always True:.ColorOp blend (one' :: V4B):.ZT
+        rast    = Rasterize triangleCtx prims
+        prims   = Transform vert input
+        input   = Fetch "hud" Triangles (IV2F "position")
+
+        hudTransfrom :: Exp V M44F
+        hudTransfrom = Uni (IM44F "hudTransform")
+
+        vert :: Exp V V2F -> VertexOut () V2F
+        vert uv = VertexOut (hudTransfrom @*. v4) (Const 1) ZT (NoPerspective uv':.ZT)
+          where
+            v4      = pack' $ V4 u v (floatV 0) (floatV 1)
+            V2 u v  = unpack' uv
+            uv'     = uv @* floatV 0.5 @+ floatV 0.5
+{-
+addSpeedHud tex fb = renderScreen blend
+  where
+    blend uv = FragmentOut $ mix' bg fg a :. ZT
+      where
+        uv' = pack' (V2 u (floatF 1 @- v))
+          where
+            V2 u v = unpack' uv
+        bg = smp' img uv
+        fg = smp tex uv'
+        V4 _ _ _ a = unpack' fg
+    smp n uv = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot n $ Texture2D (Float RGBA) n1) uv
+    smp' i uv = texture' (Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 sizeI sizeI) NoMip [i]) uv
+    sizeI = 512
+    renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image 1 V4F)
+    renderScreen = PrjFrameBuffer "" tix0 . renderScreen'
+
+    renderScreen' :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer 1 V4F)
+    renderScreen' frag = Accumulate fragCtx PassAll frag rast clear
+      where
+        fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
+        clear   = FrameBuffer (ColorImage n1 (V4 0 0 0 1):.ZT)
+        rast    = Rasterize triangleCtx prims
+        prims   = Transform vert input
+        input   = Fetch "ScreenQuad" Triangles (IV2F "position")
+
+        vert :: Exp V V2F -> VertexOut () V2F
+        vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv':.ZT)
+          where
+            v4      = pack' $ V4 u v (floatV 1) (floatV 1)
+            V2 u v  = unpack' uv
+            uv'     = uv @* floatV 0.5 @+ floatV 0.5
+
+-}

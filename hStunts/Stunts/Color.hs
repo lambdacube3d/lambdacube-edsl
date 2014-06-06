@@ -23,6 +23,7 @@ data Material
     }
 
 toRGBA :: Word32 -> [Word8]
+toRGBA 0xFFFFFF = [0,0,0,0]
 toRGBA c = [f 16, f 8, f 0, 0xFF]
   where
     f i = fromIntegral $ (c `shiftR` i) .&. 0xFF :: Word8

@@ -44,9 +44,12 @@ import Codec.Image.DevIL
 import Text.Printf
 import Foreign
 #endif
+import Text.Printf
 
-import Graphics.Text.TrueType( loadFontFile, Font )
+import Graphics.Text.TrueType( decodeFont, Font )
 import Codec.Picture( PixelRGBA8( .. ), writePng, Image(..) )
+import qualified Codec.Picture as JP
+import Stunts.Loader(Bitmap(..))
 
 type Sink a = a -> IO ()
 
@@ -98,12 +101,12 @@ main = do
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
 
-    Right font1 <- loadFontFile "Prototype.ttf"
-    Right font2 <- loadFontFile "Capture_it.ttf"
+    let Right font1 = decodeFont $ readZipFile "Prototype.ttf"
+        Right font2 = decodeFont $ readZipFile "Capture_it.ttf"
     cpuDrawThread <- newIORef True
 
-    let gfxNet = PrjFrameBuffer "outFB" tix0 stuntsGFX
-    renderer <- compileRenderer $ ScreenOut $ addHUD "hudTexture" gfxNet
+    renderer <- compileRenderer $ ScreenOut $ addHUD stuntsGFX
+
     let draw captureA = render renderer >> captureA >> swapBuffers
 
         quad :: Mesh
@@ -118,9 +121,38 @@ main = do
 
         unis = uniformSetter renderer
 
+    let speedHud = R.renderDrawing 128 128 (PixelRGBA8 0 0 0 0) $ do
+                R.withTexture (R.uniformTexture $ PixelRGBA8 255 0 0 255) $ do
+                    R.stroke 4 R.JoinRound (R.CapRound, R.CapRound) $
+                        R.circle (R.V2 64 64) 64
+                    R.fill $ R.polygon [R.V2 0 64, R.V2 64 58, R.V2 64 70]
+    uniformFTexture2D "speedTexture" unis =<< compileImageToTexture2DRGBAF False True speedHud
+    uniformM44F "hudTransform" unis $ mat4ToM44F one
+
+    --images <- mapM (\b -> compileImageToTexture2DRGBAF False True (Image (width b) (height b) (image b) :: JP.Image PixelRGBA8)) bitmaps
+    forM (zip [0..] bitmaps) $ \(n,(rn,b)) -> do
+        let fn = SB.unpack rn
+        unless ((take 3 fn) `elem` ["!cg", "!eg", "!pa"]) $ do
+            unless (unknown2 b `elem` [[1,2,4,8],[1,2,20,8],[1,2,36,8]]) $ do
+                putStr "BAD: "
+                print (n,unknown1 b, unknown2 b,width b, height b)
+            writePng (printf "png/%04d%s_%d_%d.png" (n :: Int) fn (positionX b) (positionY b)) (Image (width b) (height b) (image b) :: JP.Image PixelRGBA8)
     compiledQuad <- compileMesh quad
-    addMesh renderer "postSlot" compiledQuad []
-    addMesh renderer "ScreenQuad" compiledQuad []
+    let hudUnis = ["hudTexture","hudTransform"]
+    titleHud <- addMesh renderer "hud" compiledQuad []
+    speedHudObj <- addMesh renderer "hud" compiledQuad hudUnis
+    uniformFTexture2D "hudTexture" (objectUniformSetter speedHudObj) =<< compileImageToTexture2DRGBAF False True speedHud
+    {-
+        2d hud:
+            screen width
+            screen height
+
+          hud images:
+            width
+            height
+            transformd2D
+    -}
+
     {-
     forM_ (terrainMesh ++ trackMesh) $ \m -> do
         cm <- compileMesh m
@@ -271,6 +303,9 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
 
             forM_ (carPositionMats car) $ \s -> s $! mat4ToM44F $! fromProjective carMat 
             forM_ (zip (wheelsPositionU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu
+            currentSpeed <- btRaycastVehicle_getCurrentSpeedKmHour $ raycastVehicle car
+            --uniformFloat "speed" uniforms currentSpeed
+            --print currentSpeed
 
             setView car worldViewMat
             case prevCarId of

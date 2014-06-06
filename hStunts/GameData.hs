@@ -37,12 +37,18 @@ import Zip
 import GameGraphics
 import MeshUtil
 
+bitmaps :: [(SB.ByteString,Bitmap)]
+bitmaps = concat [T.toList $ loadBitmap k | k <- T.keys archive, ".pvs" == takeExtensionCI (SB.unpack k)]
+
 -- game specific resource handling
 loadRes :: SB.ByteString -> T.Trie LB.ByteString
 loadRes = readResources . unpackResource . readZipFile
 
 loadMesh :: SB.ByteString -> T.Trie [Mesh]
 loadMesh = fmap (toMesh . runGet getModel) . loadRes
+
+loadBitmap :: SB.ByteString -> T.Trie Bitmap
+loadBitmap = fmap (runGet getBitmap) . loadRes
 
 loadCarMesh :: SB.ByteString -> T.Trie [Mesh]
 loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) $! loadRes n
@@ -219,11 +225,10 @@ isPrefixOfCI a b = isPrefixOf a $ map toLower b
 
 -- generic resource handling
 archive :: T.Trie SB.ByteString
+{-# NOINLINE archive #-} 
 archive = unsafePerformIO $! do
     a <- concat <$> (mapM readArchive =<< filter (\n -> ".zip" == takeExtensionCI n) <$> getDirectoryContents ".")
-    --a <- readArchive "newstunts.zip"
-    --b <- readArchive "STUNTS11.ZIP"
-    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) a -- $ a ++ b
+    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) a
     print $ T.keys ar
     return ar
 
@@ -357,7 +362,7 @@ toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
 
     genMat pr = (Vec4 r g b 1, p, z, shiny)
       where
-        i = head (prMaterials pr)
+        i = (cycle $ prMaterials pr) !! 1
         Material pattern rgb _ shiny = materialMap IM.! i
         r = fromIntegral (rgb `shiftR` 16) / 255
         g = fromIntegral ((rgb `shiftR` 8) .&. 0xff) / 255
