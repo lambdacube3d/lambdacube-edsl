@@ -105,7 +105,7 @@ main = do
         Right font2 = decodeFont $ readZipFile "Capture_it.ttf"
     cpuDrawThread <- newIORef True
 
-    renderer <- compileRenderer $ ScreenOut $ pixelize 320 200 $ addHUD stuntsGFX
+    renderer <- compileRenderer $ ScreenOut $ pixelize 320 240 $ addHUD stuntsGFX
 
     let draw captureA = render renderer >> captureA >> swapBuffers
 
@@ -139,6 +139,7 @@ main = do
             writePng (printf "png/%04d%s_%d_%d.png" (n :: Int) fn (positionX b) (positionY b)) (Image (width b) (height b) (image b) :: JP.Image PixelRGBA8)
     compiledQuad <- compileMesh quad
     let hudUnis = ["hudTexture","hudTransform"]
+    addMesh renderer "Quad" compiledQuad []
     titleHud <- addMesh renderer "hud" compiledQuad []
     speedHudObj <- addMesh renderer "hud" compiledQuad hudUnis
     uniformFTexture2D "hudTexture" (objectUniformSetter speedHudObj) =<< compileImageToTexture2DRGBAF False True speedHud

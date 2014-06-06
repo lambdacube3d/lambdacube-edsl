@@ -516,7 +516,7 @@ pixelize w h i = renderScreen frag
         clear   = FrameBuffer (ColorImage n1 (V4 0 0 0 1):.ZT)
         rast    = Rasterize triangleCtx prims
         prims   = Transform vert input
-        input   = Fetch "hud" Triangles (IV2F "position")
+        input   = Fetch "Quad" Triangles (IV2F "position")
 
         vert :: Exp V V2F -> VertexOut () V2F
         vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv':.ZT)
