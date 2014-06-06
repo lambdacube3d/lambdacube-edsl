@@ -4,6 +4,7 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Concurrent
 import Data.Word
+import Data.Maybe
 import Data.IORef
 import Data.List hiding (transpose)
 import FRP.Elerea.Param
@@ -341,17 +342,23 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                             , "Porsche March IndyCar"
                             ]
                     -- only render simple stuff for now
-                    let dashElems =
+                    let dashElems = catMaybes
                             [ solidImage "dash"
+                            , solidImage "dast"
                             , solidImage "roof"
                             , solidImage "whl2"
+                            {-
+                            , solidImage "ins1"
+                            , solidImage "ins2"
+                            , solidImage "ins3"
+                            -}
                             --, solidImage "gbox"
                             ]
-                        solidImage name = (Image (width bitmap) (height bitmap) (image bitmap) :: JP.Image PixelRGBA8, R.V2 posX posY)
-                          where
-                            bitmap = carBitmaps2 car ! SB.pack name
-                            posX = fromIntegral $ positionX bitmap
-                            posY = fromIntegral $ positionY bitmap
+                        solidImage name = do
+                            bitmap <- T.lookup (SB.pack name) (carBitmaps2 car)
+                            let posX = fromIntegral $ positionX bitmap
+                                posY = fromIntegral $ positionY bitmap
+                            return (Image (width bitmap) (height bitmap) (image bitmap) :: JP.Image PixelRGBA8, R.V2 posX posY)
                     let hud = R.renderDrawing 320 200 (PixelRGBA8 0 0 0 0) $ do
                                 R.withTexture (R.uniformTexture $ PixelRGBA8 255 255 0 255) $ do
                                     R.printTextAt (font !! 1) 42 (R.V2 60 7) "Stunts"
