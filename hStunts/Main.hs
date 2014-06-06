@@ -169,6 +169,8 @@ main = do
         cm <- compileMesh m
         objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView", "worldPosition"]
 
+    let carBmps = carBitmaps <$> carsData
+
     -- setup physics
     physicsWorld <- mkPhysicsWorld
     addStaticPlane physicsWorld upwards 0 1 1
@@ -177,7 +179,7 @@ main = do
     let (sO,Vec3 sX sY sZ) = startPos
     raycastVehicles <- forM carsData $ \carData ->
                        createCar physicsWorld (carMesh carData) (wheels carData) $ translateAfter4 (Vec3 sX (sY + 1) sZ) $ rotMatrixProj4 sO upwards
-    let cars = zipWith3 Car raycastVehicles carUnis wheelsUnis
+    let cars = zipWith4 Car raycastVehicles carUnis wheelsUnis carBmps
 
     -- setup FRP network
     (mousePosition,mousePositionSink) <- external (0,0)
@@ -201,6 +203,7 @@ data Car bc = Car
     { raycastVehicle :: bc
     , carUnis :: [T.Trie InputSetter]
     , wheelsUnis :: [[T.Trie InputSetter]]
+    , carBitmaps2 :: T.Trie Bitmap
     }
 
 scene :: (BtDynamicsWorldClass bc,
@@ -336,11 +339,19 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                             , "Porsche 962"
                             , "Porsche March IndyCar"
                             ]
-                    let hud = R.renderDrawing 512 512 (PixelRGBA8 0 0 0 0) $ do
+                    let hud = R.renderDrawing 320 200 (PixelRGBA8 0 0 0 0) $ do
                                 R.withTexture (R.uniformTexture $ PixelRGBA8 255 255 0 255) $ do
-                                    R.printTextAt (font !! 1) 42 (R.V2 150 7) "Stunts"
+                                    R.printTextAt (font !! 1) 42 (R.V2 60 7) "Stunts"
                                 R.withTexture (R.uniformTexture $ PixelRGBA8 255 69 0 255) $ do
                                     R.printTextAt (font !! 0) 16 (R.V2 25 60) $ carNames !! carId
+                                renderBitmap "dash"
+                                renderBitmap "whl2"
+                                --renderBitmap "ins2"
+                        renderBitmap name = R.drawImage (Image (width bitmap) (height bitmap) (image bitmap) :: JP.Image PixelRGBA8) 0 (R.V2 posX posY)
+                          where
+                            bitmap = carBitmaps2 car ! SB.pack name
+                            posX = fromIntegral $ positionX bitmap
+                            posY = fromIntegral $ positionY bitmap
                     uniformFTexture2D "hudTexture" uniforms =<< compileImageToTexture2DRGBAF False True hud
                     threadDelay 100000
                     --writeIORef cpuDrawThread True
