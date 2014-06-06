@@ -146,7 +146,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         (_lightViewPos,_colour,pos,_eyePos,_normal,pattern,_zBias,_shiny) = untup8 attr
 
     frag :: Exp F (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag attr = FragmentOutDepth adjustedDepth (litColour :. ZT)
+    frag attr = FragmentOutDepth adjustedDepth (clamp' litColour (floatF 0) (floatF 1) :. ZT)
       where
         l = normalize' (trimV4 (worldView @*. snoc lightDirection 0))
         e = normalize' (neg' eyePos)
@@ -475,7 +475,7 @@ lightProjection nearDepth farDepth fieldOfView aspectRatio worldViewMat =
 
 addHUD fb = renderScreen frag
   where
-    frag uv = FragmentOutRastDepth $ smp :. ZT
+    frag uv = FragmentOutRastDepth $ clamp' smp (floatF 0) (floatF 1) :. ZT
       where
         uv' = pack' (V2 u (floatF 1 @- v))
         V2 u v = unpack' uv
