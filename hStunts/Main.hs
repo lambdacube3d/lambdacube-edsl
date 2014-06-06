@@ -340,19 +340,24 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                             , "Porsche 962"
                             , "Porsche March IndyCar"
                             ]
+                    -- only render simple stuff for now
+                    let dashElems =
+                            [ solidImage "dash"
+                            , solidImage "roof"
+                            , solidImage "whl2"
+                            --, solidImage "gbox"
+                            ]
+                        solidImage name = (Image (width bitmap) (height bitmap) (image bitmap) :: JP.Image PixelRGBA8, R.V2 posX posY)
+                          where
+                            bitmap = carBitmaps2 car ! SB.pack name
+                            posX = fromIntegral $ positionX bitmap
+                            posY = fromIntegral $ positionY bitmap
                     let hud = R.renderDrawing 320 200 (PixelRGBA8 0 0 0 0) $ do
                                 R.withTexture (R.uniformTexture $ PixelRGBA8 255 255 0 255) $ do
                                     R.printTextAt (font !! 1) 42 (R.V2 60 7) "Stunts"
                                 R.withTexture (R.uniformTexture $ PixelRGBA8 255 69 0 255) $ do
                                     R.printTextAt (font !! 0) 16 (R.V2 25 60) $ carNames !! carId
-                                renderBitmap "dash"
-                                renderBitmap "whl2"
-                                --renderBitmap "ins2"
-                        renderBitmap name = R.drawImage (Image (width bitmap) (height bitmap) (image bitmap) :: JP.Image PixelRGBA8) 0 (R.V2 posX posY)
-                          where
-                            bitmap = carBitmaps2 car ! SB.pack name
-                            posX = fromIntegral $ positionX bitmap
-                            posY = fromIntegral $ positionY bitmap
+                                mapM_ (\(img, pos) -> R.drawImage img 0 pos) dashElems
                     uniformFTexture2D "hudTexture" uniforms =<< compileImageToTexture2DRGBAF False True hud
                     threadDelay 100000
                     --writeIORef cpuDrawThread True
