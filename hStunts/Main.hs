@@ -105,7 +105,7 @@ main = do
         Right font2 = decodeFont $ readZipFile "Capture_it.ttf"
     cpuDrawThread <- newIORef True
 
-    renderer <- compileRenderer $ ScreenOut $ addHUD stuntsGFX
+    renderer <- compileRenderer $ ScreenOut $ pixelize 320 200 $ addHUD stuntsGFX
 
     let draw captureA = render renderer >> captureA >> swapBuffers
 
