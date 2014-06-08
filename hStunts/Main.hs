@@ -358,21 +358,19 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                     -- only render simple stuff for now
                     let dashElems = catMaybes
                             [ solidImage "dash"
-                            , solidImage "dast"
+                            --, alphaImage "dast" "dasm"
                             , solidImage "roof"
                             , solidImage "whl2"
-                            {-
-                            , solidImage "ins1"
-                            , solidImage "ins2"
-                            , solidImage "ins3"
-                            -}
-                            --, solidImage "gbox"
                             ]
                         solidImage name = do
                             bitmap <- T.lookup (SB.pack name) (carBitmaps2 car)
                             let posX = fromIntegral $ positionX bitmap
                                 posY = fromIntegral $ positionY bitmap
                             return (Image (width bitmap) (height bitmap) (image bitmap) :: JP.Image PixelRGBA8, R.V2 posX posY)
+{-                        alphaImage cName aName = do
+                            (color, pos) <- solidImage cName
+                            (alpha, _  ) <- alphaImage aName
+                            return (combineColorAlpha color alpha, pos) -}
                     let (x,y) = head $ drop 10 $ L.speedometerNeedle $ carData car
                         (ox,oy) = L.speedometerCentre $ carData car
                         hud = R.renderDrawing 320 200 (PixelRGBA8 0 0 0 0) $ do
@@ -410,6 +408,13 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                    camera
                    carId
                    carAndWheelsPos
+
+combineColorAlpha :: JP.Pixel a => JP.Image a -> JP.Image a -> JP.Image a
+combineColorAlpha color alpha = JP.generateImage f w h
+  where
+    w = JP.imageWidth color
+    h = JP.imageHeight color
+    f x y = JP.mixWithAlpha (\ _ c a -> c) (\ c a -> a) (JP.pixelAt color x y) (JP.pixelAt alpha x y)
 
 vec3ToV3F :: Vec3 -> V3F
 vec3ToV3F (Vec3 x y z) = V3 x y z
