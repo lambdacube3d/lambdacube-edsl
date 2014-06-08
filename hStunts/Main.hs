@@ -97,6 +97,8 @@ main = do
             [] -> "zct114.trk"
             n:_ -> drop 8 n
 
+        retroMode = not $ null $ filter ("--retro" `isPrefixOf`) args
+
     -- load game data
     StuntsData carsData terrainMesh trackMesh startPos <- readStuntsData carNum $ SB.pack trkFile
 
@@ -107,7 +109,7 @@ main = do
         Right font2 = decodeFont $ readZipFile "Capture_it.ttf"
     cpuDrawThread <- newIORef True
 
-    renderer <- compileRenderer $ ScreenOut $ pixelize 320 240 $ addHUD stuntsGFX
+    renderer <- compileRenderer $ ScreenOut $ (if retroMode then pixelize 320 240 else id) $ addHUD stuntsGFX
 
     let draw captureA = render renderer >> captureA >> swapBuffers
 
