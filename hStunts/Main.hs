@@ -358,7 +358,7 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                     -- only render simple stuff for now
                     let dashElems = catMaybes
                             [ solidImage "dash"
-                            --, alphaImage "dast" "dasm"
+                            , alphaImage "dast" "dasm"
                             , solidImage "roof"
                             , solidImage "whl2"
                             ]
@@ -367,10 +367,10 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                             let posX = fromIntegral $ positionX bitmap
                                 posY = fromIntegral $ positionY bitmap
                             return (Image (width bitmap) (height bitmap) (image bitmap) :: JP.Image PixelRGBA8, R.V2 posX posY)
-{-                        alphaImage cName aName = do
+                        alphaImage cName aName = do
                             (color, pos) <- solidImage cName
-                            (alpha, _  ) <- alphaImage aName
-                            return (combineColorAlpha color alpha, pos) -}
+                            (alpha, _  ) <- solidImage aName
+                            return (combineColorAlpha color alpha, pos)
                     let (x,y) = head $ drop 10 $ L.speedometerNeedle $ carData car
                         (ox,oy) = L.speedometerCentre $ carData car
                         hud = R.renderDrawing 320 200 (PixelRGBA8 0 0 0 0) $ do
