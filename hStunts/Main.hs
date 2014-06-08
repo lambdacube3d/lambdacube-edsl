@@ -284,7 +284,7 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                (command SwitchToNearCamera) (command SwitchToFarCamera) (command SwitchToFreeCamera) (command SwitchToCarCamera)
 
     let carCamera = fn <$> carPos <*> carId
-        fn m (prevId,currId) = lookat cam ({-cam &+ -}dir) u
+        fn m (prevId,currId) = lookat cam dir u
           where
             car = cars !! currId
             cam = Vec3 cx cy cz
