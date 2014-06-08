@@ -44,6 +44,9 @@ bitmaps = concat [T.toList $ loadBitmap k | k <- T.keys archive, ".pvs" == takeE
 loadRes :: SB.ByteString -> T.Trie LB.ByteString
 loadRes = readResources . unpackResource . readZipFile
 
+loadRawRes :: SB.ByteString -> T.Trie LB.ByteString
+loadRawRes = readResources . readZipFile
+
 loadMesh :: SB.ByteString -> T.Trie [Mesh]
 loadMesh = fmap (toMesh . runGet getModel) . loadRes
 
@@ -125,10 +128,16 @@ loadCarWheels n = [wheel vl $ prIndices p | let Model vl pl = m ! "car0", p <- p
     car0ScaleFactor = scaleFactor / 20
 
 loadCar :: String -> (T.Trie [Mesh], Car, [(Vec3, Float, Float)], T.Trie Bitmap)
-loadCar n = (mesh,runGet getCar $ carRes ! "simd",wheels,bitmaps)
+loadCar n = (mesh,car,wheels,bitmaps)
   where
     mesh = loadCarMesh $ SB.pack $ "ST" ++ n ++ ".P3S"
-    carRes = loadRes $ SB.pack $ "CAR" ++ n ++ ".RES"
+    carRes = loadRawRes $ SB.pack $ "CAR" ++ n ++ ".RES"
+    car = runGet (getCar carDesc carName) $ carRes ! "simd"
+      where
+        lineBreak ']' = '\n'
+        lineBreak a = a
+        carDesc = map lineBreak $ runGet getString' $ carRes ! "edes"
+        carName = runGet getString' $ carRes ! "gnam"
     wheels = loadCarWheels $ SB.pack $ "ST" ++ n ++ ".P3S"
     bitmaps = T.unionL bitmapsA bitmapsB
     bitmapsA = loadBitmap $ SB.pack $ "STDA" ++ n ++ ".PVS"

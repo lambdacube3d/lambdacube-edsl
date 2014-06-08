@@ -51,10 +51,11 @@ import Graphics.Text.TrueType( decodeFont, Font )
 import Codec.Picture( PixelRGBA8( .. ), writePng, Image(..) )
 import qualified Codec.Picture as JP
 import Stunts.Loader(Bitmap(..))
+import qualified Stunts.Loader as L
 
 type Sink a = a -> IO ()
 
-data CameraMode = FollowNear | FollowFar | UserControl
+data CameraMode = FollowNear | FollowFar | UserControl | InsideCar deriving (Eq,Ord)
 
 lightPosition :: Vec3
 lightPosition = Vec3 400 800 400
@@ -127,10 +128,11 @@ main = do
                     R.stroke 4 R.JoinRound (R.CapRound, R.CapRound) $
                         R.circle (R.V2 64 64) 64
                     R.fill $ R.polygon [R.V2 0 64, R.V2 64 58, R.V2 64 70]
-    uniformFTexture2D "speedTexture" unis =<< compileImageToTexture2DRGBAF False True speedHud
-    uniformM44F "hudTransform" unis $ mat4ToM44F one
+    --uniformFTexture2D "speedTexture" unis =<< compileImageToTexture2DRGBAF False True speedHud
+    --uniformM44F "hudTransform" unis $ mat4ToM44F one
 
     --images <- mapM (\b -> compileImageToTexture2DRGBAF False True (Image (width b) (height b) (image b) :: JP.Image PixelRGBA8)) bitmaps
+    {-
     forM (zip [0..] bitmaps) $ \(n,(rn,b)) -> do
         let fn = SB.unpack rn
         unless ((take 3 fn) `elem` ["!cg", "!eg", "!pa"]) $ do
@@ -138,10 +140,11 @@ main = do
                 putStr "BAD: "
                 print (n,unknown1 b, unknown2 b,width b, height b)
             writePng (printf "png/%04d%s_%d_%d.png" (n :: Int) fn (positionX b) (positionY b)) (Image (width b) (height b) (image b) :: JP.Image PixelRGBA8)
+    -}
     compiledQuad <- compileMesh quad
     let hudUnis = ["hudTexture","hudTransform"]
     addMesh renderer "Quad" compiledQuad []
-    titleHud <- addMesh renderer "hud" compiledQuad []
+    titleHud <- addMesh renderer "hud" compiledQuad hudUnis
     speedHudObj <- addMesh renderer "hud" compiledQuad hudUnis
     uniformFTexture2D "hudTexture" (objectUniformSetter speedHudObj) =<< compileImageToTexture2DRGBAF False True speedHud
     {-
@@ -181,7 +184,7 @@ main = do
     let (sO,Vec3 sX sY sZ) = startPos
     raycastVehicles <- forM carsData $ \carData ->
                        createCar physicsWorld (carMesh carData) (wheels carData) $ translateAfter4 (Vec3 sX (sY + 1) sZ) $ rotMatrixProj4 sO upwards
-    let cars = zipWith4 Car raycastVehicles carUnis wheelsUnis carBmps
+    let cars = zipWith5 Car raycastVehicles carUnis wheelsUnis carBmps (map carSimModel carsData)
 
     -- setup FRP network
     (mousePosition,mousePositionSink) <- external (0,0)
@@ -192,7 +195,7 @@ main = do
     capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
-        u <- scene (setScreenSize renderer) cars cpuDrawThread [font1,font2] carNum (uniformSetter renderer) physicsWorld windowSize mousePosition command capRef
+        u <- scene (setScreenSize renderer) cars cpuDrawThread [font1,font2] carNum (uniformSetter renderer) physicsWorld windowSize mousePosition command capRef titleHud
         return $ draw <$> u
 
     driveNetwork sc (readInput physicsWorld s mousePositionSink mousePressSink keyPressSink capRef)
@@ -206,6 +209,7 @@ data Car bc = Car
     , carUnis :: [T.Trie InputSetter]
     , wheelsUnis :: [[T.Trie InputSetter]]
     , carBitmaps2 :: T.Trie Bitmap
+    , carData :: L.Car
     }
 
 scene :: (BtDynamicsWorldClass bc,
@@ -221,8 +225,9 @@ scene :: (BtDynamicsWorldClass bc,
       -> Signal (Float, Float)
       -> (Command -> Signal Bool)
       -> IORef Bool
+      -> Object
       -> SignalGen Float (Signal (IO ()))
-scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSize mousePosition command capRef = do
+scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSize mousePosition command capRef titleHud = do
     isFirstFrame <- stateful True $ const $ const False
     carId <- transfer2 (Nothing, (initCarNum + 10) `mod` 11) (\_ isFirstFrame isPressed (_, prev) ->
                          if isPressed || isFirstFrame
@@ -238,14 +243,16 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
     last2 <- transfer ((0,0),(0,0)) (\_ n (_,b) -> (b,n)) mousePosition
     let mouseMove = (\((ox,oy),(nx,ny)) -> (nx-ox,ny-oy)) <$> last2
 
-        pickMode _ True _ _ _ = FollowNear
-        pickMode _ _ True _ _ = FollowFar
-        pickMode _ _ _ True _ = UserControl
-        pickMode _ _ _ _ mode = mode
+        pickMode _ True _ _ _ _ = FollowNear
+        pickMode _ _ True _ _ _ = FollowFar
+        pickMode _ _ _ True _ _ = UserControl
+        pickMode _ _ _ _ True _ = InsideCar
+        pickMode _ _ _ _ _ mode = mode
 
-        selectCam FollowNear  (cam,dir) _ _      = lookat cam (cam &+ dir) upwards
-        selectCam FollowFar   _ (cam,dir) _      = lookat cam (cam &+ dir) upwards
-        selectCam UserControl _ _ (cam,dir,up,_) = lookat cam (cam &+ dir) up
+        selectCam FollowNear  (cam,dir) _ _ _     = lookat cam (cam &+ dir) upwards
+        selectCam FollowFar   _ (cam,dir) _ _     = lookat cam (cam &+ dir) upwards
+        selectCam UserControl _ _ (cam,dir,up,_) _ = lookat cam (cam &+ dir) up
+        selectCam InsideCar _ _ _ a = a
 
     dt <- input
     let carInputPress = mapM command [SteerLeft,Accelerate,Brake,SteerRight,RestoreCar]
@@ -273,15 +280,27 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
     let fblrPress = (,,,,) <$> command FreeCamLeft <*> command FreeCamUp
                            <*> command FreeCamDown <*> command FreeCamRight <*> command FreeCamTurbo
     userCam <- userCamera (Vec3 (-4) 0 0) mouseMove fblrPress
-    camMode <- transfer3 FollowNear pickMode
-               (command SwitchToNearCamera) (command SwitchToFarCamera) (command SwitchToFreeCamera)
-    let camera = selectCam <$> camMode <*> followCamNear <*> followCamFar <*> userCam
+    camMode <- transfer4 InsideCar pickMode
+               (command SwitchToNearCamera) (command SwitchToFarCamera) (command SwitchToFreeCamera) (command SwitchToCarCamera)
+
+    let carCamera = fn <$> carPos <*> carId
+        fn m (prevId,currId) = lookat cam ({-cam &+ -}dir) u
+          where
+            car = cars !! currId
+            cam = Vec3 cx cy cz
+            dir = Vec3 dx dy dz
+            u  = Vec3 ux uy uz
+            h = 1.4 --scaleFactor * (fromIntegral $ L.cockpitHeight $ carData car) / 20
+            Vec4 cx cy cz _ = (Vec4 0 h 0 1) .* fromProjective m
+            Vec4 dx dy dz _ = (Vec4 0 0 10 1) .* fromProjective m
+            Vec4 ux uy uz _ = (Vec4 0 1 0 0) .* fromProjective m
+    let camera = selectCam <$> camMode <*> followCamNear <*> followCamFar <*> userCam <*> carCamera
 
     let Just (SM44F worldViewSetter) = T.lookup "worldView" uniforms
         Just (SM44F positionSetter) = T.lookup "worldPosition" uniforms
         Just (SM44F projectionSetter) = T.lookup "projection" uniforms
         Just (SV3F lightDirectionSetter) = T.lookup "lightDirection" uniforms
-        setupGFX ((w, h), capturing, frameCount, dt, updateHud) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
+        setupGFX ((w, h), capturing, frameCount, dt, updateHud, camMode) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
 
             let car = cars !! carId
                 fieldOfView = pi/2
@@ -306,8 +325,15 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                   forM_ (carViewMats car) $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
                   forM_ (zip (wheelsViewU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective worldViewMat
 
-            forM_ (carPositionMats car) $ \s -> s $! mat4ToM44F $! fromProjective carMat 
-            forM_ (zip (wheelsPositionU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu
+            case (camMode == InsideCar) of
+                True    -> do
+                    forM_ (carPositionMats car) $ \s -> s $! mat4ToM44F zero
+                    forM_ (zip (wheelsPositionU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F zero
+                    uniformM44F "hudTransform" (objectUniformSetter titleHud) $ mat4ToM44F one
+                False   -> do
+                    forM_ (carPositionMats car) $ \s -> s $! mat4ToM44F $! fromProjective carMat 
+                    forM_ (zip (wheelsPositionU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! fromProjective wu
+                    uniformM44F "hudTransform" (objectUniformSetter titleHud) $ mat4ToM44F zero
             currentSpeed <- btRaycastVehicle_getCurrentSpeedKmHour $ raycastVehicle car
             --uniformFloat "speed" uniforms currentSpeed
             --print currentSpeed
@@ -325,22 +351,10 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
             
             --uniformFloat "time" uniforms t
             done <- readIORef cpuDrawThread
-            when (done || updateHud) $ do
+            --when (done && updateHud) $ do
+            when (isJust prevCarId) $ do
                 writeIORef cpuDrawThread False
                 forkIO $ do
-                    let carNames =
-                            [ "Acura NSX"
-                            , "Lamborghini Countach"
-                            , "Jaguar XJR-9 IMSA"
-                            , "Lamborghini LM002"
-                            , "Porsche 911 Carrera 4"
-                            , "Chevrolet Corvette ZR1"
-                            , "Audi Quattro"
-                            , "Ferrari 288 GTO"
-                            , "Lancia Delta HF Integrale 16v"
-                            , "Porsche 962"
-                            , "Porsche March IndyCar"
-                            ]
                     -- only render simple stuff for now
                     let dashElems = catMaybes
                             [ solidImage "dash"
@@ -359,13 +373,27 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                             let posX = fromIntegral $ positionX bitmap
                                 posY = fromIntegral $ positionY bitmap
                             return (Image (width bitmap) (height bitmap) (image bitmap) :: JP.Image PixelRGBA8, R.V2 posX posY)
-                    let hud = R.renderDrawing 320 200 (PixelRGBA8 0 0 0 0) $ do
+                    let (x,y) = head $ drop 10 $ L.speedometerNeedle $ carData car
+                        (ox,oy) = L.speedometerCentre $ carData car
+                        hud = R.renderDrawing 320 200 (PixelRGBA8 0 0 0 0) $ do
+                                {-
                                 R.withTexture (R.uniformTexture $ PixelRGBA8 255 255 0 255) $ do
                                     R.printTextAt (font !! 1) 42 (R.V2 60 7) "Stunts"
                                 R.withTexture (R.uniformTexture $ PixelRGBA8 255 69 0 255) $ do
-                                    R.printTextAt (font !! 0) 16 (R.V2 25 60) $ carNames !! carId
+                                    R.printTextAt (font !! 0) 16 (R.V2 25 60) $ L.scoreboardName $ carData car -- carNames !! carId
+                                -}
                                 mapM_ (\(img, pos) -> R.drawImage img 0 pos) dashElems
-                    uniformFTexture2D "hudTexture" uniforms =<< compileImageToTexture2DRGBAF False True hud
+                                {-
+                                R.withTexture (R.uniformTexture $ PixelRGBA8 255 255 255 255) $ do
+                                    R.stroke 1 R.JoinRound (R.CapRound, R.CapRound) $
+                                         R.line (R.V2 (fromIntegral ox) (fromIntegral oy)) (R.V2 (fromIntegral x) (fromIntegral y))
+                                -}
+                    print (ox,oy,L.speedometerNeedle $ carData car)
+                    let ch = fromIntegral $ L.cockpitHeight $ carData car
+                        h = scaleFactor * ch / 20
+                    print (ch,h)
+
+                    uniformFTexture2D "hudTexture" (objectUniformSetter titleHud) =<< compileImageToTexture2DRGBAF False True hud
                     threadDelay 100000
                     --writeIORef cpuDrawThread True
                 return ()
@@ -378,7 +406,7 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
 #endif
                 return ()
     effectful4 setupGFX
-                   ((,,,,) <$> windowSize <*> capture <*> frameCount <*> dt <*> command SwitchCar)
+                   ((,,,,,) <$> windowSize <*> capture <*> frameCount <*> dt <*> command SwitchCar <*> camMode )
                    camera
                    carId
                    carAndWheelsPos
@@ -401,6 +429,7 @@ data Command
     | RestoreCar
     | SwitchCar
     -- Switch camera
+    | SwitchToCarCamera
     | SwitchToNearCamera
     | SwitchToFarCamera
     | SwitchToFreeCamera
@@ -425,6 +454,7 @@ keyMapping k =
       SwitchToNearCamera -> CharKey '1'
       SwitchToFarCamera  -> CharKey '2'
       SwitchToFreeCamera -> CharKey '3'
+      SwitchToCarCamera  -> CharKey '4'
       FreeCamLeft        -> KeyLeft
       FreeCamRight       -> KeyRight
       FreeCamUp          -> KeyUp

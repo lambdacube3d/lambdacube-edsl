@@ -1,5 +1,6 @@
 module Stunts.Loader where
 
+import Data.Char (chr)
 import Control.Applicative
 import Control.Monad
 import Data.Binary as B
@@ -20,6 +21,13 @@ import Stunts.Color
 
 getString :: Int -> Get String
 getString = fmap (SB8.unpack . SB8.takeWhile (/= '\0')) . getByteString
+
+getString' :: Get String
+getString' = do
+    c <- chr . fromIntegral <$> getWord8
+    if c == '\0'
+        then return []
+        else (c:) <$> getString'
 
 getWord :: Get Word32
 getWord = getWord32le
@@ -237,19 +245,21 @@ data Car
     , cockpitHeight             :: Int  -- This sets the apparent height from the ground on the inside (F1) view.
     , shiftingKnobPos           :: [(Int,Int)]  -- shifting knob coordinates
     , steeringDot               :: [(Int,Int)] -- 1+33 pairs
---    , speedometerNeedle         :: [(Int,Int)]
+    , speedometerCentre         :: (Int,Int)
+    , speedometerNeedle         :: [(Int,Int)]
     , digitalSpeedometer        :: [(Int,Int)]
 --    , revMeterNeedle            :: [(Int,Int)]
 
     -- text properties
---    , infoText                  :: String
---    , scoreboardName            :: String
+    , infoText                  :: String
+    , scoreboardName            :: String
     }
 
 
-getCar :: Get Car
-getCar = do
+getCar :: String -> String -> Get Car
+getCar carDesc carName = do
     let pos i g = lookAhead $ do
+            b <- bytesRead
             skip i
             g
     gears               <- pos 0x26  getInt8
@@ -270,7 +280,9 @@ getCar = do
     cockpitHeight       <- pos 0xF6  getInt16
     wheelPos            <- pos 0xF8  (replicateM 4 ((,,) <$> getInt16 <*> getInt16 <*> getInt16))
     steeringDot         <- pos 0x110 (replicateM 34 ((,) <$> getInt8 <*> getInt8))
---    speedometerNeedle   <- pos 0x14E (replicateM 34 ((,) <$> getInt8 <*> getInt8)
+    speedometerCentre   <- pos 0x14E ((,) <$> getInt16 <*> getInt16)
+    speedometerCount    <- pos 0x152 getInt16
+    speedometerNeedle   <- pos 0x154 (replicateM 104 ((,) <$> getInt8 <*> getInt8))
     digitalSpeedometer  <- pos 0x154 (replicateM 3 ((,) <$> getInt8 <*> getInt8))
     return $ Car
         { gears              = gears
@@ -291,7 +303,11 @@ getCar = do
         , cockpitHeight      = cockpitHeight
         , shiftingKnobPos    = shiftingKnobPos
         , steeringDot        = steeringDot
+        , speedometerCentre  = speedometerCentre
+        , speedometerNeedle  = speedometerNeedle
         , digitalSpeedometer = digitalSpeedometer
+        , infoText           = carDesc
+        , scoreboardName     = carName
         }
 
 {-
