@@ -76,7 +76,7 @@ main = do
 #ifdef CAPTURE
     ilInit
 #endif
-    
+
     let mediaPath = "."
 
     gameOk <- doesFileExist (mediaPath ++ "/STUNTS11.ZIP")
@@ -312,7 +312,7 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                 carViewMats car = [s | u <- carUnis car, let Just (SM44F s) = T.lookup "worldView" u]
                 wheelsPositionU car = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldPosition" u] | wu <- wheelsUnis car]
                 wheelsViewU car = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis car]
-            
+
             lightDirectionSetter $! vec3ToV3F $! lightDirection
             worldViewSetter $! mat4ToM44F $! fromProjective worldViewMat
             positionSetter $! mat4ToM44F $! idmtx
@@ -350,7 +350,7 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                   forM_ (zip (wheelsPositionU car) wheelsMats) $ \(sl,wu) -> forM_ sl $ \s -> s $! mat4ToM44F $! zero
 
             setSize (fromIntegral w) (fromIntegral h)
-            
+
             --uniformFloat "time" uniforms t
             done <- readIORef cpuDrawThread
             --when (done && updateHud) $ do
