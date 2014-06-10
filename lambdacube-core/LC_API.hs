@@ -64,7 +64,8 @@ module LC_API (
     enableObject,
 
     -- texture (temporary)
-    compileTexture2DRGBAF
+    compileTexture2DRGBAF,
+    updateTexture2DRGBAF
 ) where
 
 import Data.Int

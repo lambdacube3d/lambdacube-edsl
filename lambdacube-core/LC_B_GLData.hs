@@ -53,6 +53,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , glGenerateMipmap
     , glPixelStorei
     , glTexImage2D
+    , glTexSubImage2D
     , glTexParameteri
     , gl_CLAMP_TO_EDGE
     , gl_LINEAR
@@ -311,3 +312,17 @@ compileTexture2DRGBAF isMip isClamped bitmap = do
         glTexImage2D gl_TEXTURE_2D 0 internalFormat (fromIntegral w) (fromIntegral h) 0 dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
     when isMip $ glGenerateMipmap gl_TEXTURE_2D
     return $ TextureData to
+
+updateTexture2DRGBAF :: TextureData -> Bool -> Bitmap Word8 -> IO ()
+updateTexture2DRGBAF tx isMip bitmap = do
+    glPixelStorei gl_UNPACK_ALIGNMENT 1
+    let to = textureObject tx
+    glBindTexture gl_TEXTURE_2D to
+    withBitmap bitmap $ \(w,h) nchn 0 ptr -> do
+        let internalFormat  = fromIntegral gl_RGBA8
+            dataFormat      = fromIntegral $ case nchn of
+                3   -> gl_RGB
+                4   -> gl_RGBA
+                _   -> error "unsupported texture format!"
+        glTexSubImage2D gl_TEXTURE_2D 0 0 0 (fromIntegral w) (fromIntegral h) dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
+    when isMip $ glGenerateMipmap gl_TEXTURE_2D
