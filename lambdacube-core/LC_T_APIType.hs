@@ -479,7 +479,7 @@ data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: Te
                     -> Texture gp dim arr t ar
     -- TODO:
     --  add texture internal format specification
-    Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip)
+    Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip, Typeable layerCount, Typeable (TexDataRepr ar t))
                     => TextureType dim canMip arr layerCount t ar
                     -> TexSizeRepr dim
                     -> MipMap mip
@@ -548,3 +548,6 @@ deriving instance Typeable Obj
 deriving instance Typeable V
 deriving instance Typeable G
 deriving instance Typeable F
+deriving instance Typeable Image
+deriving instance Typeable SingleOutput
+deriving instance Typeable MultiOutput
