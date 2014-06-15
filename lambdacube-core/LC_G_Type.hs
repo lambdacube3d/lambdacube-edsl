@@ -1,15 +1,37 @@
+{-# LANGUAGE        BangPatterns #-}
+{-# LANGUAGE        ConstraintKinds #-}
+{-# LANGUAGE        DataKinds #-}
+{-# LANGUAGE        DeriveDataTypeable #-}
+{-# LANGUAGE        EmptyDataDecls #-}
+{-# LANGUAGE        FlexibleContexts #-}
+{-# LANGUAGE        FlexibleInstances #-}
+{-# LANGUAGE        FunctionalDependencies #-}
+{-# LANGUAGE        GADTs #-}
+{-# LANGUAGE        ImpredicativeTypes #-}
+{-# LANGUAGE        KindSignatures #-}
+{-# LANGUAGE        MultiParamTypeClasses #-}
+{-# LANGUAGE        OverloadedStrings #-}
+{-# LANGUAGE        ParallelListComp #-}
+{-# LANGUAGE        Rank2Types #-}
+{-# LANGUAGE        ScopedTypeVariables #-}
+{-# LANGUAGE        StandaloneDeriving #-}
+{-# LANGUAGE        TupleSections #-}
+{-# LANGUAGE        TypeFamilies #-}
+{-# LANGUAGE        TypeOperators #-}
+{-# LANGUAGE        TypeSynonymInstances #-}
 module LC_G_Type where
 
 import GHC.TypeLits
+import Data.Typeable
 
 import Data.Int
 import Data.Word
 import Foreign.Storable
 import Foreign.Ptr
 
-data V2 a = V2 !a !a deriving (Eq,Ord,Show)
-data V3 a = V3 !a !a !a deriving (Eq,Ord,Show)
-data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show)
+data V2 a = V2 !a !a deriving (Eq,Ord,Show,Typeable)
+data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Typeable)
+data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Typeable)
 
 -- matrices are stored in column major order
 type M22F = V2 V2F

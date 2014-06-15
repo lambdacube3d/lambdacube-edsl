@@ -1,3 +1,24 @@
+{-# LANGUAGE        BangPatterns #-}
+{-# LANGUAGE        ConstraintKinds #-}
+{-# LANGUAGE        DataKinds #-}
+{-# LANGUAGE        DeriveDataTypeable #-}
+{-# LANGUAGE        EmptyDataDecls #-}
+{-# LANGUAGE        FlexibleContexts #-}
+{-# LANGUAGE        FlexibleInstances #-}
+{-# LANGUAGE        FunctionalDependencies #-}
+{-# LANGUAGE        GADTs #-}
+{-# LANGUAGE        ImpredicativeTypes #-}
+{-# LANGUAGE        KindSignatures #-}
+{-# LANGUAGE        MultiParamTypeClasses #-}
+{-# LANGUAGE        OverloadedStrings #-}
+{-# LANGUAGE        ParallelListComp #-}
+{-# LANGUAGE        Rank2Types #-}
+{-# LANGUAGE        ScopedTypeVariables #-}
+{-# LANGUAGE        StandaloneDeriving #-}
+{-# LANGUAGE        TupleSections #-}
+{-# LANGUAGE        TypeFamilies #-}
+{-# LANGUAGE        TypeOperators #-}
+{-# LANGUAGE        TypeSynonymInstances #-}
 module LC_C_PrimFun where
 
 import qualified LC_T_PrimFun as T

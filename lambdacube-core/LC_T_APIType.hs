@@ -1,3 +1,25 @@
+{-# LANGUAGE        BangPatterns #-}
+{-# LANGUAGE        ConstraintKinds #-}
+{-# LANGUAGE        DataKinds #-}
+{-# LANGUAGE        DeriveDataTypeable #-}
+{-# LANGUAGE        EmptyDataDecls #-}
+{-# LANGUAGE        FlexibleContexts #-}
+{-# LANGUAGE        FlexibleInstances #-}
+{-# LANGUAGE        FunctionalDependencies #-}
+{-# LANGUAGE        GADTs #-}
+{-# LANGUAGE        ImpredicativeTypes #-}
+{-# LANGUAGE        KindSignatures #-}
+{-# LANGUAGE        MultiParamTypeClasses #-}
+{-# LANGUAGE        OverloadedStrings #-}
+{-# LANGUAGE        ParallelListComp #-}
+{-# LANGUAGE        Rank2Types #-}
+{-# LANGUAGE        ScopedTypeVariables #-}
+{-# LANGUAGE        StandaloneDeriving #-}
+{-# LANGUAGE        TupleSections #-}
+{-# LANGUAGE        TypeFamilies #-}
+{-# LANGUAGE        TypeOperators #-}
+{-# LANGUAGE        TypeSynonymInstances #-}
+{-# LANGUAGE        PolyKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 module LC_T_APIType where
 
@@ -6,6 +28,7 @@ import GHC.TypeLits
 import Data.ByteString.Char8
 import Data.Int
 import Data.Word
+import Data.Typeable
 
 import LC_G_Type
 import LC_G_APIType hiding (InputType(..))
@@ -516,3 +539,12 @@ data Frequency
 data OutputType
     = SingleOutput
     | MultiOutput
+
+deriving instance Typeable Color
+deriving instance Typeable Depth
+deriving instance Typeable Stencil
+deriving instance Typeable Interpolated
+deriving instance Typeable Obj
+deriving instance Typeable V
+deriving instance Typeable G
+deriving instance Typeable F

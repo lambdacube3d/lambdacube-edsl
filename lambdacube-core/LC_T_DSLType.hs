@@ -1,7 +1,30 @@
+{-# LANGUAGE        BangPatterns #-}
+{-# LANGUAGE        ConstraintKinds #-}
+{-# LANGUAGE        DataKinds #-}
+{-# LANGUAGE        DeriveDataTypeable #-}
+{-# LANGUAGE        EmptyDataDecls #-}
+{-# LANGUAGE        FlexibleContexts #-}
+{-# LANGUAGE        FlexibleInstances #-}
+{-# LANGUAGE        FunctionalDependencies #-}
+{-# LANGUAGE        GADTs #-}
+{-# LANGUAGE        ImpredicativeTypes #-}
+{-# LANGUAGE        KindSignatures #-}
+{-# LANGUAGE        MultiParamTypeClasses #-}
+{-# LANGUAGE        OverloadedStrings #-}
+{-# LANGUAGE        ParallelListComp #-}
+{-# LANGUAGE        Rank2Types #-}
+{-# LANGUAGE        ScopedTypeVariables #-}
+{-# LANGUAGE        StandaloneDeriving #-}
+{-# LANGUAGE        TupleSections #-}
+{-# LANGUAGE        TypeFamilies #-}
+{-# LANGUAGE        TypeOperators #-}
+{-# LANGUAGE        TypeSynonymInstances #-}
+{-# LANGUAGE        PolyKinds #-}
 module LC_T_DSLType where
 
 import Data.Int
 import Data.Word
+import Data.Typeable
 
 import LC_G_Type
 import LC_G_APIType (InputType)
@@ -14,10 +37,15 @@ data TextureShape
     | Tex3D
     | TexRect
 
-data Red    = Red  deriving (Eq,Ord)
-data RG     = RG   deriving (Eq,Ord)
-data RGB    = RGB  deriving (Eq,Ord)
-data RGBA   = RGBA deriving (Eq,Ord)
+deriving instance Typeable Tex1D
+deriving instance Typeable Tex2D
+deriving instance Typeable Tex3D
+deriving instance Typeable TexRect
+
+data Red    = Red  deriving (Typeable,Eq,Ord)
+data RG     = RG   deriving (Typeable,Eq,Ord)
+data RGB    = RGB  deriving (Typeable,Eq,Ord)
+data RGBA   = RGBA deriving (Typeable,Eq,Ord)
 
 data TextureSemantics a
     = Regular a
@@ -25,14 +53,25 @@ data TextureSemantics a
     | MultiSample a
     | Buffer a
 
+deriving instance Typeable Regular
+deriving instance Typeable Shadow
+deriving instance Typeable MultiSample
+deriving instance Typeable Buffer
+
 data TextureArray
     = SingleTex     -- singleton texture
     | ArrayTex      -- array texture
     | CubeTex       -- cube texture = array with size 6
 
+deriving instance Typeable SingleTex
+deriving instance Typeable ArrayTex
+deriving instance Typeable CubeTex
+
 --data Sampler dim layerCount t ar
 data Sampler :: TextureShape -> TextureArray -> TextureSemantics * -> * -> *
-    
+
+deriving instance Typeable Sampler
+
 -- IsScalar means here that the related type is not a tuple, but a GPU primitive type
 class GPU a => IsScalar a where
     toValue     :: a -> Value
@@ -43,118 +82,118 @@ instance Nat sh => IsScalar (Sampler dim sh t ar) where
     toType _     = error "toType Sampler is not implemented yet" -- TODO
 -}
 -- Float
-instance IsScalar (Sampler Tex1D SingleTex (Regular Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D SingleTex (Regular Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTexture1D
-instance IsScalar (Sampler Tex2D SingleTex (Regular Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D SingleTex (Regular Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTexture2D
-instance IsScalar (Sampler Tex3D SingleTex (Regular Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex3D SingleTex (Regular Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTexture3D
-instance IsScalar (Sampler Tex2D CubeTex (Regular Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D CubeTex (Regular Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTextureCube
-instance IsScalar (Sampler Tex1D ArrayTex (Regular Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D ArrayTex (Regular Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTexture1DArray
-instance IsScalar (Sampler Tex2D ArrayTex (Regular Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D ArrayTex (Regular Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTexture2DArray
-instance IsScalar (Sampler Tex2D SingleTex (MultiSample Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D SingleTex (MultiSample Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTexture2DMS
-instance IsScalar (Sampler Tex2D ArrayTex (MultiSample Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D ArrayTex (MultiSample Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTexture2DMSArray
-instance IsScalar (Sampler Tex1D SingleTex (Buffer Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D SingleTex (Buffer Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTextureBuffer
-instance IsScalar (Sampler TexRect SingleTex (Regular Float) a) where
+instance (Typeable a) => IsScalar (Sampler TexRect SingleTex (Regular Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.FTexture2DRect
 
 -- Int
-instance IsScalar (Sampler Tex1D SingleTex (Regular Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D SingleTex (Regular Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITexture1D
-instance IsScalar (Sampler Tex2D SingleTex (Regular Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D SingleTex (Regular Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITexture2D
-instance IsScalar (Sampler Tex3D SingleTex (Regular Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex3D SingleTex (Regular Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITexture3D
-instance IsScalar (Sampler Tex2D CubeTex (Regular Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D CubeTex (Regular Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITextureCube
-instance IsScalar (Sampler Tex1D ArrayTex (Regular Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D ArrayTex (Regular Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITexture1DArray
-instance IsScalar (Sampler Tex2D ArrayTex (Regular Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D ArrayTex (Regular Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITexture2DArray
-instance IsScalar (Sampler Tex2D SingleTex (MultiSample Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D SingleTex (MultiSample Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITexture2DMS
-instance IsScalar (Sampler Tex2D ArrayTex (MultiSample Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D ArrayTex (MultiSample Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITexture2DMSArray
-instance IsScalar (Sampler Tex1D SingleTex (Buffer Int) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D SingleTex (Buffer Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITextureBuffer
-instance IsScalar (Sampler TexRect SingleTex (Regular Int) a) where
+instance (Typeable a) => IsScalar (Sampler TexRect SingleTex (Regular Int) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.ITexture2DRect
 
 -- Word
-instance IsScalar (Sampler Tex1D SingleTex (Regular Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D SingleTex (Regular Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTexture1D
-instance IsScalar (Sampler Tex2D SingleTex (Regular Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D SingleTex (Regular Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTexture2D
-instance IsScalar (Sampler Tex3D SingleTex (Regular Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex3D SingleTex (Regular Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTexture3D
-instance IsScalar (Sampler Tex2D CubeTex (Regular Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D CubeTex (Regular Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTextureCube
-instance IsScalar (Sampler Tex1D ArrayTex (Regular Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D ArrayTex (Regular Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTexture1DArray
-instance IsScalar (Sampler Tex2D ArrayTex (Regular Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D ArrayTex (Regular Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTexture2DArray
-instance IsScalar (Sampler Tex2D SingleTex (MultiSample Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D SingleTex (MultiSample Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTexture2DMS
-instance IsScalar (Sampler Tex2D ArrayTex (MultiSample Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D ArrayTex (MultiSample Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTexture2DMSArray
-instance IsScalar (Sampler Tex1D SingleTex (Buffer Word) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D SingleTex (Buffer Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTextureBuffer
-instance IsScalar (Sampler TexRect SingleTex (Regular Word) a) where
+instance (Typeable a) => IsScalar (Sampler TexRect SingleTex (Regular Word) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.UTexture2DRect
 
 -- Shadow
-instance IsScalar (Sampler Tex1D SingleTex (Shadow Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D SingleTex (Shadow Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.STexture1D
-instance IsScalar (Sampler Tex2D SingleTex (Shadow Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D SingleTex (Shadow Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.STexture2D
-instance IsScalar (Sampler Tex2D CubeTex (Shadow Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D CubeTex (Shadow Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.STextureCube
-instance IsScalar (Sampler Tex1D ArrayTex (Shadow Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex1D ArrayTex (Shadow Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.STexture1DArray
-instance IsScalar (Sampler Tex2D ArrayTex (Shadow Float) a) where
+instance (Typeable a) => IsScalar (Sampler Tex2D ArrayTex (Shadow Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.STexture2DArray
-instance IsScalar (Sampler TexRect SingleTex (Shadow Float) a) where
+instance (Typeable a) => IsScalar (Sampler TexRect SingleTex (Shadow Float) a) where
     toValue v    = error "toValue Sampler is not implemented yet" -- TODO
     toType _     = U.STexture2DRect
 
@@ -238,87 +277,87 @@ instance Show (Sampler dim layerCount t ar) where
     show _ = "Sampler dim layerCount t ar"
 
 -- GPU type restriction, the functions are used in shader codegen
-class (Show a) => GPU a where
+class (Show a, Typeable a) => GPU a where
     tupleType   :: a -> Ty
 
 -- Float
-instance GPU (Sampler Tex1D SingleTex (Regular Float) a) where
+instance (Typeable a) => GPU (Sampler Tex1D SingleTex (Regular Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D SingleTex (Regular Float) a) where
+instance (Typeable a) => GPU (Sampler Tex2D SingleTex (Regular Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex3D SingleTex (Regular Float) a) where
+instance (Typeable a) => GPU (Sampler Tex3D SingleTex (Regular Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D CubeTex (Regular Float) a) where
+instance (Typeable a) => GPU (Sampler Tex2D CubeTex (Regular Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex1D ArrayTex (Regular Float) a) where
+instance (Typeable a) => GPU (Sampler Tex1D ArrayTex (Regular Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D ArrayTex (Regular Float) a) where
+instance (Typeable a) => GPU (Sampler Tex2D ArrayTex (Regular Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D SingleTex (MultiSample Float) a) where
+instance (Typeable a) => GPU (Sampler Tex2D SingleTex (MultiSample Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D ArrayTex (MultiSample Float) a) where
+instance (Typeable a) => GPU (Sampler Tex2D ArrayTex (MultiSample Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex1D SingleTex (Buffer Float) a) where
+instance (Typeable a) => GPU (Sampler Tex1D SingleTex (Buffer Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler TexRect SingleTex (Regular Float) a) where
+instance (Typeable a) => GPU (Sampler TexRect SingleTex (Regular Float) a) where
     tupleType v = Single $ toType v
 
 -- Int
-instance GPU (Sampler Tex1D SingleTex (Regular Int) a) where
+instance (Typeable a) => GPU (Sampler Tex1D SingleTex (Regular Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D SingleTex (Regular Int) a) where
+instance (Typeable a) => GPU (Sampler Tex2D SingleTex (Regular Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex3D SingleTex (Regular Int) a) where
+instance (Typeable a) => GPU (Sampler Tex3D SingleTex (Regular Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D CubeTex (Regular Int) a) where
+instance (Typeable a) => GPU (Sampler Tex2D CubeTex (Regular Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex1D ArrayTex (Regular Int) a) where
+instance (Typeable a) => GPU (Sampler Tex1D ArrayTex (Regular Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D ArrayTex (Regular Int) a) where
+instance (Typeable a) => GPU (Sampler Tex2D ArrayTex (Regular Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D SingleTex (MultiSample Int) a) where
+instance (Typeable a) => GPU (Sampler Tex2D SingleTex (MultiSample Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D ArrayTex (MultiSample Int) a) where
+instance (Typeable a) => GPU (Sampler Tex2D ArrayTex (MultiSample Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex1D SingleTex (Buffer Int) a) where
+instance (Typeable a) => GPU (Sampler Tex1D SingleTex (Buffer Int) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler TexRect SingleTex (Regular Int) a) where
+instance (Typeable a) => GPU (Sampler TexRect SingleTex (Regular Int) a) where
     tupleType v = Single $ toType v
 
 -- Word
-instance GPU (Sampler Tex1D SingleTex (Regular Word) a) where
+instance (Typeable a) => GPU (Sampler Tex1D SingleTex (Regular Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D SingleTex (Regular Word) a) where
+instance (Typeable a) => GPU (Sampler Tex2D SingleTex (Regular Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex3D SingleTex (Regular Word) a) where
+instance (Typeable a) => GPU (Sampler Tex3D SingleTex (Regular Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D CubeTex (Regular Word) a) where
+instance (Typeable a) => GPU (Sampler Tex2D CubeTex (Regular Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex1D ArrayTex (Regular Word) a) where
+instance (Typeable a) => GPU (Sampler Tex1D ArrayTex (Regular Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D ArrayTex (Regular Word) a) where
+instance (Typeable a) => GPU (Sampler Tex2D ArrayTex (Regular Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D SingleTex (MultiSample Word) a) where
+instance (Typeable a) => GPU (Sampler Tex2D SingleTex (MultiSample Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D ArrayTex (MultiSample Word) a) where
+instance (Typeable a) => GPU (Sampler Tex2D ArrayTex (MultiSample Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex1D SingleTex (Buffer Word) a) where
+instance (Typeable a) => GPU (Sampler Tex1D SingleTex (Buffer Word) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler TexRect SingleTex (Regular Word) a) where
+instance (Typeable a) => GPU (Sampler TexRect SingleTex (Regular Word) a) where
     tupleType v = Single $ toType v
 
 -- Shadow
-instance GPU (Sampler Tex1D SingleTex (Shadow Float) a) where
+instance (Typeable a) => GPU (Sampler Tex1D SingleTex (Shadow Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D SingleTex (Shadow Float) a) where
+instance (Typeable a) => GPU (Sampler Tex2D SingleTex (Shadow Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D CubeTex (Shadow Float) a) where
+instance (Typeable a) => GPU (Sampler Tex2D CubeTex (Shadow Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex1D ArrayTex (Shadow Float) a) where
+instance (Typeable a) => GPU (Sampler Tex1D ArrayTex (Shadow Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler Tex2D ArrayTex (Shadow Float) a) where
+instance (Typeable a) => GPU (Sampler Tex2D ArrayTex (Shadow Float) a) where
     tupleType v = Single $ toType v
-instance GPU (Sampler TexRect SingleTex (Shadow Float) a) where
+instance (Typeable a) => GPU (Sampler TexRect SingleTex (Shadow Float) a) where
     tupleType v = Single $ toType v
 
 instance GPU () where
@@ -620,3 +659,6 @@ tix7 :: GPU s => TupleIdx ((((((((t, s), s1), s2), s3), s4), s5), s6), s7) s
 tix7 = SuccTupIdx tix6
 tix8 :: GPU s => TupleIdx (((((((((t, s), s1), s2), s3), s4), s5), s6), s7), s8) s
 tix8 = SuccTupIdx tix7
+
+deriving instance Typeable (,,,,,,,)
+deriving instance Typeable (,,,,,,,,)

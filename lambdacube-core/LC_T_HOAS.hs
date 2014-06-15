@@ -1,3 +1,25 @@
+{-# LANGUAGE        BangPatterns #-}
+{-# LANGUAGE        ConstraintKinds #-}
+{-# LANGUAGE        DataKinds #-}
+{-# LANGUAGE        DeriveDataTypeable #-}
+{-# LANGUAGE        EmptyDataDecls #-}
+{-# LANGUAGE        FlexibleContexts #-}
+{-# LANGUAGE        FlexibleInstances #-}
+{-# LANGUAGE        FunctionalDependencies #-}
+{-# LANGUAGE        GADTs #-}
+{-# LANGUAGE        ImpredicativeTypes #-}
+{-# LANGUAGE        KindSignatures #-}
+{-# LANGUAGE        MultiParamTypeClasses #-}
+{-# LANGUAGE        OverloadedStrings #-}
+{-# LANGUAGE        ParallelListComp #-}
+{-# LANGUAGE        Rank2Types #-}
+{-# LANGUAGE        ScopedTypeVariables #-}
+{-# LANGUAGE        StandaloneDeriving #-}
+{-# LANGUAGE        TupleSections #-}
+{-# LANGUAGE        TypeFamilies #-}
+{-# LANGUAGE        TypeOperators #-}
+{-# LANGUAGE        TypeSynonymInstances #-}
+{-# LANGUAGE        UndecidableInstances #-}
 module LC_T_HOAS where
 
 import GHC.TypeLits
@@ -10,13 +32,21 @@ import LC_G_APIType (Filter(..),EdgeMode(..))
 import LC_T_APIType
 import LC_T_DSLType
 import LC_T_PrimFun
+import LC_C_PrimFun
+import Data.Typeable
+import Data.Dynamic
 
 -- Common Exp, describes shader functions
 data Exp :: Frequency -> * -> * where
-    -- Needed for conversion to de Bruijn form
+
     Tag     :: GPU t
             => Int
             -> String
+            -> Exp stage t
+
+    -- Needed for conversion to de Bruijn form
+    Var     :: GPU t
+            => Dynamic
             -> Exp stage t
                  -- environment size at defining occurrence
 {-
@@ -75,7 +105,7 @@ data Exp :: Frequency -> * -> * where
             -> Exp stage (Sampler dim arr t ar)
 
     -- loop support
-    Loop    :: (GPU s, GPU a)
+    Loop    :: (GPU s, GPU a, Typeable stage)
             => (Exp stage s -> Exp stage s)     -- state transform function
             -> (Exp stage s -> Exp stage Bool)  -- loop condition function
             -> (Exp stage s -> Exp stage a)     -- state to result transform function
@@ -89,7 +119,7 @@ data Exp :: Frequency -> * -> * where
                     -> a
                     -> Exp Obj (VertexStream primitive (InputTupleRepr a))
 
-    Transform       :: (GPU a, GPU b)
+    Transform       :: (GPU a, GPU b, Typeable clipDistances)
                     => (Exp V a -> VertexOut clipDistances b)                       -- vertex shader
                     -> Exp Obj (VertexStream primitive a)
                     -> Exp Obj (PrimitiveStream primitive clipDistances 1 V b)
@@ -105,7 +135,7 @@ data Exp :: Frequency -> * -> * where
     FrameBuffer     :: FrameBuffer layerCount t
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' t))
 
-    Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
+    Accumulate      :: (Typeable (NoStencilRepr b), GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
                     => AccumulationContext b
                     -> FragmentFilter a
                     -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
@@ -151,7 +181,6 @@ data VertexOut clipDistances t where
                 -> FlatExp V clipDistances   -- clip distance []
                 -> InterpolatedFlatExp V a
                 -> VertexOut (FTRepr clipDistances) (FTRepr a)
-
 -- Geometry
 -- describes a geometry shader
 data GeometryShader (inPrimitive :: PrimitiveType) (outPrimitive :: PrimitiveType) inClipDistances outClipDistances (layerCount :: Nat) a b where
