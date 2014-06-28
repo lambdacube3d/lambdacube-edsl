@@ -118,7 +118,7 @@ data Exp :: Frequency -> * -> * where
                     -> Exp Obj (FrameBuffer layerCount b)
                     -> Exp Obj (Image layerCount t)
 
-    PrjImage        :: ((idx + 1) <= layerCount, 2 <= layerCount, KnownNat idx)
+    PrjImage        :: ((idx + 1) <= layerCount, 2 <= layerCount, SingI idx)
                     => ByteString                       -- internal image output (can be allocated on request)
                     -> NatNum idx
                     -> Exp Obj (Image layerCount t)
@@ -155,7 +155,7 @@ data VertexOut clipDistances t where
 -- Geometry
 -- describes a geometry shader
 data GeometryShader (inPrimitive :: PrimitiveType) (outPrimitive :: PrimitiveType) inClipDistances outClipDistances (layerCount :: Nat) a b where
-    GeometryShader  :: (GPU j, GPU i, GPU b, GPU outputClipDistances, GPU input, KnownNat layerCount
+    GeometryShader  :: (GPU j, GPU i, GPU b, GPU outputClipDistances, GPU input, SingI layerCount
                        , inputVertex ~ (V4F,Float,inputClipDistances,a)
                        , input ~ PrimitiveVertices inputPrimitive inputVertex
                        )
@@ -168,7 +168,7 @@ data GeometryShader (inPrimitive :: PrimitiveType) (outPrimitive :: PrimitiveTyp
                     -> (Exp G j -> GeometryOut j outputClipDistances b)             -- generate vertices
                     -> GeometryShader inputPrimitive outputPrimitive inputClipDistances outputClipDistances layerCount a b
 {-
-    GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, KnownNat layerNum)
+    GeometryShader      :: (GPU (PrimitiveVertices primIn a), GPU i, GPU j, GPU b, IsPrimitive primIn, IsPrimitive primOut, SingI layerNum)
                         => NatNum layerNum                                          -- geometry shader:
                         -> primOut                                                  -- output primitive
                         -> Int                                                      -- max amount of generated vertices

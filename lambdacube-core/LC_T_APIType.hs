@@ -275,17 +275,17 @@ data FragmentOperation ty where
 -- specifies an empty image (pixel rectangle)
 -- hint: framebuffer is composed from images
 data Image (layerCount :: Nat) t where
-    DepthImage      :: KnownNat layerCount
+    DepthImage      :: SingI layerCount
                     => NatNum layerCount
                     -> Float    -- initial value
                     -> Image layerCount (Depth Float)
 
-    StencilImage    :: KnownNat layerCount
+    StencilImage    :: SingI layerCount
                     => NatNum layerCount
                     -> Int32    -- initial value
                     -> Image layerCount (Stencil Int32)
 
-    ColorImage      :: (IsNum t, IsVecScalar d color t, IsScalar color, KnownNat layerCount)
+    ColorImage      :: (IsNum t, IsVecScalar d color t, IsScalar color, SingI layerCount)
                     => NatNum layerCount
                     -> color    -- initial value
                     -> Image layerCount (Color color)
@@ -420,12 +420,12 @@ instance IsColorArity RGBA where
 
 -- fully describes a texture type
 data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> TextureSemantics * -> * -> * where -- hint: arr - single or array texture, ar - arity (Red,RG,RGB,..)
-    Texture1D       :: KnownNat layerCount
+    Texture1D       :: SingI layerCount
                     => TextureDataType t ar
                     -> NatNum layerCount
                     -> TextureType Tex1D TexMip (TexArrRepr layerCount) layerCount t ar
 
-    Texture2D       :: KnownNat layerCount
+    Texture2D       :: SingI layerCount
                     => TextureDataType t ar
                     -> NatNum layerCount
                     -> TextureType Tex2D TexMip (TexArrRepr layerCount) layerCount t ar
@@ -439,7 +439,7 @@ data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> Text
     TextureRect     :: TextureDataType t ar
                     -> TextureType TexRect TexNoMip SingleTex 1 t ar
 
-    Texture2DMS     :: KnownNat layerCount
+    Texture2DMS     :: SingI layerCount
                     => TextureDataType (Regular t) ar
                     -> NatNum layerCount
                     -> TextureType Tex2D TexNoMip (TexArrRepr layerCount) layerCount (MultiSample t) ar
