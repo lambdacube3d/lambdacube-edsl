@@ -61,8 +61,8 @@ addStaticShape dynamicsWorld mesh friction restitution = do
     --btCollisionObject_setRestitution body restitution
     btDynamicsWorld_addRigidBody dynamicsWorld body
 
-addCar :: BtDynamicsWorldClass bc => bc -> [Mesh] -> [(Vec3,Float,Float,[Mesh])] -> Proj4 -> IO BtRaycastVehicle
-addCar dynamicsWorld carChassisMesh wheels transform = do
+createCar :: BtDynamicsWorldClass bc => bc -> [Mesh] -> [(Vec3,Float,Float,[Mesh])] -> Proj4 -> IO BtRaycastVehicle
+createCar dynamicsWorld carChassisMesh wheels transform = do
     carChassisShape <- mkConvexTriangleMeshShape carChassisMesh
     (_carMotionState,carChassisBody,carVehicle) <- mkVehicle dynamicsWorld carChassisShape 800 wheels
     btRigidBody_proceedToTransform carChassisBody $ proj4ToTransform transform
@@ -77,6 +77,24 @@ updateCar carVehicle = forM [0..3] $ \i -> do
     --s <- btRaycastVehicle_getCurrentSpeedKmHour carVehicle
     --putStrLn $ "car speed: " ++ show s
 
+addCar :: (BtDynamicsWorldClass bc, BtRaycastVehicleClass v) => bc -> v -> IO ()
+addCar dw v = do
+  btDynamicsWorld_addRigidBody dw =<< btRaycastVehicle_getRigidBody v
+  btDynamicsWorld_addVehicle dw v
+
+removeCar :: (BtDynamicsWorldClass bc, BtRaycastVehicleClass v) => bc -> v -> IO ()
+removeCar dw v = do
+  btDynamicsWorld_removeVehicle dw v
+  btDynamicsWorld_removeRigidBody dw =<< btRaycastVehicle_getRigidBody v
+
+getCarMotionState :: (BtRaycastVehicleClass v) => v -> IO BtMotionState
+getCarMotionState = btRigidBody_getMotionState <=< btRaycastVehicle_getRigidBody
+
+setCarMotionState :: (BtRaycastVehicleClass v) => v -> BtMotionState -> IO ()
+setCarMotionState v s = do
+  b <- btRaycastVehicle_getRigidBody v
+  btRigidBody_setMotionState b s
+
 steerCar :: BtRaycastVehicleClass bc => Float -> bc -> [Bool] -> IO ()
 steerCar dt carVehicle [left,up,down,right,restore] = do
     when restore $ do
@@ -84,8 +102,10 @@ steerCar dt carVehicle [left,up,down,right,restore] = do
         btRigidBody_applyTorque carBody (Vec3 30000 30000 30000)
         return ()
 
+    currentSpeed <- btRaycastVehicle_getCurrentSpeedKmHour carVehicle
     let (gEngineForce, gBrakingForce) = case (up,down) of
-            (False,True)    -> (0,5*120)
+            (False,True) | currentSpeed > 0 -> (0,5*120)
+                         | otherwise        -> (-10*120,0)
             (True,False)    -> (15*120,0)
             _               -> (0,0)
     btRaycastVehicle_applyEngineForce carVehicle gEngineForce 2
@@ -143,7 +163,6 @@ mkVehicle dw chassisShape mass wheels = do
     vehicleRayCaster <- btDefaultVehicleRaycaster dw
     vehicle <- btRaycastVehicle tuning carChassis vehicleRayCaster
     btCollisionObject_setActivationState carChassis 4 -- #define DISABLE_DEACTIVATION 4
-    btDynamicsWorld_addVehicle dw vehicle
 
     btRaycastVehicle_setCoordinateSystem vehicle 0 1 2
     let wheelDirectionCS0       = Vec3 0 (-1) 0
@@ -179,4 +198,5 @@ mkVehicle dw chassisShape mass wheels = do
         print =<< btWheelInfo_m_frictionSlip_get wheel
         print =<< btWheelInfo_m_rollInfluence_get wheel
     -}
+    removeCar dw vehicle
     return (carMotionSate,carChassis,vehicle)

@@ -37,12 +37,21 @@ import Zip
 import GameGraphics
 import MeshUtil
 
+bitmaps :: [(SB.ByteString,Bitmap)]
+bitmaps = concat [T.toList $ loadBitmap k | k <- T.keys archive, ".pvs" == takeExtensionCI (SB.unpack k)]
+
 -- game specific resource handling
 loadRes :: SB.ByteString -> T.Trie LB.ByteString
 loadRes = readResources . unpackResource . readZipFile
 
+loadRawRes :: SB.ByteString -> T.Trie LB.ByteString
+loadRawRes = readResources . readZipFile
+
 loadMesh :: SB.ByteString -> T.Trie [Mesh]
 loadMesh = fmap (toMesh . runGet getModel) . loadRes
+
+loadBitmap :: SB.ByteString -> T.Trie Bitmap
+loadBitmap = fmap (runGet getBitmap) . loadRes
 
 loadCarMesh :: SB.ByteString -> T.Trie [Mesh]
 loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) $! loadRes n
@@ -118,12 +127,21 @@ loadCarWheels n = [wheel vl $ prIndices p | let Model vl pl = m ! "car0", p <- p
         v i = let (a,b,c) = vl !! i in Vec3 a b c
     car0ScaleFactor = scaleFactor / 20
 
-loadCar :: String -> (T.Trie [Mesh], Car, [(Vec3, Float, Float)])
-loadCar n = (mesh,runGet getCar $ carRes ! "simd",wheels)
+loadCar :: String -> (T.Trie [Mesh], Car, [(Vec3, Float, Float)], T.Trie Bitmap)
+loadCar n = (mesh,car,wheels,bitmaps)
   where
     mesh = loadCarMesh $ SB.pack $ "ST" ++ n ++ ".P3S"
-    carRes = loadRes $ SB.pack $ "CAR" ++ n ++ ".RES"
+    carRes = loadRawRes $ SB.pack $ "CAR" ++ n ++ ".RES"
+    car = runGet (getCar carDesc carName) $ carRes ! "simd"
+      where
+        lineBreak ']' = '\n'
+        lineBreak a = a
+        carDesc = map lineBreak $ runGet getString' $ carRes ! "edes"
+        carName = runGet getString' $ carRes ! "gnam"
     wheels = loadCarWheels $ SB.pack $ "ST" ++ n ++ ".P3S"
+    bitmaps = T.unionL bitmapsA bitmapsB
+    bitmapsA = loadBitmap $ SB.pack $ "STDA" ++ n ++ ".PVS"
+    bitmapsB = loadBitmap $ SB.pack $ "STDB" ++ n ++ ".PVS"
 
 loadTrack :: SB.ByteString -> IO ([(Proj4, [Mesh])], [(Proj4, [Mesh])], (Float, Vec3))
 loadTrack trkFile = do
@@ -182,28 +200,38 @@ loadTrack trkFile = do
         return (scalingUniformProj4 (y*0.4+0.3) .*. rotMatrixProj4 a (Vec3 0 1 0) .*. translation (Vec3 x (y*1500+600) z), m)
     return (terrain ++ clouds ++ fence, track,startPos)
 
-data StuntsData
-    = StuntsData
+data CarData
+    = CarData
     { carMesh       :: [Mesh]
     , wheels        :: [(Vec3,Float,Float,[Mesh])]
+    , carSimModel   :: Car
+    , carBitmaps    :: T.Trie Bitmap
+    }
+
+data StuntsData
+    = StuntsData
+    { cars          :: [CarData]
     , terrainMesh   :: [Mesh]
     , trackMesh     :: [Mesh]
     , startPosition :: (Float,Vec3)
-    , carSimModel   :: Car
     }
 
 readStuntsData :: Int -> SB.ByteString -> IO StuntsData
 readStuntsData carNum trkFile = do
     (terrain,track,startPos) <- loadTrack trkFile
-    let cars = map loadCar ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
-        (carModel,carSim,carWheels) = cars !! (carNum `mod` 11)
+    let cars = map (mkCarData . loadCar) ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
+        mkCarData (carModel,carSim,carWheels,carBmps) =
+            CarData
+            { carMesh     = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- carModel ! "car0"]
+            , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- carWheels]
+            , carSimModel = carSim
+            , carBitmaps  = carBmps
+            }
     return $! StuntsData
-        { carMesh       = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- carModel ! "car0"]
-        , wheels        = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- carWheels]
+        { cars          = cars
         , terrainMesh   = [transformMesh' p m | (p,ml) <- terrain, m <- ml]
         , trackMesh     = [transformMesh' p m | (p,ml) <- track, m <- ml]
         , startPosition = startPos
-        , carSimModel   = carSim
         }
 
 takeExtensionCI = map toLower . takeExtension
@@ -211,11 +239,10 @@ isPrefixOfCI a b = isPrefixOf a $ map toLower b
 
 -- generic resource handling
 archive :: T.Trie SB.ByteString
+{-# NOINLINE archive #-} 
 archive = unsafePerformIO $! do
     a <- concat <$> (mapM readArchive =<< filter (\n -> ".zip" == takeExtensionCI n) <$> getDirectoryContents ".")
-    --a <- readArchive "newstunts.zip"
-    --b <- readArchive "STUNTS11.ZIP"
-    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) a -- $ a ++ b
+    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) a
     print $ T.keys ar
     return ar
 
@@ -349,7 +376,7 @@ toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
 
     genMat pr = (Vec4 r g b 1, p, z, shiny)
       where
-        i = head (prMaterials pr)
+        i = (cycle $ prMaterials pr) !! 1
         Material pattern rgb _ shiny = materialMap IM.! i
         r = fromIntegral (rgb `shiftR` 16) / 255
         g = fromIntegral ((rgb `shiftR` 8) .&. 0xff) / 255

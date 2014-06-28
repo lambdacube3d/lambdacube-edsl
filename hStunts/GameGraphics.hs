@@ -54,6 +54,10 @@ get4Z v = let V4 _ _ z _ = unpack' v in z
 upwards :: Vec3
 upwards = Vec3 0 1 0
 
+v2FF :: V2F -> Exp F V2F
+v2FF = Const
+
+
 {-
 data Primitive
     = Primitive
@@ -142,7 +146,7 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         (_lightViewPos,_colour,pos,_eyePos,_normal,pattern,_zBias,_shiny) = untup8 attr
 
     frag :: Exp F (M44F,V4F,V3F,V3F,V3F,Int32,Float,Float) -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
-    frag attr = FragmentOutDepth adjustedDepth (litColour :. ZT)
+    frag attr = FragmentOutDepth adjustedDepth (clamp' litColour (floatF 0) (floatF 1) :. ZT)
       where
         l = normalize' (trimV4 (worldView @*. snoc lightDirection 0))
         e = normalize' (neg' eyePos)
@@ -468,3 +472,55 @@ lightProjection nearDepth farDepth fieldOfView aspectRatio worldViewMat =
       where
         a = (y1-y0)/(x1-x0)
         b = y0-a*x0
+
+addHUD fb = renderScreen frag
+  where
+    frag uv = FragmentOutRastDepth $ clamp' smp (floatF 0) (floatF 1) :. ZT
+      where
+        uv' = pack' (V2 u (floatF 1 @- v))
+        V2 u v = unpack' uv
+        smp = texture' (Sampler LinearFilter ClampToEdge $ TextureSlot "hudTexture" $ Texture2D (Float RGBA) n1) uv'
+
+    renderScreen = PrjFrameBuffer "" tix0 . renderScreen'
+
+    renderScreen' frag = Accumulate fragCtx PassAll frag rast fb
+      where
+        fragCtx = AccumulationContext Nothing $ DepthOp {-Less-}Always True:.ColorOp blend (one' :: V4B):.ZT
+        rast    = Rasterize triangleCtx prims
+        prims   = Transform vert input
+        input   = Fetch "hud" Triangles (IV2F "position")
+
+        hudTransfrom :: Exp V M44F
+        hudTransfrom = Uni (IM44F "hudTransform")
+
+        vert :: Exp V V2F -> VertexOut () V2F
+        vert uv = VertexOut (hudTransfrom @*. v4) (Const 1) ZT (NoPerspective uv':.ZT)
+          where
+            v4      = pack' $ V4 u v (floatV 0) (floatV 1)
+            V2 u v  = unpack' uv
+            uv'     = uv @* floatV 0.5 @+ floatV 0.5
+
+pixelize w h i = renderScreen frag
+  where
+    frag uv = FragmentOut $ smp uv :. ZT
+      where
+        smp coord = texture' (Sampler PointFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 w h) NoMip [i]) coord
+
+    renderScreen :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (Image 1 V4F)
+    renderScreen = PrjFrameBuffer "" tix0 . renderScreen'
+
+    renderScreen' :: (Exp F V2F -> FragmentOut (Color V4F :+: ZZ)) -> Exp Obj (FrameBuffer 1 V4F)
+    renderScreen' frag = Accumulate fragCtx PassAll frag rast clear
+      where
+        fragCtx = AccumulationContext Nothing $ ColorOp NoBlending (one' :: V4B):.ZT
+        clear   = FrameBuffer (ColorImage n1 (V4 0 0 0 1):.ZT)
+        rast    = Rasterize triangleCtx prims
+        prims   = Transform vert input
+        input   = Fetch "Quad" Triangles (IV2F "position")
+
+        vert :: Exp V V2F -> VertexOut () V2F
+        vert uv = VertexOut v4 (Const 1) ZT (NoPerspective uv':.ZT)
+          where
+            v4      = pack' $ V4 u v (floatV 1) (floatV 1)
+            V2 u v  = unpack' uv
+            uv'     = uv @* floatV 0.5 @+ floatV 0.5
