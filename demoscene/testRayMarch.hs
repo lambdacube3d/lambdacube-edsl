@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, MultiParamTypeClasses, DataKinds #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, MultiParamTypeClasses, DataKinds, FlexibleContexts #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)

@@ -29,6 +29,12 @@ floatV = Const
 floatF :: Float -> Exp F Float
 floatF = Const
 
+v3F :: V3F -> Exp F V3F
+v3F = Const
+
+v4F :: V4F -> Exp F V4F
+v4F = Const
+
 intF :: Int32 -> Exp F Int32
 intF = Const
 
@@ -181,10 +187,10 @@ vsm = Accumulate fragCtx PassAll calcLuminance rast clear
 
     sampler = Sampler LinearFilter ClampToEdge shadowMapBlur
     --Texture (Exp Obj) dim arr t ar
-    shadowMap :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
+    --shadowMap :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
     shadowMap = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
 
-    shadowMapBlur :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
+    --shadowMapBlur :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
     shadowMapBlur = Texture (Texture2D (Float RG) n1) (V2 512 512) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurVH $ PrjFrameBuffer "blur" tix0 moments]
 {-
 tx :: Exp Obj (Image 1 (V2 Float))

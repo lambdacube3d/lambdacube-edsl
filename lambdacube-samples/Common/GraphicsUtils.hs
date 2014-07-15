@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, NamedFieldPuns, ParallelListComp, DataKinds #-}
+{-# LANGUAGE OverloadedStrings, NamedFieldPuns, ParallelListComp, DataKinds, FlexibleContexts #-}
 
 module Common.GraphicsUtils where
 

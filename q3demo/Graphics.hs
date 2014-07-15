@@ -330,7 +330,7 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
   where
     offset  = NoOffset--Offset (0) (-10)
     fragCtx = AccumulationContext Nothing $ DepthOp Lequal True:.ColorOp NoBlending (one' :: V4B):.ZT
-    rastCtx = TriangleCtx CullNone (PolygonLine 2) offset LastVertex
+    rastCtx = TriangleCtx CullNone (PolygonLine 1) offset LastVertex
     rast    = Rasterize rastCtx prims
     prims   = Transform vert input
     input   = Fetch "missing shader" Triangles (IV3F "position", IV4F "color")

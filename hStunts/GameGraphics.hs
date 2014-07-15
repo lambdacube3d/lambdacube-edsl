@@ -209,10 +209,10 @@ stuntsGFX = {-blurVH $ PrjFrameBuffer "blur" tix0 $ -}Accumulate fragCtx (Filter
         
     shadowSampler slice = Sampler LinearFilter ClampToEdge (shadowMap slice)
     
-    shadowMap :: Int -> Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
+    --shadowMap :: Int -> Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
     shadowMap slice = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 (moments slice)]
 
-    shadowMapBlur :: Int -> Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
+    --shadowMapBlur :: Int -> Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
     shadowMapBlur slice = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 $ blurDepth slice $ PrjFrameBuffer "blur" tix0 (moments slice)]
     
     --shadowMapEnvelope :: Texture GP Tex2D SingleTex (Regular Float) RGBA

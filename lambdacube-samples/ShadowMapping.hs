@@ -1,5 +1,5 @@
 {-# OPTIONS -cpp #-}
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds, FlexibleContexts #-}
 
 import Control.Applicative hiding (Const)
 import Control.Monad
@@ -317,10 +317,10 @@ vsm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
 
     sampler = Sampler LinearFilter ClampToEdge shadowMapBlur
     
-    shadowMap :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
+    --shadowMap :: Exp Obj (Texture Tex2D SingleTex (Regular Float) RG)
     shadowMap = Texture (Texture2D (Float RG) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 moments]
 
-    shadowMapBlur :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) RG
+    --shadowMapBlur :: Exp Obj (Texture Tex2D SingleTex (Regular Float) RG)
     shadowMapBlur = Texture (Texture2D (Float RG) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 blurredMoments]
       where
         blurredMoments = blur blurCoefficients (PrjFrameBuffer "blur" tix0 moments)
@@ -375,5 +375,5 @@ sm = Accumulate accCtx PassAll frag (Rasterize triangleCtx prims) clearBuf
 
     sampler = Sampler PointFilter ClampToEdge shadowMap
     
-    shadowMap :: Texture (Exp Obj) Tex2D SingleTex (Regular Float) Red
+    --shadowMap :: Exp Obj (Texture Tex2D SingleTex (Regular Float) Red)
     shadowMap = Texture (Texture2D (Float Red) n1) (V2 shadowMapSize shadowMapSize) NoMip [PrjFrameBuffer "shadowMap" tix0 depth]

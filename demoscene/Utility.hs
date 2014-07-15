@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, OverloadedStrings, DataKinds #-}
+{-# LANGUAGE TypeOperators, OverloadedStrings, DataKinds, FlexibleContexts #-}
 module Utility where
 
 import LC_API

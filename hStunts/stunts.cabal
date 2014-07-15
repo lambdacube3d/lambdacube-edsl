@@ -59,7 +59,7 @@ Executable stunts
   Main-IS:        Main.hs
   Extensions:     CPP
   GHC-Options:    -Wall -fno-warn-unused-do-bind -fno-warn-name-shadowing -O2 -fspec-constr-count=6 -rtsopts
-  Build-Depends:  base >= 4 && < 5, directory, random, mtl, lambdacube-core, bullet, elerea, GLFW-b == 0.1.0.5, bytestring, binary,
+  Build-Depends:  base >= 4 && < 5, directory, random, mtl, lambdacube-core, bullet, elerea, GLFW-b == 0.1.0.5, bytestring, binary < 7.1,
                   containers, vector, vect, OpenGLRaw, bytestring-trie, zlib, mmap, filepath, Rasterific < 0.3, FontyFruity, JuicyPixels
 
   if flag(Capture)

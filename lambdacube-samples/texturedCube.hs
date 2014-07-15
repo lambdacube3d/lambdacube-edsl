@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds, FlexibleContexts, GADTs #-}
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Control.Monad
@@ -10,8 +10,7 @@ import LC_API
 import LC_Mesh
 
 import Codec.Image.STB hiding (Image)
-
-import Paths_lambdacube_samples (getDataFileName)
+import FX
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
 --  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
@@ -104,11 +103,11 @@ cube = Mesh
     , mGPUData      = Nothing
     }
 
-texturing :: Exp Obj (VertexStream Triangle (V3F,V2F)) -> Exp Obj (FrameBuffer 1 (Float,V4F))
-texturing objs = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
+texturing :: Exp Obj (Texture Tex2D SingleTex (Regular Float) RGBA) -> Exp Obj (VertexStream Triangle (V3F,V2F)) -> Exp Obj (FrameBuffer 1 (Float,V4F))
+texturing tex objs = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
   where
     rasterCtx :: RasterContext Triangle
-    rasterCtx = TriangleCtx (CullFront CW) PolygonFill NoOffset LastVertex
+    rasterCtx = TriangleCtx (CullNone) PolygonFill NoOffset LastVertex
 
     fragmentCtx :: AccumulationContext (Depth Float :+: (Color (V4 Float) :+: ZZ))
     fragmentCtx = AccumulationContext Nothing $ DepthOp Less True:.ColorOp NoBlending (one' :: V4B):.ZT
@@ -134,8 +133,6 @@ texturing objs = Accumulate fragmentCtx PassAll fragmentShader fragmentStream em
 
     fragmentShader :: Exp F V2F -> FragmentOut (Depth Float :+: Color V4F :+: ZZ)
     fragmentShader uv = FragmentOutRastDepth $ color tex uv :. ZT
-      where
-        tex = TextureSlot "myTextureSampler" $ Texture2D (Float RGBA) n1
 
 v3v4 :: Exp s V3F -> Exp s V4F
 v3v4 v = let V3 x y z = unpack' v in pack' $ V4 x y z (Const 1)
@@ -149,15 +146,29 @@ main = do
     openWindow defaultDisplayOptions
         { displayOptions_width              = 1024
         , displayOptions_height             = 768
+        , displayOptions_numRedBits         = 8
+        , displayOptions_numGreenBits       = 8
+        , displayOptions_numBlueBits        = 8
+        , displayOptions_numAlphaBits       = 8
+        , displayOptions_numDepthBits       = 24
         , displayOptions_openGLVersion      = (3,2)
         , displayOptions_openGLProfile      = CoreProfile
         }
     setWindowTitle "LambdaCube 3D Textured Cube"
 
-    let frameImage :: Exp Obj (Image 1 V4F)
-        frameImage = PrjFrameBuffer "" tix0 $ texturing $ Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV")
+    let texture = TextureSlot "myTextureSampler" $ Texture2D (Float RGBA) n1
+        frameImage :: Exp Obj (Image 1 V4F)
+        frameImage = PrjFrameBuffer "" tix0 $ texturing texture (Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV"))
 
-    renderer <- compileRenderer $ ScreenOut frameImage
+        fx img _ = PrjFrameBuffer "" tix0 $ texturing (imgToTex $ postProcess img) (Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV"))
+        imgToTex img = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
+
+        frameImageFX = foldl fx frameImage [1..4]
+
+    --renderer <- compileRenderer $ ScreenOut $ frameImage
+    --renderer <- compileRenderer $ ScreenOut $ blur gaussFilter9 $ frameImage
+    renderer <- compileRenderer $ ScreenOut $ frameImageFX
+    initUtility renderer
 
     let uniformMap      = uniformSetter renderer
         texture         = uniformFTexture2D "myTextureSampler" uniformMap
@@ -165,17 +176,18 @@ main = do
         setWindowSize   = setScreenSize renderer
 
     setWindowSize 1024 768
-    Right img <- loadImage =<< getDataFileName "hello.png"
+    Right img <- loadImage "hello.png" -- "uvtemplate.bmp"
     texture =<< compileTexture2DRGBAF True False img
 
     gpuCube <- compileMesh cube
     addMesh renderer "stream" gpuCube []
 
-    let cm  = fromProjective (lookat (Vec3 4 3 3) (Vec3 0 0 0) (Vec3 0 1 0))
+    --let cm  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
+    let cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
         pm  = perspective 0.1 100 (pi/4) (1024 / 768)
         loop = do
             t <- getTime
-            let angle = pi / 2 * realToFrac t
+            let angle = pi / 24 * realToFrac t
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
             mvp $! mat4ToM44F $! mm .*. cm .*. pm
             render renderer

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, ParallelListComp, DataKinds #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, ParallelListComp, DataKinds, FlexibleContexts #-}
 
 import Control.Monad
 import Control.Monad.Fix

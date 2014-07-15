@@ -22,7 +22,7 @@ import Codec.Image.STB hiding (Image)
 
 quad :: Mesh
 quad = Mesh
-    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
+    { mAttributes   = T.singleton "position" $ A_V2F $ SV.fromList $ [V2 a b, V2 a a, V2 b a, V2 b a, V2 b b, V2 a b]
     , mPrimitive    = P_Triangles
     , mGPUData      = Nothing
     }
@@ -158,8 +158,8 @@ initCommon title = do
         , displayOptions_numBlueBits        = 8
         , displayOptions_numAlphaBits       = 8
         , displayOptions_numDepthBits       = 24
-        , displayOptions_width              = 512
-        , displayOptions_height             = 512
+        , displayOptions_width              = 1024
+        , displayOptions_height             = 768
         , displayOptions_windowIsResizable  = True
         , displayOptions_openGLVersion      = (3,2)
         , displayOptions_openGLProfile      = CoreProfile
