@@ -114,6 +114,10 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_RG32F
     , gl_RG32I
     , gl_RG32UI
+    , gl_RGB
+    , gl_RGB32F
+    , gl_RGB32I
+    , gl_RGB32UI
     , gl_RGBA
     , gl_RGBA32F
     , gl_RGBA32I
@@ -652,7 +656,12 @@ fromGLUniformType _ = error "Failed fromGLType"
 printShaderLog :: GLuint -> IO ()
 printShaderLog o = do
     i <- glGetShaderiv1 gl_INFO_LOG_LENGTH o
-    allocaArray (fromIntegral i) $! \ps -> glGetShaderInfoLog o (fromIntegral i) nullPtr ps >> SB.packCString (castPtr ps) >>= SB.putStr
+    when (i > 0) $
+      alloca $ \sizePtr -> allocaArray (fromIntegral i) $! \ps -> do
+        glGetShaderInfoLog o (fromIntegral i) sizePtr ps
+        size <- peek sizePtr
+        log <- SB.packCStringLen (castPtr ps, fromIntegral size)
+        SB.putStrLn log
 
 glGetShaderiv1 :: GLenum -> GLuint -> IO GLint
 glGetShaderiv1 pname o = alloca $! \pi -> glGetShaderiv o pname pi >> peek pi
@@ -663,7 +672,12 @@ glGetProgramiv1 pname o = alloca $! \pi -> glGetProgramiv o pname pi >> peek pi
 printProgramLog :: GLuint -> IO ()
 printProgramLog o = do
     i <- glGetProgramiv1 gl_INFO_LOG_LENGTH o
-    allocaArray (fromIntegral i) $! \ps -> glGetProgramInfoLog o (fromIntegral i) nullPtr ps >> SB.packCString (castPtr ps) >>= SB.putStr
+    when (i > 0) $
+      alloca $ \sizePtr -> allocaArray (fromIntegral i) $! \ps -> do
+        glGetProgramInfoLog o (fromIntegral i) sizePtr ps
+        size <- peek sizePtr
+        log <- SB.packCStringLen (castPtr ps, fromIntegral size)
+        SB.putStrLn log
 
 compileShader :: GLuint -> [ByteString] -> IO ()
 compileShader o srcl = withMany SB.useAsCString srcl $! \l -> withArray l $! \p -> do
@@ -785,10 +799,13 @@ textureDataTypeToGLType (WordT  Red)    = gl_R32UI
 textureDataTypeToGLType (FloatT RG)     = gl_RG32F
 textureDataTypeToGLType (IntT   RG)     = gl_RG32I
 textureDataTypeToGLType (WordT  RG)     = gl_RG32UI
+textureDataTypeToGLType (FloatT RGB)    = gl_RGB32F
+textureDataTypeToGLType (IntT   RGB)    = gl_RGB32I
+textureDataTypeToGLType (WordT  RGB)    = gl_RGB32UI
 textureDataTypeToGLType (FloatT RGBA)   = gl_RGBA32F
 textureDataTypeToGLType (IntT   RGBA)   = gl_RGBA32I
 textureDataTypeToGLType (WordT  RGBA)   = gl_RGBA32UI
-textureDataTypeToGLType a = error $ "FIXME: This texture format is not yet supported" ++ show a
+textureDataTypeToGLType a = error $ "FIXME: This texture format is not yet supported " ++ show a
 
 textureDataTypeToGLArityType :: TextureDataType -> GLenum
 textureDataTypeToGLArityType (FloatT Red)    = gl_RED
@@ -797,10 +814,13 @@ textureDataTypeToGLArityType (WordT  Red)    = gl_RED
 textureDataTypeToGLArityType (FloatT RG)     = gl_RG
 textureDataTypeToGLArityType (IntT   RG)     = gl_RG
 textureDataTypeToGLArityType (WordT  RG)     = gl_RG
+textureDataTypeToGLArityType (FloatT RGB)    = gl_RGB
+textureDataTypeToGLArityType (IntT   RGB)    = gl_RGB
+textureDataTypeToGLArityType (WordT  RGB)    = gl_RGB
 textureDataTypeToGLArityType (FloatT RGBA)   = gl_RGBA
 textureDataTypeToGLArityType (IntT   RGBA)   = gl_RGBA
 textureDataTypeToGLArityType (WordT  RGBA)   = gl_RGBA
-textureDataTypeToGLArityType a = error $ "FIXME: This texture format is not yet supported" ++ show a
+textureDataTypeToGLArityType a = error $ "FIXME: This texture format is not yet supported " ++ show a
 {-
 Texture and renderbuffer color formats (R):
     R11F_G11F_B10F

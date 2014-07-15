@@ -24,7 +24,7 @@ module BiMap (
 import qualified Data.Map    as M
 import qualified Data.IntMap as IM
 
-data BiMap a = BiMap (M.Map a Int) (IM.IntMap a)
+data BiMap a = BiMap (M.Map a Int) (IM.IntMap a) deriving (Show,Read)
 
 -- Find a key for a value
 lookup_key :: Ord a => a -> BiMap a -> Maybe Int
@@ -46,9 +46,6 @@ insert v (BiMap m im) = (k, BiMap m' im')
 
 empty :: BiMap a
 empty = BiMap (M.empty) (IM.empty)
-
-instance Show a => Show (BiMap a) where
-    show (BiMap _ m) =  "BiMap" ++ show (IM.toList m)
 
 size :: BiMap a -> Int
 size (BiMap _ m) = IM.size m

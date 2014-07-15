@@ -79,6 +79,8 @@ import LC_B_GLSLCodeGen
 import LC_B_Traversals
 import LC_B_GLCompile
 
+import qualified Data.IntMap as IM
+import BiMap
 -- Renderer
 
 nubS :: Ord a => [a] -> [a]
@@ -87,8 +89,20 @@ nubS = Set.toList . Set.fromList
 findFetch :: DAG -> Exp -> Maybe Exp
 findFetch dag f = listToMaybe [a | a@Fetch {} <- drawOperations dag f]
 
+---------------------------
 -- odered according pass dependency (topology order)
+{-
+findFrameBuffer
+gpUniverse
+-}
 orderedFrameBuffersFromGP :: DAG -> Exp -> [Exp]
+orderedFrameBuffersFromGP dag r = es --[e | e@(Accumulate{}) <- IM.elems m]
+  where
+    rfb = findFrameBuffer dag r
+    txl = concat [map (findFrameBuffer dag . toExp dag) l | Texture _ _ _ l <- IM.elems m]
+    es = map (toExp dag) . nubS . map (toExpId dag) $ rfb : txl
+    BiMap _ m = dagExp dag
+{-
 orderedFrameBuffersFromGP dag orig = order deps
   where 
     deps :: Map Exp (Set Exp)
@@ -110,9 +124,11 @@ orderedFrameBuffersFromGP dag orig = order deps
       where
         leaves = Map.keys noDeps
         (noDeps,hasDeps) = Map.partition Set.null d
+-}
+---------------------------
 
-printGLStatus = checkGL >>= print
-printFBOStatus = checkFBO >>= print
+printGLStatus = checkGL >>= print_
+printFBOStatus = checkFBO >>= print_
 
 mkSlotDescriptor :: Set Exp -> IO SlotDescriptor
 mkSlotDescriptor gps = SlotDescriptor gps <$> newIORef Set.empty
@@ -166,6 +182,8 @@ mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj f = ca
                     MV.write texUnitState texUnitIdx texObj'
                     glActiveTexture $ gl_TEXTURE0 + fromIntegral texUnitIdx
                     glBindTexture gl_TEXTURE_2D texObj
+                    putStrLn_ $ "CMD: glActiveTexture " ++ show texUnitIdx
+                    putStrLn_ $ "CMD: glBindTexture gl_TEXTURE_2D " ++ show texObj
                     --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
 
         drawRef <- newIORef $ ObjectSet (return ()) Map.empty
@@ -178,7 +196,7 @@ mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj f = ca
             , drawObjectsIORef  = drawRef
             , fragmentOutCount  = outColorCnt
             }
-    _ -> error $ "GP node type error: should be FrameBuffer but got: " ++ (head $ words $ show f)
+    _ -> error $ "GP node type error: should be FrameBuffer but got: " ++ (head $ (words $ show f) ++ [])
 
 -- FIXME: currently we expect ScreenOut to be the last operation
 mkPassSetup :: IORef (Word,Word) -> DAG -> Map Exp GLuint -> (Exp -> [Exp]) -> (Bool,Int,Int) -> Exp -> IO (IO (), IO ())
@@ -188,6 +206,7 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
         let setup = do
                 (screenW,screenH) <- readIORef screenSizeIORef
                 glViewport 0 0 (fromIntegral screenW) (fromIntegral screenH)
+                putStrLn_ $ "CMD: glBindFramebuffer gl_DRAW_FRAMEBUFFER 0"
                 glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
                 let fboMapping = [if i == outIdx then gl_BACK_LEFT else gl_NONE | i <- [1..outCnt]]
                 withArray fboMapping $ glDrawBuffers (fromIntegral $ length fboMapping)
@@ -230,9 +249,9 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
         putStr "    - mappig setup: " >> printGLStatus
 
         -- check all texture size maches
-        unless (all (== head texSizes) texSizes) $ error ("Framebuffer attachment size mismatch! \n" ++ "  - sizes: " ++ show texSizes)
+        unless (all (== head (texSizes ++ error "texSizes")) texSizes) $ error ("Framebuffer attachment size mismatch! \n" ++ "  - sizes: " ++ show texSizes)
         -- create and attach depth buffer
-        let VV2U (V2 depthW depthH) = head texSizes
+        let VV2U (V2 depthW depthH) = head $ texSizes ++ error "texSizes2"
         when hasDepthOp $ do
             {-
             depthTex <- alloca $! \pto -> glGenRenderbuffers 1 pto >> peek pto
@@ -246,9 +265,9 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
             -}
             depthTex <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
             putStr "    - alloc depth texture: " >> printGLStatus
-            let layerCnt = head layerCnts
+            let layerCnt = head $ layerCnts ++ error "layerCnts"
                 txTarget = if layerCnt > 1 then gl_TEXTURE_2D_ARRAY else gl_TEXTURE_2D
-                internalFormat = fromIntegral gl_DEPTH_COMPONENT32
+                internalFormat = fromIntegral gl_DEPTH_COMPONENT --32
                 dataFormat = fromIntegral gl_DEPTH_COMPONENT
             glBindTexture txTarget depthTex
             putStr "    - bind depth texture: " >> printGLStatus
@@ -273,7 +292,10 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
         putStr "    - check FBO completeness: " >> printFBOStatus
 
         let renderAct = do
+                --printGLStatus
+                putStrLn_ $ "CMD: glBindFramebuffer gl_DRAW_FRAMEBUFFER " ++ show glFBO
                 glBindFramebuffer gl_DRAW_FRAMEBUFFER glFBO
+                printGLStatus
                 glViewport 0 0 (fromIntegral depthW) (fromIntegral depthH)
                 --putStr " -- FBO bind: " >> printGLStatus
                 --putStr " -- FBO status: " >> printFBOStatus
@@ -307,7 +329,9 @@ compileRenderer dag (ScreenOut img) = do
                        , let [t] = codeGenType $ expType dag s]
 
         ordFBs = orderedFrameBuffersFromGP dag gp
-        allGPs = nubS $ concatMap (gpUniverse' dag) ordFBs
+        allGPs = Set.toList $ Set.unions $ map (Set.fromList . gpUniverse' dag) $ nubS ordFBs
+        --gpunis = gpUniverseV dag
+        --allGPs = Set.toList $ Set.unions $ map (Set.fromList . gpUniverse' dag) $ map (toExpId dag) $ nubS ordFBs
 
         -- collect slot info: name, primitive type, stream input, uniform input
         (slotStreamList, slotUniformList, slotGPList) = unzip3
@@ -321,8 +345,12 @@ compileRenderer dag (ScreenOut img) = do
         slotUniformTrie = foldl' (T.mergeBy (\a b -> Just (T.unionL a b))) T.empty slotUniformList
         (uniformNames,uniformTypes) = unzip $ nubS $ concatMap (T.toList . snd) $ T.toList slotUniformTrie
 
-    putStrLn $ "GP universe size:  " ++ show (length allGPs)
-    putStrLn $ "Exp universe size: " ++ show (length (nubS $ expUniverse' dag gp))
+    putStrLn_ "calculate exp universe..."
+    print_ $ map (toExpId dag) ordFBs
+    print_ ordFBs
+    putStrLn_ $ "Exp universe size: " ++ show (length (nubS $ expUniverse' dag gp))
+    putStrLn_ $ "ord GP size:  " ++ show (length ordFBs)
+    putStrLn_ $ "GP universe size:  " ++ show (length allGPs)
 
     -- create RenderState
     rendState <- mkRenderState
@@ -370,9 +398,10 @@ compileRenderer dag (ScreenOut img) = do
         , slotStream            = slotStreamTrie
         , uniformSetter         = uniformSetterTrie
         , render                = do
-                                    --print " * Frame Started"
+                                    --print_ " * Frame Started"
+                                    putStrLn_ "CMD: render frame started"
                                     sequence_ passRender
-                                    --print " * Frame Ended"
+                                    --print_ " * Frame Ended"
         , dispose               = renderTexDispose >> sequence_ passDispose
         , setScreenSize         = \w h -> writeIORef screenSizeIORef (w,h)
 

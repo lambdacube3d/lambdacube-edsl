@@ -1,26 +1,4 @@
-{-# LANGUAGE        BangPatterns #-}
-{-# LANGUAGE        ConstraintKinds #-}
-{-# LANGUAGE        DataKinds #-}
-{-# LANGUAGE        DeriveDataTypeable #-}
-{-# LANGUAGE        EmptyDataDecls #-}
-{-# LANGUAGE        FlexibleContexts #-}
-{-# LANGUAGE        FlexibleInstances #-}
-{-# LANGUAGE        FunctionalDependencies #-}
-{-# LANGUAGE        GADTs #-}
-{-# LANGUAGE        ImpredicativeTypes #-}
-{-# LANGUAGE        KindSignatures #-}
-{-# LANGUAGE        MultiParamTypeClasses #-}
-{-# LANGUAGE        OverloadedStrings #-}
-{-# LANGUAGE        ParallelListComp #-}
-{-# LANGUAGE        Rank2Types #-}
-{-# LANGUAGE        ScopedTypeVariables #-}
-{-# LANGUAGE        StandaloneDeriving #-}
-{-# LANGUAGE        TupleSections #-}
-{-# LANGUAGE        TypeFamilies #-}
-{-# LANGUAGE        TypeOperators #-}
-{-# LANGUAGE        TypeSynonymInstances #-}
-{-# LANGUAGE        UndecidableInstances #-}
-module LC_C_Convert2 {-(convertGPOutput)-} where
+module LC_C_Convert2 {-(convertGPOutput)-} (convert) where
 
 import GHC.TypeLits
 
@@ -32,6 +10,7 @@ import qualified LC_T_APIType as T
 import qualified LC_T_DSLType as T hiding (Shadow)
 import qualified LC_T_PrimFun as T
 import qualified LC_T_HOAS as H
+import qualified LC_U_DeBruijn as U
 import LC_U_DeBruijn2
 import LC_U_APIType
 import LC_G_APIType
@@ -42,6 +21,145 @@ import Data.Reify
 import Data.Typeable
 import Data.Dynamic
 import Control.Applicative hiding (Const)
+import Data.Map (Map,(!))
+import qualified Data.Map as Map
+import qualified Data.IntMap as IM
+import Control.Monad.State
+import Data.List (elemIndex)
+import BiMap
+import qualified Data.Vector as V
+
+data ConvertState
+    = ConvertState
+    { lambdas   :: [Unique]
+    , expMap    :: Map Unique (TypedExp Unique, Maybe Unique)
+    , cvtMap    :: Map Unique (Ty,U.Exp)
+    }
+
+type C = State ConvertState
+
+cvt :: Unique -> C Unique
+cvt idx = do
+    s <- get
+    case expMap s ! idx of
+        (_,Just eId)    -> return eId
+        (e,Nothing)     -> convertExp idx e
+
+cvtList :: Unique -> C [Unique]
+cvtList idx = do
+    s <- get
+    case expMap s ! idx of
+        ((E ty e),_)  -> case e of
+            Nil         -> return []
+            Cons x xs   -> (:) <$> cvt x <*> cvtList xs
+            _           -> error "internal error (cvtList)"
+
+cvtTuple :: Unique -> C [Unique]
+cvtTuple idx = do
+    s <- get
+    case expMap s ! idx of
+        ((E ty e),_)  -> case e of
+            Nil         -> return []
+            Cons x xs   -> (:) <$> cvt x <*> cvtTuple xs
+            _           -> error "internal error (cvtTuple)"
+
+emit :: Unique -> Ty -> U.Exp -> C Unique
+emit idx ty e = do
+    ConvertState{..} <- get
+    let nextIdx = Map.size cvtMap
+        cvtMap' = Map.insert nextIdx (ty,e) cvtMap
+        expMap' = Map.adjust (\(e,Nothing) -> (e,Just nextIdx)) idx expMap
+    put $ ConvertState lambdas expMap' cvtMap'
+    return nextIdx
+
+convertExp :: Unique -> TypedExp Unique -> C Unique
+convertExp eIdx (E ty exp) = case exp of
+    Lam a b -> do
+        let add e = do
+                cm <- gets cvtMap
+                let idx = Map.size cm
+                modify (\s -> s {cvtMap = Map.insert idx (Unknown "Body",e) cm})
+                return idx
+        ls <- gets lambdas
+        modify (\s -> s {lambdas = a : ls})
+        v <- cvt a
+        f <- cvt b
+        modify (\s -> s {lambdas = ls})
+        emit eIdx ty =<< U.Lam <$> add (U.Body f)
+
+    Var                     -> do
+        ls <- gets lambdas
+        let Just i = elemIndex eIdx ls
+        emit eIdx ty $ U.Var i ""
+
+    -- Exp
+    Const a                 -> emit eIdx ty $ U.Const a
+    PrimVar a               -> emit eIdx ty $ U.PrimVar a
+    Uni a                   -> emit eIdx ty $ U.Uni a
+
+    Tup a                   -> emit eIdx ty =<< (\t -> U.Tup (reverse t)) <$> cvtTuple a
+    Prj a b                 -> emit eIdx ty =<< U.Prj a <$> cvt b
+    Cond a b c              -> emit eIdx ty =<< U.Cond <$> cvt a <*> cvt b <*> cvt c
+    PrimApp a b             -> emit eIdx ty =<< U.PrimApp a <$> cvt b
+    Sampler a b c           -> emit eIdx ty =<< U.Sampler a b <$> cvt c
+    Loop a b c d            -> emit eIdx ty =<< U.Loop <$> cvt a <*> cvt b <*> cvt c <*> cvt d
+
+    -- special tuple expressions
+    VertexOut a b c d       -> emit eIdx ty =<< U.VertexOut <$> cvt a <*> cvt b <*> cvtList c <*> cvtList d
+    GeometryOut a b c d e   -> emit eIdx ty =<< U.GeometryOut <$> cvt a <*> cvt b <*> cvt c <*> cvtList d <*> cvtList e
+    FragmentOut a           -> emit eIdx ty =<< U.FragmentOut <$> cvtList a
+    FragmentOutDepth a b    -> emit eIdx ty =<< U.FragmentOutDepth <$> cvt a <*> cvtList b
+    FragmentOutRastDepth a  -> emit eIdx ty =<< U.FragmentOutRastDepth <$> cvtList a
+
+    -- GP
+    Fetch a b c             -> emit eIdx ty $ U.Fetch a b c
+    Transform a b           -> emit eIdx ty =<< U.Transform <$> cvt a <*> cvt b
+    Reassemble a b          -> emit eIdx ty =<< U.Reassemble <$> cvt a <*> cvt b
+    Rasterize a b           -> emit eIdx ty =<< U.Rasterize a <$> cvt b
+    FrameBuffer a           -> emit eIdx ty $ U.FrameBuffer a
+    Accumulate a b c d e    -> emit eIdx ty =<< U.Accumulate a <$> cvt b <*> cvt c <*> cvt d <*> cvt e
+    PrjFrameBuffer a b c    -> emit eIdx ty =<< U.PrjFrameBuffer a b <$> cvt c
+    PrjImage a b c          -> emit eIdx ty =<< U.PrjImage a b <$> cvt c
+
+    -- Texture
+    TextureSlot a b         -> emit eIdx ty $ U.TextureSlot a b
+    Texture a b c d         -> emit eIdx ty =<< U.Texture a b c <$> cvtList d
+
+    -- Interpolated
+    Flat a                  -> emit eIdx ty =<< U.Flat <$> cvt a
+    Smooth a                -> emit eIdx ty =<< U.Smooth <$> cvt a
+    NoPerspective a         -> emit eIdx ty =<< U.NoPerspective <$> cvt a
+
+    GeometryShader a b c d e f  -> emit eIdx ty =<< U.GeometryShader a b c <$> cvt d <*> cvt e <*> cvt f
+
+    -- FragmentFilter
+    PassAll                 -> emit eIdx ty $ U.PassAll
+    Filter a                -> emit eIdx ty =<< U.Filter <$> cvt a
+
+    -- GPOutput
+    ImageOut a b c          -> emit eIdx ty =<< U.ImageOut a b <$> cvt c
+    ScreenOut a             -> emit eIdx ty =<< U.ScreenOut <$> cvt a
+    MultiOut a              -> emit eIdx ty =<< U.MultiOut <$> cvtList a
+    _ -> error $ "internal error (convertExp) " ++ show exp
+
+convert :: H.GPOutput a -> IO (U.Exp,U.DAG)
+convert e = do
+    g@(Graph l r) <- reifyGraph e
+    let s = ConvertState [] (Map.fromList [(i,(e,Nothing)) | (i,e) <- l]) Map.empty
+        (r',s') = runState (cvt r) s
+        tel = Map.toList $ cvtMap s'
+        (tl,el) = unzip [((i,t),(i,e)) | (i,(t,e)) <- tel]
+        emap  = IM.fromList el
+        bimap = BiMap (Map.fromList [(e,i) | (i,e) <- el]) emap
+        tmap  = IM.fromList tl
+        cmap  = IM.fromList [(i,2) | (i,_) <- tl] -- HINT: hack
+    print r >> mapM print l
+    print "----"
+    print r' >> mapM print tel
+    return (emap IM.! r',U.DAG bimap tmap cmap V.empty V.empty)
+
+saveCore :: String -> H.GPOutput a -> IO ()
+saveCore name e = convert e >>= writeFile (name ++ ".lcore") . show
 
 deriving instance Typeable H.VertexOut
 deriving instance Typeable H.GeometryOut
@@ -58,105 +176,107 @@ class NewVar a where
 instance Eq (H.Exp a b) where
     _ == _ = False
 
-instance (MuRef a,Typeable a, NewVar a, Typeable b, MuRef b, DeRef a ~ DeRef (a -> b),DeRef b ~ DeRef (a -> b)) => MuRef (a -> b) where
-  type DeRef (a -> b) = Exp
+data TypedExp a = E Ty (Exp a) deriving (Eq,Ord,Show,Typeable)
 
-  mapDeRef f fn = let v = mkVar $ toDyn fn 
-                  in Lam <$> f v <*> f (fn v)
+addType (e :: H.Exp a t) f = E (genTy (undefined :: t)) <$> f
+noType s f = E (Unknown s) <$> f
+
+instance (GPU a,MuRef (H.Exp f a),Typeable (H.Exp f a), NewVar (H.Exp f a), Typeable b, MuRef b, DeRef (H.Exp f a) ~ DeRef ((H.Exp f a) -> b),DeRef b ~ DeRef ((H.Exp f a) -> b)) => MuRef ((H.Exp f a) -> b) where
+  type DeRef ((H.Exp f a) -> b) = TypedExp
+
+  mapDeRef f (fn :: (H.Exp f a) -> b) = let v = mkVar $ toDyn fn 
+                  in addType (undefined :: H.Exp f a) $ Lam <$> f v <*> f (fn v)
+
 
 instance MuRef (H.Exp a b) where
-  type DeRef (H.Exp a b) = Exp
+  type DeRef (H.Exp a b) = TypedExp
 
-  mapDeRef f (H.Var t)        = pure Var
-  mapDeRef f (H.Const t)      = pure (Const $ T.toValue t)
-  mapDeRef f (H.PrimVar i)    = pure (PrimVar $ fst $ T.toInput i)
-  mapDeRef f (H.Uni i)        = pure (Uni $ fst $ T.toInput i)
-  mapDeRef f (H.Cond c t e)   = Cond <$> f c <*> f t <*> f e
-  mapDeRef f (H.PrimApp p a)  = PrimApp (convertPrimFun p) <$> f a
-  mapDeRef f (H.Tup t)        = Tup <$> f t
-  mapDeRef f (H.Prj idx (e :: H.Exp stage e') :: H.Exp stage' t') = Prj (genTupLen (prjToInt idx) (undefined :: e')) <$> f e
-  mapDeRef f (H.Sampler a b c)  = Sampler a b <$> f c
-  mapDeRef f (H.Loop a b c d)   = Loop <$> f a <*> f b <*> f c <*> f d
-  mapDeRef f (H.Fetch a b c)    = pure $ Fetch a (convertFetchPrimitive b) (T.toInputList c)
-  mapDeRef f (H.Transform a b)  = Transform <$> f a <*> f b
-  mapDeRef f (H.Reassemble a b) = Reassemble <$> f a <*> f b
-  mapDeRef f (H.Rasterize a b)  = Rasterize (convertRasterContext a) <$> f b
-  mapDeRef f (H.FrameBuffer a)  = pure $ FrameBuffer $ convertFrameBuffer a
-  mapDeRef f (H.Accumulate a b c d e) = Accumulate (convertAccumulationContext a) <$> f b <*> f c <*> f d <*> f e
-  mapDeRef f (H.PrjFrameBuffer a b c) = PrjFrameBuffer a (prjToInt b) <$> f c
-  mapDeRef f (H.PrjImage a b c) = PrjImage a (toInt b) <$> f c
+  mapDeRef f x@(H.Var t)        = addType x $ pure Var
+  mapDeRef f x@(H.Const t)      = addType x $ pure (Const $ T.toValue t)
+  mapDeRef f x@(H.PrimVar i)    = addType x $ pure (PrimVar $ fst $ T.toInput i)
+  mapDeRef f x@(H.Uni i)        = addType x $ pure (Uni $ fst $ T.toInput i)
+  mapDeRef f x@(H.Cond c t e)   = addType x $ Cond <$> f c <*> f t <*> f e
+  mapDeRef f x@(H.PrimApp p a)  = addType x $ PrimApp (convertPrimFun p) <$> f a
+  mapDeRef f x@(H.Tup t)        = addType x $ Tup <$> f t
+  mapDeRef f x@(H.Prj idx (e :: H.Exp stage e') :: H.Exp stage' t') = addType x $ Prj (genTupLen (prjToInt idx) (undefined :: e')) <$> f e
+  mapDeRef f x@(H.Sampler a b c)   = addType x $ Sampler a b <$> f c
+  mapDeRef f x@(H.TextureSlot n t) = noType "TextureSlot" $ pure $ TextureSlot n $ convertTextureType t
+  mapDeRef f x@(H.Texture t s m d) = noType "Texture" $ Texture (convertTextureType t) (T.toValue s) (convertMipMap m) <$> f d
+  mapDeRef f x@(H.Loop a b c d)   = addType x $ Loop <$> f a <*> f b <*> f c <*> f d
+  mapDeRef f x@(H.Fetch a b c)    = noType "Fetch" $ pure $ Fetch a (convertFetchPrimitive b) (T.toInputList c)
+  mapDeRef f x@(H.Transform a b)  = noType "Transform" $ Transform <$> f a <*> f b
+  mapDeRef f x@(H.Reassemble a b) = noType "Reassemble" $ Reassemble <$> f a <*> f b
+  mapDeRef f x@(H.Rasterize a b)  = noType "Rasterize" $ Rasterize (convertRasterContext a) <$> f b
+  mapDeRef f x@(H.FrameBuffer a)  = noType "FrameBuffer" $ pure $ FrameBuffer $ convertFrameBuffer a
+  mapDeRef f x@(H.Accumulate a b c d e) = noType "Accumulate" $ Accumulate (convertAccumulationContext a) <$> f b <*> f c <*> f d <*> f e
+  mapDeRef f x@(H.PrjFrameBuffer a b c) = noType "PrjFrameBuffer" $ PrjFrameBuffer a (prjToInt b) <$> f c
+  mapDeRef f x@(H.PrjImage a b c) = noType "PrjImage" $ PrjImage a (toInt b) <$> f c
 
 instance (Typeable a, MuRef a,DeRef [a] ~ DeRef a) => MuRef [a] where
-  type DeRef [a] = Exp
+  type DeRef [a] = TypedExp
 
-  mapDeRef f (x:xs) = liftA2 Cons (f x) (f xs)
-  mapDeRef f []     = pure Nil
-
-instance MuRef (T.Texture (H.Exp T.Obj) dim arr t ar) where
-  type DeRef (T.Texture (H.Exp T.Obj) dim arr t ar) = Exp
-
-  mapDeRef f (T.TextureSlot n t) = pure $ TextureSlot n $ convertTextureType t
-  mapDeRef f (T.Texture t s m d) = Texture (convertTextureType t) (T.toValue s) (convertMipMap m) <$> f d
+  mapDeRef f (x:xs) = noType "ConsL" $ liftA2 Cons (f x) (f xs)
+  mapDeRef f []     = noType "NilL" $ pure Nil
 
 instance MuRef (Tuple (H.Exp stage) t) where
-  type DeRef (Tuple (H.Exp stage) t) = Exp
+  type DeRef (Tuple (H.Exp stage) t) = TypedExp
 
-  mapDeRef f NilTup             = pure Nil
-  mapDeRef f (es `SnocTup` e)   = liftA2 Cons (f es) (f e) -- inverted list
+  mapDeRef f NilTup             = noType "NilT" $ pure Nil
+  mapDeRef f (es `SnocTup` e)   = noType "ConsT" $ liftA2 Cons (f e) (f es) -- inverted list
 
 instance MuRef (T.Interpolated (H.Exp f) a) where
-  type DeRef (T.Interpolated (H.Exp f) a) = Exp
+  type DeRef (T.Interpolated (H.Exp f) a) = TypedExp
 
-  mapDeRef f (T.Flat e)          = Flat <$> f e
-  mapDeRef f (T.Smooth e)        = Smooth <$> f e
-  mapDeRef f (T.NoPerspective e) = NoPerspective <$> f e
+  mapDeRef f (T.Flat e)          = noType "Flat" $ Flat <$> f e
+  mapDeRef f (T.Smooth e)        = noType "Smooth" $ Smooth <$> f e
+  mapDeRef f (T.NoPerspective e) = noType "NoPerspective" $ NoPerspective <$> f e
 
 instance MuRef (H.FlatExp f a) where
-  type DeRef (H.FlatExp f a) = Exp
+  type DeRef (H.FlatExp f a) = TypedExp
 
-  mapDeRef f (e:.xs) = liftA2 Cons (f e) (f xs)
-  mapDeRef f ZT = pure Nil
+  mapDeRef f (e:.xs) = noType "ConsFE" $ liftA2 Cons (f e) (f xs)
+  mapDeRef f ZT = noType "NilFE" $ pure Nil
 
 instance MuRef (H.InterpolatedFlatExp f a) where
-  type DeRef (H.InterpolatedFlatExp f a) = Exp
+  type DeRef (H.InterpolatedFlatExp f a) = TypedExp
 
-  mapDeRef f (e:.xs) = liftA2 Cons (f e) (f xs)
-  mapDeRef f ZT = pure Nil
+  mapDeRef f (e:.xs) = noType "ConsIFE" $ liftA2 Cons (f e) (f xs)
+  mapDeRef f ZT = noType "NilIFE" $ pure Nil
 
 instance GPU a => MuRef (H.FragmentFilter a) where
-  type DeRef (H.FragmentFilter a) = Exp
+  type DeRef (H.FragmentFilter a) = TypedExp
 
-  mapDeRef f H.PassAll    = pure PassAll
-  mapDeRef f (H.Filter a) = Filter <$> f a
+  mapDeRef f H.PassAll    = noType "PassAll" $ pure PassAll
+  mapDeRef f (H.Filter a) = noType "Filter" $ Filter <$> f a
 
 instance MuRef (H.FragmentOut a) where
-  type DeRef (H.FragmentOut a) = Exp
+  type DeRef (H.FragmentOut a) = TypedExp
 
-  mapDeRef f (H.FragmentOut a) = FragmentOut <$> f a
-  mapDeRef f (H.FragmentOutDepth a b) = FragmentOutDepth <$> f a <*> f b
-  mapDeRef f (H.FragmentOutRastDepth a) = FragmentOutRastDepth <$> f a
+  mapDeRef f (H.FragmentOut a) = noType "FragmentOut" $ FragmentOut <$> f a
+  mapDeRef f (H.FragmentOutDepth a b) = noType "FragmentOutDepth" $ FragmentOutDepth <$> f a <*> f b
+  mapDeRef f (H.FragmentOutRastDepth a) = noType "FragmentOutRastDepth" $ FragmentOutRastDepth <$> f a
 
 instance MuRef (H.VertexOut a b) where
-  type DeRef (H.VertexOut a b) = Exp
+  type DeRef (H.VertexOut a b) = TypedExp
 
-  mapDeRef f (H.VertexOut a b c d) = VertexOut <$> f a <*> f b <*> f c <*> f d
+  mapDeRef f (H.VertexOut a b c d) = noType "VertexOut" $ VertexOut <$> f a <*> f b <*> f c <*> f d
 
 instance MuRef (H.GeometryOut a b c) where
-  type DeRef (H.GeometryOut a b c) = Exp
+  type DeRef (H.GeometryOut a b c) = TypedExp
 
-  mapDeRef f (H.GeometryOut a b c d e) = GeometryOut <$> f a <*> f b <*> f c <*> f d <*> f e
+  mapDeRef f (H.GeometryOut a b c d e) = noType "GeometryOut" $ GeometryOut <$> f a <*> f b <*> f c <*> f d <*> f e
 
 instance MuRef (H.GeometryShader a b c d e f g) where
-  type DeRef (H.GeometryShader a b c d e f g) = Exp
+  type DeRef (H.GeometryShader a b c d e f g) = TypedExp
 
-  mapDeRef f (H.GeometryShader a b c d e g) = GeometryShader (toInt a) (convertOutputPrimitive b) c <$> f d <*> f e <*> f g
+  mapDeRef f (H.GeometryShader a b c d e g) = noType "GeometryShader" $ GeometryShader (toInt a) (convertOutputPrimitive b) c <$> f d <*> f e <*> f g
 
 instance MuRef (H.GPOutput a) where
-  type DeRef (H.GPOutput a) = Exp
+  type DeRef (H.GPOutput a) = TypedExp
 
-  mapDeRef f (H.ImageOut a b c) = ImageOut a b <$> f c
-  mapDeRef f (H.ScreenOut a) = ScreenOut <$> f a
-  mapDeRef f (H.MultiOut a) = MultiOut <$> f a
+  mapDeRef f (H.ImageOut a b c) = noType "ImageOut" $ ImageOut a b <$> f c
+  mapDeRef f (H.ScreenOut a) = noType "ScreenOut" $ ScreenOut <$> f a
+  mapDeRef f (H.MultiOut a) = noType "MultiOut" $ MultiOut <$> f a
 
 main = do
         let g1 :: H.Exp V Float

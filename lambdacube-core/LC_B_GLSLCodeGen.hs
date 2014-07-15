@@ -455,7 +455,7 @@ codeGenExp' dag smpName env expId = do
                     ty      = codeGenType $ expIdType dag expId
                     e       = codeGenPrim f ty argTy arg'
                 if length e > 1 then return e else
-                    store dag expId $ head e
+                    store dag expId $ head $ e ++ error "PrimApp - head"
             s@(Sampler f e t)   -> case Map.lookup s smpName of
                 Just name   -> return [Variable name]
                 Nothing     -> error "Internal error: Unknown sampler value!"
@@ -476,7 +476,7 @@ codeGenExp' dag smpName env expId = do
                         ]
                 case env V.!? i of
                     Nothing -> errEx
-                    Just v  -> if length v == arity then return v else errEx
+                    Just v  -> return v --if length v == arity then return v else errEx
 
             Tup t               -> concat <$> mapM (codeGenExp' dag smpName env) t
             p@(Prj idx e)       -> do

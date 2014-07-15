@@ -5,7 +5,8 @@ import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 
 import LC_U_APIType
-import LC_U_DeBruijn
+import LC_U_DeBruijn hiding (expUniverse, gpUniverse)
+import Data.Vector ((!),Vector,(//))
 
 class HasExp a where
     expUniverse    :: DAG -> a -> [Exp]
@@ -20,6 +21,8 @@ instance HasExp ExpId where
     expUniverse' dag e  = expUniverse' dag $ toExp dag e
 
 instance HasExp Exp where
+    expUniverse dag exp = expUniverseV dag ! toExpId dag exp
+{-
     expUniverse dag exp = case exp of
         Lam f                   -> expUniverse dag f
         Body f                  -> let a = toExp dag f
@@ -58,10 +61,12 @@ instance HasExp Exp where
         NoPerspective a         -> toExp dag a : expUniverse dag a 
         GeometryShader _ _ _ a b c  -> expUniverse dag a ++ expUniverse dag b ++ expUniverse dag c
         _                       -> []
-
+-}
     expUniverse' dag exp = exp : expUniverse dag exp
 
 gpUniverse :: DAG -> Exp -> [Exp]
+gpUniverse dag gp = gp : gpUniverseV dag ! toExpId dag gp
+{-
 gpUniverse dag gp = gp : case gp of
     Transform _ a           -> gpUniverse dag $ toExp dag a
     Reassemble _ a          -> gpUniverse dag $ toExp dag a
@@ -70,13 +75,15 @@ gpUniverse dag gp = gp : case gp of
     PrjFrameBuffer _ _ a    -> gpUniverse dag $ toExp dag a
     PrjImage _ _ a          -> gpUniverse dag $ toExp dag a
     _                       -> []
-
+-}
 -- includes the origin
 gpUniverse' :: DAG -> Exp -> [Exp]
 gpUniverse' dag gp = gp : gpUniverse dag gp
 
 findFrameBuffer :: DAG -> Exp -> Exp
-findFrameBuffer dag a = head $ dropWhile notFrameBuffer $ gpUniverse' dag a
+findFrameBuffer dag a = case dropWhile notFrameBuffer $ gpUniverse' dag a of
+    e:_ -> e
+    _   -> error "findFrameBuffer: nil"
   where
     notFrameBuffer (Accumulate {})  = False
     notFrameBuffer (FrameBuffer {}) = False

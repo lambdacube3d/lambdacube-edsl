@@ -83,6 +83,7 @@ import qualified LC_T_HOAS as H
 
 import qualified LC_U_DeBruijn as U
 import LC_C_Convert
+--import LC_C_Convert2
 
 import LC_B_GL hiding (compileRenderer)
 import LC_B_GLCompile
@@ -96,10 +97,29 @@ import Data.ByteString.Char8 (ByteString)
 import Data.ByteString.Char8 as SB
 import Data.Trie as T
 
+import BiMap
+import Data.List as L
+import qualified Data.IntMap as IM
+
+import System.IO as IO
+
 compileRenderer :: H.GPOutput H.SingleOutput -> IO Renderer
-compileRenderer l = GL.compileRenderer dag $ U.toExp dag l'
-  where
-    (l', dag) = runState (U.unN $ convertGPOutput l) U.emptyDAG
+compileRenderer l = do
+
+    let root =  U.toExp dag l'
+        (l', dag) = runState (U.unN $ convertGPOutput l) U.emptyDAG
+        U.DAG (BiMap _ em) tm _ _ _ = dag
+        unis = U.mkExpUni dag
+        gunis = U.mkGPUni dag
+        dag' = dag {U.expUniverseV = unis, U.gpUniverseV = gunis}
+    --print unis
+    --print gunis
+    print l'
+    mapM print $ L.zipWith (\(i,e) (_,t) -> (i,(t,e))) (IM.toList em) (IM.toList tm)
+
+    --(root, dag) <- convert l
+    IO.hPutStrLn stderr "GL.compileRenderer"
+    GL.compileRenderer dag' root
 
 nullSetter :: ByteString -> String -> a -> IO ()
 nullSetter n t _ = Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t

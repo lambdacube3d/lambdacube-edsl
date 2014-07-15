@@ -1,25 +1,3 @@
-{-# LANGUAGE        BangPatterns #-}
-{-# LANGUAGE        ConstraintKinds #-}
-{-# LANGUAGE        DataKinds #-}
-{-# LANGUAGE        DeriveDataTypeable #-}
-{-# LANGUAGE        EmptyDataDecls #-}
-{-# LANGUAGE        FlexibleContexts #-}
-{-# LANGUAGE        FlexibleInstances #-}
-{-# LANGUAGE        FunctionalDependencies #-}
-{-# LANGUAGE        GADTs #-}
-{-# LANGUAGE        ImpredicativeTypes #-}
-{-# LANGUAGE        KindSignatures #-}
-{-# LANGUAGE        MultiParamTypeClasses #-}
-{-# LANGUAGE        OverloadedStrings #-}
-{-# LANGUAGE        ParallelListComp #-}
-{-# LANGUAGE        Rank2Types #-}
-{-# LANGUAGE        ScopedTypeVariables #-}
-{-# LANGUAGE        StandaloneDeriving #-}
-{-# LANGUAGE        TupleSections #-}
-{-# LANGUAGE        TypeFamilies #-}
-{-# LANGUAGE        TypeOperators #-}
-{-# LANGUAGE        TypeSynonymInstances #-}
-{-# LANGUAGE        PolyKinds #-}
 module LC_T_DSLType where
 
 import Data.Int

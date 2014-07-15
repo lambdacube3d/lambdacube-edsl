@@ -55,7 +55,7 @@ convertOpenGP = cvt
     cvt lyt (H.Reassemble sh ps)           = reassemble (convertGeometryShader lyt sh) (cvt lyt ps)
     cvt lyt (H.Rasterize ctx ps)           = rasterize (convertRasterContext ctx) $ cvt lyt ps
     cvt lyt (H.FrameBuffer fb)             = frameBuffer (convertFrameBuffer fb)
-    cvt lyt (H.Accumulate ctx f sh fs fb)  = accumulate (convertAccumulationContext ctx) (convertFragmentFilter lyt f)
+    cvt lyt (H.Accumulate ctx f sh fs fb)  = accumulate (convertAccumulationContext lyt ctx) (convertFragmentFilter lyt f)
                                                                                           (convertFun1Frag lyt sh)
                                                                                           (cvt lyt fs)
                                                                                           (cvt lyt fb)
@@ -160,7 +160,9 @@ convertOpenExp lyt = cvt
     cvt (H.Prj idx (e :: H.Exp stage e') :: H.Exp stage' t')       = prj (genTy (undefined :: t')) (genTupLen (prjToInt idx) (undefined :: e')) $ cvt e
     cvt (H.Cond e1 e2 e3 :: H.Exp stage t')   = cond (genTy (undefined :: t')) (cvt e1) (cvt e2) (cvt e3)
     cvt (H.PrimApp p e :: H.Exp stage t')     = primApp (genTy (undefined :: t')) (convertPrimFun p) $ cvt e
-    cvt (H.Sampler f em t :: H.Exp stage t')  = sampler (genTy (undefined :: t')) f em $ convertTexture t
+    cvt (H.Sampler f em t :: H.Exp stage t')  = sampler (genTy (undefined :: t')) f em $ cvt t
+    cvt (H.TextureSlot n t :: H.Exp stage t') = textureSlot n (convertTextureType t)
+    cvt (H.Texture t s m d :: H.Exp stage t') = texture (convertTextureType t) (T.toValue s) (convertMipMap m) (map convertGP d)
     cvt (H.Loop e1 e2 e3 s :: H.Exp stage t') = loop (genTy (undefined :: t')) (convertFun1Exp lyt e1) (convertFun1Exp lyt e2) (convertFun1Exp lyt e3) (cvt s)
 
 convertFun1Vert :: ExpC exp => forall a b clipDistances. GPU a
@@ -209,13 +211,6 @@ convertTuple _lyt NilTup          = []
 convertTuple lyt (es `SnocTup` e) = convertTuple lyt es ++ [convertOpenExp lyt e]
 
 -- data type conversion
-
-convertTexture :: ExpC exp
-               => T.Texture (H.Exp T.Obj) dim arr t ar
-               -> exp
-convertTexture (T.TextureSlot n t) = textureSlot n (convertTextureType t)
-convertTexture (T.Texture t s m d) = texture (convertTextureType t) (T.toValue s) (convertMipMap m) (map convertGP d)
-
 convertTextureDataType :: T.TextureDataType t ar -> TextureDataType
 convertTextureDataType (T.Float a)  = FloatT (T.toColorArity a)
 convertTextureDataType (T.Int a)    = IntT (T.toColorArity a)
@@ -260,8 +255,10 @@ convertOutputPrimitive v = case v of
     T.LinesOutput       -> LinesOutput
     T.PointsOutput      -> PointsOutput
 
-convertAccumulationContext :: T.AccumulationContext b -> AccumulationContext
-convertAccumulationContext (T.AccumulationContext n ops) = AccumulationContext n $ cvt ops
+convertAccumulationContext :: Layout -> H.AccumulationContext b -> AccumulationContext
+convertAccumulationContext lyt (H.AccumulationContext n ops) = AccumulationContext 0 $ cvt ops
+--convertAccumulationContext :: ExpC exp => Layout -> H.AccumulationContext b -> exp
+--convertAccumulationContext lyt (H.AccumulationContext vpSize ops) = accumulationContext (convertOpenExp [] vpSize) $ cvt ops
   where
     cvt :: FlatTuple T.NoConstraint T.FragmentOperation b -> [FragmentOperation]
     cvt ZT                          = []

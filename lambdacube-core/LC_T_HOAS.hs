@@ -1,25 +1,3 @@
-{-# LANGUAGE        BangPatterns #-}
-{-# LANGUAGE        ConstraintKinds #-}
-{-# LANGUAGE        DataKinds #-}
-{-# LANGUAGE        DeriveDataTypeable #-}
-{-# LANGUAGE        EmptyDataDecls #-}
-{-# LANGUAGE        FlexibleContexts #-}
-{-# LANGUAGE        FlexibleInstances #-}
-{-# LANGUAGE        FunctionalDependencies #-}
-{-# LANGUAGE        GADTs #-}
-{-# LANGUAGE        ImpredicativeTypes #-}
-{-# LANGUAGE        KindSignatures #-}
-{-# LANGUAGE        MultiParamTypeClasses #-}
-{-# LANGUAGE        OverloadedStrings #-}
-{-# LANGUAGE        ParallelListComp #-}
-{-# LANGUAGE        Rank2Types #-}
-{-# LANGUAGE        ScopedTypeVariables #-}
-{-# LANGUAGE        StandaloneDeriving #-}
-{-# LANGUAGE        TupleSections #-}
-{-# LANGUAGE        TypeFamilies #-}
-{-# LANGUAGE        TypeOperators #-}
-{-# LANGUAGE        TypeSynonymInstances #-}
-{-# LANGUAGE        UndecidableInstances #-}
 module LC_T_HOAS where
 
 import GHC.TypeLits
@@ -101,11 +79,25 @@ data Exp :: Frequency -> * -> * where
     Sampler :: GPU (Sampler dim arr t ar)
             => Filter
             -> EdgeMode
-            -> Texture (Exp Obj) dim arr t ar
+            -> Exp Obj (Texture dim arr t ar)
             -> Exp stage (Sampler dim arr t ar)
 
+    TextureSlot     :: (IsValidTextureSlot t)
+                    => ByteString -- texture slot name
+                    -> TextureType dim mip arr layerCount t ar
+                    -> Exp Obj (Texture dim arr t ar)
+    -- TODO:
+    --  add texture internal format specification
+    Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip {- ,Typeable (TexDataRepr ar t), Typeable (TextureType dim canMip arr layerCount t ar), Typeable (Image layerCount (TexDataRepr ar t))-})
+                    => TextureType dim canMip arr layerCount t ar
+                    -> TexSizeRepr dim
+                    -> MipMap mip
+--                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
+                    -> [Exp Obj (Image layerCount (TexDataRepr ar t))]
+                    -> Exp Obj (Texture dim arr t ar)
+
     -- loop support
-    Loop    :: (GPU s, GPU a, Typeable stage)
+    Loop    :: (GPU s, GPU a{-, Typeable stage-})
             => (Exp stage s -> Exp stage s)     -- state transform function
             -> (Exp stage s -> Exp stage Bool)  -- loop condition function
             -> (Exp stage s -> Exp stage a)     -- state to result transform function
@@ -119,7 +111,7 @@ data Exp :: Frequency -> * -> * where
                     -> a
                     -> Exp Obj (VertexStream primitive (InputTupleRepr a))
 
-    Transform       :: (GPU a, GPU b, Typeable clipDistances)
+    Transform       :: (GPU a, GPU b{-, Typeable clipDistances-})
                     => (Exp V a -> VertexOut clipDistances b)                       -- vertex shader
                     -> Exp Obj (VertexStream primitive a)
                     -> Exp Obj (PrimitiveStream primitive clipDistances 1 V b)
@@ -135,7 +127,7 @@ data Exp :: Frequency -> * -> * where
     FrameBuffer     :: FrameBuffer layerCount t
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' t))
 
-    Accumulate      :: (Typeable (NoStencilRepr b), GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
+    Accumulate      :: ({-Typeable (NoStencilRepr b), -}GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
                     => AccumulationContext b
                     -> FragmentFilter a
                     -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
@@ -263,3 +255,9 @@ data GPOutput (o :: OutputType) where
 
     MultiOut    :: [GPOutput SingleOutput]
                 -> GPOutput MultiOutput
+
+data AccumulationContext t
+    = AccumulationContext
+    { accViewportName   :: Maybe ByteString -- accViewportSize   :: Exp Obj V2U
+    , accOperations     :: FlatTuple NoConstraint FragmentOperation t
+    }

@@ -92,6 +92,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_POLYGON_OFFSET_FILL
     , gl_POLYGON_OFFSET_LINE
     , gl_POLYGON_OFFSET_POINT
+    -- debug
     )
 
 import LC_G_Type
@@ -141,6 +142,9 @@ setupRasterContext = cvt
         setProvokingVertex pv
 
     cvt (TriangleCtx cm pm po pv) = do
+        let printGLStatus = checkGL >>= print_
+
+        putStrLn_ "TriangleCtx 1" >> printGLStatus
         -- cull mode
         case cm of
             CullNone    -> glDisable gl_CULL_FACE
@@ -152,32 +156,47 @@ setupRasterContext = cvt
                 glEnable    gl_CULL_FACE
                 glCullFace  gl_BACK
                 glFrontFace $ cff f
+        putStrLn_ "TriangleCtx 2" >> printGLStatus
 
         -- polygon mode
         case pm of
             PolygonPoint ps -> do
                 setPointSize ps
+                putStrLn_ "TriangleCtx 2 - 1" >> printGLStatus
                 glPolygonMode gl_FRONT_AND_BACK gl_POINT
+                putStrLn_ "TriangleCtx 2 - 2" >> printGLStatus
             PolygonLine lw  -> do
+                putStrLn_ ("TriangleCtx 2 - 3 : " ++ show lw) >> printGLStatus
                 glLineWidth (realToFrac lw)
+                putStrLn_ "TriangleCtx 2 - 4" >> printGLStatus
                 glPolygonMode gl_FRONT_AND_BACK gl_LINE
+                putStrLn_ "TriangleCtx 2 - 5" >> printGLStatus
             PolygonFill  -> glPolygonMode gl_FRONT_AND_BACK gl_FILL
+        putStrLn_ "TriangleCtx 3" >> printGLStatus
 
         -- polygon offset
+        {-
         glDisable gl_POLYGON_OFFSET_POINT
         glDisable gl_POLYGON_OFFSET_LINE
         glDisable gl_POLYGON_OFFSET_FILL
+        -}
+        putStrLn_ "TriangleCtx 4" >> printGLStatus
         case po of
-            NoOffset -> return ()
+            NoOffset -> glDisable $ case pm of
+                PolygonPoint _  -> gl_POLYGON_OFFSET_POINT
+                PolygonLine  _  -> gl_POLYGON_OFFSET_LINE
+                PolygonFill     -> gl_POLYGON_OFFSET_FILL
             Offset f u -> do
                 glPolygonOffset (realToFrac f) (realToFrac u)
                 glEnable $ case pm of
                     PolygonPoint _  -> gl_POLYGON_OFFSET_POINT
                     PolygonLine  _  -> gl_POLYGON_OFFSET_LINE
                     PolygonFill     -> gl_POLYGON_OFFSET_FILL
+        putStrLn_ "TriangleCtx 5" >> printGLStatus
 
         -- provoking vertex
         setProvokingVertex pv
+        putStrLn_ "TriangleCtx 6" >> printGLStatus
 
 setupAccumulationContext :: AccumulationContext -> IO ()
 setupAccumulationContext (AccumulationContext n ops) = cvt ops
@@ -199,7 +218,9 @@ setupAccumulationContext (AccumulationContext n ops) = cvt ops
                 glDepthFunc $! comparisonFunctionToGLType df
                 glDepthMask (cvtBool dm)
         cvtC 0 xs
-    cvt xs = do 
+    cvt xs = do
+        glDepthMask (cvtBool True) -- ??? wtf probably gl bug
+
         glDisable gl_DEPTH_TEST
         glDisable gl_STENCIL_TEST
         cvtC 0 xs
@@ -353,7 +374,7 @@ setupAccumulationContext (AccumulationContext n ops) = cvt ops
 -}
 
 compileClearFrameBuffer :: Exp -> IO ()
-compileClearFrameBuffer (FrameBuffer fb) = cvt fb
+compileClearFrameBuffer (FrameBuffer fb) = putStrLn_ ("CMD: clearFrameBuffer " ++ show fb) >> cvt fb
   where
     -- we have to handle depth and stencil specially, available configurations:
     --  depth
@@ -470,7 +491,7 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
         (srcV,outV) = codeGenVertexShader dag samplerNameMap slotInput $ toExp dag vsh
         allSamplerNames = samplerNames ++ slotSamplerNames 
         samplerNameMap  = Map.fromList allSamplerNames
-        printGLStatus = checkGL >>= print
+        printGLStatus = checkGL >>= print_
         createAndAttach [] _ = return $! Nothing
         createAndAttach sl t = do
             mapM_ SB.putStrLn sl
@@ -529,12 +550,27 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
         disposeFun = glDeleteProgram po >> mapM_ glDeleteShader (catMaybes [vsh,gsh,fsh])
         renderFun = do
             ObjectSet drawObjs objsMap <- readIORef objsIORef
+            --unless (False {-Map.null objsMap-}) $ do
             unless (Map.null objsMap) $ do
                 --putStrLn $ "Slot: " ++ show slotName ++ "  object count: " ++ show (Map.size objsMap)
+                putStrLn_ "pre draw" >> printGLStatus
+                putStrLn_ $ "CMD: setRasterContext " ++ show rCtx
                 setupRasterContext rCtx
+                putStrLn_ ("setupRasterContext " ++ show rCtx) >> printGLStatus
                 setupAccumulationContext aCtx
+                putStrLn_ "setupAccumulationContext" >> printGLStatus
+                putStrLn_ $ "CMD: setAccumulationContext " ++ show aCtx
+                putStrLn_ $ "CMD: glUseProgram " ++ show po
                 glUseProgram po
+                putStrLn_ "glUseProgram" >> printGLStatus
+                putStrLn_ $ "CMD: renderSlot " ++ show slotName
                 drawObjs
-    print slotName
-    print uLoc'
+                putStrLn_ "drawObjs" >> printGLStatus
+    print_ slotName
+    print_ uLoc'
     return $! (renderFun, disposeFun, uLoc', sLoc, outColorCnt)
+
+putStrLn_ :: a -> IO ()
+putStrLn_ _ = return ()
+
+print_ = putStrLn_

@@ -152,7 +152,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
             LineStripAdjacency      -> gl_LINE_STRIP_ADJACENCY
             LineListAdjacency       -> gl_LINES_ADJACENCY
         streamCounts = [c | Stream _ _ _ _ c <- T.elems objAttributes]
-        count = head streamCounts
+        count = head $ streamCounts ++ error "streamCounts"
 
     when (slotType /= primType) $ fail $ "addObject: primitive type mismatch: " ++ show (slotType,primType)
     when (objSType /= sType) $ fail $ unlines
@@ -167,7 +167,8 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
 
     -- validate index type if presented and create draw action
     (iSetup,draw) <- case objIndices of
-        Nothing -> return (glBindBuffer gl_ELEMENT_ARRAY_BUFFER 0, glDrawArrays primGL 0 (fromIntegral count))
+        Nothing -> return (putStrLn_ ("OBJ: glBindBuffer gl_ELEMENT_ARRAY_BUFFER 0") >> glBindBuffer gl_ELEMENT_ARRAY_BUFFER 0, 
+             putStrLn_ ("OBJ: glDrawArrays " ++ show prim ++ " 0 " ++ show count) >> glDrawArrays primGL 0 (fromIntegral count))
         Just (IndexStream (Buffer arrs bo) arrIdx start idxCount) -> do
             -- setup index buffer
             let ArrayDesc arrType arrLen arrOffs arrSize = arrs V.! arrIdx
@@ -175,7 +176,8 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
                 ptr    = intPtrToPtr $! fromIntegral (arrOffs + start * sizeOfArrayType arrType)
             -- validate index type
             when (notElem arrType [ArrWord8, ArrWord16, ArrWord32]) $ fail "addObject: index type should be unsigned integer type"
-            return (glBindBuffer gl_ELEMENT_ARRAY_BUFFER bo, glDrawElements primGL (fromIntegral idxCount) glType ptr)
+            return (putStrLn_ ("OBJ: glBindBuffer gl_ELEMENT_ARRAY_BUFFER " ++ show bo) >> glBindBuffer gl_ELEMENT_ARRAY_BUFFER bo,
+                putStrLn_ ("OBJ: glDrawElements " ++ show prim ++ " " ++ show idxCount ++ " " ++ show arrType ++ " " ++ show ptr) >> glDrawElements primGL (fromIntegral idxCount) glType ptr)
 
     -- implementation
     let renderDescriptorMap = renderDescriptor renderer
@@ -228,8 +230,11 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
                     --print "draw object"
                     --putStrLn $ "  setup global uniforms: " ++ show [n | n <- globalUNames, T.member n uLocs]
                     globalUSetup            -- setup uniforms
-                    --putStrLn $ "  setup object uniforms: " ++ show [n | n <- objUniforms, T.member n uLocs]
+                    putStrLn_ $ "OBJ: globalUSetup"
+                    --putStrLn_ $ "  setup object uniforms: " ++ show [n | n <- objUniforms, T.member n uLocs]
                     objUSetup
+                    putStrLn_ $ "OBJ: objUSetup"
+                    putStrLn_ $ "OBJ: glBindVertexArray " ++ show vao
                     glBindVertexArray vao   -- setup stream input (aka object attributes)
                     draw                    -- execute draw function
             return (vao,renderFun)
@@ -326,3 +331,6 @@ updateTexture2DRGBAF tx isMip bitmap = do
                 _   -> error "unsupported texture format!"
         glTexSubImage2D gl_TEXTURE_2D 0 0 0 (fromIntegral w) (fromIntegral h) dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
     when isMip $ glGenerateMipmap gl_TEXTURE_2D
+
+putStrLn_ :: a -> IO ()
+putStrLn_ _ = return ()

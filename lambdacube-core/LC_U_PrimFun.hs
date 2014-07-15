@@ -157,4 +157,4 @@ data PrimFun
     | PrimTextureGradOffset
     | PrimTextureProjGrad
     | PrimTextureProjGradOffset
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Read)

@@ -12,6 +12,11 @@ import LC_U_PrimFun
 import BiMap
 import qualified Data.IntMap as IM
 
+import Data.Vector ((!),Vector,(//))
+import qualified Data.IntSet as IS
+import qualified Data.Vector as V
+import Data.List (foldl')
+
 type ExpId = Int
 
 --newtype DAG = DAG (BiMap Exp) deriving Show
@@ -20,23 +25,105 @@ data DAG
     { dagExp    :: BiMap Exp
     , dagTy     :: IM.IntMap Ty
     , dagCount  :: IM.IntMap Int
-    } deriving Show
+    , expUniverseV :: V.Vector [Exp]
+    , gpUniverseV :: V.Vector [Exp]
+    } deriving (Show,Read)
 
+
+-- HINT: traveres over one accumulation's sub expressions including samplers covering multiple passes, but does not include the whole accumulation chain
+expUniverse :: Int -> Exp -> V.Vector IS.IntSet -> IS.IntSet
+expUniverse expId exp v = (\l -> IS.unions $ IS.singleton expId : (map (v !) l)) $ case exp of
+    Lam a                   -> [a]
+    Body a                  -> [a]
+    Apply a b               -> [a, b]
+    Tup a                   -> a
+    Prj _ a                 -> [a]
+    Cond a b c              -> [a, b, c]
+    PrimApp _ a             -> [a]
+    Loop a b c d            -> [a, b, c, d]
+    VertexOut a b c d       -> [a, b] ++ c ++ d
+    GeometryOut a b c d e   -> [a, b, c] ++ d ++ e
+    FragmentOut a           -> a
+    FragmentOutDepth a b    -> a : b
+    FragmentOutRastDepth a  -> a
+    Transform a b           -> [a, b]
+    Reassemble a b          -> [a, b]
+    Rasterize _ a           -> [a]
+    Accumulate a b c d _    -> [accViewportSize a, b, c, d]
+    PrjFrameBuffer _ _ a    -> [a]
+    PrjImage _ _ a          -> [a]
+    Filter a                -> [a]
+    Flat a                  -> [a]
+    Smooth a                -> [a]
+    NoPerspective a         -> [a]
+    GeometryShader _ _ _ a b c  -> [a, b, c]
+    Sampler _ _ a           -> [a]
+    _                       -> []
+
+mkExpUni :: DAG -> V.Vector [Exp]
+mkExpUni dag = V.map (\is -> [exps ! i | i <- IS.elems is]) $ foldl' (\v i -> V.snoc v $ expUniverse i (toExp dag i) v) V.empty [0..s-1]
+  where
+    s = IM.size im
+    exps = V.generate s (im IM.!)
+    BiMap _ im = dagExp dag
+
+gpUniverse :: Int -> Exp -> V.Vector IS.IntSet -> IS.IntSet
+gpUniverse expId exp v = (\l -> IS.unions $ IS.singleton expId : (map (v !) l)) $ case exp of
+    Transform _ a           -> [a]
+    Reassemble _ a          -> [a]
+    Rasterize _ a           -> [a]
+    Accumulate _ _ _ a b    -> [a, b]
+    PrjFrameBuffer _ _ a    -> [a]
+    PrjImage _ _ a          -> [a]
+    _                       -> []
+
+mkGPUni :: DAG -> V.Vector [Exp]
+mkGPUni dag = V.map (\is -> reverse [exps ! i | i <- IS.elems is]) $ foldl' (\v i -> V.snoc v $ gpUniverse i (toExp dag i) v) V.empty [0..s-1]
+  where
+    s = IM.size im
+    exps = V.generate s (im IM.!)
+    BiMap _ im = dagExp dag
+
+{-
+myNub l = go IS.empty l
+  where
+    go s [] = []
+    go s (x:xs)
+        | IS.member x s = go s xs
+        | otherwise     = x : go (IS.insert x s) xs
+
+gpUniverse :: Int -> Exp -> V.Vector [ExpId] -> [ExpId]
+gpUniverse expId exp v = (\l -> myNub $ concat $ [expId] : (map (v !) l)) $ case exp of
+    Transform _ a           -> [a]
+    Reassemble _ a          -> [a]
+    Rasterize _ a           -> [a]
+    Accumulate _ _ _ a b    -> [a, b]
+    PrjFrameBuffer _ _ a    -> [a]
+    PrjImage _ _ a          -> [a]
+    _                       -> []
+
+mkGPUni :: DAG -> V.Vector [Exp]
+mkGPUni dag = V.map (\is -> [exps ! i | i <- is]) $ foldl' (\v i -> V.snoc v $ gpUniverse i (toExp dag i) v) V.empty [0..s-1]
+  where
+    s = IM.size im
+    exps = V.generate s (im IM.!)
+    BiMap _ im = dagExp dag
+-}
 emptyDAG :: DAG
-emptyDAG = DAG empty IM.empty IM.empty
+emptyDAG = DAG empty IM.empty IM.empty V.empty V.empty
 
 hashcons :: Ty -> Exp -> State DAG ExpId
 hashcons !t !e = do
-  DAG !m !tm !cm <- get
+  DAG !m !tm !cm !uv !gv <- get
   case lookup_key e m of
     Nothing -> let (!k,!m') = insert e m
                    !tm'     = IM.insert k t tm
                    !cm'     = IM.insert k 1 cm
-               in put (DAG m' tm' cm') >> return k
+               in put (DAG m' tm' cm' uv gv) >> return k
     Just !k  -> do
         {-trace ("sharing : " ++ show k ++ " :: " ++ show (tm IM.! k)) $ -}
         let !cm'    = IM.adjust (1+) k cm
-        put (DAG m tm cm')
+        put (DAG m tm cm' uv gv)
         return k
 {-
 --hashcons = dontShare
@@ -50,24 +137,24 @@ dontShare t e = do
 
 -- Utility functions for CodeGen
 toExp :: DAG -> ExpId -> Exp
-toExp (DAG !m _ _) !k = lookup_val k m
+toExp (DAG !m _ _ _ _) !k = lookup_val k m
 
 toExpId :: DAG -> Exp -> ExpId
-toExpId (DAG !m _ _) !v = let Just k = lookup_key v m in k
+toExpId (DAG !m _ _ _ _) !v = let Just k = lookup_key v m in k
 
 expIdType :: DAG -> ExpId -> Ty
-expIdType (DAG _ !tm _) !k = tm IM.! k
+expIdType (DAG _ !tm _ _ _) !k = tm IM.! k
 
 expType :: DAG -> Exp -> Ty
-expType dag@(DAG !m !tm _) !e = case lookup_key e m of
+expType dag@(DAG !m !tm _ _ _) !e = case lookup_key e m of
     Nothing -> error $ "unknown Exp node: " ++ show e
     Just !k  -> expIdType dag k
 
 expIdCount :: DAG -> ExpId -> Int
-expIdCount (DAG _ _ !cm) !k = cm IM.! k
+expIdCount (DAG _ _ !cm _ _) !k = cm IM.! k
 
 expCount :: DAG -> Exp -> Int
-expCount dag@(DAG !m !tm !cm) !e = case lookup_key e m of
+expCount dag@(DAG !m !tm !cm _ _) !e = case lookup_key e m of
     Nothing -> error $ "unknown Exp node: " ++ show e
     Just !k  -> expIdCount dag k
 
@@ -128,7 +215,7 @@ data Exp
     | ImageOut              ByteString V2U !ExpId
     | ScreenOut             !ExpId
     | MultiOut              [ExpId]
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Read)
 
 class ExpC exp where
     -- exp constructors
@@ -244,32 +331,32 @@ instance ExpC N where
         hashcons (Unknown "FragmentOutRastDepth") $ FragmentOutRastDepth h
     -- gp constructors
     fetch !a !b !c = N $ do
-        hashcons VertexStream' $ Fetch a b c
+        hashcons (Unknown "VertexStream") $ Fetch a b c
     transform !a !b = N $ do
         !h1 <- unN a
         !h2 <- unN b
-        hashcons PrimitiveStream' $ Transform h1 h2
+        hashcons (Unknown "PrimitiveStream") $ Transform h1 h2
     reassemble !a !b = N $ do
         !h1 <- unN a
         !h2 <- unN b
-        hashcons PrimitiveStream' $ Reassemble h1 h2
+        hashcons (Unknown "PrimitiveStream") $ Reassemble h1 h2
     rasterize !a !b = N $ do
         !h1 <- unN b
-        hashcons FragmentStream' $ Rasterize a h1
+        hashcons (Unknown "FragmentStream") $ Rasterize a h1
     frameBuffer !a = N $ do
-        hashcons FrameBuffer' $ FrameBuffer a
+        hashcons (Unknown "FrameBuffer") $ FrameBuffer a
     accumulate !a !b !c !d !e = N $ do
         !h1 <- unN b
         !h2 <- unN c
         !h3 <- unN d
         !h4 <- unN e
-        hashcons FrameBuffer' $ Accumulate a h1 h2 h3 h4
+        hashcons (Unknown "FrameBuffer") $ Accumulate a h1 h2 h3 h4
     prjFrameBuffer !a !b !c = N $ do
         !h1 <- unN c
-        hashcons Image' $ PrjFrameBuffer a b h1
+        hashcons (Unknown "Image") $ PrjFrameBuffer a b h1
     prjImage !a !b !c = N $ do
         !h1 <- unN c
-        hashcons Image' $ PrjImage a b h1
+        hashcons (Unknown "Image") $ PrjImage a b h1
     -- texture constructors
     textureSlot !a !b = N $ hashcons (Unknown "TextureSlot") $ TextureSlot a b
     texture !a !b !c !d = N $ do
@@ -306,3 +393,11 @@ instance ExpC N where
     multiOut !a = N $ do
         !h1 <- mapM unN a
         hashcons (Unknown "MultiOut") $ MultiOut h1
+
+data AccumulationContext
+    = AccumulationContext
+    { accViewportSize   :: ExpId
+    , accOperations     :: [FragmentOperation]
+    }
+    deriving (Read,Show, Eq, Ord)
+

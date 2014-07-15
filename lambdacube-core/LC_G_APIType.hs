@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 module LC_G_APIType where
 
 import Data.Typeable
@@ -26,7 +25,7 @@ data Primitive
     | TriangleListAdjacency
     | LineStripAdjacency
     | LineListAdjacency
-    deriving (Typeable,Eq,Ord,Bounded,Enum,Show)
+    deriving (Read,Typeable,Eq,Ord,Bounded,Enum,Show)
 
 -- GPU type value reification, needed for shader codegen
 data Value
@@ -55,7 +54,7 @@ data Value
     | VM42F     !M42F
     | VM43F     !M43F
     | VM44F     !M44F
-    deriving (Typeable,Show,Eq,Ord)
+    deriving (Read,Typeable,Show,Eq,Ord)
 
 type SetterFun a = a -> IO ()
 
@@ -148,7 +147,7 @@ data ArrayType
     | ArrInt32
     | ArrFloat
     | ArrHalf     -- Hint: half float is not supported in haskell
-    deriving (Typeable,Show,Eq,Ord)
+    deriving (Read,Typeable,Show,Eq,Ord)
 
 sizeOfArrayType :: ArrayType -> Int
 sizeOfArrayType ArrWord8  = 1
@@ -189,18 +188,13 @@ data StreamType
     | TM42F
     | TM43F
     | TM44F
-    deriving (Typeable,Show,Eq,Ord)
+    deriving (Read,Typeable,Show,Eq,Ord)
 
 data Ty
     = Single !InputType
     | Tuple [Ty]
-    | FrameBuffer'
-    | Image'
-    | PrimitiveStream'
-    | VertexStream'
-    | FragmentStream'
     | Unknown String
-    deriving (Typeable,Show,Eq,Ord)
+    deriving (Read,Typeable,Show,Eq,Ord)
 
 tySize :: Ty -> Int
 tySize (Tuple a)  = sum $ map tySize a
@@ -273,7 +267,7 @@ data InputType
     | UTexture2DMSArray
     | UTextureBuffer
     | UTexture2DRect
-    deriving (Typeable,Show,Eq,Ord)
+    deriving (Read,Typeable,Show,Eq,Ord)
 
 toStreamType :: InputType -> Maybe StreamType
 toStreamType Word     = Just TWord
@@ -363,34 +357,34 @@ data IndexStream b
     , indexLength   :: Int
     }
 
-data PointSpriteCoordOrigin = LowerLeft | UpperLeft deriving (Typeable,Show, Eq, Ord)
-data PointSize              = PointSize Float | ProgramPointSize deriving (Typeable,Eq,Ord,Show)
-data PolygonOffset          = NoOffset | Offset Float Float  deriving (Typeable,Eq,Ord,Show)
-data FrontFace              = CCW | CW deriving (Typeable,Eq,Ord,Show)
-data PolygonMode            = PolygonPoint PointSize | PolygonLine Float | PolygonFill deriving (Typeable,Eq,Ord,Show)
-data ProvokingVertex        = FirstVertex | LastVertex deriving (Typeable,Eq,Ord,Bounded,Enum,Show)
-data CullMode               = CullNone | CullFront FrontFace | CullBack FrontFace deriving (Typeable,Eq,Ord,Show)
+data PointSpriteCoordOrigin = LowerLeft | UpperLeft deriving (Read,Typeable,Show, Eq, Ord)
+data PointSize              = PointSize Float | ProgramPointSize deriving (Read,Typeable,Eq,Ord,Show)
+data PolygonOffset          = NoOffset | Offset Float Float  deriving (Read,Typeable,Eq,Ord,Show)
+data FrontFace              = CCW | CW deriving (Read,Typeable,Eq,Ord,Show)
+data PolygonMode            = PolygonPoint PointSize | PolygonLine Float | PolygonFill deriving (Read,Typeable,Eq,Ord,Show)
+data ProvokingVertex        = FirstVertex | LastVertex deriving (Read,Typeable,Eq,Ord,Bounded,Enum,Show)
+data CullMode               = CullNone | CullFront FrontFace | CullBack FrontFace deriving (Read,Typeable,Eq,Ord,Show)
 type DepthFunction          = ComparisonFunction
-data ComparisonFunction     = Never | Less | Equal | Lequal | Greater | Notequal | Gequal | Always deriving (Typeable, Eq, Ord, Show )
-data StencilOperation       = OpZero | OpKeep | OpReplace | OpIncr | OpIncrWrap | OpDecr | OpDecrWrap | OpInvert deriving (Typeable, Eq, Ord, Show )
-data BlendEquation          = FuncAdd | FuncSubtract | FuncReverseSubtract | Min | Max deriving (Typeable, Eq, Ord, Show )
-data BlendingFactor         = Zero | One | SrcColor | OneMinusSrcColor | DstColor | OneMinusDstColor | SrcAlpha | OneMinusSrcAlpha | DstAlpha | OneMinusDstAlpha | ConstantColor | OneMinusConstantColor | ConstantAlpha | OneMinusConstantAlpha | SrcAlphaSaturate deriving (Typeable, Eq, Ord, Show )
-data LogicOperation         = Clear | And | AndReverse | Copy | AndInverted | Noop | Xor | Or | Nor | Equiv | Invert | OrReverse | CopyInverted | OrInverted | Nand | Set deriving (Typeable, Eq, Ord, Show )
+data ComparisonFunction     = Never | Less | Equal | Lequal | Greater | Notequal | Gequal | Always deriving (Read,Typeable, Eq, Ord, Show )
+data StencilOperation       = OpZero | OpKeep | OpReplace | OpIncr | OpIncrWrap | OpDecr | OpDecrWrap | OpInvert deriving (Read,Typeable, Eq, Ord, Show )
+data BlendEquation          = FuncAdd | FuncSubtract | FuncReverseSubtract | Min | Max deriving (Read,Typeable, Eq, Ord, Show )
+data BlendingFactor         = Zero | One | SrcColor | OneMinusSrcColor | DstColor | OneMinusDstColor | SrcAlpha | OneMinusSrcAlpha | DstAlpha | OneMinusDstAlpha | ConstantColor | OneMinusConstantColor | ConstantAlpha | OneMinusConstantAlpha | SrcAlphaSaturate deriving (Read,Typeable, Eq, Ord, Show )
+data LogicOperation         = Clear | And | AndReverse | Copy | AndInverted | Noop | Xor | Or | Nor | Equiv | Invert | OrReverse | CopyInverted | OrInverted | Nand | Set deriving (Read,Typeable, Eq, Ord, Show )
 
 data StencilOps
     = StencilOps
     { frontStencilOp    :: StencilOperation -- ^ Used for front faced triangles and other primitives.
     , backStencilOp     :: StencilOperation -- ^ Used for back faced triangles.
-    } deriving (Typeable,Eq,Ord,Show)
+    } deriving (Read,Typeable,Eq,Ord,Show)
 
-data StencilTests = StencilTests StencilTest StencilTest  deriving (Typeable,Eq,Ord,Show)
+data StencilTests = StencilTests StencilTest StencilTest  deriving (Read,Typeable,Eq,Ord,Show)
 data StencilTest
     = StencilTest
     { stencilComparision    :: ComparisonFunction   -- ^ The function used to compare the @stencilReference@ and the stencil buffers value with.
     , stencilReference      :: Int32                -- ^ The value to compare with the stencil buffer's value.
     , stencilMask           :: Word32               -- ^ A bit mask with ones in each position that should be compared and written to the stencil buffer.
-    } deriving (Typeable,Eq,Ord,Show)
+    } deriving (Read,Typeable,Eq,Ord,Show)
 
 -- sampler and texture specification
-data Filter = PointFilter | LinearFilter    deriving (Typeable,Show,Eq,Ord)
-data EdgeMode = Repeat | MirroredRepeat | ClampToEdge | ClampToBorder       deriving (Typeable,Show,Eq,Ord)
+data Filter = PointFilter | LinearFilter    deriving (Read,Typeable,Show,Eq,Ord)
+data EdgeMode = Repeat | MirroredRepeat | ClampToEdge | ClampToBorder       deriving (Read,Typeable,Show,Eq,Ord)

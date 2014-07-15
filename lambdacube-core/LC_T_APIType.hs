@@ -1,26 +1,3 @@
-{-# LANGUAGE        BangPatterns #-}
-{-# LANGUAGE        ConstraintKinds #-}
-{-# LANGUAGE        DataKinds #-}
-{-# LANGUAGE        DeriveDataTypeable #-}
-{-# LANGUAGE        EmptyDataDecls #-}
-{-# LANGUAGE        FlexibleContexts #-}
-{-# LANGUAGE        FlexibleInstances #-}
-{-# LANGUAGE        FunctionalDependencies #-}
-{-# LANGUAGE        GADTs #-}
-{-# LANGUAGE        ImpredicativeTypes #-}
-{-# LANGUAGE        KindSignatures #-}
-{-# LANGUAGE        MultiParamTypeClasses #-}
-{-# LANGUAGE        OverloadedStrings #-}
-{-# LANGUAGE        ParallelListComp #-}
-{-# LANGUAGE        Rank2Types #-}
-{-# LANGUAGE        ScopedTypeVariables #-}
-{-# LANGUAGE        StandaloneDeriving #-}
-{-# LANGUAGE        TupleSections #-}
-{-# LANGUAGE        TypeFamilies #-}
-{-# LANGUAGE        TypeOperators #-}
-{-# LANGUAGE        TypeSynonymInstances #-}
-{-# LANGUAGE        PolyKinds #-}
-{-# LANGUAGE UndecidableInstances #-}
 module LC_T_APIType where
 
 import GHC.TypeLits
@@ -49,6 +26,8 @@ data NatNum :: Nat -> * where
     N7 :: NatNum 7
     N8 :: NatNum 8
     N9 :: NatNum 9
+
+deriving instance Typeable NatNum
 
 n0 = N0
 n1 = N1
@@ -202,11 +181,11 @@ data FragmentStream (layerCount :: Nat) t
 -- flat tuple, another internal tuple representation
 
 -- means unit
-data ZZ = ZZ deriving (Show)
+data ZZ = ZZ deriving (Show,Typeable)
 
 -- used for tuple type description
 infixr 1 :+:
-data tail :+: head = !tail :+: !head deriving (Show)
+data tail :+: head = !tail :+: !head deriving (Show,Typeable)
 
 -- used for tuple value description
 infixr 1 :.
@@ -273,11 +252,6 @@ class NoConstraint a
 instance NoConstraint a
 
 type FrameBuffer layerCount t = FlatTuple NoConstraint (Image layerCount) t
-data AccumulationContext t
-    = AccumulationContext
-    { accViewportName   :: Maybe ByteString
-    , accOperations     :: FlatTuple NoConstraint FragmentOperation t
-    }
 
 -- Fragment Operation
 data FragmentOperation ty where
@@ -367,6 +341,12 @@ type instance NoStencilRepr (Depth a :+: b) = Depth a :+: (NoStencilRepr b)
 data TextureMipMap
     = TexMip
     | TexNoMip
+
+deriving instance Typeable TexMip
+deriving instance Typeable TexNoMip
+
+deriving instance Typeable MipMap
+
 
 data MipMap (t :: TextureMipMap) where
     NoMip   :: MipMap TexNoMip
@@ -472,6 +452,8 @@ data TextureType :: TextureShape -> TextureMipMap -> TextureArray -> Nat -> Text
 
 
 -- defines a texture
+data Texture (dim :: TextureShape) (arr :: TextureArray) (t :: TextureSemantics *) ar
+{-
 data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: TextureSemantics *) ar where
     TextureSlot     :: (IsValidTextureSlot t)
                     => ByteString -- texture slot name
@@ -479,13 +461,14 @@ data Texture (gp :: * -> *) (dim :: TextureShape) (arr :: TextureArray) (t :: Te
                     -> Texture gp dim arr t ar
     -- TODO:
     --  add texture internal format specification
-    Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip, Typeable layerCount, Typeable (TexDataRepr ar t))
+    Texture         :: (IsScalar (TexSizeRepr dim), IsMipValid canMip mip, Typeable (TexDataRepr ar t), Typeable (TextureType dim canMip arr layerCount t ar), Typeable (Image layerCount (TexDataRepr ar t)))
                     => TextureType dim canMip arr layerCount t ar
                     -> TexSizeRepr dim
                     -> MipMap mip
 --                    -> TexRepr dim mip gp layerCount (TexDataRepr ar t) -- FIXME: for cube it will give wrong type
                     -> [gp (Image layerCount (TexDataRepr ar t))]
                     -> Texture gp dim arr t ar
+-}
 {-
     -- TODO:
     --  swizzling (arity conversion)
@@ -549,5 +532,8 @@ deriving instance Typeable V
 deriving instance Typeable G
 deriving instance Typeable F
 deriving instance Typeable Image
+deriving instance Typeable Texture
+deriving instance Typeable TextureType
 deriving instance Typeable SingleOutput
 deriving instance Typeable MultiOutput
+deriving instance Typeable TextureDataType
