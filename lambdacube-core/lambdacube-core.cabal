@@ -28,7 +28,7 @@ Description:
 
 Library
   Build-Depends:
-        base >=4.6, containers >=0.5 && <0.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vector >=0.10 && <0.11, OpenGLRaw >=1.5 && <1.6, bitmap >=0.0 && <0.1, prettyclass >=1.0 && <1.1, language-glsl >=0.0 && <0.1, binary >= 0.7.1 && <0.8, ghc-prim,
+        base >=4.6, containers >=0.5 && <0.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vector >=0.10 && <0.11, OpenGLRaw >=1.5 && <1.6, bitmap >=0.0 && <0.1, prettyclass >=1.0 && <1.1, language-glsl >=0.1 && <0.2, binary >= 0.7.1 && <0.8, ghc-prim,
         data-reify >= 0.6 && <0.7
   Exposed-modules:
         BiMap

@@ -837,10 +837,10 @@ inVar :: String -> TypeSpecifierNonArray -> ExternalDeclaration
 inVar name ty = Declaration $ var name ty (Just $ TypeQualSto In)
 
 inVarArr :: String -> GLSL.InterpolationQualifier -> TypeSpecifierNonArray -> ExternalDeclaration
-inVarArr name iq ty = Declaration $ InitDeclaration (TypeDeclarator varType) [InitDecl name Nothing Nothing]
+inVarArr name iq ty = Declaration $ InitDeclaration (TypeDeclarator varType) [InitDecl name (Just Nothing) Nothing]
   where
     tq = Just $ TypeQualInt iq $ Just In
-    varTySpecNoPrec = TypeSpecNoPrecision ty (Just Nothing)
+    varTySpecNoPrec = TypeSpecNoPrecision ty Nothing
     varTySpec = TypeSpec Nothing varTySpecNoPrec
     varType = FullType tq varTySpec
 
