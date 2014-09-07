@@ -1,0 +1,84 @@
+Name:           lambdacube-edsl
+Version:        0.1.0
+Cabal-Version:  >= 1.6 && < 2
+Build-Type:     Simple
+License:        BSD3
+License-File:   LICENSE
+Author:         Csaba Hruska, Gergely Patai
+Maintainer:     csaba (dot) hruska (at) gmail (dot) com
+Stability:      experimental
+Homepage:       http://lambdacube3d.wordpress.com/
+Bug-Reports:    https://github.com/csabahruska/lc-dsl/issues
+Category:       Graphics
+Tested-With:    GHC == 7.6.3
+Synopsis:       LambdaCube 3D is a domain specific language and library that makes it possible to program GPUs in a purely functional style.
+Description:
+    LambdaCube 3D is a domain specific language and library that makes
+    it possible to program GPUs in a purely functional style.
+    Programming with LambdaCube constitutes of composing a data-flow
+    description, which is compiled into a specialised library. The
+    language provides a uniform way to define shaders and compositor
+    chains by treating both streams and framebuffers as first-class
+    values.
+    .
+    As a user of the library you only need to import the "LC_API" and
+    "LC_Mesh" modules. You should check out the pointers at <http://lambdacube3d.wordpress.com/getting-started/>
+    to understand the principle behind the library, and also have a good look
+    at the @lambdacube-samples@ package.
+
+Library
+  Build-Depends:
+        base >=4.6,
+        containers >=0.5 && <0.6,
+        mtl >=2.1 && <2.2,
+        bytestring >=0.10 && <0.11,
+        bytestring-trie >=0.2 && <0.3,
+        vector >=0.10 && <0.11,
+        ghc-prim,
+        --data-reify >= 0.6 && <0.7,
+        lambdacube-core == 0.1.0
+
+  default-language:  Haskell2010
+  hs-source-dirs:    src/lib
+  Exposed-modules:
+        LambdaCube.Convert.PrimFun
+        LambdaCube.Convert.ToDeBruijn
+        --LambdaCube.Convert.ToDeBruijnRec
+        LambdaCube.Language
+        LambdaCube.Language.HOAS
+        LambdaCube.Language.PrimFun
+        LambdaCube.Language.ReifyType
+        LambdaCube.Language.Sampler
+        LambdaCube.Language.Type
+                  
+  GHC-options:
+--        -Werror
+        -Wall
+        -fno-warn-missing-signatures
+        -fno-warn-name-shadowing
+        -fno-warn-orphans
+        -fno-warn-unused-binds
+        -fno-warn-unused-do-bind
+        -fspec-constr-count=10
+        -funbox-strict-fields
+        -O0
+-- for profiling
+--        -auto-all
+--        -caf-all
+
+  Extensions:
+        ConstraintKinds
+        DataKinds
+        DeriveDataTypeable
+        FlexibleContexts
+        FlexibleInstances
+        FunctionalDependencies
+        GADTs
+        KindSignatures
+        MultiParamTypeClasses
+        ScopedTypeVariables
+        StandaloneDeriving
+        TypeFamilies
+        TypeOperators
+        TypeSynonymInstances
+        PolyKinds
