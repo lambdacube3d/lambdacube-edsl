@@ -8,8 +8,8 @@ import qualified Data.Trie as T
 import Data.Vect
 import qualified Data.Vector.Storable as V
 
-import LC_API
-import LC_Mesh
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 
 complexMesh :: [(Proj4, Mesh)] -> Mesh
 complexMesh parts = Mesh

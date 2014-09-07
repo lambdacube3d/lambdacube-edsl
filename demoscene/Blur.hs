@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 module Blur where
 
-import LC_API
+import LambdaCube.GL
 import Utility
 
 data Blur

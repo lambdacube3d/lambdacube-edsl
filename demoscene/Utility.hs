@@ -1,8 +1,8 @@
 {-# LANGUAGE TypeOperators, OverloadedStrings, DataKinds, FlexibleContexts #-}
 module Utility where
 
-import LC_API
-import LC_Mesh
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 import Geometry
 
 floatV :: Float -> Exp V Float

@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 module ShaderToy (fxFakeRipple, fxWarping, fxMotionBlur) where
 
-import LC_API
+import LambdaCube.GL
 import Utility
 import Swizzling
 import BuiltinVec

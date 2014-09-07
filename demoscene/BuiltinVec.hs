@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts #-}
 module BuiltinVec where
 
-import LC_API
+import LambdaCube.GL
 
 class BuiltinVec4 v r stage s where
   vec4' :: (GPU v,

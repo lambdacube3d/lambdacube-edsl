@@ -16,7 +16,7 @@ import Data.Bitmap.IO
 import Debug.Trace
 
 import BSP
-import LC_API
+import LambdaCube.GL
 import MD3 (MD3Model)
 import qualified MD3 as MD3
 import Q3Patch

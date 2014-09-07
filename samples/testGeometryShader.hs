@@ -14,10 +14,10 @@ import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import System.Environment
 
-import LC_API
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 
 import Graphics.Rendering.OpenGL.Raw.Core32
-import LC_Mesh
 import Codec.Image.STB hiding (Image)
 
 import Math.Noise

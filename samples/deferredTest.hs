@@ -13,12 +13,10 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as V
 
-import LC_API
---import LCLanguage
---import LCGL
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 
 import Graphics.Rendering.OpenGL.Raw.Core32
-import LC_Mesh
 import Codec.Image.STB hiding (Image)
 
 --import qualified Criterion.Measurement as C

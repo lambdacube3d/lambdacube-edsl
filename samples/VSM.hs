@@ -3,7 +3,7 @@ module VSM where
 
 import Data.ByteString.Char8 (ByteString)
 
-import LC_API
+import LambdaCube.GL
 --import LCLanguage
 
 -- specialized snoc

@@ -7,8 +7,7 @@ import Data.Int
 import Data.Vect.Float hiding (reflect')
 import Data.List hiding (transpose)
 
-import LC_API
---import LCLanguage
+import LambdaCube.GL
 
 --import VSM hiding (floatF)
 

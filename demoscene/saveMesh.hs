@@ -2,7 +2,7 @@
 import Control.Monad
 import System.Environment
 import ThriftUtils
-import LC_Mesh
+import LambdaCube.GL.Mesh
 
 import qualified Data.ByteString.Char8 as SB
 

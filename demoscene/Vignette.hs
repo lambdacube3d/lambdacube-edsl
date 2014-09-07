@@ -1,8 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 module Vignette where
 
-import LC_API
-import LC_T_PrimFun
+import LambdaCube.GL
 import Utility
 import BuiltinVec
 

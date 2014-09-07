@@ -10,8 +10,8 @@ module MeshUtil (transformMesh,transformMesh',joinMesh) where
 import qualified Data.Vector.Storable as SV
 
 import qualified Data.Trie as T
-import LC_API
-import LC_Mesh
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 
 import Data.List
 import Data.ByteString.Char8 (ByteString)

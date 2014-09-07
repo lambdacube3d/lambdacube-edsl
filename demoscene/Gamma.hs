@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 module Gamma where
 
-import LC_API
+import LambdaCube.GL
 import Utility
 
 data Gamma

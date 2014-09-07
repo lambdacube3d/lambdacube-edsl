@@ -5,8 +5,8 @@ import Data.ByteString.Char8 (ByteString)
 import Physics.Bullet.Raw
 import Physics.Bullet.Raw.Class
 import qualified Data.Trie as T
-import LC_Mesh
-import LC_API
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 import qualified Data.Vector.Storable as V
 import Data.List
 import Data.Vector.Storable ((!))

@@ -39,9 +39,9 @@ import Physics.Bullet.Raw.Utils
 import System.IO.Unsafe
 import Unsafe.Coerce
 
-import LC_API hiding (Transform)
-import qualified LC_API as LC
-import LC_Mesh
+import LambdaCube.GL hiding (Transform)
+import qualified LambdaCube.GL as LC
+import LambdaCube.GL.Mesh
 
 import Utils
 import GraphicsUtils

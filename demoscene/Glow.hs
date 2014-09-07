@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 module Glow where
 
-import LC_API
+import LambdaCube.GL
 import Utility
 
 import Blur

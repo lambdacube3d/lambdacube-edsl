@@ -26,8 +26,8 @@ import qualified Data.Vector.Storable as SV
 import System.Directory
 import System.FilePath
 
-import LC_API hiding (Line)
-import LC_Mesh hiding (loadMesh)
+import LambdaCube.GL hiding (Line)
+import LambdaCube.GL.Mesh hiding (loadMesh)
 import Stunts.Color
 import Stunts.Loader
 import Stunts.Track

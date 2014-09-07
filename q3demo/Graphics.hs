@@ -7,7 +7,7 @@ import Data.List
 import Data.Digest.CRC32
 import Data.Maybe
 import Data.Vect
-import LC_API
+import LambdaCube.GL
 
 import Material hiding (Blending)
 

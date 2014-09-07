@@ -51,10 +51,9 @@ Executable q3demo
                   data-binary-ieee754,
                   digest,
                   elerea,
-                  lambdacube-core,
+                  lambdacube-gl,
                   mmap,
                   stb-image,
-                  type-level-numbers,
                   vect,
                   zlib
 

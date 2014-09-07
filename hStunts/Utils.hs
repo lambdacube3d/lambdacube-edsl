@@ -22,7 +22,7 @@ import Data.Vector.Storable (unsafeWith)
 import Foreign 
 import System.IO.Unsafe
 
-import LC_API (TextureData(..))
+import LambdaCube.GL (TextureData(..))
 
 -- Reactive helper functions
 

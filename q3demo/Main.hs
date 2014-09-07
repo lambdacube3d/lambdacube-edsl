@@ -32,8 +32,8 @@ import Data.Bitmap
 import Data.Digest.CRC32
 import Codec.Image.STB hiding (Image)
 
-import LC_API
-import LC_Mesh
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 
 import Effect
 

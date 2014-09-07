@@ -10,7 +10,7 @@ Stability:      experimental
 Homepage:       http://lambdacube3d.wordpress.com/
 Bug-Reports:    https://github.com/csabahruska/lc-dsl/issues
 Category:       Graphics
-Tested-With:    GHC == 7.6.3
+Tested-With:    GHC == 7.8.2
 Synopsis:       LambdaCube 3D is a domain specific language and library that makes it possible to program GPUs in a purely functional style.
 Description:
     LambdaCube 3D is a domain specific language and library that makes
@@ -28,35 +28,24 @@ Description:
 
 Library
   Build-Depends:
-        base >=4.6, containers >=0.5 && <0.6, mtl >=2.1 && <2.2, bytestring >=0.10 && <0.11, bytestring-trie >=0.2 && <0.3, vector >=0.10 && <0.11, OpenGLRaw >=1.5 && <1.6, bitmap >=0.0 && <0.1, prettyclass >=1.0 && <1.1, language-glsl >=0.1 && <0.2, binary >= 0.7.1 && <0.8, ghc-prim,
-        data-reify >= 0.6 && <0.7
+        base >=4.6,
+        containers >=0.5 && <0.6,
+        mtl >=2.1 && <2.2,
+        bytestring >=0.10 && <0.11,
+        bytestring-trie >=0.2 && <0.3,
+        vector >=0.10 && <0.11
+
+  default-language:  Haskell2010
+  hs-source-dirs:    src/lib
+
   Exposed-modules:
-        BiMap
-        LC_API
-        LC_B_GL
-        LC_B_GLCompile
-        LC_B_GLData
-        LC_B_GLSLCodeGen
-        LC_B_GLType
-        LC_B_GLUtil
-        LC_B_Traversals
-        LC_C_Convert
---        LC_C_Convert2
-        LC_C_PrimFun
-        LC_G_APIType
-        LC_G_Type
-        LC_Mesh
-        LC_T_APIType
-        LC_T_DSLType
-        LC_T_HOAS
-        LC_T_Language
-        LC_T_PrimFun
-        LC_T_Sampler
-        LC_U_APIType
-        LC_U_DeBruijn
---        LC_U_DeBruijn2
-        LC_U_PrimFun
-                  
+        LambdaCube.Core.Util.BiMap
+        LambdaCube.Core.Traversals
+        LambdaCube.Core.PrimFun
+        LambdaCube.Core.Type
+        LambdaCube.Core.DeBruijn
+--        LambdaCube.Core.DeBruijnRec
+
   GHC-options:
 --        -Werror
         -Wall
@@ -73,26 +62,6 @@ Library
 --        -caf-all
 
   Extensions:
-        BangPatterns
-        ConstraintKinds
-        DataKinds
         DeriveDataTypeable
-        EmptyDataDecls
-        FlexibleContexts
-        FlexibleInstances
-        FunctionalDependencies
-        GADTs
-        ImpredicativeTypes
-        KindSignatures
-        MultiParamTypeClasses
-        OverloadedStrings
-        ParallelListComp
-        Rank2Types
-        ScopedTypeVariables
-        StandaloneDeriving
-        TupleSections
-        TypeFamilies
-        TypeOperators
+        BangPatterns
         TypeSynonymInstances
-        PolyKinds
-

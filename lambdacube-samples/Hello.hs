@@ -6,8 +6,8 @@ import Data.Vect
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 
-import LC_API
-import LC_Mesh
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 
 import Codec.Image.STB hiding (Image)
 

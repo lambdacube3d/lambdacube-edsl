@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 module RayMarch (fxRayMarch) where
 
-import LC_API
+import LambdaCube.GL
 import Utility
 import Swizzling
 

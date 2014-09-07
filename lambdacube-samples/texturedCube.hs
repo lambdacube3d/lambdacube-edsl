@@ -6,8 +6,8 @@ import Data.Vect
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 
-import LC_API
-import LC_Mesh
+import        LambdaCube.GL
+import        LambdaCube.GL.Mesh
 
 import Codec.Image.STB hiding (Image)
 import FX
@@ -160,14 +160,12 @@ main = do
         frameImage :: Exp Obj (Image 1 V4F)
         frameImage = PrjFrameBuffer "" tix0 $ texturing texture (Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV"))
 
-        fx img _ = PrjFrameBuffer "" tix0 $ texturing (imgToTex $ postProcess img) (Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV"))
+        fx img = PrjFrameBuffer "" tix0 $ texturing (imgToTex $ postProcess $ img) (Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV"))
         imgToTex img = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
-
-        frameImageFX = foldl fx frameImage [1..4]
 
     --renderer <- compileRenderer $ ScreenOut $ frameImage
     --renderer <- compileRenderer $ ScreenOut $ blur gaussFilter9 $ frameImage
-    renderer <- compileRenderer $ ScreenOut $ frameImageFX
+    renderer <- compileRenderer $ ScreenOut $ iterate fx frameImage !! 4
     initUtility renderer
 
     let uniformMap      = uniformSetter renderer

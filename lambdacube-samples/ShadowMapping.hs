@@ -10,8 +10,8 @@ import Data.Vect.Float.Instances ()
 import FRP.Elerea.Param
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 
-import LC_API
-import LC_Mesh
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
 
 import Common.Utils
 import Common.GraphicsUtils

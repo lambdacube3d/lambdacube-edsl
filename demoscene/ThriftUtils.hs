@@ -25,9 +25,9 @@ import GHC.IO.Handle (Handle)
 
 import qualified Data.Trie as T
 
-import qualified LC_Mesh as LC
+import qualified LambdaCube.GL.Mesh as LC
 import qualified FCurve as FC
-import LC_API
+import LambdaCube.GL
 
 sblToV :: Storable a => [SB.ByteString] -> V.Vector a
 sblToV ls = v
