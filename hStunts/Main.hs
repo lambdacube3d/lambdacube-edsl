@@ -297,20 +297,20 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
             Vec4 ux uy uz _ = (Vec4 0 1 0 0) .* fromProjective m
     let camera = selectCam <$> camMode <*> followCamNear <*> followCamFar <*> userCam <*> carCamera
 
-    let Just (SM44F worldViewSetter) = T.lookup "worldView" uniforms
-        Just (SM44F positionSetter) = T.lookup "worldPosition" uniforms
-        Just (SM44F projectionSetter) = T.lookup "projection" uniforms
-        Just (SV3F lightDirectionSetter) = T.lookup "lightDirection" uniforms
+    let worldViewSetter = uniformM44F "worldView" uniforms
+        positionSetter = uniformM44F "worldPosition" uniforms
+        projectionSetter = uniformM44F "projection" uniforms
+        lightDirectionSetter = uniformV3F "lightDirection" uniforms
         setupGFX ((w, h), capturing, frameCount, dt, updateHud, camMode) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
 
             let car = cars !! carId
                 fieldOfView = pi/2
                 aspectRatio = fromIntegral w / fromIntegral h
                 projection nearDepth farDepth = perspective nearDepth farDepth fieldOfView aspectRatio
-                carPositionMats car = [s | u <- carUnis car, let Just (SM44F s) = T.lookup "worldPosition" u]
-                carViewMats car = [s | u <- carUnis car, let Just (SM44F s) = T.lookup "worldView" u]
-                wheelsPositionU car = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldPosition" u] | wu <- wheelsUnis car]
-                wheelsViewU car = [[s | u <- wu, let Just (SM44F s) = T.lookup "worldView" u] | wu <- wheelsUnis car]
+                carPositionMats car = map (uniformM44F "worldPosition") $ carUnis car
+                carViewMats car = map (uniformM44F "worldView") $ carUnis car
+                wheelsPositionU car = [[uniformM44F "worldPosition" u | u <- wu] | wu <- wheelsUnis car]
+                wheelsViewU car = [[uniformM44F "worldView" u | u <- wu] | wu <- wheelsUnis car]
 
             lightDirectionSetter $! vec3ToV3F $! lightDirection
             worldViewSetter $! mat4ToM44F $! fromProjective worldViewMat
