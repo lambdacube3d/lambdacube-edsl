@@ -156,8 +156,8 @@ mkRenderTextures dag allGPs = do
         texSlotName     = Map.fromList $ nubS [(s,SB.unpack n) | s@(Sampler _ _ txExp) <- samplers, TextureSlot n _ <- [toExp dag txExp]]
     return (texSlotName, renderTexName, renderTexGLObj, sequence_ disposeTex, dependentSamplers)
 
-mkRenderDescriptor :: DAG -> RenderState -> Map Exp String -> Map Exp String -> Map Exp GLuint -> Exp -> IO RenderDescriptor
-mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj f = case f of
+mkRenderDescriptor :: T.Trie InputGetter -> DAG -> RenderState -> Map Exp String -> Map Exp String -> Map Exp GLuint -> Exp -> IO RenderDescriptor
+mkRenderDescriptor uniformGetterTrie dag rendState texSlotName renderTexName renderTexGLObj f = case f of
     FrameBuffer imgs  -> RenderDescriptor T.empty T.empty (compileClearFrameBuffer f) (return ()) <$> newIORef (ObjectSet (return ()) Map.empty) <*> pure (length [() | ColorImage {} <- imgs])
     Accumulate {}   -> do
         {- 
@@ -185,7 +185,7 @@ mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj f = ca
                     --putStr (" -- Texture bind (TexUnit " ++ show (texUnitIdx,texObj) ++ " TexObj): ") >> printGLStatus
 
         drawRef <- newIORef $ ObjectSet (return ()) Map.empty
-        (rA,dA,uT,sT,outColorCnt) <- compileRenderFrameBuffer dag usedRenderTexName usedTexSlotName drawRef f
+        (rA,dA,uT,sT,outColorCnt) <- compileRenderFrameBuffer rendState uniformGetterTrie dag usedRenderTexName usedTexSlotName drawRef f
         return $ RenderDescriptor
             { uniformLocation   = uT
             , streamLocation    = sT
@@ -197,12 +197,13 @@ mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj f = ca
     _ -> error $ "GP node type error: should be FrameBuffer but got: " ++ (head $ (words $ show f) ++ [])
 
 -- FIXME: currently we expect ScreenOut to be the last operation
-mkPassSetup :: IORef (Word,Word) -> DAG -> Map Exp GLuint -> (Exp -> [Exp]) -> (Bool,Int,Int) -> Exp -> IO (IO (), IO ())
-mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,outCnt) fb = case isLast of
+mkPassSetup :: IORef (Word,Word) -> RenderState -> DAG -> Map Exp GLuint -> (Exp -> [Exp]) -> (Bool,Int,Int) -> Exp -> IO (IO (), IO ())
+mkPassSetup screenSizeIORef rendState dag renderTexGLObj dependentSamplers (isLast,outIdx,outCnt) fb = case isLast of
     True    -> do
         putStrLn $ " -- last pass output count: " ++ show outCnt ++ "  outIdx: " ++ show outIdx
         let setup = do
                 (screenW,screenH) <- readIORef screenSizeIORef
+                writeIORef (renderTargetSize rendState) $ V2 (fromIntegral screenW) (fromIntegral screenH)
                 glViewport 0 0 (fromIntegral screenW) (fromIntegral screenH)
                 putStrLn_ $ "CMD: glBindFramebuffer gl_DRAW_FRAMEBUFFER 0"
                 glBindFramebuffer gl_DRAW_FRAMEBUFFER 0
@@ -220,7 +221,8 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
         putStr "    - bind: " >> printGLStatus
         let depSamplers = dependentSamplers fb
             hasDepthOp = case fb of
-                Accumulate (AccumulationContext _ ops) _ _ _ _  -> not $ L.null [() | DepthOp {} <- ops]
+                Accumulate aCtx _ _ _ _  -> not $ L.null [() | DepthOp {} <- ops]
+                  where AccumulationContext _ ops = toExp dag aCtx
                 FrameBuffer imgs -> not $ L.null [() | DepthImage {} <- imgs]
         ----------
         -- FIXME: samplers must contain the fragment value's output index!
@@ -294,6 +296,7 @@ mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (isLast,outIdx,
                 putStrLn_ $ "CMD: glBindFramebuffer gl_DRAW_FRAMEBUFFER " ++ show glFBO
                 glBindFramebuffer gl_DRAW_FRAMEBUFFER glFBO
                 printGLStatus
+                writeIORef (renderTargetSize rendState) $ V2 (fromIntegral depthW) (fromIntegral depthH)
                 glViewport 0 0 (fromIntegral depthW) (fromIntegral depthH)
                 --putStr " -- FBO bind: " >> printGLStatus
                 --putStr " -- FBO status: " >> printFBOStatus
@@ -307,8 +310,10 @@ mkRenderState = do
     maxTextureUnits <- glGetIntegerv1 gl_MAX_COMBINED_TEXTURE_IMAGE_UNITS
     texUnitState <- MV.new $ fromIntegral maxTextureUnits
     MV.set texUnitState (-1)
+    rtSize <- newIORef $ V2 0 0
     return $ RenderState
         { textureUnitState  = texUnitState
+        , renderTargetSize  = rtSize
         }
 {-
   Note: Input mapping problem
@@ -353,8 +358,9 @@ compileRenderer dag (ScreenOut img) = do
     -- create RenderState
     rendState <- mkRenderState
 
-    (uSetup,uSetter) <- unzip <$> mapM (mkUniformSetter rendState) uniformTypes
+    (uSetup,uSetter,uGetter) <- unzip3 <$> mapM (mkUniformSetter rendState) uniformTypes
     let uniformSetterTrie   = T.fromList $! zip uniformNames uSetter
+        uniformGetterTrie   = T.fromList $! zip uniformNames uGetter
         mkUniformSetupTrie  = T.fromList $! zip uniformNames uSetup
 
         slotGP :: Trie (Set Exp)
@@ -367,7 +373,7 @@ compileRenderer dag (ScreenOut img) = do
     (texSlotName,renderTexName,renderTexGLObj,renderTexDispose,dependentSamplers) <- mkRenderTextures dag allGPs
 
     -- create RenderDescriptors
-    renderDescriptors <- Map.fromList <$> mapM (\a -> (a,) <$> mkRenderDescriptor dag rendState texSlotName renderTexName renderTexGLObj a) (nubS $ concatMap (renderChain dag) ordFBs)
+    renderDescriptors <- Map.fromList <$> mapM (\a -> (a,) <$> mkRenderDescriptor uniformGetterTrie dag rendState texSlotName renderTexName renderTexGLObj a) (nubS $ concatMap (renderChain dag) ordFBs)
 
     -- create IORef for ScreenOut Size
     screenSizeIORef <- newIORef (0,0)
@@ -379,7 +385,7 @@ compileRenderer dag (ScreenOut img) = do
         let Just rd = Map.lookup fb renderDescriptors
         putStrLn ("pass #" ++ show passNo)
         putStrLn (" - draw count: " ++ show (length drawList))
-        (passSetup,passDispose) <- mkPassSetup screenSizeIORef dag renderTexGLObj dependentSamplers (fb == gp,fragmentOutCount rd - idx, fragmentOutCount rd) fb
+        (passSetup,passDispose) <- mkPassSetup screenSizeIORef rendState dag renderTexGLObj dependentSamplers (fb == gp,fragmentOutCount rd - idx, fragmentOutCount rd) fb
         return (passSetup >> sequence_ drawList, passDispose >> sequence_ disposeList)
 
     -- debug

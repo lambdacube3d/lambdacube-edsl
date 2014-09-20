@@ -150,6 +150,7 @@ instance Ord Object where
 data RenderState
     = RenderState
     { textureUnitState  :: IOVector Int
+    , renderTargetSize  :: IORef V2U
     }
 
 type StreamSetter = Stream Buffer -> IO ()
@@ -234,34 +235,39 @@ data TextureData
     }
 
 type SetterFun a = a -> IO ()
+newtype Getter a = Getter (IO a)
+newtype Setter a = Setter (SetterFun a)
+
+type InputGetter = Input Getter
+type InputSetter = Input Setter
 
 -- user will provide scalar input data via this type
-data InputSetter
-    = SBool  (SetterFun Bool)
-    | SV2B   (SetterFun V2B)
-    | SV3B   (SetterFun V3B)
-    | SV4B   (SetterFun V4B)
-    | SWord  (SetterFun Word32)
-    | SV2U   (SetterFun V2U)
-    | SV3U   (SetterFun V3U)
-    | SV4U   (SetterFun V4U)
-    | SInt   (SetterFun Int32)
-    | SV2I   (SetterFun V2I)
-    | SV3I   (SetterFun V3I)
-    | SV4I   (SetterFun V4I)
-    | SFloat (SetterFun Float)
-    | SV2F   (SetterFun V2F)
-    | SV3F   (SetterFun V3F)
-    | SV4F   (SetterFun V4F)
-    | SM22F  (SetterFun M22F)
-    | SM23F  (SetterFun M23F)
-    | SM24F  (SetterFun M24F)
-    | SM32F  (SetterFun M32F)
-    | SM33F  (SetterFun M33F)
-    | SM34F  (SetterFun M34F)
-    | SM42F  (SetterFun M42F)
-    | SM43F  (SetterFun M43F)
-    | SM44F  (SetterFun M44F)
+data Input a
+    = SBool  (a Bool)
+    | SV2B   (a V2B)
+    | SV3B   (a V3B)
+    | SV4B   (a V4B)
+    | SWord  (a Word32)
+    | SV2U   (a V2U)
+    | SV3U   (a V3U)
+    | SV4U   (a V4U)
+    | SInt   (a Int32)
+    | SV2I   (a V2I)
+    | SV3I   (a V3I)
+    | SV4I   (a V4I)
+    | SFloat (a Float)
+    | SV2F   (a V2F)
+    | SV3F   (a V3F)
+    | SV4F   (a V4F)
+    | SM22F  (a M22F)
+    | SM23F  (a M23F)
+    | SM24F  (a M24F)
+    | SM32F  (a M32F)
+    | SM33F  (a M33F)
+    | SM34F  (a M34F)
+    | SM42F  (a M42F)
+    | SM43F  (a M43F)
+    | SM44F  (a M44F)
     -- shadow textures
     | SSTexture1D
     | SSTexture2D
@@ -271,7 +277,7 @@ data InputSetter
     | SSTexture2DRect
     -- float textures
     | SFTexture1D
-    | SFTexture2D           (SetterFun TextureData)
+    | SFTexture2D           (a TextureData)
     | SFTexture3D
     | SFTextureCube
     | SFTexture1DArray

@@ -1,6 +1,6 @@
 module LambdaCube.GL.Compile where
 
-import Control.Applicative
+import Control.Applicative hiding (Const)
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
 import Data.IORef
@@ -40,6 +40,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_VERTEX_SHADER
 
     -- ACCUMULATION CONTEXT related *
+    , glViewport
     -- blending
     , glBlendColor
     , glBlendEquationSeparate
@@ -196,9 +197,10 @@ setupRasterContext = cvt
         setProvokingVertex pv
         putStrLn_ "TriangleCtx 6" >> printGLStatus
 
-setupAccumulationContext :: AccumulationContext -> IO ()
-setupAccumulationContext (AccumulationContext n ops) = cvt ops
+setupAccumulationContext :: RenderState -> T.Trie InputGetter -> DAG -> ExpId -> IO ()
+setupAccumulationContext rendState uniformGetterTrie dag aCtx = cvt ops
   where
+    AccumulationContext vpSize ops = toExp dag aCtx
     cvt :: [FragmentOperation] -> IO ()
     cvt (StencilOp a b c : DepthOp f m : xs) = do
         -- TODO
@@ -255,7 +257,18 @@ setupAccumulationContext (AccumulationContext n ops) = cvt ops
                 _           -> (1,1,1,1)
         glColorMask mr mg mb ma
         cvtC (i + 1) xs
-    cvtC _ [] = return ()
+    cvtC _ [] = case vpSize of
+      Nothing -> do
+        V2 w h <- readIORef $ renderTargetSize rendState
+        glViewport 0 0 (fromIntegral w) (fromIntegral h)
+      Just vpSizeExp -> do
+        V4 x y w h <- case toExp dag vpSizeExp of
+          Uni n -> case T.lookup n uniformGetterTrie of
+            Just (SV4U (Getter v)) -> v
+            _ -> error $ "interal error: viewport size type mismatch for Uni input " ++ show n
+          Const (VV4U c) -> return c
+          a -> error $ "interal error: viewport size type mismatch - " ++ show a
+        glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
 
     cvtBool :: Bool -> GLboolean
     cvtBool True  = 1
@@ -466,8 +479,8 @@ compileClearFrameBuffer (FrameBuffer fb) = putStrLn_ ("CMD: clearFrameBuffer " +
 
 -- FIXME: simple solution, does not support sharing
 -- result: (RenderAction, DisposeAction, UniformLocation, StreamLocation)
-compileRenderFrameBuffer :: DAG -> [(Exp,String)] -> [(Exp,String)] -> IORef ObjectSet -> Exp -> IO (IO (), IO (), Trie GLint, Trie GLuint, Int)
-compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate aCtx ffilter fsh rastExp fb) = do
+compileRenderFrameBuffer :: RenderState -> Trie InputGetter -> DAG -> [(Exp,String)] -> [(Exp,String)] -> IORef ObjectSet -> Exp -> IO (IO (), IO (), Trie GLint, Trie GLuint, Int)
+compileRenderFrameBuffer rendState uniformGetterTrie dag samplerNames slotSamplerNames objsIORef (Accumulate aCtx ffilter fsh rastExp fb) = do
     --rndr <- compileFrameBuffer fb rndr'
     po <- glCreateProgram
     let Rasterize rCtx primsExp     = toExp dag rastExp
@@ -555,7 +568,7 @@ compileRenderFrameBuffer dag samplerNames slotSamplerNames objsIORef (Accumulate
                 putStrLn_ $ "CMD: setRasterContext " ++ show rCtx
                 setupRasterContext rCtx
                 putStrLn_ ("setupRasterContext " ++ show rCtx) >> printGLStatus
-                setupAccumulationContext aCtx
+                setupAccumulationContext rendState uniformGetterTrie dag aCtx
                 putStrLn_ "setupAccumulationContext" >> printGLStatus
                 putStrLn_ $ "CMD: setAccumulationContext " ++ show aCtx
                 putStrLn_ $ "CMD: glUseProgram " ++ show po

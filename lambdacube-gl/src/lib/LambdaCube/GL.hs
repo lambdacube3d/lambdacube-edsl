@@ -90,7 +90,7 @@ module LambdaCube.GL (
     EdgeMode(..),
 
     -- types for pipeline input
-    InputSetter(..),
+    InputSetter,
     BufferSetter,
     ArrayType(..),
     Array(..),
@@ -189,105 +189,105 @@ uniformM44F   :: ByteString -> Trie InputSetter -> SetterFun M44F
 uniformFTexture2D   :: ByteString -> Trie InputSetter -> SetterFun TextureData
 
 uniformBool n is = case T.lookup n is of
-    Just (SBool fun)    -> fun
+    Just (SBool (Setter fun)) -> fun
     _   -> nullSetter n "Bool"
 
 uniformV2B n is = case T.lookup n is of
-    Just (SV2B fun)    -> fun
+    Just (SV2B (Setter fun)) -> fun
     _   -> nullSetter n "V2B"
 
 uniformV3B n is = case T.lookup n is of
-    Just (SV3B fun)    -> fun
+    Just (SV3B (Setter fun)) -> fun
     _   -> nullSetter n "V3B"
 
 uniformV4B n is = case T.lookup n is of
-    Just (SV4B fun)    -> fun
+    Just (SV4B (Setter fun)) -> fun
     _   -> nullSetter n "V4B"
 
 uniformWord n is = case T.lookup n is of
-    Just (SWord fun)    -> fun
+    Just (SWord (Setter fun)) -> fun
     _   -> nullSetter n "Word"
 
 uniformV2U n is = case T.lookup n is of
-    Just (SV2U fun)    -> fun
+    Just (SV2U (Setter fun)) -> fun
     _   -> nullSetter n "V2U"
 
 uniformV3U n is = case T.lookup n is of
-    Just (SV3U fun)    -> fun
+    Just (SV3U (Setter fun)) -> fun
     _   -> nullSetter n "V3U"
 
 uniformV4U n is = case T.lookup n is of
-    Just (SV4U fun)    -> fun
+    Just (SV4U (Setter fun)) -> fun
     _   -> nullSetter n "V4U"
 
 uniformInt n is = case T.lookup n is of
-    Just (SInt fun)    -> fun
+    Just (SInt (Setter fun)) -> fun
     _   -> nullSetter n "Int"
 
 uniformV2I n is = case T.lookup n is of
-    Just (SV2I fun)    -> fun
+    Just (SV2I (Setter fun)) -> fun
     _   -> nullSetter n "V2I"
 
 uniformV3I n is = case T.lookup n is of
-    Just (SV3I fun)    -> fun
+    Just (SV3I (Setter fun)) -> fun
     _   -> nullSetter n "V3I"
 
 uniformV4I n is = case T.lookup n is of
-    Just (SV4I fun)    -> fun
+    Just (SV4I (Setter fun)) -> fun
     _   -> nullSetter n "V4I"
 
 uniformFloat n is = case T.lookup n is of
-    Just (SFloat fun)    -> fun
+    Just (SFloat (Setter fun)) -> fun
     _   -> nullSetter n "Float"
 
 uniformV2F n is = case T.lookup n is of
-    Just (SV2F fun)    -> fun
+    Just (SV2F (Setter fun)) -> fun
     _   -> nullSetter n "V2F"
 
 uniformV3F n is = case T.lookup n is of
-    Just (SV3F fun)    -> fun
+    Just (SV3F (Setter fun)) -> fun
     _   -> nullSetter n "V3F"
 
 uniformV4F n is = case T.lookup n is of
-    Just (SV4F fun)    -> fun
+    Just (SV4F (Setter fun)) -> fun
     _   -> nullSetter n "V4F"
 
 uniformM22F n is = case T.lookup n is of
-    Just (SM22F fun)    -> fun
+    Just (SM22F (Setter fun)) -> fun
     _   -> nullSetter n "M22F"
 
 uniformM23F n is = case T.lookup n is of
-    Just (SM23F fun)    -> fun
+    Just (SM23F (Setter fun)) -> fun
     _   -> nullSetter n "M23F"
 
 uniformM24F n is = case T.lookup n is of
-    Just (SM24F fun)    -> fun
+    Just (SM24F (Setter fun)) -> fun
     _   -> nullSetter n "M24F"
 
 uniformM32F n is = case T.lookup n is of
-    Just (SM32F fun)    -> fun
+    Just (SM32F (Setter fun)) -> fun
     _   -> nullSetter n "M32F"
 
 uniformM33F n is = case T.lookup n is of
-    Just (SM33F fun)    -> fun
+    Just (SM33F (Setter fun)) -> fun
     _   -> nullSetter n "M33F"
 
 uniformM34F n is = case T.lookup n is of
-    Just (SM34F fun)    -> fun
+    Just (SM34F (Setter fun)) -> fun
     _   -> nullSetter n "M34F"
 
 uniformM42F n is = case T.lookup n is of
-    Just (SM42F fun)    -> fun
+    Just (SM42F (Setter fun)) -> fun
     _   -> nullSetter n "M42F"
 
 uniformM43F n is = case T.lookup n is of
-    Just (SM43F fun)    -> fun
+    Just (SM43F (Setter fun)) -> fun
     _   -> nullSetter n "M43F"
 
 uniformM44F n is = case T.lookup n is of
-    Just (SM44F fun)    -> fun
+    Just (SM44F (Setter fun)) -> fun
     _   -> nullSetter n "M44F"
 
 uniformFTexture2D n is = case T.lookup n is of
-    Just (SFTexture2D fun)    -> fun
+    Just (SFTexture2D (Setter fun)) -> fun
     _   -> nullSetter n "FTexture2D"

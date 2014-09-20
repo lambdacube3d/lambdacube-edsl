@@ -328,36 +328,36 @@ queryUniforms po = do
         uLocation = [i | (_,i,_,_) <- ul]
     return $! (T.fromList $! zip uNames uLocation, T.fromList $! zip uNames uTypes)
 
-mkUniformSetter :: RenderState -> InputType -> IO (GLint -> IO (), InputSetter)
-mkUniformSetter _ Bool    = do {t <- newIORef False;                        return $! (\i -> readIORef t >>= setUBool i,  SBool $!  writeIORef t)}
-mkUniformSetter _ V2B     = do {t <- newIORef (V2 False False);             return $! (\i -> readIORef t >>= setUV2B i,   SV2B $!   writeIORef t)}
-mkUniformSetter _ V3B     = do {t <- newIORef (V3 False False False);       return $! (\i -> readIORef t >>= setUV3B i,   SV3B $!   writeIORef t)}
-mkUniformSetter _ V4B     = do {t <- newIORef (V4 False False False False); return $! (\i -> readIORef t >>= setUV4B i,   SV4B $!   writeIORef t)}
-mkUniformSetter _ Word    = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUWord i,  SWord $!  writeIORef t)}
-mkUniformSetter _ V2U     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2U i,   SV2U $!   writeIORef t)}
-mkUniformSetter _ V3U     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3U i,   SV3U $!   writeIORef t)}
-mkUniformSetter _ V4U     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4U i,   SV4U $!   writeIORef t)}
-mkUniformSetter _ Int     = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUInt i,   SInt $!   writeIORef t)}
-mkUniformSetter _ V2I     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2I i,   SV2I $!   writeIORef t)}
-mkUniformSetter _ V3I     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3I i,   SV3I $!   writeIORef t)}
-mkUniformSetter _ V4I     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4I i,   SV4I $!   writeIORef t)}
-mkUniformSetter _ Float   = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUFloat i, SFloat $! writeIORef t)}
-mkUniformSetter _ V2F     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2F i,   SV2F $!   writeIORef t)}
-mkUniformSetter _ V3F     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3F i,   SV3F $!   writeIORef t)}
-mkUniformSetter _ V4F     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4F i,   SV4F $!   writeIORef t)}
-mkUniformSetter _ M22F    = do {t <- newIORef (V2 z2 z2);                   return $! (\i -> readIORef t >>= setUM22F i,  SM22F $!  writeIORef t)}
-mkUniformSetter _ M23F    = do {t <- newIORef (V3 z2 z2 z2);                return $! (\i -> readIORef t >>= setUM23F i,  SM23F $!  writeIORef t)}
-mkUniformSetter _ M24F    = do {t <- newIORef (V4 z2 z2 z2 z2);             return $! (\i -> readIORef t >>= setUM24F i,  SM24F $!  writeIORef t)}
-mkUniformSetter _ M32F    = do {t <- newIORef (V2 z3 z3);                   return $! (\i -> readIORef t >>= setUM32F i,  SM32F $!  writeIORef t)}
-mkUniformSetter _ M33F    = do {t <- newIORef (V3 z3 z3 z3);                return $! (\i -> readIORef t >>= setUM33F i,  SM33F $!  writeIORef t)}
-mkUniformSetter _ M34F    = do {t <- newIORef (V4 z3 z3 z3 z3);             return $! (\i -> readIORef t >>= setUM34F i,  SM34F $!  writeIORef t)}
-mkUniformSetter _ M42F    = do {t <- newIORef (V2 z4 z4);                   return $! (\i -> readIORef t >>= setUM42F i,  SM42F $!  writeIORef t)}
-mkUniformSetter _ M43F    = do {t <- newIORef (V3 z4 z4 z4);                return $! (\i -> readIORef t >>= setUM43F i,  SM43F $!  writeIORef t)}
-mkUniformSetter _ M44F    = do {t <- newIORef (V4 z4 z4 z4 z4);             return $! (\i -> readIORef t >>= setUM44F i,  SM44F $!  writeIORef t)}
+mkUniformSetter :: RenderState -> InputType -> IO (GLint -> IO (), InputSetter, InputGetter)
+mkUniformSetter _ Bool    = do {t <- newIORef False;                        return $! (\i -> readIORef t >>= setUBool i,  SBool $!  Setter $ writeIORef t, SBool $  Getter $ readIORef t)}
+mkUniformSetter _ V2B     = do {t <- newIORef (V2 False False);             return $! (\i -> readIORef t >>= setUV2B i,   SV2B $!   Setter $ writeIORef t, SV2B $   Getter $ readIORef t)}
+mkUniformSetter _ V3B     = do {t <- newIORef (V3 False False False);       return $! (\i -> readIORef t >>= setUV3B i,   SV3B $!   Setter $ writeIORef t, SV3B $   Getter $ readIORef t)}
+mkUniformSetter _ V4B     = do {t <- newIORef (V4 False False False False); return $! (\i -> readIORef t >>= setUV4B i,   SV4B $!   Setter $ writeIORef t, SV4B $   Getter $ readIORef t)}
+mkUniformSetter _ Word    = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUWord i,  SWord $!  Setter $ writeIORef t, SWord $  Getter $ readIORef t)}
+mkUniformSetter _ V2U     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2U i,   SV2U $!   Setter $ writeIORef t, SV2U $   Getter $ readIORef t)}
+mkUniformSetter _ V3U     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3U i,   SV3U $!   Setter $ writeIORef t, SV3U $   Getter $ readIORef t)}
+mkUniformSetter _ V4U     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4U i,   SV4U $!   Setter $ writeIORef t, SV4U $   Getter $ readIORef t)}
+mkUniformSetter _ Int     = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUInt i,   SInt $!   Setter $ writeIORef t, SInt $   Getter $ readIORef t)}
+mkUniformSetter _ V2I     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2I i,   SV2I $!   Setter $ writeIORef t, SV2I $   Getter $ readIORef t)}
+mkUniformSetter _ V3I     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3I i,   SV3I $!   Setter $ writeIORef t, SV3I $   Getter $ readIORef t)}
+mkUniformSetter _ V4I     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4I i,   SV4I $!   Setter $ writeIORef t, SV4I $   Getter $ readIORef t)}
+mkUniformSetter _ Float   = do {t <- newIORef 0;                            return $! (\i -> readIORef t >>= setUFloat i, SFloat $! Setter $ writeIORef t, SFloat $ Getter $ readIORef t)}
+mkUniformSetter _ V2F     = do {t <- newIORef (V2 0 0);                     return $! (\i -> readIORef t >>= setUV2F i,   SV2F $!   Setter $ writeIORef t, SV2F $   Getter $ readIORef t)}
+mkUniformSetter _ V3F     = do {t <- newIORef (V3 0 0 0);                   return $! (\i -> readIORef t >>= setUV3F i,   SV3F $!   Setter $ writeIORef t, SV3F $   Getter $ readIORef t)}
+mkUniformSetter _ V4F     = do {t <- newIORef (V4 0 0 0 0);                 return $! (\i -> readIORef t >>= setUV4F i,   SV4F $!   Setter $ writeIORef t, SV4F $   Getter $ readIORef t)}
+mkUniformSetter _ M22F    = do {t <- newIORef (V2 z2 z2);                   return $! (\i -> readIORef t >>= setUM22F i,  SM22F $!  Setter $ writeIORef t, SM22F $  Getter $ readIORef t)}
+mkUniformSetter _ M23F    = do {t <- newIORef (V3 z2 z2 z2);                return $! (\i -> readIORef t >>= setUM23F i,  SM23F $!  Setter $ writeIORef t, SM23F $  Getter $ readIORef t)}
+mkUniformSetter _ M24F    = do {t <- newIORef (V4 z2 z2 z2 z2);             return $! (\i -> readIORef t >>= setUM24F i,  SM24F $!  Setter $ writeIORef t, SM24F $  Getter $ readIORef t)}
+mkUniformSetter _ M32F    = do {t <- newIORef (V2 z3 z3);                   return $! (\i -> readIORef t >>= setUM32F i,  SM32F $!  Setter $ writeIORef t, SM32F $  Getter $ readIORef t)}
+mkUniformSetter _ M33F    = do {t <- newIORef (V3 z3 z3 z3);                return $! (\i -> readIORef t >>= setUM33F i,  SM33F $!  Setter $ writeIORef t, SM33F $  Getter $ readIORef t)}
+mkUniformSetter _ M34F    = do {t <- newIORef (V4 z3 z3 z3 z3);             return $! (\i -> readIORef t >>= setUM34F i,  SM34F $!  Setter $ writeIORef t, SM34F $  Getter $ readIORef t)}
+mkUniformSetter _ M42F    = do {t <- newIORef (V2 z4 z4);                   return $! (\i -> readIORef t >>= setUM42F i,  SM42F $!  Setter $ writeIORef t, SM42F $  Getter $ readIORef t)}
+mkUniformSetter _ M43F    = do {t <- newIORef (V3 z4 z4 z4);                return $! (\i -> readIORef t >>= setUM43F i,  SM43F $!  Setter $ writeIORef t, SM43F $  Getter $ readIORef t)}
+mkUniformSetter _ M44F    = do {t <- newIORef (V4 z4 z4 z4 z4);             return $! (\i -> readIORef t >>= setUM44F i,  SM44F $!  Setter $ writeIORef t, SM44F $  Getter $ readIORef t)}
 mkUniformSetter rendState FTexture2D = do
     let texUnitState = textureUnitState rendState
     t <- newIORef (TextureData 0)
-    return $! (\i -> readIORef t >>= setTextureData texUnitState i,  SFTexture2D $!  writeIORef t)
+    return $! (\i -> readIORef t >>= setTextureData texUnitState i,  SFTexture2D $!  Setter $ writeIORef t, SFTexture2D $ Getter $ readIORef t)
 
 -- FIXME: implement properly
 setTextureData :: IOVector Int -> GLint -> TextureData -> IO ()

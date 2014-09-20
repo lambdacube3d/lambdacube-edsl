@@ -256,6 +256,6 @@ data GPOutput (o :: OutputType) where
 
 data AccumulationContext t
     = AccumulationContext
-    { accViewportName   :: Maybe ByteString -- accViewportSize   :: Exp Obj V2U
+    { accViewportSize   :: Maybe (Exp Obj V4U)
     , accOperations     :: FlatTuple NoConstraint FragmentOperation t
     }

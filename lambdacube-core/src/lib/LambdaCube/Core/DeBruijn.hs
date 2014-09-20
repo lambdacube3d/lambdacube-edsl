@@ -14,6 +14,7 @@ import Data.Vector ((!),Vector,(//))
 import qualified Data.IntSet as IS
 import qualified Data.Vector as V
 import Data.List (foldl')
+import Data.Maybe (maybeToList)
 
 type ExpId = Int
 
@@ -47,7 +48,7 @@ expUniverse expId exp v = (\l -> IS.unions $ IS.singleton expId : (map (v !) l))
     Transform a b           -> [a, b]
     Reassemble a b          -> [a, b]
     Rasterize _ a           -> [a]
-    Accumulate a b c d _    -> [accViewportSize a, b, c, d]
+    Accumulate a b c d _    -> [a, b, c, d]
     PrjFrameBuffer _ _ a    -> [a]
     PrjImage _ _ a          -> [a]
     Filter a                -> [a]
@@ -56,6 +57,7 @@ expUniverse expId exp v = (\l -> IS.unions $ IS.singleton expId : (map (v !) l))
     NoPerspective a         -> [a]
     GeometryShader _ _ _ a b c  -> [a, b, c]
     Sampler _ _ a           -> [a]
+    AccumulationContext a _ -> maybeToList a
     _                       -> []
 
 mkExpUni :: DAG -> V.Vector [Exp]
@@ -190,7 +192,7 @@ data Exp
     | Reassemble            !ExpId !ExpId
     | Rasterize             RasterContext !ExpId
     | FrameBuffer           [Image]
-    | Accumulate            AccumulationContext !ExpId !ExpId !ExpId !ExpId
+    | Accumulate            !ExpId !ExpId !ExpId !ExpId !ExpId
     | PrjFrameBuffer        ByteString Int !ExpId
     | PrjImage              ByteString Int !ExpId
 
@@ -213,6 +215,9 @@ data Exp
     | ImageOut              ByteString V2U !ExpId
     | ScreenOut             !ExpId
     | MultiOut              [ExpId]
+
+    -- Contexts
+    | AccumulationContext   !(Maybe ExpId) [FragmentOperation]
     deriving (Eq, Ord, Show, Read)
 
 class ExpC exp where
@@ -242,7 +247,8 @@ class ExpC exp where
     reassemble      :: exp -> exp -> exp
     rasterize       :: RasterContext -> exp -> exp
     frameBuffer     :: [Image] -> exp
-    accumulate      :: AccumulationContext -> exp -> exp -> exp -> exp -> exp
+    accumulationContext :: Maybe exp -> [FragmentOperation] -> exp
+    accumulate      :: exp -> exp -> exp -> exp -> exp -> exp
     prjFrameBuffer  :: ByteString -> Int -> exp -> exp
     prjImage        :: ByteString -> Int -> exp -> exp
     -- texture constructors
@@ -343,12 +349,18 @@ instance ExpC N where
         hashcons (Unknown "FragmentStream") $ Rasterize a h1
     frameBuffer !a = N $ do
         hashcons (Unknown "FrameBuffer") $ FrameBuffer a
+    accumulationContext !a !b = N $ do
+        !h1 <- case a of
+          Nothing -> return Nothing
+          Just v -> fmap Just $ unN v
+        hashcons (Unknown "AccumulationContext") $ AccumulationContext h1 b
     accumulate !a !b !c !d !e = N $ do
+        !h0 <- unN a
         !h1 <- unN b
         !h2 <- unN c
         !h3 <- unN d
         !h4 <- unN e
-        hashcons (Unknown "FrameBuffer") $ Accumulate a h1 h2 h3 h4
+        hashcons (Unknown "FrameBuffer") $ Accumulate h0 h1 h2 h3 h4
     prjFrameBuffer !a !b !c = N $ do
         !h1 <- unN c
         hashcons (Unknown "Image") $ PrjFrameBuffer a b h1
@@ -391,11 +403,3 @@ instance ExpC N where
     multiOut !a = N $ do
         !h1 <- mapM unN a
         hashcons (Unknown "MultiOut") $ MultiOut h1
-
-data AccumulationContext
-    = AccumulationContext
-    { accViewportSize   :: ExpId
-    , accOperations     :: [FragmentOperation]
-    }
-    deriving (Read,Show, Eq, Ord)
-

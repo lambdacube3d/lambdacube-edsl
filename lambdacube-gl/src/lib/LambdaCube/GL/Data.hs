@@ -186,7 +186,7 @@ addObject renderer slotName prim objIndices objAttributes objUniforms =
         rendState       = renderState renderer
         
     stateIORef <- newIORef True
-    (mkObjUSetup,objUSetters) <- unzip <$> (sequence [mkUniformSetter rendState t | n <- objUniforms, t <- maybeToList $ T.lookup n uniformType])
+    (mkObjUSetup,objUSetters,_) <- unzip3 <$> (sequence [mkUniformSetter rendState t | n <- objUniforms, t <- maybeToList $ T.lookup n uniformType])
     let objUSetterTrie = T.fromList $! zip objUniforms objUSetters
     
         mkDrawAction :: Exp -> IO (GLuint,IO ())

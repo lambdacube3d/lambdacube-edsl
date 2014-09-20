@@ -254,10 +254,8 @@ convertOutputPrimitive v = case v of
     T.LinesOutput       -> LinesOutput
     T.PointsOutput      -> PointsOutput
 
-convertAccumulationContext :: Layout -> H.AccumulationContext b -> AccumulationContext
-convertAccumulationContext lyt (H.AccumulationContext n ops) = AccumulationContext 0 $ cvt ops
---convertAccumulationContext :: ExpC exp => Layout -> H.AccumulationContext b -> exp
---convertAccumulationContext lyt (H.AccumulationContext vpSize ops) = accumulationContext (convertOpenExp [] vpSize) $ cvt ops
+convertAccumulationContext :: ExpC exp => Layout -> H.AccumulationContext b -> exp
+convertAccumulationContext lyt (H.AccumulationContext vpSize ops) = accumulationContext (fmap (convertOpenExp []) vpSize) $ cvt ops
   where
     cvt :: FlatTuple T.NoConstraint T.FragmentOperation b -> [FragmentOperation]
     cvt ZT                          = []
