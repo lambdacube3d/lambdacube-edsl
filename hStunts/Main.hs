@@ -99,7 +99,7 @@ main = do
         retroMode = not $ null $ filter ("--retro" `isPrefixOf`) args
 
     -- load game data
-    StuntsData carsData terrainMesh trackMesh startPos <- readStuntsData carNum $ SB.pack trkFile
+    StuntsData carsData tracksData <- readStuntsData
 
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
@@ -162,20 +162,26 @@ main = do
     {-
     forM_ (terrainMesh ++ trackMesh) $ \m -> do
         cm <- compileMesh m
-        addMesh renderer "streamSlot" cm []
+        addMesh renderer "GameLevel" cm []
     -}
-    cm <- compileMesh $ joinMesh $ terrainMesh ++ trackMesh
-    addMesh renderer "streamSlot" cm []
+    trackMeshes <- forM tracksData $ \(TrackData terrainMesh trackMesh startPos) -> do
+      cm <- compileMesh $ joinMesh $ terrainMesh ++ trackMesh
+      mesh <- addMesh renderer "GameLevel" cm []
+      enableObject mesh False
+      shape1 <- mkStaticShape trackMesh
+      shape2 <- mkStaticShape terrainMesh
+      return (mesh,shape1,shape2)
 
     carUnis <- forM (map carMesh carsData) $ mapM $ \m -> do
         cm <- compileMesh m
-        objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView", "worldPosition"]
+        objectUniformSetter <$> addMesh renderer "GameLevel" cm ["worldView", "worldPosition"]
 
     wheelsUnis <- forM (map wheels carsData) $ mapM $ \(_,_,_,ml) -> forM ml $ \m -> do
         cm <- compileMesh m
-        objectUniformSetter <$> addMesh renderer "streamSlot" cm ["worldView", "worldPosition"]
+        objectUniformSetter <$> addMesh renderer "GameLevel" cm ["worldView", "worldPosition"]
 
     let carBmps = carBitmaps <$> carsData
+    let TrackData terrainMesh trackMesh startPos = head tracksData
 
     -- setup physics
     physicsWorld <- mkPhysicsWorld
@@ -196,7 +202,7 @@ main = do
     capRef <- newIORef False
     s <- fpsState
     sc <- start $ do
-        u <- scene (setScreenSize renderer) cars cpuDrawThread [font1,font2] carNum (uniformSetter renderer) physicsWorld windowSize mousePosition command capRef titleHud
+        u <- scene (setScreenSize renderer) trackMeshes cars cpuDrawThread [font1,font2] carNum (uniformSetter renderer) physicsWorld windowSize mousePosition command capRef titleHud
         return $ draw <$> u
 
     driveNetwork sc (readInput physicsWorld s mousePositionSink mousePressSink keyPressSink capRef)
@@ -216,6 +222,7 @@ data Car bc = Car
 scene :: (BtDynamicsWorldClass bc,
           BtRaycastVehicleClass v)
       => (Word -> Word -> IO ())
+      -> [(Object,BtRigidBody,BtRigidBody)]
       -> [Car v]
       -> IORef Bool
       -> [Font]
@@ -228,7 +235,7 @@ scene :: (BtDynamicsWorldClass bc,
       -> IORef Bool
       -> Object
       -> SignalGen Float (Signal (IO ()))
-scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSize mousePosition command capRef titleHud = do
+scene setSize tracks cars cpuDrawThread font initCarNum uniforms physicsWorld windowSize mousePosition command capRef titleHud = do
     isFirstFrame <- stateful True $ const $ const False
     carId <- transfer2 (Nothing, (initCarNum + 10) `mod` 11) (\_ isFirstFrame isPressed (_, prev) ->
                          if isPressed || isFirstFrame
@@ -236,6 +243,12 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
                          else (Nothing, prev))
              isFirstFrame
              =<< edge (command SwitchCar)
+    trackObject <- transfer2 (Nothing, 0) (\_ isFirstFrame isPressed (_, prev) ->
+                         if isPressed || isFirstFrame
+                         then (Just prev, (prev + 1) `mod` (length tracks))
+                         else (Nothing, prev))
+             isFirstFrame
+             =<< edge (command SwitchTrack)
     time <- stateful 0 (+)
     frameCount <- stateful (0 :: Int) (\_ c -> c + 1)
 
@@ -301,8 +314,18 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
         positionSetter = uniformM44F "worldPosition" uniforms
         projectionSetter = uniformM44F "projection" uniforms
         lightDirectionSetter = uniformV3F "lightDirection" uniforms
-        setupGFX ((w, h), capturing, frameCount, dt, updateHud, camMode) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
-
+        setupGFX ((w, h), capturing, frameCount, dt, updateHud, camMode, (prevTrack,currTrack)) worldViewMat (prevCarId, carId) (carMat, wheelsMats) = do
+            case prevTrack of
+              Nothing -> return ()
+              Just p -> do
+                let (oldMesh,oldShape1,oldShape2) = (tracks !! p)
+                    (newMesh,newShape1,newShape2) = (tracks !! currTrack)
+                enableObject oldMesh False
+                enableStaticShape physicsWorld oldShape1 False
+                enableStaticShape physicsWorld oldShape2 False
+                enableObject newMesh True
+                enableStaticShape physicsWorld newShape1 True
+                enableStaticShape physicsWorld newShape2 True
             let car = cars !! carId
                 fieldOfView = pi/2
                 aspectRatio = fromIntegral w / fromIntegral h
@@ -405,7 +428,7 @@ scene setSize cars cpuDrawThread font initCarNum uniforms physicsWorld windowSiz
 #endif
                 return ()
     effectful4 setupGFX
-                   ((,,,,,) <$> windowSize <*> capture <*> frameCount <*> dt <*> command SwitchCar <*> camMode )
+                   ((,,,,,,) <$> windowSize <*> capture <*> frameCount <*> dt <*> command SwitchCar <*> camMode <*> trackObject)
                    camera
                    carId
                    carAndWheelsPos
@@ -434,6 +457,7 @@ data Command
     | SteerRight
     | RestoreCar
     | SwitchCar
+    | SwitchTrack
     -- Switch camera
     | SwitchToCarCamera
     | SwitchToNearCamera
@@ -457,6 +481,7 @@ keyMapping k =
       SteerRight         -> CharKey 'D'
       RestoreCar         -> CharKey 'R'
       SwitchCar          -> CharKey 'E'
+      SwitchTrack        -> CharKey 'T'
       SwitchToNearCamera -> CharKey '1'
       SwitchToFarCamera  -> CharKey '2'
       SwitchToFreeCamera -> CharKey '3'

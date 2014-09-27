@@ -208,17 +208,21 @@ data CarData
     , carBitmaps    :: T.Trie Bitmap
     }
 
+data TrackData
+  = TrackData
+  { terrainMesh   :: [Mesh]
+  , trackMesh     :: [Mesh]
+  , startPosition :: (Float,Vec3)
+  }
+
 data StuntsData
     = StuntsData
     { cars          :: [CarData]
-    , terrainMesh   :: [Mesh]
-    , trackMesh     :: [Mesh]
-    , startPosition :: (Float,Vec3)
+    , tracks        :: [TrackData]
     }
 
-readStuntsData :: Int -> SB.ByteString -> IO StuntsData
-readStuntsData carNum trkFile = do
-    (terrain,track,startPos) <- loadTrack trkFile
+readStuntsData :: IO StuntsData
+readStuntsData = do
     let cars = map (mkCarData . loadCar) ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
         mkCarData (carModel,carSim,carWheels,carBmps) =
             CarData
@@ -227,11 +231,17 @@ readStuntsData carNum trkFile = do
             , carSimModel = carSim
             , carBitmaps  = carBmps
             }
+        mkTrackData trkFile = do
+          (terrain,track,startPos) <- loadTrack trkFile
+          return $ TrackData
+            { terrainMesh   = [transformMesh' p m | (p,ml) <- terrain, m <- ml]
+            , trackMesh     = [transformMesh' p m | (p,ml) <- track, m <- ml]
+            , startPosition = startPos
+            }
+    tracks <- mapM mkTrackData [k | k <- T.keys archive, ".trk" == takeExtensionCI (SB.unpack k)]
     return $! StuntsData
-        { cars          = cars
-        , terrainMesh   = [transformMesh' p m | (p,ml) <- terrain, m <- ml]
-        , trackMesh     = [transformMesh' p m | (p,ml) <- track, m <- ml]
-        , startPosition = startPos
+        { cars    = cars
+        , tracks  = tracks
         }
 
 takeExtensionCI = map toLower . takeExtension

@@ -61,6 +61,16 @@ addStaticShape dynamicsWorld mesh friction restitution = do
     --btCollisionObject_setRestitution body restitution
     btDynamicsWorld_addRigidBody dynamicsWorld body
 
+mkStaticShape :: [Mesh] -> IO BtRigidBody
+mkStaticShape mesh = do
+    shape <- mkStaticTriangleMeshShape mesh
+    motionState <- btDefaultMotionState idTransform idTransform
+    btRigidBody1 0 motionState shape zero
+
+enableStaticShape :: BtDynamicsWorldClass bc => bc -> BtRigidBody -> Bool -> IO ()
+enableStaticShape dynamicsWorld body True  = btDynamicsWorld_addRigidBody dynamicsWorld body
+enableStaticShape dynamicsWorld body False = btDynamicsWorld_removeRigidBody dynamicsWorld body
+
 createCar :: BtDynamicsWorldClass bc => bc -> [Mesh] -> [(Vec3,Float,Float,[Mesh])] -> Proj4 -> IO BtRaycastVehicle
 createCar dynamicsWorld carChassisMesh wheels transform = do
     carChassisShape <- mkConvexTriangleMeshShape carChassisMesh
