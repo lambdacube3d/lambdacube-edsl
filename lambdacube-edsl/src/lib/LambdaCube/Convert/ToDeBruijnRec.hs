@@ -364,3 +364,4 @@ convertFrameBuffer = cvt
     cvt (T.DepthImage a b:.xs)      = DepthImage (toInt a) b : cvt xs
     cvt (T.StencilImage a b:.xs)    = StencilImage (toInt a) b : cvt xs
     cvt (T.ColorImage a b:.xs)      = ColorImage (toInt a) (T.toValue b) : cvt xs
+    cvt (T.UnclearedImage a:.xs)    = UnclearedImage (toInt a) : cvt xs

@@ -211,9 +211,10 @@ data FragmentOperation
     deriving (Read,Show, Eq, Ord)
 
 data Image
-    = DepthImage    Int Float
-    | StencilImage  Int Int32
-    | ColorImage    Int Value
+    = DepthImage      Int Float
+    | StencilImage    Int Int32
+    | ColorImage      Int Value
+    | UnclearedImage  Int
     deriving (Read,Show, Eq, Ord)
 
 data TextureDataType

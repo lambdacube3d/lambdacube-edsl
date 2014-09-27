@@ -418,6 +418,7 @@ compileClearFrameBuffer (FrameBuffer fb) = putStrLn_ ("CMD: clearFrameBuffer " +
                 _                   -> (0,0,0,1)
         glClearColor r g b a
         glClear $ fromIntegral gl_COLOR_BUFFER_BIT
+    cvtC i (UnclearedImage sh : xs) = return ()
     cvtC i [] = return ()
 
 -- TODO

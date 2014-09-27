@@ -283,6 +283,12 @@ data Image (layerCount :: Nat) t where
                     => NatNum layerCount
                     -> color    -- initial value
                     -> Image layerCount (Color color)
+    
+    UnclearedImage  :: (IsNum t, IsVecScalar d color t, IsScalar color, KnownNat layerCount)
+                    => NatNum layerCount
+                    -> Image layerCount (Color color)
+    
+
 
 -- restriction for framebuffer structure according content semantic
 -- supported configurations: optional stencil + optional depth + [zero or more color]
