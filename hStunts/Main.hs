@@ -186,8 +186,6 @@ main = do
     -- setup physics
     physicsWorld <- mkPhysicsWorld
     addStaticPlane physicsWorld upwards 0 1 1
-    addStaticShape physicsWorld trackMesh 1 1
-    addStaticShape physicsWorld terrainMesh 1000 1000
     let (sO,Vec3 sX sY sZ) = startPos
     raycastVehicles <- forM carsData $ \carData ->
                        createCar physicsWorld (carMesh carData) (wheels carData) $ translateAfter4 (Vec3 sX (sY + 1) sZ) $ rotMatrixProj4 sO upwards
