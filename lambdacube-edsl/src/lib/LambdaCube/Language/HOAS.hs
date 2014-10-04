@@ -11,6 +11,7 @@ import LambdaCube.Language.ReifyType
 import LambdaCube.Language.PrimFun
 import Data.Typeable
 import Data.Dynamic
+import qualified LambdaCube.Core.DeBruijn as U (N)
 
 -- Common Exp, describes shader functions
 data Exp :: Frequency -> * -> * where
@@ -19,6 +20,15 @@ data Exp :: Frequency -> * -> * where
             => Int
             -> String
             -> Exp stage t
+
+    -- Needed for Let conversion
+    Shr     :: U.N
+            -> Exp stage t
+
+    Let     :: (GPU a, GPU b)
+            => Exp stage a
+            -> (Exp stage a -> Exp stage b)
+            -> Exp stage b
 
     -- Needed for conversion to de Bruijn form
     Var     :: GPU t
