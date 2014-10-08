@@ -3,7 +3,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Trans
+--import Control.Monad.Trans
 import Control.Concurrent
 import Data.Word
 import Data.Maybe
@@ -12,7 +12,7 @@ import Data.List hiding (transpose)
 import FRP.Elerea.Param
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 
-import Data.ByteString.Char8 (ByteString)
+--import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as SB
 
 import qualified Data.Vector as VG
@@ -27,8 +27,8 @@ import LambdaCube.GL.Mesh
 import Physics.Bullet.Raw
 import Physics.Bullet.Raw.Class
 
-import System.Directory
-import System.Exit
+--import System.Directory
+--import System.Exit
 
 import GameData
 import GamePhysics
@@ -45,10 +45,10 @@ import Codec.Image.DevIL
 import Text.Printf
 import Foreign
 #endif
-import Text.Printf
+--import Text.Printf
 
 import Graphics.Text.TrueType( decodeFont, Font )
-import Codec.Picture( PixelRGBA8( .. ), writePng, Image(..) )
+import Codec.Picture( PixelRGBA8( .. ), {-writePng,-} Image(..) )
 import qualified Codec.Picture as JP
 import Stunts.Loader(Bitmap(..))
 import qualified Stunts.Loader as L

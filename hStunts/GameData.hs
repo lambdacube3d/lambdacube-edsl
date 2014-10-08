@@ -134,12 +134,17 @@ loadCarWheels n = [wheel vl $ prIndices p | let Model vl pl = m ! "car0", p <- p
         v i = let (a,b,c) = vl !! i in Vec3 a b c
     car0ScaleFactor = scaleFactor / 20
 
-loadCar :: String -> (T.Trie [Mesh], Car, [(Vec3, Float, Float)], T.Trie Bitmap)
-loadCar n = (mesh,car,wheels,bitmaps)
+loadCar :: String -> CarData
+loadCar n = CarData
+    { carMesh     = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- mesh ! "car0"]
+    , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- wheels]
+    , carSimModel = carSim
+    , carBitmaps  = bitmaps
+    }
   where
     mesh = loadCarMesh $ SB.pack $ "ST" ++ n ++ ".P3S"
     carRes = loadRawRes $ SB.pack $ "CAR" ++ n ++ ".RES"
-    car = runGet (getCar carDesc carName) $ carRes ! "simd"
+    carSim = runGet (getCar carDesc carName) $ carRes ! "simd"
       where
         lineBreak ']' = '\n'
         lineBreak a = a
@@ -230,14 +235,7 @@ data StuntsData
 
 readStuntsData :: IO StuntsData
 readStuntsData = do
-    let cars = map (mkCarData . loadCar) ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
-        mkCarData (carModel,carSim,carWheels,carBmps) =
-            CarData
-            { carMesh     = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- carModel ! "car0"]
-            , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- carWheels]
-            , carSimModel = carSim
-            , carBitmaps  = carBmps
-            }
+    let cars = map loadCar ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
         mkTrackData trkFile = do
           (terrain,track,startPos) <- loadTrack trkFile
           return $ TrackData
