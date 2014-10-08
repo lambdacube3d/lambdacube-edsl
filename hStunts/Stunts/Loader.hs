@@ -84,14 +84,16 @@ data Primitive
     }
     deriving Show
 
+type Vertex = (Float, Float, Float)
+
 data Model
     = Model
-    { mdVertices    :: [(Float,Float,Float)]
+    { mdVertices    :: [Vertex]
     , mdPrimitives  :: [Primitive]
     }
     deriving Show
 
-getVertex :: Get (Float, Float, Float)
+getVertex :: Get Vertex
 getVertex = do
     x <- getInt16
     y <- getInt16

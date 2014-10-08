@@ -1,4 +1,8 @@
-module Zip where
+module Zip
+    ( readArchive
+    , eFilePath
+    , decompress
+    ) where
 
 {-
  Zip specification:
