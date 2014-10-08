@@ -1,4 +1,9 @@
-module Stunts.Color where
+module Stunts.Color
+    ( Material (..)
+    , Pattern (..)
+    , materialMap
+    , vgaPal
+    ) where
 
 import Data.Bits
 import Data.IntMap (IntMap)
