@@ -31,7 +31,10 @@ data Material
     }
 
 data Color
-    = Color Word8 Word8 Word8 Word8
+    = Color Word8   -- red
+            Word8   -- green
+            Word8   -- blue
+            Word8   -- alpha
 
 serializeColor :: Color -> [Word8]
 serializeColor (Color r g b a) = [r, g, b, a]
