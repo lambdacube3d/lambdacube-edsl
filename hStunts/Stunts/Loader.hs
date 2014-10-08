@@ -178,7 +178,7 @@ getBitmap = do
             return $ concat $ transpose img
 
         _           -> replicateM (width * height) ((vgaPal IM.!) <$> getInt8)
-    return $ Bitmap width height positionX positionY (SV.fromList $ concat image) unknown1 unknown2
+    return $ Bitmap width height positionX positionY (SV.fromList $ concatMap serializeColor image) unknown1 unknown2
 
 data Car
     = Car

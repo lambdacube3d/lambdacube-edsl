@@ -1,6 +1,8 @@
 module Stunts.Color
     ( Material (..)
     , Pattern (..)
+    , Color
+    , serializeColor
     , materialMap
     , vgaPal
     ) where
@@ -27,9 +29,15 @@ data Material
     , shininess  :: Float
     }
 
-toRGBA :: Word32 -> [Word8]
-toRGBA 0xFFFFFF = [0,0,0,0]
-toRGBA c = [f 16, f 8, f 0, 0xFF]
+data Color
+    = Color Word8 Word8 Word8 Word8
+
+serializeColor :: Color -> [Word8]
+serializeColor (Color a b c d) = [a, b, c, d]
+
+toRGBA :: Word32 -> Color
+toRGBA 0xFFFFFF = Color 0 0 0 0
+toRGBA c = Color (f 16) (f 8) (f 0) 0xFF
   where
     f i = fromIntegral $ (c `shiftR` i) .&. 0xFF :: Word8
 
@@ -172,7 +180,7 @@ materialMap = IM.fromList
     , (128,  (Material Opaque         0xDCDCDC   17  20.0)) -- Corner kerbs
     ]
 
-vgaPal :: IntMap [Word8]
+vgaPal :: IntMap Color
 vgaPal = IM.fromList $ zip [0,1..] $ map toRGBA [
     0x000000, 0x0000A8, 0x00A800, 0x00A8A8, 0xA80000, 0xA800A8, 0xA85400, 0xA8A8A8,
     0x545454, 0x5454FC, 0x54FC54, 0x54FCFC, 0xFC5454, 0xFC54FC, 0xFCFC54, 0xFCFCFC,
