@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
-module Stunts.Unpack where
+module Stunts.Unpack
+    ( unpackResource
+    ) where
 
 import Control.Applicative
 import Data.Bits
