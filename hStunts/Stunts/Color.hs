@@ -34,7 +34,7 @@ data Color
     = Color Word8 Word8 Word8 Word8
 
 serializeColor :: Color -> [Word8]
-serializeColor (Color a b c d) = [a, b, c, d]
+serializeColor (Color r g b a) = [r, g, b, a]
 
 toRGBA :: Word32 -> Color
 toRGBA 0xFFFFFF = Color 0 0 0 0
