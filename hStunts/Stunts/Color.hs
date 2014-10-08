@@ -37,12 +37,6 @@ data Color
 serializeColor :: Color -> [Word8]
 serializeColor (Color r g b a) = [r, g, b, a]
 
-toRGBA :: Word32 -> Color
-toRGBA 0xFFFFFF = Color 0 0 0 0
-toRGBA c = Color (f 16) (f 8) (f 0) 0xFF
-  where
-    f i = fromIntegral $ (c `shiftR` i) .&. 0xFF
-
 {-
 checkFun m = vgaPal IM.! (colorIndex m) == (toRGB $ color m)
 check = foldl (&&) True $ IM.elems $ IM.map checkFun materialMap
@@ -230,5 +224,13 @@ vgaPal = V.fromList $ map toRGBA [
     0xF4C0A8, 0xF0BCA0, 0xF0B89C, 0xF0B494, 0xECB090, 0xECAC88, 0xECA884, 0xE8A480,
     0xE8A078, 0xE89C74, 0xE4986C, 0xE49468, 0xE49464, 0xFC9C9C, 0xFC9494, 0xFC9090,
     0xFC8C8C, 0xFC8484, 0xFC8080, 0xFC7C7C, 0xD8B498, 0xD0AC8C, 0xCCA484, 0xC89C7C,
-    0xC49474, 0xC0906C, 0xC0C0C0, 0xBCBCBC, 0xB8B8B8, 0xB4B4B4, 0xB0B0B0, 0xFFFFFF
-    ]
+    0xC49474, 0xC0906C, 0xC0C0C0, 0xBCBCBC, 0xB8B8B8, 0xB4B4B4, 0xB0B0B0
+    ] ++ [Color 0 0 0 0]
+  where
+    toRGBA :: Word32 -> Color
+    toRGBA c = Color (f 16) (f 8) (f 0) 0xFF
+      where
+        f i = fromIntegral $ (c `shiftR` i) .&. 0xFF
+
+
+
