@@ -387,7 +387,8 @@ toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
     genMat pr = (Vec4 (f r) (f g) (f b) 1, p, z, shiny)
       where
         i = (cycle $ prMaterials pr) !! 1
-        Material pattern (Color r g b _) _ shiny = materialMap V.! i
+        Material pattern ci shiny = materialMap V.! i
+        Color r g b _ = vgaPal V.! ci
         f i = fromIntegral i / 255
         p = case pattern of
             Grate        -> 2

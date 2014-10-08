@@ -23,7 +23,6 @@ data Pattern
 data Material
     = Material
     { pattern    :: Pattern
-    , color      :: Color --Word32      -- cached
     , colorIndex :: Int
     , shininess  :: Float
     }
@@ -49,11 +48,9 @@ checkFun m = vgaPal IM.! (colorIndex m) == (toRGB $ color m)
 check = foldl (&&) True $ IM.elems $ IM.map checkFun materialMap
 -}
 
-material p ci s = Material p (vgaPal V.! ci) ci s
-
---  MaterialIndex      Pattern        Color     ColorIndexOnPalette
 materialMap :: V.Vector Material
 materialMap = V.fromList
+    --         pattern   colorIndex shininess
     -- 0
     [ material Opaque           0   4.0 -- Black
     , material Opaque           1   4.0 -- Blue
@@ -197,6 +194,8 @@ materialMap = V.fromList
     , material Opaque          12  20.0 -- Corner kerbs
     , material Opaque          17  20.0 -- Corner kerbs
     ]
+  where
+    material = Material
 
 vgaPal :: V.Vector Color
 vgaPal = V.fromList $ map toRGBA [
