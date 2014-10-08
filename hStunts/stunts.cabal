@@ -38,6 +38,7 @@ Extra-Source-Files:
   GameData.hs
   GameGraphics.hs
   GamePhysics.hs
+  Args.hs
   Main.hs
   MeshUtil.hs
   Utils.hs
@@ -72,6 +73,7 @@ Executable stunts
                 , mmap
                 , filepath
                 , directory
+                , cmdargs
 
                 , elerea
                 , OpenGLRaw

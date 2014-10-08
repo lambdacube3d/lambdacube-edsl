@@ -1,4 +1,6 @@
-{-# LANGUAGE OverloadedStrings, PackageImports #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE NamedFieldPuns #-}
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans
@@ -26,7 +28,6 @@ import Physics.Bullet.Raw
 import Physics.Bullet.Raw.Class
 
 import System.Directory
-import System.Environment
 import System.Exit
 
 import GameData
@@ -51,6 +52,7 @@ import Codec.Picture( PixelRGBA8( .. ), writePng, Image(..) )
 import qualified Codec.Picture as JP
 import Stunts.Loader(Bitmap(..))
 import qualified Stunts.Loader as L
+import Args
 
 type Sink a = a -> IO ()
 
@@ -76,27 +78,8 @@ main = do
     ilInit
 #endif
 
-    let mediaPath = "."
-
-    gameOk <- doesFileExist (mediaPath ++ "/STUNTS11.ZIP")
-    unless gameOk $ do
-        putStrLn "Missing game file! Please download the original game from"
-        putStrLn "<http://downloads.pigsgrame.de/STUNTS11.ZIP> and move it to"
-        putStrLn "the same folder as this executable."
-        putStrLn "For reference, the above file should be 1077864 bytes."
-        exitFailure
-
-    args <- getArgs
-
-    let carNum = case filter ("--car=" `isPrefixOf`) args of
-            [] -> 4
-            n:_ -> read (drop 6 n)
-
-        trkFile = case filter ("--track=" `isPrefixOf`) args of
-            [] -> "zct114.trk"
-            n:_ -> drop 8 n
-
-        retroMode = not $ null $ filter ("--retro" `isPrefixOf`) args
+    -- get command line arguments (see Args.hs)
+    Args {mediaPath, trkFile, carNum, retroMode} <- getArgs
 
     -- load game data
     StuntsData carsData tracksData <- readStuntsData
