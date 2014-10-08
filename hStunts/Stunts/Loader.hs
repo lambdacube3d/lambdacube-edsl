@@ -1,4 +1,16 @@
-module Stunts.Loader where
+module Stunts.Loader
+    ( Primitive (..)
+    , PrimitiveType (..)
+    , Model (..)
+    , Bitmap (..)
+    , Car (..)
+    , getModel
+    , getCar
+    , getBitmap
+    , getString'
+    , readResources
+    , readTrack
+    ) where
 
 import Data.Char (chr)
 import Control.Applicative
