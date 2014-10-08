@@ -155,7 +155,7 @@ loadCar n = CarData
     bitmapsA = loadBitmap $ SB.pack $ "STDA" ++ n ++ ".PVS"
     bitmapsB = loadBitmap $ SB.pack $ "STDB" ++ n ++ ".PVS"
 
-loadTrack :: SB.ByteString -> IO ([(Proj4, [Mesh])], [(Proj4, [Mesh])], (Float, Vec3))
+loadTrack :: SB.ByteString -> IO TrackData
 loadTrack trkFile = do
     let game1Map = loadMesh "GAME1.P3S"
         game2Map = loadMesh "GAME2.P3S"
@@ -210,7 +210,12 @@ loadTrack trkFile = do
         (a,x,z) <- getCoord <$> randomIO <*> randomIO
         y <- randomIO
         return (scalingUniformProj4 (y*0.4+0.3) .*. rotMatrixProj4 a (Vec3 0 1 0) .*. translation (Vec3 x (y*1500+600) z), m)
-    return (terrain ++ clouds ++ fence, track,startPos)
+
+    return TrackData
+        { terrainMesh   = [transformMesh' p m | (p,ml) <- terrain ++ clouds ++ fence, m <- ml]
+        , trackMesh     = [transformMesh' p m | (p,ml) <- track, m <- ml]
+        , startPosition = startPos
+        }
 
 data CarData
     = CarData
@@ -236,14 +241,7 @@ data StuntsData
 readStuntsData :: IO StuntsData
 readStuntsData = do
     let cars = map loadCar ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
-        mkTrackData trkFile = do
-          (terrain,track,startPos) <- loadTrack trkFile
-          return $ TrackData
-            { terrainMesh   = [transformMesh' p m | (p,ml) <- terrain, m <- ml]
-            , trackMesh     = [transformMesh' p m | (p,ml) <- track, m <- ml]
-            , startPosition = startPos
-            }
-    tracks <- mapM mkTrackData [k | k <- T.keys archive, ".trk" == takeExtensionCI (SB.unpack k)]
+    tracks <- mapM loadTrack [k | k <- T.keys archive, ".trk" == takeExtensionCI (SB.unpack k)]
     return $! StuntsData
         { cars    = cars
         , tracks  = tracks
