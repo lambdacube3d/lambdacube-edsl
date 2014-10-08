@@ -387,7 +387,7 @@ toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
     genMat pr = (Vec4 r g b 1, p, z, shiny)
       where
         i = (cycle $ prMaterials pr) !! 1
-        Material pattern rgb _ shiny = materialMap IM.! i
+        Material pattern rgb _ shiny = materialMap V.! i
         r = fromIntegral (rgb `shiftR` 16) / 255
         g = fromIntegral ((rgb `shiftR` 8) .&. 0xff) / 255
         b = fromIntegral (rgb .&. 0xff) / 255

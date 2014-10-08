@@ -8,8 +8,6 @@ module Stunts.Color
     ) where
 
 import Data.Bits
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IM
 import qualified Data.Vector as V
 import Data.Word
 
@@ -51,8 +49,8 @@ check = foldl (&&) True $ IM.elems $ IM.map checkFun materialMap
 -}
 
 --  MaterialIndex      Pattern        Color     ColorIndexOnPalette
-materialMap :: IntMap Material
-materialMap = IM.fromList
+materialMap :: V.Vector Material
+materialMap = V.fromList $ map snd
     [ (  0,  (Material Opaque         0x000000    0   4.0)) -- Black
     , (  1,  (Material Opaque         0x0000A8    1   4.0)) -- Blue
     , (  2,  (Material Opaque         0x00A800    2   4.0)) -- Green
