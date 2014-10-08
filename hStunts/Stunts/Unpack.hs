@@ -2,6 +2,8 @@
 
 module Stunts.Unpack
     ( unpackResource
+    , unpackResource'
+    , loadResource
     ) where
 
 import Control.Applicative
