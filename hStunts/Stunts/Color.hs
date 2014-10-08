@@ -1,7 +1,7 @@
 module Stunts.Color
     ( Material (..)
     , Pattern (..)
-    , Color
+    , Color (..)
     , serializeColor
     , materialMap
     , vgaPal
@@ -23,7 +23,7 @@ data Pattern
 data Material
     = Material
     { pattern    :: Pattern
-    , color      :: Word32
+    , color      :: Color --Word32      -- cached
     , colorIndex :: Int
     , shininess  :: Float
     }
@@ -33,6 +33,7 @@ data Color
             Word8   -- green
             Word8   -- blue
             Word8   -- alpha
+    deriving (Eq)
 
 serializeColor :: Color -> [Word8]
 serializeColor (Color r g b a) = [r, g, b, a]
@@ -48,151 +49,153 @@ checkFun m = vgaPal IM.! (colorIndex m) == (toRGB $ color m)
 check = foldl (&&) True $ IM.elems $ IM.map checkFun materialMap
 -}
 
+material p ci s = Material p (vgaPal V.! ci) ci s
+
 --  MaterialIndex      Pattern        Color     ColorIndexOnPalette
 materialMap :: V.Vector Material
 materialMap = V.fromList
     -- 0
-    [ Material Opaque         0x000000    0   4.0 -- Black
-    , Material Opaque         0x0000A8    1   4.0 -- Blue
-    , Material Opaque         0x00A800    2   4.0 -- Green
-    , Material Opaque         0x00A8A8    3   4.0
-    , Material Opaque         0xA80000    4   4.0 -- Highway light / cork l/r wall
-    , Material Opaque         0xA800A8    5   4.0
-    , Material Opaque         0xA85400    6  20.0 -- Barn roof
-    , Material Opaque         0xA8A8A8    7   4.0 -- Gas station doors
-    , Material Opaque         0x545454    8   4.0
-    , Material Opaque         0x5454FC    9   4.0
+    [ material Opaque           0   4.0 -- Black
+    , material Opaque           1   4.0 -- Blue
+    , material Opaque           2   4.0 -- Green
+    , material Opaque           3   4.0
+    , material Opaque           4   4.0 -- Highway light / cork l/r wall
+    , material Opaque           5   4.0
+    , material Opaque           6  20.0 -- Barn roof
+    , material Opaque           7   4.0 -- Gas station doors
+    , material Opaque           8   4.0
+    , material Opaque           9   4.0
     -- 10
-    , Material Opaque         0x54FC54   10   4.0 -- Tree (pine)
-    , Material Opaque         0x54FCFC   11   4.0
-    , Material Opaque         0xFC5454   12   4.0 -- Highway split light
-    , Material Opaque         0xFC54FC   13   4.0
-    , Material Opaque         0xFCFC54   14   4.0 -- Sharp turn sign
-    , Material Opaque         0xFCFCFC   15   4.0 -- Tennis court lines
-    , Material Opaque         0x246820  108   4.0 -- Grass
-    , Material Opaque         0x5CFCFC  116   0.0 -- Sky
-    , Material Opaque         0xFCFCFC   15  20.0 -- Highway centerline
-    , Material Opaque         0x484848   28  20.0 -- Asphalt pavement
+    , material Opaque          10   4.0 -- Tree (pine)
+    , material Opaque          11   4.0
+    , material Opaque          12   4.0 -- Highway split light
+    , material Opaque          13   4.0
+    , material Opaque          14   4.0 -- Sharp turn sign
+    , material Opaque          15   4.0 -- Tennis court lines
+    , material Opaque         108   4.0 -- Grass
+    , material Opaque         116   0.0 -- Sky
+    , material Opaque          15  20.0 -- Highway centerline
+    , material Opaque          28  20.0 -- Asphalt pavement
     -- 20
-    , Material Opaque         0x383838   29  20.0 -- Tunnel centerline
-    , Material Opaque         0xFCFC54   14  20.0 -- Asphalt centerline
-    , Material Grate          0x484848   28  15.0 -- Loop / Elev. road surface
-    , Material Grate          0x202020   31  15.0 -- Pipe surface
-    , Material Grate          0xFCFC54   14  15.0
-    , Material Opaque         0x9C6438  200   4.0 -- Dirt pavement
-    , Material Opaque         0xB48054  198   4.0
-    , Material Opaque         0xCCA080  196   4.0 -- Dirt centerline
-    , Material Opaque         0xD8FCFC  112   4.0 -- Ice pavement
-    , Material Opaque         0x9CFCFC  114   4.0
+    , material Opaque          29  20.0 -- Tunnel centerline
+    , material Opaque          14  20.0 -- Asphalt centerline
+    , material Grate           28  15.0 -- Loop / Elev. road surface
+    , material Grate           31  15.0 -- Pipe surface
+    , material Grate           14  15.0
+    , material Opaque         200   4.0 -- Dirt pavement
+    , material Opaque         198   4.0
+    , material Opaque         196   4.0 -- Dirt centerline
+    , material Opaque         112   4.0 -- Ice pavement
+    , material Opaque         114   4.0
     -- 30
-    , Material Opaque         0x5CFCFC  116   4.0 -- Ice centerline
-    , Material Opaque         0xE4C4AC  194   4.0 -- Bridges, buildings, etc.
-    , Material Opaque         0xC0906C  197   4.0 -- Bridges, buildings, etc.
-    , Material Opaque         0x9C6438  200   4.0 -- Bridges, buildings, etc.
-    , Material Grate          0x9C9CFC  146   4.0
-    , Material Opaque         0xFC4040   37  15.0 -- Banked road outer side
-    , Material Opaque         0xFC7C7C   35  15.0 -- Tunnel walls / Bankings
-    , Material Opaque         0xFC40FC  181   4.0 -- Bridge cables
-    , Material Opaque         0x383838   29  20.0 -- Wheel (tyre tread)
-    , Material Opaque         0x202020   31  20.0 -- Wheel (tyre sidewall)
+    , material Opaque         116   4.0 -- Ice centerline
+    , material Opaque         194   4.0 -- Bridges, buildings, etc.
+    , material Opaque         197   4.0 -- Bridges, buildings, etc.
+    , material Opaque         200   4.0 -- Bridges, buildings, etc.
+    , material Grate          146   4.0
+    , material Opaque          37  15.0 -- Banked road outer side
+    , material Opaque          35  15.0 -- Tunnel walls / Bankings
+    , material Opaque         181   4.0 -- Bridge cables
+    , material Opaque          29  20.0 -- Wheel (tyre tread)
+    , material Opaque          31  20.0 -- Wheel (tyre sidewall)
     -- 40
-    , Material Opaque         0xC0C0C0   19  40.0 -- Wheel ("rim")
-    , Material Opaque         0x00A8A8    3  40.0 -- Windows (LM002 car1)
-    , Material Opaque         0x54FCFC   11  40.0 -- Gas station windows
-    , Material Opaque         0x545454    8  40.0 -- Windows and windshields
-    , Material Opaque         0x000000    0  40.0 -- Windows and windshields
-    , Material Opaque         0xA80000    4   4.0
-    , Material Opaque         0xA80000    4   4.0
-    , Material Opaque         0xFC5454   12   4.0
-    , Material Opaque         0x00007C  156  30.0 -- Blue 1      Car body
-    , Material Opaque         0x0000A8    1  30.0 -- Blue 2      Car body
+    , material Opaque          19  40.0 -- Wheel ("rim")
+    , material Opaque           3  40.0 -- Windows (LM002 car1)
+    , material Opaque          11  40.0 -- Gas station windows
+    , material Opaque           8  40.0 -- Windows and windshields
+    , material Opaque           0  40.0 -- Windows and windshields
+    , material Opaque           4   4.0
+    , material Opaque           4   4.0
+    , material Opaque          12   4.0
+    , material Opaque         156  30.0 -- Blue 1      Car body
+    , material Opaque           1  30.0 -- Blue 2      Car body
     -- 50
-    , Material Opaque         0x0000D0  152  30.0 -- Blue 3      Car body
-    , Material Opaque         0x0004FC  150  30.0 -- Blue 4      Car body
-    , Material Opaque         0xB40000   42  30.0 -- Red 1       Car body
-    , Material Opaque         0xE40000   40  30.0 -- Red 2       Car body
-    , Material Opaque         0xFC2020   38  30.0 -- Red 3       Car body
-    , Material Opaque         0xFC4040   37  30.0 -- Red 4       Car body
-    , Material Opaque         0x545454    8  30.0 -- Graphite 1  Car body
-    , Material Opaque         0x606060   26  30.0 -- Graphite 2  Car body
-    , Material Opaque         0x707070   25  30.0 -- Graphite 3  Car body
-    , Material Opaque         0x7C7C7C   24  30.0 -- Graphite 4  Car body
+    , material Opaque         152  30.0 -- Blue 3      Car body
+    , material Opaque         150  30.0 -- Blue 4      Car body
+    , material Opaque          42  30.0 -- Red 1       Car body
+    , material Opaque          40  30.0 -- Red 2       Car body
+    , material Opaque          38  30.0 -- Red 3       Car body
+    , material Opaque          37  30.0 -- Red 4       Car body
+    , material Opaque           8  30.0 -- Graphite 1  Car body
+    , material Opaque          26  30.0 -- Graphite 2  Car body
+    , material Opaque          25  30.0 -- Graphite 3  Car body
+    , material Opaque          24  30.0 -- Graphite 4  Car body
     -- 60
-    , Material Opaque         0xE4D800   72  30.0 -- Yellow 1    Car body
-    , Material Opaque         0xFCF420   70  30.0 -- Yellow 2    Car body
-    , Material Opaque         0xFCF85C   68  30.0 -- Yellow 3    Car body
-    , Material Opaque         0xFCFC9C   66  30.0 -- Yellow 4    Car body
-    , Material Opaque         0x009C9C  123  30.0 -- Cyan 1      Car body
-    , Material Opaque         0x00CCCC  121  30.0 -- Cyan 2      Car body
-    , Material Opaque         0x00E4E4  120  30.0 -- Cyan 3      Car body
-    , Material Opaque         0x40FCFC  117  30.0 -- Cyan 4      Car body
-    , Material Opaque         0x508400   92  30.0 -- Green 1     Car body / Tree (palm)
-    , Material Opaque         0x74B400   90  30.0 -- Green 2     Car body / Tree (palm)
+    , material Opaque          72  30.0 -- Yellow 1    Car body
+    , material Opaque          70  30.0 -- Yellow 2    Car body
+    , material Opaque          68  30.0 -- Yellow 3    Car body
+    , material Opaque          66  30.0 -- Yellow 4    Car body
+    , material Opaque         123  30.0 -- Cyan 1      Car body
+    , material Opaque         121  30.0 -- Cyan 2      Car body
+    , material Opaque         120  30.0 -- Cyan 3      Car body
+    , material Opaque         117  30.0 -- Cyan 4      Car body
+    , material Opaque          92  30.0 -- Green 1     Car body / Tree (palm)
+    , material Opaque          90  30.0 -- Green 2     Car body / Tree (palm)
     -- 70
-    , Material Opaque         0x90E400   88  30.0 -- Green 3     Car body / Tree (palm)
-    , Material Opaque         0xA0FC00   87  30.0 -- Green 4     Car body
-    , Material Opaque         0x440070  173  30.0 -- Purple 1    Car body
-    , Material Opaque         0x60009C  171  30.0 -- Purple 2    Car body
-    , Material Opaque         0x8000CC  169  30.0 -- Purple 3    Car body
-    , Material Opaque         0xA800FC  167  30.0 -- Purple 4    Car body
-    , Material Opaque         0xB0B0B0   20  30.0 -- Silver 1    Car body
-    , Material Opaque         0xC0C0C0   19  30.0 -- Silver 2    Car body
-    , Material Opaque         0xCCCCCC   18  30.0 -- Silver 3    Car body
-    , Material Opaque         0xDCDCDC   17  30.0 -- Silver 4    Car body
+    , material Opaque          88  30.0 -- Green 3     Car body / Tree (palm)
+    , material Opaque          87  30.0 -- Green 4     Car body
+    , material Opaque         173  30.0 -- Purple 1    Car body
+    , material Opaque         171  30.0 -- Purple 2    Car body
+    , material Opaque         169  30.0 -- Purple 3    Car body
+    , material Opaque         167  30.0 -- Purple 4    Car body
+    , material Opaque          20  30.0 -- Silver 1    Car body
+    , material Opaque          19  30.0 -- Silver 2    Car body
+    , material Opaque          18  30.0 -- Silver 3    Car body
+    , material Opaque          17  30.0 -- Silver 4    Car body
     -- 80
-    , Material Opaque         0x6C5800   77  30.0 -- Golden 1    Car body
-    , Material Opaque         0x847400   76  30.0 -- Golden 2    Car body
-    , Material Opaque         0xB4A400   74  30.0 -- Golden 3    Car body
-    , Material Opaque         0xCCC000   73  30.0 -- Golden 4    Car body
-    , Material Opaque         0x700000   45  30.0 -- Burgundy 1  Car body
-    , Material Opaque         0x840000   44  30.0 -- Burgundy 2  Car body
-    , Material Opaque         0xB40000   42  30.0 -- Burgundy 3  Car body
-    , Material Opaque         0xCC0000   41  30.0 -- Burgundy 4  Car body
-    , Material Opaque         0x000040  159  30.0 -- Violet 1    Car body
-    , Material Opaque         0x280040  175  30.0 -- Violet 2    Car body
+    , material Opaque          77  30.0 -- Golden 1    Car body
+    , material Opaque          76  30.0 -- Golden 2    Car body
+    , material Opaque          74  30.0 -- Golden 3    Car body
+    , material Opaque          73  30.0 -- Golden 4    Car body
+    , material Opaque          45  30.0 -- Burgundy 1  Car body
+    , material Opaque          44  30.0 -- Burgundy 2  Car body
+    , material Opaque          42  30.0 -- Burgundy 3  Car body
+    , material Opaque          41  30.0 -- Burgundy 4  Car body
+    , material Opaque         159  30.0 -- Violet 1    Car body
+    , material Opaque         175  30.0 -- Violet 2    Car body
     -- 90
-    , Material Opaque         0x340058  174  30.0 -- Violet 3    Car body
-    , Material Opaque         0x500084  172  30.0 -- Violet 4    Car body
-    , Material Opaque         0x383838   29   4.0
-    , Material Opaque         0x484848   28   4.0
-    , Material Grate          0xCCCCCC   18   4.0 -- Tennis net
-    , Material Opaque         0x74B400   90   4.0 -- Tennis grass
-    , Material Opaque         0xFCFCFC   15   0.0 -- Clouds
-    , Material Opaque         0xA8A8A8    7   0.0 -- Clouds
-    , Material Opaque         0x9C6438  200   4.0 -- Pinetree trunk
-    , Material Opaque         0xC0602C  219   4.0 -- Pinetree trunk
+    , material Opaque         174  30.0 -- Violet 3    Car body
+    , material Opaque         172  30.0 -- Violet 4    Car body
+    , material Opaque          29   4.0
+    , material Opaque          28   4.0
+    , material Grate           18   4.0 -- Tennis net
+    , material Opaque          90   4.0 -- Tennis grass
+    , material Opaque          15   0.0 -- Clouds
+    , material Opaque           7   0.0 -- Clouds
+    , material Opaque         200   4.0 -- Pinetree trunk
+    , material Opaque         219   4.0 -- Pinetree trunk
     -- 100
-    , Material Opaque         0x0080D0  136  50.0 -- Water
-    , Material Opaque         0x84E084   99   4.0 -- Grass (hilltop)
-    , Material Opaque         0x70C46C  101   4.0 -- Grass (hill slope)
-    , Material Opaque         0x58A858  103   4.0 -- Grass (angled slope)
-    , Material Opaque         0x509C4C  104   4.0 -- Grass (angled slope)
-    , Material Opaque         0x388034  106   4.0 -- Grass (angled slope)
-    , Material Opaque         0xDCDCDC   17   4.0 -- Gas station / Joe's
-    , Material Opaque         0xB0B0B0   20   4.0 -- Gas station / Joe's
-    , Material Opaque         0x905410   60   4.0 -- Trunk (palmtree)
-    , Material Opaque         0x6C5800   77   4.0 -- Trunk (palmtree)
+    , material Opaque         136  50.0 -- Water
+    , material Opaque          99   4.0 -- Grass (hilltop)
+    , material Opaque         101   4.0 -- Grass (hill slope)
+    , material Opaque         103   4.0 -- Grass (angled slope)
+    , material Opaque         104   4.0 -- Grass (angled slope)
+    , material Opaque         106   4.0 -- Grass (angled slope)
+    , material Opaque          17   4.0 -- Gas station / Joe's
+    , material Opaque          20   4.0 -- Gas station / Joe's
+    , material Opaque          60   4.0 -- Trunk (palmtree)
+    , material Opaque          77   4.0 -- Trunk (palmtree)
     -- 110
-    , Material Opaque         0x580000   46  30.0 -- Joe's roof
-    , Material Opaque         0x744008   61   4.0 -- Windmill (base)
-    , Material Opaque         0x700000   45   4.0 -- Windmill (base)
-    , Material Opaque         0x80542C  202  20.0 -- Windmill (blades)
-    , Material Opaque         0x540054  190  20.0 -- Joe's flashing sign
-    , Material Opaque         0xA400A4  186  20.0 -- Joe's flashing sign
-    , Material Opaque         0xE000E4  183  20.0 -- Joe's flashing sign
-    , Material Opaque         0xFC5CFC  180  20.0 -- Joe's flashing sign
-    , Material Transparent    0xFFFFFF  255   0.0 -- Windmill animation mask
-    , Material Grille         0x484848   28   4.0
+    , material Opaque          46  30.0 -- Joe's roof
+    , material Opaque          61   4.0 -- Windmill (base)
+    , material Opaque          45   4.0 -- Windmill (base)
+    , material Opaque         202  20.0 -- Windmill (blades)
+    , material Opaque         190  20.0 -- Joe's flashing sign
+    , material Opaque         186  20.0 -- Joe's flashing sign
+    , material Opaque         183  20.0 -- Joe's flashing sign
+    , material Opaque         180  20.0 -- Joe's flashing sign
+    , material Transparent    255   0.0 -- Windmill animation mask
+    , material Grille          28   4.0
     -- 120
-    , Material InverseGrille  0x2C2C2C   30   4.0
-    , Material Glass          0xFCFCFC   15   4.0
-    , Material InverseGlass   0xB0B0B0   20   4.0
-    , Material Glass          0xFCF85C   68   4.0
-    , Material InverseGlass   0xFCAC54   54   4.0
-    , Material Glass          0xFC0000   39   4.0
-    , Material InverseGlass   0x9C0000   43   4.0
-    , Material Opaque         0xFC5454   12  20.0 -- Corner kerbs
-    , Material Opaque         0xDCDCDC   17  20.0 -- Corner kerbs
+    , material InverseGrille   30   4.0
+    , material Glass           15   4.0
+    , material InverseGlass    20   4.0
+    , material Glass           68   4.0
+    , material InverseGlass    54   4.0
+    , material Glass           39   4.0
+    , material InverseGlass    43   4.0
+    , material Opaque          12  20.0 -- Corner kerbs
+    , material Opaque          17  20.0 -- Corner kerbs
     ]
 
 vgaPal :: V.Vector Color

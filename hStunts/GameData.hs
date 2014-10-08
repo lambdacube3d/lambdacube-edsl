@@ -384,13 +384,11 @@ toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
         vc = v V.! c
     genNormal _ = zero
 
-    genMat pr = (Vec4 r g b 1, p, z, shiny)
+    genMat pr = (Vec4 (f r) (f g) (f b) 1, p, z, shiny)
       where
         i = (cycle $ prMaterials pr) !! 1
-        Material pattern rgb _ shiny = materialMap V.! i
-        r = fromIntegral (rgb `shiftR` 16) / 255
-        g = fromIntegral ((rgb `shiftR` 8) .&. 0xff) / 255
-        b = fromIntegral (rgb .&. 0xff) / 255
+        Material pattern (Color r g b _) _ shiny = materialMap V.! i
+        f i = fromIntegral i / 255
         p = case pattern of
             Grate        -> 2
             Transparent  -> 0
