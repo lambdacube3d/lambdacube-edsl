@@ -161,14 +161,14 @@ getBitmap = do
     positionY <- getInt16
     unknown2 <- replicateM 4 getUByte
     image <- case unknown2 of
-        [1,2,4,8]   -> replicateM (width * height) ((vgaPal IM.!) <$> getInt8)
+        [1,2,4,8]   -> replicateM (width * height) ((vgaPal V.!) <$> getInt8)
         [1,2,20,8]  -> do
             img <- replicateM width $ 
-                replicateM height ((vgaPal IM.!) <$> getInt8)
+                replicateM height ((vgaPal V.!) <$> getInt8)
             return $ concat $ transpose img
         [1,2,36,8]  -> do
             img <- replicateM width $ do
-                col <- replicateM height ((vgaPal IM.!) <$> getInt8)
+                col <- replicateM height ((vgaPal V.!) <$> getInt8)
                 let (lo,hi) = splitAt ((height + 1) `div` 2) col
                     go0 [] a = a
                     go0 (a:xs) b = a : go1 xs b
@@ -177,7 +177,7 @@ getBitmap = do
                 return $ go0 lo hi
             return $ concat $ transpose img
 
-        _           -> replicateM (width * height) ((vgaPal IM.!) <$> getInt8)
+        _           -> replicateM (width * height) ((vgaPal V.!) <$> getInt8)
     return $ Bitmap width height positionX positionY (SV.fromList $ concatMap serializeColor image) unknown1 unknown2
 
 data Car

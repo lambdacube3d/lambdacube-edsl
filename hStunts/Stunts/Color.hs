@@ -10,6 +10,7 @@ module Stunts.Color
 import Data.Bits
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IM
+import qualified Data.Vector as V
 import Data.Word
 
 data Pattern
@@ -39,7 +40,7 @@ toRGBA :: Word32 -> Color
 toRGBA 0xFFFFFF = Color 0 0 0 0
 toRGBA c = Color (f 16) (f 8) (f 0) 0xFF
   where
-    f i = fromIntegral $ (c `shiftR` i) .&. 0xFF :: Word8
+    f i = fromIntegral $ (c `shiftR` i) .&. 0xFF
 
 {-
 checkFun m = vgaPal IM.! (colorIndex m) == (toRGB $ color m)
@@ -180,8 +181,8 @@ materialMap = IM.fromList
     , (128,  (Material Opaque         0xDCDCDC   17  20.0)) -- Corner kerbs
     ]
 
-vgaPal :: IntMap Color
-vgaPal = IM.fromList $ zip [0,1..] $ map toRGBA [
+vgaPal :: V.Vector Color
+vgaPal = V.fromList $ map toRGBA [
     0x000000, 0x0000A8, 0x00A800, 0x00A8A8, 0xA80000, 0xA800A8, 0xA85400, 0xA8A8A8,
     0x545454, 0x5454FC, 0x54FC54, 0x54FCFC, 0xFC5454, 0xFC54FC, 0xFCFC54, 0xFCFCFC,
     0xFCFCFC, 0xDCDCDC, 0xCCCCCC, 0xC0C0C0, 0xB0B0B0, 0xA4A4A4, 0x989898, 0x888888,
