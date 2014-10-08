@@ -1,6 +1,13 @@
 {-# LANGUAGE NoMonomorphismRestriction, ParallelListComp, OverloadedStrings #-}
 
-module GameData where
+module GameData
+    ( StuntsData (..)
+    , CarData (..)
+    , TrackData (..)
+    , readStuntsData
+    , readZipFile
+    , scaleFactor
+    ) where
 
 import Control.Applicative
 import Control.Arrow
