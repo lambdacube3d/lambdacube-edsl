@@ -1,4 +1,17 @@
-module GamePhysics where
+module GamePhysics
+    ( mkStaticShape
+    , enableStaticShape
+    , createCar
+    , removeCar
+    , addCar
+    , steerCar
+    , updateCar
+    , getCarMotionState
+    , setCarMotionState
+    , rigidBodyProj4
+    , mkPhysicsWorld
+    , addStaticPlane
+    ) where
 
 import Control.Monad
 import Physics.Bullet.Raw
