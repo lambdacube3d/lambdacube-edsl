@@ -22,7 +22,6 @@ import Data.Ord
 import Data.Vect.Float
 import Data.Vect.Float.Instances
 import Data.Vect.Float.Util.Quaternion hiding (toU)
---import System.IO.Unsafe
 import System.Random
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.ByteString.Lazy as LB
@@ -246,8 +245,8 @@ data StuntsData
     , font2         :: Font
     }
 
-readStuntsData :: IO StuntsData
-readStuntsData = runArchive $ do
+readStuntsData :: FilePath -> FilePath -> IO StuntsData
+readStuntsData oldFile newFile = runArchive oldFile newFile $ do
     cars <- mapM (pureArchive . loadCar) ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
     keys <- asks T.keys
     tracks <- mapM loadTrack [k | k <- keys, ".trk" == takeExtensionCI (SB.unpack k)]
@@ -270,10 +269,11 @@ pureArchive :: Monad m => Archive a -> ArchiveT m a
 pureArchive = mapReaderT $ return . runIdentity
 
 -- generic resource handling
-runArchive :: ArchiveT IO a -> IO a
-runArchive m = do
-    a <- concat <$> (mapM readArchive =<< filter (\n -> ".zip" == takeExtensionCI n) <$> getDirectoryContents ".")
-    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) a
+runArchive :: FilePath -> FilePath -> ArchiveT IO a -> IO a
+runArchive oldFile newFile m = do
+    old <- readArchive oldFile
+    new <- readArchive newFile
+    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) $ old ++ new
     print $ T.keys ar
     runReaderT m ar
 

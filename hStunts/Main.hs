@@ -9,6 +9,8 @@ import Data.Word
 import Data.Maybe
 import Data.IORef
 import Data.List hiding (transpose)
+import System.FilePath
+import Paths_stunts
 import FRP.Elerea.Param
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 
@@ -82,7 +84,8 @@ main = do
     Args {mediaPath, trkFile, carNum, retroMode} <- getArgs
 
     -- load game data
-    StuntsData carsData tracksData font1 font2 <- readStuntsData
+    dir <- getDataDir
+    StuntsData carsData tracksData font1 font2 <- readStuntsData mediaPath (dir </> "newstunts.zip")
 
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
