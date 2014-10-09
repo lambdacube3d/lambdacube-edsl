@@ -13,6 +13,7 @@ import Control.Arrow
 import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Binary.Get as B
 import Data.Bits
 import Data.Char
@@ -160,11 +161,11 @@ loadCar n = do
         , carBitmaps  = bitmaps
         }
 
-loadTrack :: SB.ByteString -> ArchiveT IO TrackData
+loadTrack :: SB.ByteString -> Archive TrackData
 loadTrack trkFile = do
-    game1Map <- pureArchive $ loadMesh "GAME1.P3S"
-    game2Map <- pureArchive $ loadMesh "GAME2.P3S"
-    (terrainItems,trackItems) <- pureArchive $ readTrack <$> readZipFile' trkFile
+    game1Map <- loadMesh "GAME1.P3S"
+    game2Map <- loadMesh "GAME2.P3S"
+    (terrainItems,trackItems) <- readTrack <$> readZipFile' trkFile
 
     let modelIdToMesh :: (SB.ByteString,SB.ByteString) -> [Mesh]
         modelIdToMesh ("GAME1.P3S",n) = game1Map ! n
@@ -211,9 +212,9 @@ loadTrack trkFile = do
               where
                 a' = a*2*pi
                 c t = ((50+200*d)*t a'+15)*edgeSize*scaleFactor
-        m <- getCloudMesh <$> randomIO
-        (a,x,z) <- getCoord <$> randomIO <*> randomIO
-        y <- randomIO
+        m <- getCloudMesh <$> rnd
+        (a,x,z) <- getCoord <$> rnd <*> rnd
+        y <- rnd
         return (scalingUniformProj4 (y*0.4+0.3) .*. rotMatrixProj4 a (Vec3 0 1 0) .*. translation (Vec3 x (y*1500+600) z), m)
 
     return TrackData
@@ -247,11 +248,11 @@ data StuntsData
 
 readStuntsData :: FilePath -> FilePath -> IO StuntsData
 readStuntsData oldFile newFile = runArchive oldFile newFile $ do
-    cars <- mapM (pureArchive . loadCar) ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
+    cars <- mapM loadCar ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
     keys <- asks T.keys
     tracks <- mapM loadTrack [k | k <- keys, ".trk" == takeExtensionCI (SB.unpack k)]
-    Right font1 <- pureArchive $ decodeFont <$> readZipFile "Prototype.ttf"
-    Right font2 <- pureArchive $ decodeFont <$> readZipFile "Capture_it.ttf"
+    Right font1 <- decodeFont <$> readZipFile "Prototype.ttf"
+    Right font2 <- decodeFont <$> readZipFile "Capture_it.ttf"
     return $! StuntsData
         { cars    = cars
         , tracks  = tracks
@@ -262,20 +263,20 @@ readStuntsData oldFile newFile = runArchive oldFile newFile $ do
 takeExtensionCI = map toLower . takeExtension
 isPrefixOfCI a b = isPrefixOf a $ map toLower b
 
-type ArchiveT = ReaderT (T.Trie SB.ByteString)
-type Archive = ArchiveT Identity
+type Archive = ReaderT (T.Trie SB.ByteString) Rnd
 
-pureArchive :: Monad m => Archive a -> ArchiveT m a
-pureArchive = mapReaderT $ return . runIdentity
+type Rnd = State StdGen
+rnd = state random
 
 -- generic resource handling
-runArchive :: FilePath -> FilePath -> ArchiveT IO a -> IO a
+runArchive :: FilePath -> FilePath -> Archive a -> IO a
 runArchive oldFile newFile m = do
     old <- readArchive oldFile
     new <- readArchive newFile
     let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) $ old ++ new
     print $ T.keys ar
-    runReaderT m ar
+    g <- newStdGen
+    return $ evalState (runReaderT m ar) g
 
 infix 7 !
 (!) :: T.Trie a -> SB.ByteString -> a
