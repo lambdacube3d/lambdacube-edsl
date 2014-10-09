@@ -164,10 +164,6 @@ main = do
         fx img = PrjFrameBuffer "" tix0 $ texturing (imgToTex $ postProcess $ img) (Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV"))
         imgToTex img = Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [img]
 
-        emptyFB :: Exp Obj (FrameBuffer 1 (Float,V4F))
-        emptyFB = FrameBuffer (DepthImage n1 1000:.ColorImage n1 (V4 0 0.4 0 1):.ZT)
-        clear = PrjFrameBuffer "" tix0 $ emptyFB
-
     renderer <- compileRenderer $ SamplerOut "image" $ Sampler LinearFilter ClampToEdge $ Texture (Texture2D (Float RGBA) n1) (V2 512 512) NoMip [iterate fx frameImage !! 1]
 
     renderer2 <- do
