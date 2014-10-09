@@ -69,10 +69,9 @@ loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) <$> lo
       where
         miny = minimum [y | (_,y,_) <- mdVertices md]
         ixs = findIndices (\(_,y,_) -> y == miny) (mdVertices md)
-        md' = md { mdPrimitives =
-                        [pr | pr <- mdPrimitives md,
-                         prType pr /= Polygon || null (intersect ixs (prIndices pr))]
-                 }
+        md' = md { mdPrimitives = filter (prOK . prType) $ mdPrimitives md }
+        prOK (Polygon is) = null $ intersect ixs is
+        prOK _ = True
 
     -- Add some faces to fill the hole on the bottom of the car models
     addBottom md = md { mdPrimitives = newFaces ++ mdPrimitives md }
@@ -88,7 +87,7 @@ loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) <$> lo
         vs = V.fromList (mdVertices md)
         vec i = let (x,y,z) = vs V.! i in Vec3 x y z
 
-        edges = [e | Primitive { prType = Polygon, prIndices = ixs } <- mdPrimitives md,
+        edges = [e | Primitive { prType = Polygon ixs } <- mdPrimitives md,
                  all ((0 <=) . _1 . vec) ixs, e <- zip ixs (last ixs : ixs)]
 
         uniqueEdges = go edges
@@ -100,7 +99,7 @@ loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) <$> lo
               where
                 sameEdge (i1',i2') = (i1,i2) == (i1',i2') || (i2,i1) == (i1',i2')
 
-        newFaces = [Primitive Polygon False False [57] ixs |
+        newFaces = [Primitive (Polygon ixs) False False [57] |
                     (i1,i2) <- uniqueEdges,
                     let (x1,y1,z1) = vs V.! i1,
                     let (x2,y2,z2) = vs V.! i2,
@@ -115,7 +114,7 @@ loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) <$> lo
           where
             notOverlapping (n', v') = abs (n &. n') < 0.999 || abs (n &. normalize (v' &- v)) > 0.001
             (n, v) = plane i1 i2 i3
-            ps = [plane i1 i2 i3 | Primitive { prType = Polygon, prIndices = i1:i2:i3:_ } <- mdPrimitives md]
+            ps = [plane i1 i2 i3 | Primitive { prType = Polygon (i1:i2:i3:_) } <- mdPrimitives md]
             plane i1 i2 i3 = (normalize ((v2 &- v1) &^ (v3 &- v1)), v1)
               where
                 v1 = vec i1
@@ -126,10 +125,10 @@ loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) <$> lo
 loadCarWheels :: SB.ByteString -> Archive [(Vec3, Float, Float)]
 loadCarWheels n = do
     m <- fmap (runGet getModel) <$> loadRes n
-    return [wheel vl $ prIndices p | let Model vl pl = m ! "car0", p <- pl, prType p == Wheel]
+    return [wheel vl p1 p2 p3 p4 p5 p6 | let Model vl pl = m ! "car0", Primitive { prType = Wheel p1 p2 p3 p4 p5 p6 } <- pl]
   where
     -- wheel pos, wheel width, wheel radius
-    wheel vl [p1,p2,_p3,p4,_p5,_p6] = ((v p1 + v p4) &* (0.5 * car0ScaleFactor),car0ScaleFactor * (len $ v p1 - v p4),car0ScaleFactor * (len $ v p2 - v p1))
+    wheel vl p1 p2 _p3 p4 _p5 _p6 = ((v p1 + v p4) &* (0.5 * car0ScaleFactor),car0ScaleFactor * (len $ v p1 - v p4),car0ScaleFactor * (len $ v p2 - v p1))
       where
         v i = let (a,b,c) = vl !! i in Vec3 a b c
     car0ScaleFactor = scaleFactor / 20
@@ -305,9 +304,9 @@ wheelBase n = Model vl pl
         j = fi * fromIntegral i
     vl = [mkVertex z r i | r <- [1,0.55], z <- [-0.5,0.5], i <- [0..n-1]]
     pl = side ++ tread
-    side = [Primitive Polygon True (col == 40) [col] (rev [n0..n0+n-1]) |
+    side = [Primitive (Polygon $ rev [n0..n0+n-1]) True (col == 40) [col] |
             (n0,rev,col) <- [(0,id,39),(n,reverse,39),(n*2,id,40),(n*3,reverse,40)]]
-    tread = [Primitive Polygon True False [38] [i,i+n,i'+n,i'] |
+    tread = [Primitive (Polygon [i,i+n,i'+n,i']) True False [38] |
              i <- [0..n-1], let i' = if i == n-1 then 0 else i+1]
 
 {-
@@ -367,19 +366,15 @@ toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
   where
     md = separateFaces . convertLines $ mdOrig
 
-    groupToSubMesh prs@(pr:_) = case prType pr of
-        --Particle    -> vsm OT_POINT_LIST (vib id)
-        --Line        -> vsm OT_LINE_LIST (vib id)
-        Polygon     -> P_TrianglesI (vib triangulate)
-        _           -> P_TrianglesI SV.empty
+    groupToSubMesh ids = P_TrianglesI (vib triangulate)
       where
         --vsm pty = VSubMesh "StuntsMaterial" pty Nothing . Just
-        vib fun = SV.fromList $ fun . prIndices =<< prs
+        vib fun = SV.fromList $ fun =<< ids
         triangulate (v0:vs@(_:_)) = concat [[toInt32 v0, toInt32 v1, toInt32 v2] | v1 <- tail vs | v2 <- vs]
         triangulate _ = []
         toInt32 :: Int -> Int32
         toInt32 = fromIntegral
-    sml     = map groupToSubMesh $ groupSetBy (comparing (prMaterials &&& prType)) $ mdPrimitives md
+    sml     = [groupToSubMesh [is | Primitive { prType = Polygon is } <- mdPrimitives md]]
 
     v3      = A_V3F . SV.convert . V.map (\(Vec3 x y z) -> V3 x y z)
     v4      = A_V4F . SV.convert . V.map (\(Vec4 x y z w) -> V4 x y z w)
@@ -410,38 +405,56 @@ toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
             _            -> 1
         z = if i `elem` [16,101,102,103,104,105] then 1 else if prZBias pr then -1 else 0
 
-    (nf,cf,pf,zf,sf) = V.unzip5 $ V.fromList [(genNormal (prIndices pr), c, p, z, s) | pr <- mdPrimitives md, let (c,p,z,s) = genMat pr]
-    i = V.fromList [ix | (ix,pr) <- zip [0..] (mdPrimitives md), _ <- prIndices pr]
+    (nf,cf,pf,zf,sf) = V.unzip5 $ V.fromList [(genNormal (prIndices $ prType pr), c, p, z, s) | pr <- mdPrimitives md, let (c,p,z,s) = genMat pr]
+    i = V.fromList [ix | (ix,pr) <- zip [0..] (mdPrimitives md), _ <- prIndices $ prType pr]
     n = V.backpermute nf i
     c = V.backpermute cf i
     p = V.backpermute pf i
     z = V.backpermute zf i
     s = V.backpermute sf i
 
+prIndices (Particle v) = [v]
+prIndices (Line a b) = [a,b]
+prIndices (Polygon is) = is
+prIndices (Sphere a b) = [a,b]
+prIndices (Wheel a b c d e f) = a:b:c:d:e:f:[]
+prIndices Ignored = []
+prIndices _ = error "prIdices"
+
 separateFaces :: Model -> Model
 separateFaces md = Model { mdVertices = vs', mdPrimitives = prs' }
   where
     vs = V.fromList (mdVertices md)
-    vs' = [vs V.! ix | pr <- mdPrimitives md, ix <- prIndices pr]
+    vs' = [vs V.! ix | pr <- mdPrimitives md, ix <- prIndices $ prType pr]
     prs' = go 0 (mdPrimitives md)
       where
         go _ [] = []
         go n (pr:prs) = n' `seq` pr' : go n' prs
           where
-            l = length (prIndices pr)
+            l = length (prIndices $ prType pr)
             n' = n+l
-            pr' = pr { prIndices = take l [n..] }
+            pr' = pr { prType = ff (prType pr) $ take l [n..] }
+
+            ff (Particle _) (a:_) = Particle a
+            ff (Line _ _) (a:b:_) = Line a b
+            ff (Polygon xs) l = Polygon $ take (length xs) l
+            ff (Sphere _ _) (a:b:_) = Sphere a b
+            ff (Wheel _ _ _ _ _ _) (a:b:c:d:e:f:_) = Wheel a b c d e f
+            ff Ignored _ = Ignored
 
 convertLines :: Model -> Model
 convertLines md = Model { mdVertices = mdVertices md ++ concat vs', mdPrimitives = notLines ++ concat prs' }
   where
     vs = V.fromList (mdVertices md)
-    (lines,notLines) = partition ((==Line) . prType) (mdPrimitives md)
+    notLines = filter (notLine . prType) (mdPrimitives md)
+    notLine (Line _ _) = False
+    notLine _ = True
     nvs = V.length vs
-    (vs',prs') = unzip [mkLine i0 pr | i0 <- [nvs,nvs+n*2..] | pr <- lines]
-    mkLine i0 pr = (map (\(Vec3 x y z) -> (x,y,z)) vs', end ++ side)
+    (vs',prs') = unzip [mkLine i0 i1 i2 pr | i0 <- [nvs,nvs+n*2..] | pr@(Primitive { prType = Line i1 i2 }) <- mdPrimitives md]
+    mkLine i0 i1 i2 pr = (map (\(Vec3 x y z) -> (x,y,z)) vs', end ++ side)
       where
-        (x1,y1,z1):(x2,y2,z2):_ = map (vs V.!) (prIndices pr)
+        (x1,y1,z1) = vs V.! i1
+        (x2,y2,z2) = vs V.! i2
         v1 = Vec3 x1 y1 z1
         v2 = Vec3 x2 y2 z2
         vd = v1 &- v2
@@ -452,7 +465,7 @@ convertLines md = Model { mdVertices = mdVertices md ++ concat vs', mdPrimitives
         vs' = [v &+ (s *& vdp) &+ (c *& vdp') | v <- [v1,v2], (s,c) <- scs]
         end = [mkp [i0..i0+n'], mkp [i0+n..i0+n+n']]
         side = [mkp [i0+i,i0+i+n,i0+i'+n,i0+i'] | i <- [0..n'], let i' = if i == n' then 0 else i+1]
-        mkp is = pr { prType = Polygon, prZBias = False, prIndices = is }
+        mkp is = pr { prType = Polygon is, prZBias = False }
 
     n = 8
     n' = n-1

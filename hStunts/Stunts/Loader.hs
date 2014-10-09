@@ -65,12 +65,14 @@ getInt' = fromIntegral <$> getWord32le :: Get Int32
 getInt :: Get Int
 getInt = fromIntegral <$> getInt' :: Get Int
 
+type VI = Int   -- vertex index
+
 data PrimitiveType
-    = Particle
-    | Line
-    | Polygon
-    | Sphere
-    | Wheel
+    = Particle VI
+    | Line VI VI
+    | Polygon [VI]
+    | Sphere Int Int
+    | Wheel Int Int Int Int Int Int
     | Ignored
     deriving (Eq,Ord,Show)
 
@@ -80,7 +82,6 @@ data Primitive
     , prTwoSided    :: Bool
     , prZBias       :: Bool
     , prMaterials   :: [Int]
-    , prIndices     :: [Int]
     }
     deriving Show
 
@@ -105,19 +106,18 @@ getVertex = do
 
 getPrimitive :: Int -> Get Primitive
 getPrimitive numPaintJobs = do
-    let convertType c
-            | c == 1    = (1,Particle)
-            | c == 2    = (2,Line)
-            | 3 <= c &&
-              c <= 10   = (c,Polygon)
-            | c == 11   = (2,Sphere)
-            | c == 12   = (6,Wheel)
-            | otherwise = (0,Ignored)
-    (cnt,ptype) <- convertType <$> getInt8
+    cnt <- getInt8
     (twosided,zbias) <- (\i -> (testBit i 0,testBit i 1)) <$> getUByte
     materials <- replicateM numPaintJobs getInt8
-    indices <- replicateM cnt getInt8
-    return $ Primitive ptype twosided zbias materials indices
+    ptype <- case cnt of
+        1   -> Particle <$> getInt8
+        2   -> Line <$> getInt8 <*> getInt8
+        n | 3 <= n && n <= 10
+            -> Polygon <$> replicateM n getInt8
+        11  -> Sphere <$> getInt8 <*> getInt8
+        12  -> Wheel <$> getInt8 <*> getInt8 <*> getInt8 <*> getInt8 <*> getInt8 <*> getInt8
+        _   -> pure Ignored
+    return $ Primitive ptype twosided zbias materials
 
 getModel :: Get Model
 getModel = do
