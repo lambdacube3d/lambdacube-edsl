@@ -46,11 +46,6 @@ import qualified Zip
 --import GameGraphics
 import MeshUtil
 
-bitmaps :: Archive [(SB.ByteString,Bitmap)]
-bitmaps = do
-    keys <- asks T.keys
-    concat <$> sequence [T.toList <$> loadBitmap k | k <- keys, ".pvs" == takeExtensionCI (SB.unpack k)]
-
 -- game specific resource handling
 loadRes :: SB.ByteString -> Archive (T.Trie LB.ByteString)
 loadRes = fmap (readResources . unpackResource) . readZipFile

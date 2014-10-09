@@ -59,7 +59,7 @@ Executable stunts
   HS-Source-Dirs: .
   Main-IS:        Main.hs
   Extensions:     CPP
-  GHC-Options:    -Wall -fno-warn-unused-do-bind -fno-warn-name-shadowing -O2 -fspec-constr-count=6 -rtsopts
+  GHC-Options:    -Wall -fno-warn-unused-do-bind -fno-warn-name-shadowing -fno-warn-type-defaults -O2 -fspec-constr-count=6 -rtsopts
   Build-Depends:  base >= 4 && < 5
                 , mtl
                 , containers

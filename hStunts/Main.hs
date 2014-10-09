@@ -31,6 +31,7 @@ import Physics.Bullet.Raw.Class
 
 --import System.Directory
 --import System.Exit
+import System.Random
 
 import GameData
 import GamePhysics
@@ -55,6 +56,7 @@ import qualified Codec.Picture as JP
 import Stunts.Loader(Bitmap(..))
 import qualified Stunts.Loader as L
 import Args
+import Zip
 
 type Sink a = a -> IO ()
 
