@@ -94,7 +94,7 @@ questionYN msg = do
     putStrLn ""
     return $ answer `elem` "Yy"
 
-abort :: IO ()
+abort :: IO a
 abort = do
     putStrLn "Aborting"
     exitFailure
