@@ -1,5 +1,6 @@
 module Zip
-    ( readArchive
+    ( Archive
+    , readArchive
     , eFilePath
     , decompress
     ) where

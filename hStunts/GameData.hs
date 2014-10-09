@@ -11,17 +11,16 @@ module GameData
 import Control.Applicative
 import Control.Arrow
 import Control.Monad
-import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary.Get as B
-import Data.Bits
+--import Data.Bits
 import Data.Char
 import Data.Int
 import Data.List
 import Data.Ord
 import Data.Vect.Float
-import Data.Vect.Float.Instances
+--import Data.Vect.Float.Instances
 import Data.Vect.Float.Util.Quaternion hiding (toU)
 import System.Random
 import qualified Data.ByteString.Char8 as SB
@@ -31,8 +30,7 @@ import qualified Data.Trie as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
 
-import System.Directory
-import System.FilePath
+import System.FilePath (takeExtension)
 
 import Graphics.Text.TrueType( decodeFont, Font )
 
@@ -42,9 +40,10 @@ import Stunts.Color
 import Stunts.Loader
 import Stunts.Track
 import Stunts.Unpack
-import Zip
+import Zip hiding (Archive)
+import qualified Zip
 
-import GameGraphics
+--import GameGraphics
 import MeshUtil
 
 bitmaps :: Archive [(SB.ByteString,Bitmap)]
@@ -246,8 +245,14 @@ data StuntsData
     , font2         :: Font
     }
 
-readStuntsData :: FilePath -> FilePath -> IO StuntsData
-readStuntsData oldFile newFile = runArchive oldFile newFile $ do
+-- generic resource handling
+runArchive :: Archive a -> Zip.Archive -> StdGen -> a
+runArchive m arc g = evalState (runReaderT m ar) g
+  where
+    ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) arc
+
+readStuntsData :: Zip.Archive -> StdGen -> StuntsData
+readStuntsData = runArchive $ do
     cars <- mapM loadCar ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
     keys <- asks T.keys
     tracks <- mapM loadTrack [k | k <- keys, ".trk" == takeExtensionCI (SB.unpack k)]
@@ -266,17 +271,9 @@ isPrefixOfCI a b = isPrefixOf a $ map toLower b
 type Archive = ReaderT (T.Trie SB.ByteString) Rnd
 
 type Rnd = State StdGen
-rnd = state random
 
--- generic resource handling
-runArchive :: FilePath -> FilePath -> Archive a -> IO a
-runArchive oldFile newFile m = do
-    old <- readArchive oldFile
-    new <- readArchive newFile
-    let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) $ old ++ new
-    print $ T.keys ar
-    g <- newStdGen
-    return $ evalState (runReaderT m ar) g
+rnd :: Random a => Rnd a
+rnd = state random
 
 infix 7 !
 (!) :: T.Trie a -> SB.ByteString -> a

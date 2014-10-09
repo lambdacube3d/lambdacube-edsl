@@ -85,7 +85,11 @@ main = do
 
     -- load game data
     dir <- getDataDir
-    StuntsData carsData tracksData font1 font2 <- readStuntsData mediaPath (dir </> "newstunts.zip")
+    old <- readArchive mediaPath
+    new <- readArchive $ dir </> "newstunts.zip"
+    -- print $ T.keys (old ++ new)
+    g <- newStdGen
+    let StuntsData carsData tracksData font1 font2 = readStuntsData (old ++ new) g
 
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
