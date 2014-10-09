@@ -129,13 +129,13 @@ loadCarWheels n = do
     return [wheel vl $ prIndices p | let Model vl pl = m ! "car0", p <- pl, prType p == Wheel]
   where
     -- wheel pos, wheel width, wheel radius
-    wheel vl [p1,p2,p3,p4,p5,p6] = ((v p1 + v p4) &* (0.5 * car0ScaleFactor),car0ScaleFactor * (len $ v p1 - v p4),car0ScaleFactor * (len $ v p2 - v p1))
+    wheel vl [p1,p2,_p3,p4,_p5,_p6] = ((v p1 + v p4) &* (0.5 * car0ScaleFactor),car0ScaleFactor * (len $ v p1 - v p4),car0ScaleFactor * (len $ v p2 - v p1))
       where
         v i = let (a,b,c) = vl !! i in Vec3 a b c
     car0ScaleFactor = scaleFactor / 20
 
 loadCar :: String -> Archive CarData
-loadCar n = do 
+loadCar n = do
     mesh <- loadCarMesh $ SB.pack $ "ST" ++ n ++ ".P3S"
     carRes <- loadRawRes $ SB.pack $ "CAR" ++ n ++ ".RES"
     let carSim = runGet (getCar carDesc carName) $ carRes ! "simd"
@@ -147,12 +147,11 @@ loadCar n = do
     wheels <- loadCarWheels $ SB.pack $ "ST" ++ n ++ ".P3S"
     bitmapsA <- loadBitmap $ SB.pack $ "STDA" ++ n ++ ".PVS"
     bitmapsB <- loadBitmap $ SB.pack $ "STDB" ++ n ++ ".PVS"
-    let bitmaps = T.unionL bitmapsA bitmapsB
     return $ CarData
         { carMesh     = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- mesh ! "car0"]
         , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- wheels]
         , carSimModel = carSim
-        , carBitmaps  = bitmaps
+        , carBitmaps  = T.unionL bitmapsA bitmapsB
         }
 
 loadTrack :: SB.ByteString -> Archive TrackData
@@ -174,7 +173,7 @@ loadTrack trkFile = do
         clampItem i (Mesh attrs prim Nothing) = Mesh (T.mapBy clamp attrs) prim Nothing
           where
             (iw,ih) = trackModelSizeMap IM.! i
-            (ms,_,_) = trackModelMap IM.! i
+            (_ms,_,_) = trackModelMap IM.! i
             clamp n (A_V3F a)
                 | n == "position" = Just $ A_V3F $ if iw == 1 && ih == 1 then go a else a
                 | otherwise = Just $ A_V3F a
@@ -260,8 +259,9 @@ readStuntsData = runArchive $ do
         , font2   = font2
         }
 
+takeExtensionCI :: FilePath -> String
 takeExtensionCI = map toLower . takeExtension
-isPrefixOfCI a b = isPrefixOf a $ map toLower b
+--isPrefixOfCI a b = isPrefixOf a $ map toLower b
 
 type Archive = ReaderT (T.Trie SB.ByteString) Rnd
 
