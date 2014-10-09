@@ -20,7 +20,7 @@ import Data.Int
 import Data.List
 import Data.Ord
 import Data.Vect.Float
---import Data.Vect.Float.Instances
+import Data.Vect.Float.Instances
 import Data.Vect.Float.Util.Quaternion hiding (toU)
 import System.Random
 import qualified Data.ByteString.Char8 as SB
