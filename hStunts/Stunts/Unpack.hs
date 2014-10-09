@@ -7,6 +7,7 @@ module Stunts.Unpack
     ) where
 
 import Control.Applicative
+import Control.Arrow
 import Data.Bits
 import Data.List
 import Data.Vector ((!), (//))
@@ -64,29 +65,28 @@ unpackRLE (escCount:xs) = decodeBytes $
         3 -> let n1:n2:c:cs' = cs in replicate (n1 + n2 `shiftL` 8) c ++ decodeBytes cs'
         n -> let c:cs' = cs in replicate (n-1) c ++ decodeBytes cs'
 
+splits :: [a] -> [Int] -> ([a], [[a]])
+splits = mapAccumL $ \as i -> let (bs,cs) = splitAt i as in (cs, bs)
+
 unpackVLE :: [Int] -> [Int]
-unpackVLE (widthsCount:xs) = unfoldr (readDict dict) stream
+unpackVLE (widthsCount: xs) = unfoldr (readDict dict) bitstream
   where
     widthsLen = widthsCount .&. 0x7f
     (widths,xs') = splitAt widthsLen xs
-    (alphabet,xs'') = splitAt (sum widths) xs'
-    stream = [testBit x n | x <- xs'', n <- [7,6..0]]
-    dict = buildDict widths alphabet
-
-    buildDict ws as = go ws as 1 (0 :: Int) Empty
+    (xs'', alphabet) = splits xs' widths
+    bitstream = [testBit x n | x <- xs'', n <- [7,6..0]]
+    dict = foldl go Empty $ zip [1..] $ snd $ annotate (0 :: Int) alphabet
       where
-        go []     _  _ _ d = d
-        go (w:ws) as l n d
-            | w == 0    = go ws as (l+1) (n `shiftL` 1) d
-            | otherwise = go (w-1:ws) as' l (n+1) (add l d a)
-          where
-            a:as' = as
-            add 0  _     a = Leaf a
-            add l' Empty a = add (l'-1) Empty a :|: Empty
-            add l' (d1 :|: d2) a
-                | testBit n (l'-1) = d1 :|: add (l'-1) d2 a
-                | otherwise        = add (l'-1) d1 a :|: d2
+        annotate = mapAccumL $ (((`shiftL` 1) *** id) .) . mapAccumL (\n a -> (n+1, (n,a)))
 
-    readDict (Leaf x)    bs     = Just (x,bs)
+        go d (l, as) = foldl go' d as
+          where
+            go' d (n,a) = insert d $ map (testBit n) [l-1,l-2.. -1]
+              where
+                insert (d1 :|: d2) (b:bs) = if b then d1 :|: insert d2 bs
+                                                 else insert d1 bs :|: d2
+                insert Empty (_:bs) = foldl (\x _ -> x :|: Empty) (Leaf a) bs
+
     readDict (d1 :|: d2) (b:bs) = readDict (if b then d2 else d1) bs
+    readDict (Leaf x)    bs     = Just (x,bs)
     readDict _           _      = Nothing
