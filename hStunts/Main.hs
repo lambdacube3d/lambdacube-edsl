@@ -82,13 +82,11 @@ main = do
     Args {mediaPath, trkFile, carNum, retroMode} <- getArgs
 
     -- load game data
-    StuntsData carsData tracksData <- readStuntsData
+    StuntsData carsData tracksData font1 font2 <- readStuntsData
 
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"
 
-    let Right font1 = decodeFont $ readZipFile "Prototype.ttf"
-        Right font2 = decodeFont $ readZipFile "Capture_it.ttf"
     cpuDrawThread <- newIORef True
 
     renderer <- compileRenderer $ ScreenOut $ (if retroMode then pixelize 320 240 else id) $ addHUD stuntsGFX

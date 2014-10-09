@@ -5,13 +5,14 @@ module GameData
     , CarData (..)
     , TrackData (..)
     , readStuntsData
-    , readZipFile
     , scaleFactor
     ) where
 
 import Control.Applicative
 import Control.Arrow
 import Control.Monad
+import Control.Monad.Identity
+import Control.Monad.Reader
 import Data.Binary.Get as B
 import Data.Bits
 import Data.Char
@@ -21,7 +22,7 @@ import Data.Ord
 import Data.Vect.Float
 import Data.Vect.Float.Instances
 import Data.Vect.Float.Util.Quaternion hiding (toU)
-import System.IO.Unsafe
+--import System.IO.Unsafe
 import System.Random
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.ByteString.Lazy as LB
@@ -32,6 +33,8 @@ import qualified Data.Vector.Storable as SV
 
 import System.Directory
 import System.FilePath
+
+import Graphics.Text.TrueType( decodeFont, Font )
 
 import LambdaCube.GL hiding (Line)
 import LambdaCube.GL.Mesh hiding (loadMesh)
@@ -44,24 +47,26 @@ import Zip
 import GameGraphics
 import MeshUtil
 
-bitmaps :: [(SB.ByteString,Bitmap)]
-bitmaps = concat [T.toList $ loadBitmap k | k <- T.keys archive, ".pvs" == takeExtensionCI (SB.unpack k)]
+bitmaps :: Archive [(SB.ByteString,Bitmap)]
+bitmaps = do
+    keys <- asks T.keys
+    concat <$> sequence [T.toList <$> loadBitmap k | k <- keys, ".pvs" == takeExtensionCI (SB.unpack k)]
 
 -- game specific resource handling
-loadRes :: SB.ByteString -> T.Trie LB.ByteString
-loadRes = readResources . unpackResource . readZipFile
+loadRes :: SB.ByteString -> Archive (T.Trie LB.ByteString)
+loadRes = fmap (readResources . unpackResource) . readZipFile
 
-loadRawRes :: SB.ByteString -> T.Trie LB.ByteString
-loadRawRes = readResources . readZipFile
+loadRawRes :: SB.ByteString -> Archive (T.Trie LB.ByteString)
+loadRawRes = fmap readResources . readZipFile
 
-loadMesh :: SB.ByteString -> T.Trie [Mesh]
-loadMesh = fmap (toMesh . runGet getModel) . loadRes
+loadMesh :: SB.ByteString -> Archive (T.Trie [Mesh])
+loadMesh = (fmap . fmap) (toMesh . runGet getModel) . loadRes
 
-loadBitmap :: SB.ByteString -> T.Trie Bitmap
-loadBitmap = fmap (runGet getBitmap) . loadRes
+loadBitmap :: SB.ByteString -> Archive (T.Trie Bitmap)
+loadBitmap = (fmap . fmap) (runGet getBitmap) . loadRes
 
-loadCarMesh :: SB.ByteString -> T.Trie [Mesh]
-loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) $! loadRes n
+loadCarMesh :: SB.ByteString -> Archive (T.Trie [Mesh])
+loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) <$> loadRes n
   where
     fixOp k = if k == "car0" then addBottom . fixLambo else id
 
@@ -124,44 +129,45 @@ loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) $! loa
                 v3 = vec i3
         isNewFace _ = False
 
-loadCarWheels :: SB.ByteString -> [(Vec3, Float, Float)]
-loadCarWheels n = [wheel vl $ prIndices p | let Model vl pl = m ! "car0", p <- pl, prType p == Wheel]
+loadCarWheels :: SB.ByteString -> Archive [(Vec3, Float, Float)]
+loadCarWheels n = do
+    m <- fmap (runGet getModel) <$> loadRes n
+    return [wheel vl $ prIndices p | let Model vl pl = m ! "car0", p <- pl, prType p == Wheel]
   where
-    m = fmap (runGet getModel) $ loadRes n
     -- wheel pos, wheel width, wheel radius
     wheel vl [p1,p2,p3,p4,p5,p6] = ((v p1 + v p4) &* (0.5 * car0ScaleFactor),car0ScaleFactor * (len $ v p1 - v p4),car0ScaleFactor * (len $ v p2 - v p1))
       where
         v i = let (a,b,c) = vl !! i in Vec3 a b c
     car0ScaleFactor = scaleFactor / 20
 
-loadCar :: String -> CarData
-loadCar n = CarData
-    { carMesh     = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- mesh ! "car0"]
-    , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- wheels]
-    , carSimModel = carSim
-    , carBitmaps  = bitmaps
-    }
-  where
-    mesh = loadCarMesh $ SB.pack $ "ST" ++ n ++ ".P3S"
-    carRes = loadRawRes $ SB.pack $ "CAR" ++ n ++ ".RES"
-    carSim = runGet (getCar carDesc carName) $ carRes ! "simd"
-      where
-        lineBreak ']' = '\n'
-        lineBreak a = a
-        carDesc = map lineBreak $ runGet getString' $ carRes ! "edes"
-        carName = runGet getString' $ carRes ! "gnam"
-    wheels = loadCarWheels $ SB.pack $ "ST" ++ n ++ ".P3S"
-    bitmaps = T.unionL bitmapsA bitmapsB
-    bitmapsA = loadBitmap $ SB.pack $ "STDA" ++ n ++ ".PVS"
-    bitmapsB = loadBitmap $ SB.pack $ "STDB" ++ n ++ ".PVS"
+loadCar :: String -> Archive CarData
+loadCar n = do 
+    mesh <- loadCarMesh $ SB.pack $ "ST" ++ n ++ ".P3S"
+    carRes <- loadRawRes $ SB.pack $ "CAR" ++ n ++ ".RES"
+    let carSim = runGet (getCar carDesc carName) $ carRes ! "simd"
+          where
+            lineBreak ']' = '\n'
+            lineBreak a = a
+            carDesc = map lineBreak $ runGet getString' $ carRes ! "edes"
+            carName = runGet getString' $ carRes ! "gnam"
+    wheels <- loadCarWheels $ SB.pack $ "ST" ++ n ++ ".P3S"
+    bitmapsA <- loadBitmap $ SB.pack $ "STDA" ++ n ++ ".PVS"
+    bitmapsB <- loadBitmap $ SB.pack $ "STDB" ++ n ++ ".PVS"
+    let bitmaps = T.unionL bitmapsA bitmapsB
+    return $ CarData
+        { carMesh     = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- mesh ! "car0"]
+        , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- wheels]
+        , carSimModel = carSim
+        , carBitmaps  = bitmaps
+        }
 
-loadTrack :: SB.ByteString -> IO TrackData
+loadTrack :: SB.ByteString -> ArchiveT IO TrackData
 loadTrack trkFile = do
-    let game1Map = loadMesh "GAME1.P3S"
-        game2Map = loadMesh "GAME2.P3S"
-        (terrainItems,trackItems) = readTrack $ readZipFile' trkFile
+    game1Map <- pureArchive $ loadMesh "GAME1.P3S"
+    game2Map <- pureArchive $ loadMesh "GAME2.P3S"
+    (terrainItems,trackItems) <- pureArchive $ readTrack <$> readZipFile' trkFile
 
-        modelIdToMesh :: (SB.ByteString,SB.ByteString) -> [Mesh]
+    let modelIdToMesh :: (SB.ByteString,SB.ByteString) -> [Mesh]
         modelIdToMesh ("GAME1.P3S",n) = game1Map ! n
         modelIdToMesh ("GAME2.P3S",n) = game2Map ! n
         modelIdToMesh (n,_) = error $ "Unknown resource file: " ++ show n
@@ -200,7 +206,7 @@ loadTrack trkFile = do
                 [(toProj4 o x y False, fenc) | y <- [1..28], (o,x) <- [(pi/2,0),(-pi/2,29)]] ++
                 [(toProj4 o x y False, cfen) | (o,x,y) <- [(pi/2,0,0), (0,29,0), (-pi/2,29,29), (pi,0,29)]]
 
-    clouds <- replicateM 70 $ do
+    clouds <- lift $ replicateM 70 $ do
         let getCloudMesh n = game2Map ! (SB.pack $ "cld" ++ show (1 + n `mod` 3 :: Int))
             getCoord a d = (a', c sin, c cos)
               where
@@ -236,42 +242,54 @@ data StuntsData
     = StuntsData
     { cars          :: [CarData]
     , tracks        :: [TrackData]
+    , font1         :: Font
+    , font2         :: Font
     }
 
 readStuntsData :: IO StuntsData
-readStuntsData = do
-    let cars = map loadCar ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
-    tracks <- mapM loadTrack [k | k <- T.keys archive, ".trk" == takeExtensionCI (SB.unpack k)]
+readStuntsData = runArchive $ do
+    cars <- mapM (pureArchive . loadCar) ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
+    keys <- asks T.keys
+    tracks <- mapM loadTrack [k | k <- keys, ".trk" == takeExtensionCI (SB.unpack k)]
+    Right font1 <- pureArchive $ decodeFont <$> readZipFile "Prototype.ttf"
+    Right font2 <- pureArchive $ decodeFont <$> readZipFile "Capture_it.ttf"
     return $! StuntsData
         { cars    = cars
         , tracks  = tracks
+        , font1   = font1
+        , font2   = font2
         }
 
 takeExtensionCI = map toLower . takeExtension
 isPrefixOfCI a b = isPrefixOf a $ map toLower b
 
+type ArchiveT = ReaderT (T.Trie SB.ByteString)
+type Archive = ArchiveT Identity
+
+pureArchive :: Monad m => Archive a -> ArchiveT m a
+pureArchive = mapReaderT $ return . runIdentity
+
 -- generic resource handling
-archive :: T.Trie SB.ByteString
-{-# NOINLINE archive #-} 
-archive = unsafePerformIO $! do
+runArchive :: ArchiveT IO a -> IO a
+runArchive m = do
     a <- concat <$> (mapM readArchive =<< filter (\n -> ".zip" == takeExtensionCI n) <$> getDirectoryContents ".")
     let ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) a
     print $ T.keys ar
-    return ar
+    runReaderT m ar
 
 infix 7 !
 (!) :: T.Trie a -> SB.ByteString -> a
 m ! n = let Just d = T.lookup n m in d
 
-readZipFile :: SB.ByteString -> LB.ByteString
-readZipFile n = case T.lookup n archive of
-    Just d  -> LB.fromChunks [d]
-    Nothing -> error $ "File not found: " ++ show n
+readZipFile :: SB.ByteString -> Archive LB.ByteString
+readZipFile = fmap (LB.fromChunks . (:[])) . readZipFile'
 
-readZipFile' :: SB.ByteString -> SB.ByteString
-readZipFile' n = case T.lookup n archive of
-    Just d  -> d
-    Nothing -> error $ "File not found: " ++ show n
+readZipFile' :: SB.ByteString -> Archive SB.ByteString
+readZipFile' n = do
+    x <- asks $ T.lookup n
+    return $ case x of
+        Just d  -> d
+        Nothing -> error $ "File not found: " ++ show n
 
 -- constants
 scaleFactor :: Float
