@@ -10,18 +10,25 @@ import Data.Maybe
 import Data.IORef
 import Data.List hiding (transpose)
 import System.FilePath
+import System.Directory (doesFileExist)
+import System.Exit (exitFailure)
+import System.IO
 import Paths_stunts
 import FRP.Elerea.Param
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 
 --import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as SB
+import qualified Data.ByteString.Lazy as LB
 
 import qualified Data.Vector as VG
 import qualified Data.Vector.Storable as V
 import qualified Data.Trie as T
 --import Control.Concurrent.STM
 import Data.Vect.Float
+
+import Network.HTTP
+import Network.URI
 
 import LambdaCube.GL
 import LambdaCube.GL.Mesh
@@ -76,22 +83,64 @@ withFrameBuffer x y w h fn = allocaBytes (w*h*4) $ \p -> do
 captureRate :: Float
 captureRate = 30
 
+downloadURI = "http://downloads.pigsgrame.de/STUNTS11.ZIP"
+
+questionYN :: String -> IO Bool
+questionYN msg = do
+    putStrLn msg
+    putStr "[Y/N] " >> hFlush stdout
+    hSetBuffering stdin NoBuffering
+    answer <- getChar
+    putStrLn ""
+    return $ answer `elem` "Yy"
+
+abort :: IO ()
+abort = do
+    putStrLn "Aborting"
+    exitFailure
+
 main :: IO ()
 main = do
 #ifdef CAPTURE
     ilInit
 #endif
+    datadir <- getDataDir
+    extradata <- readArchive $ datadir </> "newstunts.zip"
+    let dataorig = datadir </> "STUNTS11.ZIP"
 
     -- get command line arguments (see Args.hs)
-    Args {mediaPath, trkFile, carNum, retroMode} <- getArgs
+    let adjustMediaPath args
+            | null (mediaPath args) = args {mediaPath = dataorig}
+            | otherwise = args
+    Args {mediaPath, trkFile, carNum, retroMode} <- adjustMediaPath <$> getArgs
 
     -- load game data
-    dir <- getDataDir
-    old <- readArchive mediaPath
-    new <- readArchive $ dir </> "newstunts.zip"
-    -- print $ T.keys (old ++ new)
+    original <- do
+        exist <- doesFileExist mediaPath
+        if exist
+          then readArchive mediaPath
+          else do
+            putStrLn "Missing game file!"
+--            putStrLn "For reference, the above file should be 1077864 bytes."
+            b <- questionYN $ "Should I try to download the original game from"
+                                ++ "\n<" ++ downloadURI ++ "> ?"
+            if b then do
+                putStrLn $ "Getting " ++ downloadURI
+                let Just uri = parseURI downloadURI
+                res <- simpleHTTP $ Request uri GET [] ""
+                case res of
+                  Left err -> print err >> abort
+                  Right r -> do
+                    putStrLn "Done getting."
+                    b <- questionYN "Should I try to save the original game file?"
+                    when b $ do
+                        LB.writeFile dataorig $ rspBody r
+                        putStrLn $ "File written to " ++ dataorig
+                    return $ readArchive' $ rspBody r
+              else abort
+
     g <- newStdGen
-    let StuntsData carsData tracksData font1 font2 = readStuntsData (old ++ new) g
+    let StuntsData carsData tracksData font1 font2 = readStuntsData (original ++ extradata) g
 
     -- setup graphics
     windowSize <- initCommon "Stunts NextGen powered by LambdaCube Engine"

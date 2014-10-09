@@ -1,6 +1,7 @@
 module Zip
     ( Archive
     , readArchive
+    , readArchive'
     , eFilePath
     , decompress
     ) where
@@ -37,7 +38,10 @@ decompress :: Entry -> SB.ByteString
 decompress = SB.concat . LB.toChunks . decompress'
 
 readArchive :: String -> IO Archive
-readArchive n = runGet getArchive . LB.fromChunks . (:[]) <$> mmapFileByteString n Nothing
+readArchive n = readArchive' . LB.fromChunks . (:[]) <$> mmapFileByteString n Nothing
+
+readArchive' :: LB.ByteString -> Archive
+readArchive' = runGet getArchive
 
 chunks :: Word32 -> Get a -> Get [a]
 chunks c a = lookAhead getWord32le >>= \code -> case code == c of
