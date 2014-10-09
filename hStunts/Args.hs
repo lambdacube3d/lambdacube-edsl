@@ -31,7 +31,7 @@ stuntsArgs = Args
     , carNum        = 4                 &= typ "INT"   &= help "Car number, default is 4"
     , retroMode     = False                            &= help "Retro mode, default is off"
     , verbose       = 1                                &= help "Verbosity level of stdout debug info, default is 1"
-    }  &= summary ("Haskell stunts " ++ showVersion version ++ ", (C) -2014 Csaba Hruska")
+    }  &= summary ("Haskell stunts " ++ showVersion version ++ ", (C) 2010-2014 Csaba Hruska and others")
        &= program "stunts"
 
 getArgs :: IO Args
