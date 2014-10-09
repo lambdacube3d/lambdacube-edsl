@@ -58,6 +58,8 @@ expUniverse expId exp v = (\l -> IS.unions $ IS.singleton expId : (map (v !) l))
     GeometryShader _ _ _ a b c  -> [a, b, c]
     Sampler _ _ a           -> [a]
     AccumulationContext a _ -> maybeToList a
+    ScreenOut a             -> [a]
+    SamplerOut _ a          -> [a]
     _                       -> []
 
 mkExpUni :: DAG -> V.Vector [Exp]
@@ -212,7 +214,7 @@ data Exp
     | Filter                !ExpId
 
     -- GPOutput
-    | ImageOut              ByteString V2U !ExpId
+    | SamplerOut            ByteString !ExpId
     | ScreenOut             !ExpId
     | MultiOut              [ExpId]
 
@@ -265,7 +267,7 @@ class ExpC exp where
     passAll         :: exp
     filter_         :: exp -> exp
     -- GPOutput constructors
-    imageOut        :: ByteString -> V2U -> exp -> exp
+    samplerOut      :: ByteString -> exp -> exp
     screenOut       :: exp -> exp
     multiOut        :: [exp] -> exp
 
@@ -398,9 +400,9 @@ instance ExpC N where
         !h1 <- unN a
         hashcons (Unknown "Filter") $ Filter h1
     -- GPOutput constructors
-    imageOut !a !b !c = N $ do
-        !h1 <- unN c
-        hashcons (Unknown "ImageOut") $ ImageOut a b h1
+    samplerOut !a !b = N $ do
+        !h1 <- unN b
+        hashcons (Unknown "SamplerOut") $ SamplerOut a h1
     screenOut !a = N $ do
         !h1 <- unN a
         hashcons (Unknown "ScreenOut") $ ScreenOut h1

@@ -54,6 +54,7 @@ module LambdaCube.GL (
     render,
     dispose,
     setScreenSize,
+    samplerOutput,
 
     Object,
     addObject,

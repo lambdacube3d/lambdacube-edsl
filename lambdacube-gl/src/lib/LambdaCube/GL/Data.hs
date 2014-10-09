@@ -331,5 +331,6 @@ updateTexture2DRGBAF tx isMip bitmap = do
         glTexSubImage2D gl_TEXTURE_2D 0 0 0 (fromIntegral w) (fromIntegral h) dataFormat gl_UNSIGNED_BYTE $ castPtr ptr
     when isMip $ glGenerateMipmap gl_TEXTURE_2D
 
-putStrLn_ :: a -> IO ()
+putStrLn_ :: String -> IO ()
+--putStrLn_ = putStrLn
 putStrLn_ _ = return ()

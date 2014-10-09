@@ -37,7 +37,7 @@ genTy :: GPU a => a -> Ty
 genTy = T.tupleType
 
 convertGPOutput :: H.GPOutput o -> N
-convertGPOutput (H.ImageOut a b c)  = imageOut a b $ convertGP c
+convertGPOutput (H.SamplerOut a b)  = samplerOut a $ convertExp [] b
 convertGPOutput (H.ScreenOut a)     = screenOut $ convertGP a
 convertGPOutput (H.MultiOut a)      = multiOut $ map convertGPOutput a
 

@@ -582,7 +582,9 @@ compileRenderFrameBuffer rendState uniformGetterTrie dag samplerNames slotSample
     print_ uLoc'
     return $! (renderFun, disposeFun, uLoc', sLoc, outColorCnt)
 
-putStrLn_ :: a -> IO ()
+putStrLn_ :: String -> IO ()
+--putStrLn_ = putStrLn
 putStrLn_ _ = return ()
 
-print_ = putStrLn_
+print_ :: Show a => a -> IO ()
+print_ _ = return ()

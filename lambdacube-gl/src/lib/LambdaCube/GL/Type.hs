@@ -100,6 +100,7 @@ data Renderer -- internal type
     , render                :: IO ()
     , dispose               :: IO ()
     , setScreenSize         :: Word -> Word -> IO ()
+    , samplerOutput         :: Trie TextureData
 
     -- internal
     , mkUniformSetup        :: Trie (GLint -> IO ())    -- global unifiorm
@@ -232,7 +233,7 @@ instance Storable a => Storable (V4 a) where
 data TextureData
     = TextureData
     { textureObject :: GLuint
-    }
+    } deriving Show
 
 type SetterFun a = a -> IO ()
 newtype Getter a = Getter (IO a)

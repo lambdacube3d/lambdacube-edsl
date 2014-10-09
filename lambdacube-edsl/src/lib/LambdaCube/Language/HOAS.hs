@@ -251,11 +251,10 @@ data FragmentFilter a where
     Filter  :: (Exp F a -> Exp F Bool)
             -> FragmentFilter a
 
-
 data GPOutput (o :: OutputType) where
-    ImageOut    :: ByteString
-                -> V2U
-                -> Exp Obj (Image 1 t)
+    SamplerOut  :: GPU (Sampler dim arr t ar)
+                => ByteString
+                -> Exp Obj (Sampler dim arr t ar)
                 -> GPOutput SingleOutput
 
     ScreenOut   :: Exp Obj (Image 1 t)
