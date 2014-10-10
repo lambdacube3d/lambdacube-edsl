@@ -2,6 +2,7 @@
 
 module Stunts.Track(terrainModelMap,trackModelMap,trackModelSizeMap) where
 
+import Control.Arrow
 import Data.IntMap (IntMap, (!))
 import qualified Data.IntMap as IM
 import Data.ByteString.Char8 (ByteString)
@@ -20,36 +21,40 @@ terrainOrientation = [0, a, 2*a, 3*a]
   where
     a = pi / 2
 
-type ModelID = (ByteString,ByteString) -- FileName ModelName
-type ModelMap = IntMap ([ModelID],[ModelID],Float) -- Graphics, Collision, Orientation
+type FileName = ByteString
+type ModelName = ByteString
+type ModelID = (FileName,ModelName)
+type ModelData = ([ModelID],[ModelID]) -- Graphics, Collision
+type OrientedModelData = ([ModelID],[ModelID],Float) -- Graphics, Collision, Orientation
+type ModelMap = IntMap OrientedModelData
 
-meshMap :: ByteString -> [ByteString] -> [(ByteString,ByteString)]
-meshMap r l = [(r,n) | n <- l]
+addFileName :: FileName -> [ModelName] -> [ModelID]
+addFileName r l = [(r,n) | n <- l]
 
-trackModels :: IntMap ([ModelID],[ModelID])
-trackModels = IM.map (\(a,b) -> (meshMap "GAME1.P3S" a,meshMap "GAME1.P3S" b)) trackModelsGame1P3S `IM.union`
-              IM.map (\(a,b) -> (meshMap "GAME2.P3S" a,meshMap "GAME2.P3S" b)) trackModelsGame2P3S
+trackModels :: IntMap ModelData
+trackModels = IM.map (addFileName "GAME1.P3S" *** addFileName "GAME1.P3S") trackModelsGame1P3S `IM.union`
+              IM.map (addFileName "GAME2.P3S" *** addFileName "GAME2.P3S") trackModelsGame2P3S
 
-terrainModels :: IntMap ([ModelID],[ModelID])
-terrainModels = IM.map (\l -> let ml = meshMap "GAME2.P3S" l in (ml,ml)) terrainModelsGame2P3S
+terrainModels :: IntMap ModelData
+terrainModels = IM.map (\l -> let ml = addFileName "GAME2.P3S" l in (ml,ml)) terrainModelsGame2P3S
 
-addModel :: [Float] -> IntMap ([ModelID],[ModelID]) -> [Int] -> [(Int,([ModelID],[ModelID],Float))]
-addModel ol m l@ ~(i0:_) = [(i,(ma,mb,o)) | i <- l | o <- ol]
+addModel :: [Float] -> IntMap ModelData -> [Int] -> IntMap OrientedModelData
+addModel ol m l@ ~(i0:_) = IM.fromList $ [(i,(ma,mb,o)) | i <- l | o <- ol]
   where
     (ma,mb) = m ! i0
 
-addMultiMaterialModel :: [Float] -> IntMap ([ModelID],[ModelID]) -> [(Int,Int,Int)] -> [(Int,([ModelID],[ModelID],Float))]
-addMultiMaterialModel ol m l@ ~((i0,_,_):_) = concat [[(a,(ma,mb,o)), (b,(ma,mb,o)), (c,(ma,mb,o))] | (a,b,c) <- l | o <- ol]
+addMultiMaterialModel :: [Float] -> IntMap ModelData -> [(Int,Int,Int)] -> IntMap OrientedModelData
+addMultiMaterialModel ol m l@ ~((i0,_,_):_) = IM.fromList $ concat [[(a,(ma,mb,o)), (b,(ma,mb,o)), (c,(ma,mb,o))] | (a,b,c) <- l | o <- ol]
   where
     (ma,mb) = m ! i0
 
 trackModelMap :: ModelMap
-trackModelMap = IM.fromList $ concat $
+trackModelMap = IM.unions $
                 [addModel (trackOrientation m) trackModels m | m <- track] ++
                 [addMultiMaterialModel (trackOrientation m) trackModels m | m <- variableMaterialTrack]
 
 terrainModelMap :: ModelMap
-terrainModelMap = IM.fromList $ addModel terrainOrientation terrainModels =<< terrain
+terrainModelMap = IM.unions $ map (addModel terrainOrientation terrainModels) terrain
 
 -- rotate the list items, the first item will satisfy the given condition
 sortFun :: (a -> Bool) -> [a] -> [a]
@@ -69,7 +74,7 @@ terrain = map (sortFun (`IM.notMember` terrainModels))
     ]
 
 --GAME2.P3S
-terrainModelsGame2P3S :: IntMap [ByteString]
+terrainModelsGame2P3S :: IntMap [ModelName]
 terrainModelsGame2P3S = IM.fromList
     [ (0x0F, ["goui"])
     , (0x0B, ["gouo", "high"]) -- needs a ground square
@@ -145,7 +150,9 @@ variableMaterialTrack = map (sortFun (\(i,_,_) -> IM.notMember i trackModelsGame
     , ([0xD0, 0xD1, 0xD2, 0xD3],    [0xD4, 0xD5, 0xD6, 0xD7],   [0xD8, 0xD9, 0xDA, 0xDB])
     ]
 
-trackModelSizeMap :: IntMap (Int,Int)
+type Size = (Int, Int)
+
+trackModelSizeMap :: IntMap Size
 trackModelSizeMap = IM.union sizeMap $ IM.map (const (1,1)) trackModelMap
   where
     sizeMap = IM.fromList [(i,s) | (is,s) <- [(s2x2,(2,2)),(s1x2,(1,2)),(s2x1,(2,1))], i <- is]
@@ -164,7 +171,7 @@ trackModelSizeMap = IM.union sizeMap $ IM.map (const (1,1)) trackModelMap
     s1x2 = [ 0x40, 0x55 ]
     s2x1 = [ 0x41, 0x56 ]
 
-trackModelsGame1P3S :: IntMap ([ByteString],[ByteString])
+trackModelsGame1P3S :: IntMap ([ModelName],[ModelName])
 trackModelsGame1P3S = IM.fromList
     -- simple
     [ (0x31, (["bank"], ["zban"]))
@@ -205,7 +212,7 @@ todo:
 ]
 -}
 
-trackModelsGame2P3S :: IntMap ([ByteString],[ByteString])
+trackModelsGame2P3S :: IntMap ([ModelName],[ModelName])
 trackModelsGame2P3S = IM.fromList
     -- simple
     [ (0xAB, (["boat"], ["zboa"]))

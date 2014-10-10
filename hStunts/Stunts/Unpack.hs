@@ -2,34 +2,34 @@
 
 module Stunts.Unpack
     ( unpackResource
-    , unpackResource'
-    , loadResource
+--    , unpackResource'
+--    , loadResource
     ) where
 
-import Control.Applicative
+--import Control.Applicative
 import Control.Arrow
 import Data.Bits
 import Data.List
 import Data.Vector ((!), (//))
-import System.IO
-import qualified Data.ByteString as SB
+--import System.IO
+--import qualified Data.ByteString as SB
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Vector as V
 
 data Dict = Empty | Leaf Int | Dict :|: Dict
-
+{-
 loadResource :: FilePath -> IO [Int]
 loadResource path = withBinaryFile path ReadMode $ \hdl ->
     force =<< unpack . map fromEnum <$> hGetContents hdl
   where
     force xs = last xs `seq` return xs
-
+-}
 unpackResource :: LB.ByteString -> LB.ByteString
 unpackResource = LB.pack . map fromIntegral . unpack . map fromIntegral . LB.unpack
-
+{-
 unpackResource' :: SB.ByteString -> SB.ByteString
 unpackResource' = SB.pack . map fromIntegral . unpack . map fromIntegral . SB.unpack
-
+-}
 unpack :: [Int] -> [Int]
 unpack (n:xs)
     | testBit n 7 = iterate pass (drop 3 xs) !! (n .&. 0x7f)
