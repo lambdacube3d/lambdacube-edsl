@@ -220,7 +220,7 @@ main = do
         objectUniformSetter <$> addMesh renderer "GameLevel" cm ["worldView", "worldPosition"]
 
     let carBmps = carBitmaps <$> carsData
-    let TrackData terrainMesh trackMesh startPos = head tracksData
+    let TrackData _terrainMesh _trackMesh startPos = head tracksData
 
     -- setup physics
     physicsWorld <- mkPhysicsWorld

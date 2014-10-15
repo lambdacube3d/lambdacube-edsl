@@ -1,4 +1,5 @@
 {-# LANGUAGE NoMonomorphismRestriction, ParallelListComp, OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module GameData
     ( StuntsData (..)
@@ -9,7 +10,7 @@ module GameData
     ) where
 
 import Control.Applicative
-import Control.Arrow
+--import Control.Arrow
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
@@ -18,11 +19,13 @@ import Data.Binary.Get as B
 import Data.Char
 import Data.Int
 import Data.List
-import Data.Ord
+import Data.Maybe
+import Data.Bits
 import Data.Vect.Float
-import Data.Vect.Float.Instances
+import Data.Vect.Float.Instances ()
 import Data.Vect.Float.Util.Quaternion hiding (toU)
 import System.Random
+import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.IntMap as IM
@@ -38,13 +41,123 @@ import LambdaCube.GL hiding (Line)
 import LambdaCube.GL.Mesh hiding (loadMesh)
 import Stunts.Color
 import Stunts.Loader
-import Stunts.Track
 import Stunts.Unpack
 import Zip hiding (Archive)
 import qualified Zip
 
 --import GameGraphics
 import MeshUtil
+
+patch :: LB.ByteString -> LB.ByteString -> LB.ByteString
+patch diff source = LB.concat ps `LB.append` rest
+  where
+    readDiff = do
+        w <- getWord16le
+        if w == 0 then return []
+          else do
+            p <- getLazyByteString $ if w .&. 0x8000 == 0 then 2 else 4
+            ((fromIntegral $ w .&. 0x7fff, p):) <$> readDiff
+
+    corr ((i, x): xs) = (i - 1, x): xs
+
+    (rest, ps) = mapAccumL appPatch source $ corr $ runGet readDiff diff
+    appPatch img (jump, p) = (LB.append p $ LB.drop (LB.length p) rest, unchanged)
+      where
+        (unchanged, rest) = LB.splitAt jump img
+
+executableImage :: Archive LB.ByteString
+executableImage = do
+    -- TODO: decide uncompression by extension
+    egaCmn  <- unpackResource <$> readZipFile "EGA.CMN"
+    mcgaCod <- unpackResource <$> readZipFile "MCGA.COD"
+    mcgaDif <- unpackResource <$> readZipFile "MCGA.DIF"
+    mcgaHdr <- readZipFile "MCGA.HDR"
+    return $ flip runGet mcgaHdr $ do
+        skip 2
+        bytesInLastPage    <- fromIntegral <$> getWord16le
+        pagesInExecutable  <- fromIntegral <$> getWord16le
+        skip 2
+        paragraphsInHeader <- fromIntegral <$> getWord16le
+        let
+            executableSize = (pagesInExecutable `shiftL` 9) + if (bytesInLastPage > 0) then bytesInLastPage - 0x1f0 else 0
+            headerSize = paragraphsInHeader `shiftL` 4
+
+            pad n a
+                | n >= LB.length a = LB.append a $ LB.replicate (n - LB.length a) 0
+
+        return $ pad executableSize $ pad headerSize mcgaHdr `LB.append` patch mcgaDif (egaCmn `LB.append` mcgaCod)
+
+extractDataFromPackedExecutable :: LB.ByteString -> LB.ByteString
+extractDataFromPackedExecutable image
+    = LB.reverse $ LB.concat $ readInst $ LB.dropWhile (== 0xff) $ LB.reverse $ LB.take (packedDataStart + packedDataLength) image
+  where
+    paragraphsInHeader  = readUshortAt 8
+    codeSegment         = readUshortAt 22
+    exepackOffset       = (paragraphsInHeader + codeSegment) `shiftL` 4
+    _destinationLength  = readUshortAt $ exepackOffset + 12
+    skipLength          = readUshortAt $ exepackOffset + 14
+    packedDataStart     = paragraphsInHeader `shiftL` 4
+    packedDataLength    = exepackOffset - ((skipLength - 1) `shiftL` 4) - packedDataStart
+
+    readUshortAt i = fromIntegral (LB.index image i) .|. (fromIntegral (LB.index image $ i+1) `shiftL` 8)
+
+    uc = fromMaybe (error "...") . LB.uncons
+    getCount (uc -> (hi, uc -> (low, rest))) = ((fromIntegral hi `shiftL` 8) .|. fromIntegral low, rest)
+
+    readInst (uc -> (opcode, getCount -> (count, rest))) = let
+        cont rest = if opcode .&. 1 == 0 then readInst rest else []
+      in case (opcode .&. 0xfe, rest) of
+        (0xb0, uc -> (fill, rest)) -> LB.replicate count fill: cont rest
+        (0xb2, LB.splitAt count -> (block, rest)) -> block: cont rest
+
+
+type FileName  = SB.ByteString
+type ModelName = SB.ByteString
+type Item      = ([ModelName], Float) -- Graphics, Orientation
+type Size      = (Int, Int)
+
+trackModelMaps :: Archive (IM.IntMap Item, IM.IntMap Size)
+trackModelMaps = do
+    unpackedCode <- extractDataFromPackedExecutable <$> executableImage
+
+    let baseAddress      = 0xabcc
+        nameBaseAddress  = 0x9584
+        nameSize         = 5
+        shapeBaseAddress = 0x764c
+        shapeSize        = 22
+
+        trackModelSizeMap = IM.fromList
+            [ (i, ( if sizeFlags .&. 2 == 0 then 1 else 2
+                  , if sizeFlags .&. 1 == 0 then 1 else 2
+                  )
+              )
+            | i <- [0..0xf7]
+            , let structAddress = baseAddress + fromIntegral i * 14
+            , let sizeFlags = LB.index unpackedCode (structAddress + 11)
+            ]
+
+        nameOk = SB.all isAlphaNum
+
+        trackModelMap = IM.fromList
+            [ (i, (gr, orientation)
+              )
+            | i <- [0..0xf7]
+            , let structAddress = baseAddress + fromIntegral i * 14
+            , let otherPartIndex = LB.index unpackedCode (structAddress + 8)
+            , let _materialIndex = LB.index unpackedCode (structAddress + 9)
+            , let shapeAddress = fromIntegral (LB.index unpackedCode $ structAddress + 4) .|. fromIntegral (LB.index unpackedCode $ structAddress + 5) `shiftL` 8
+            , let nameOffset = (shapeAddress - shapeBaseAddress) * nameSize `div` shapeSize + nameBaseAddress
+            , let meshName = SBS.pack $ LB.unpack $ LB.take 4 $ LB.drop nameOffset unpackedCode :: SB.ByteString
+            , let orientation_ = LB.index unpackedCode (structAddress + 3) .&. 0x03
+            , let orientation = fromIntegral ((4 - orientation_) `mod` 4) * (pi/2)
+            , let gr = (if nameOk meshName then meshName else "")
+                    : if otherPartIndex == 0 then [] else getName $ fromIntegral otherPartIndex
+            ]
+
+        getName i = take 1 $ fst $ trackModelMap IM.! i
+
+    return (trackModelMap, trackModelSizeMap)
+
 
 -- game specific resource handling
 loadRes :: SB.ByteString -> Archive (T.Trie LB.ByteString)
@@ -155,24 +268,25 @@ loadCar n = do
 
 loadTrack :: SB.ByteString -> Archive TrackData
 loadTrack trkFile = do
+    (trackModelMap, trackModelSizeMap) <- trackModelMaps
+
     game1Map <- loadMesh "GAME1.P3S"
     game2Map <- loadMesh "GAME2.P3S"
+    let gameMap = game1Map `T.unionL` game2Map
     (terrainItems,trackItems) <- readTrack <$> readZipFile' trkFile
 
-    let modelIdToMesh :: (SB.ByteString,SB.ByteString) -> [Mesh]
-        modelIdToMesh ("GAME1.P3S",n) = game1Map ! n
-        modelIdToMesh ("GAME2.P3S",n) = game2Map ! n
-        modelIdToMesh (n,_) = error $ "Unknown resource file: " ++ show n
-        f (a,b,c) = (map modelIdToMesh a, map modelIdToMesh b,c)
+    let modelIdToMesh :: SB.ByteString -> [Mesh]
+        modelIdToMesh n = gameMap ! n
 
-        terrainMap  = IM.map f terrainModelMap
-        trackMap    = IM.mapWithKey (\k (a,b,c) -> (map (map (clampItem k)) a, map (map (clampItem k)) b, c)) (IM.map f trackModelMap)
+        f (a,c) = (map modelIdToMesh a,c)
+
+        trackMap    = IM.mapWithKey (\k (a,c) -> (map (map (clampItem k)) a, c)) (IM.map f trackModelMap)
 
         clampItem :: Int -> Mesh -> Mesh
         clampItem i (Mesh attrs prim Nothing) = Mesh (T.mapBy clamp attrs) prim Nothing
           where
             (iw,ih) = trackModelSizeMap IM.! i
-            (_ms,_,_) = trackModelMap IM.! i
+            (_ms,_) = trackModelMap IM.! i
             clamp n (A_V3F a)
                 | n == "position" = Just $ A_V3F $ if iw == 1 && ih == 1 then go a else a
                 | otherwise = Just $ A_V3F a
@@ -181,8 +295,11 @@ loadTrack trkFile = do
                 go v = SV.map (\(V3 x y z) -> V3 (minmax x) y (minmax z)) v
             clamp _ a = Just a
 
-        terrain = [(toProj4 o x y e,m) | (i,x,y,e) <- terrainItems, let (ml,_,o) = terrainMap IM.! i, m <- ml] -- U Vec3 Mesh
-        track   = [(toProj4' o i x y e,m) | (i,x,y,e) <- trackItems, let (ml,_,o) = trackMap IM.! i, m <- ml] -- U Vec3 Mesh
+        -- TODO: replace this with uniform ground
+        patch i ml = ml ++ [modelIdToMesh "high" | i `elem` [0,2,3,4,5,11,12,13,14]]
+
+        terrain = [(toProj4 o x y e,m) | (i,x,y,e) <- terrainItems, let (ml,o) = if i == 0 then ([],0) else trackMap IM.! (i + 215), m <- patch i ml] -- U Vec3 Mesh
+        track   = [(toProj4' o i x y e,m) | (i,x,y,e) <- trackItems, let (ml,o) = trackMap IM.! i, m <- ml] -- U Vec3 Mesh
 
         startOrientation (c,x,y,e)
             | elem c [0x01, 0x86, 0x93] = Just (pi,toVec3' c x y e &* scaleFactor)    -- North
@@ -197,6 +314,17 @@ loadTrack trkFile = do
         fence = [(toProj4 o x y False, fenc) | x <- [1..28], (o,y) <- [(0,0),(pi,29)]] ++
                 [(toProj4 o x y False, fenc) | y <- [1..28], (o,x) <- [(pi/2,0),(-pi/2,29)]] ++
                 [(toProj4 o x y False, cfen) | (o,x,y) <- [(pi/2,0,0), (0,29,0), (-pi/2,29,29), (pi,0,29)]]
+
+        toProj4' :: Float -> Int -> Int -> Int -> Bool -> Proj4
+        toProj4' o i x y e = (orthogonal $ rightOrthoU $ toU o) .*. translation (toVec3' i x y e) .*. scalingUniformProj4 scaleFactor
+
+        toVec3' :: IM.Key -> Int -> Int -> Bool -> Vec3
+        toVec3' i x y e = Vec3 (edgeSize * x') (if e then hillHeight else 0) (edgeSize * y')
+          where
+            f = fromIntegral :: Int -> Float
+            (iw,ih) = trackModelSizeMap IM.! i
+            x' = f x + (f iw - 1) * 0.5
+            y' = f y + (f ih - 1) * 0.5
 
     clouds <- lift $ replicateM 70 $ do
         let getCloudMesh n = game2Map ! (SB.pack $ "cld" ++ show (1 + n `mod` 3 :: Int))
@@ -478,19 +606,8 @@ groupSetBy f = groupBy (\x y -> f x y == EQ) . sortBy f
 toProj4 :: Float -> Int -> Int -> Bool -> Proj4
 toProj4 o x y e = (orthogonal $ rightOrthoU $ toU o) .*. translation (toVec3 x y e) .*. scalingUniformProj4 scaleFactor
 
-toProj4' :: Float -> Int -> Int -> Int -> Bool -> Proj4
-toProj4' o i x y e = (orthogonal $ rightOrthoU $ toU o) .*. translation (toVec3' i x y e) .*. scalingUniformProj4 scaleFactor
-
 toVec3 :: Int -> Int -> Bool -> Vec3
 toVec3 x y e = Vec3 (edgeSize * fromIntegral x) (if e then hillHeight else 0) (edgeSize * fromIntegral y)
-
-toVec3' :: IM.Key -> Int -> Int -> Bool -> Vec3
-toVec3' i x y e = Vec3 (edgeSize * x') (if e then hillHeight else 0) (edgeSize * y')
-  where
-    f = fromIntegral :: Int -> Float
-    (iw,ih) = trackModelSizeMap IM.! i
-    x' = f x + (f iw - 1) * 0.5
-    y' = f y + (f ih - 1) * 0.5
 
 toU :: Float -> U
 toU o = rotU (Vec3 0 1 0) $ realToFrac o

@@ -32,7 +32,6 @@ Extra-Source-Files:
   README
   Stunts/Color.hs
   Stunts/Loader.hs
-  Stunts/Track.hs
   Stunts/Unpack.hs
   BulletUtil.hs
   GameData.hs
