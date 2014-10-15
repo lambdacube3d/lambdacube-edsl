@@ -111,12 +111,11 @@ extractDataFromPackedExecutable image
         (0xb2, LB.splitAt count -> (block, rest)) -> block: cont rest
 
 
-type FileName  = SB.ByteString
 type ModelName = SB.ByteString
 type Item      = ([ModelName], Float) -- Graphics, Orientation
 type Size      = (Int, Int)
 
-trackModelMaps :: Archive (IM.IntMap Item, IM.IntMap Size)
+trackModelMaps :: Archive (IM.IntMap (Item, Size))
 trackModelMaps = do
     unpackedCode <- extractDataFromPackedExecutable <$> executableImage
 
@@ -126,20 +125,12 @@ trackModelMaps = do
         shapeBaseAddress = 0x764c
         shapeSize        = 22
 
-        trackModelSizeMap = IM.fromList
-            [ (i, ( if sizeFlags .&. 2 == 0 then 1 else 2
-                  , if sizeFlags .&. 1 == 0 then 1 else 2
-                  )
-              )
-            | i <- [0..0xf7]
-            , let structAddress = baseAddress + fromIntegral i * 14
-            , let sizeFlags = LB.index unpackedCode (structAddress + 11)
-            ]
-
-        nameOk = SB.all isAlphaNum
-
         trackModelMap = IM.fromList
-            [ (i, (gr, orientation)
+            [ (i, ( (gr, orientation)
+                  , ( if sizeFlags .&. 2 == 0 then 1 else 2
+                    , if sizeFlags .&. 1 == 0 then 1 else 2
+                    )
+                  )
               )
             | i <- [0..0xf7]
             , let structAddress = baseAddress + fromIntegral i * 14
@@ -150,13 +141,14 @@ trackModelMaps = do
             , let meshName = SBS.pack $ LB.unpack $ LB.take 4 $ LB.drop nameOffset unpackedCode :: SB.ByteString
             , let orientation_ = LB.index unpackedCode (structAddress + 3) .&. 0x03
             , let orientation = fromIntegral ((4 - orientation_) `mod` 4) * (pi/2)
-            , let gr = (if nameOk meshName then meshName else "")
+            , let gr = (if SB.all isAlphaNum meshName then meshName else "")
                     : if otherPartIndex == 0 then [] else getName $ fromIntegral otherPartIndex
+            , let sizeFlags = LB.index unpackedCode (structAddress + 11)
             ]
 
-        getName i = take 1 $ fst $ trackModelMap IM.! i
+        getName i = take 1 $ fst $ fst $ trackModelMap IM.! i
 
-    return (trackModelMap, trackModelSizeMap)
+    return trackModelMap
 
 
 -- game specific resource handling
@@ -268,7 +260,7 @@ loadCar n = do
 
 loadTrack :: SB.ByteString -> Archive TrackData
 loadTrack trkFile = do
-    (trackModelMap, trackModelSizeMap) <- trackModelMaps
+    trackModelMap <- trackModelMaps
 
     game1Map <- loadMesh "GAME1.P3S"
     game2Map <- loadMesh "GAME2.P3S"
@@ -278,15 +270,14 @@ loadTrack trkFile = do
     let modelIdToMesh :: SB.ByteString -> [Mesh]
         modelIdToMesh n = gameMap ! n
 
-        f (a,c) = (map modelIdToMesh a,c)
+        f ((a,c),_) = (map modelIdToMesh a,c)
 
         trackMap    = IM.mapWithKey (\k (a,c) -> (map (map (clampItem k)) a, c)) (IM.map f trackModelMap)
 
         clampItem :: Int -> Mesh -> Mesh
         clampItem i (Mesh attrs prim Nothing) = Mesh (T.mapBy clamp attrs) prim Nothing
           where
-            (iw,ih) = trackModelSizeMap IM.! i
-            (_ms,_) = trackModelMap IM.! i
+            (_, (iw,ih)) = trackModelMap IM.! i
             clamp n (A_V3F a)
                 | n == "position" = Just $ A_V3F $ if iw == 1 && ih == 1 then go a else a
                 | otherwise = Just $ A_V3F a
@@ -322,7 +313,7 @@ loadTrack trkFile = do
         toVec3' i x y e = Vec3 (edgeSize * x') (if e then hillHeight else 0) (edgeSize * y')
           where
             f = fromIntegral :: Int -> Float
-            (iw,ih) = trackModelSizeMap IM.! i
+            (_, (iw,ih)) = trackModelMap IM.! i
             x' = f x + (f iw - 1) * 0.5
             y' = f y + (f ih - 1) * 0.5
 
