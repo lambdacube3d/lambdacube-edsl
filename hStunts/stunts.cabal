@@ -30,7 +30,6 @@ Stability:     experimental
 Build-Type:    Simple
 Extra-Source-Files:
   README
-  Stunts/Color.hs
   Stunts/Loader.hs
   Stunts/Unpack.hs
   BulletUtil.hs

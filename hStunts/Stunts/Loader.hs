@@ -4,6 +4,7 @@ module Stunts.Loader
     , Model (..)
     , Bitmap (..)
     , Car (..)
+    , Color (..)
     , getModel
     , getCar
     , getBitmap
@@ -29,7 +30,15 @@ import qualified Data.Trie as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
 
-import Stunts.Color
+data Color
+    = Color Word8   -- red
+            Word8   -- green
+            Word8   -- blue
+            Word8   -- alpha
+    deriving (Eq)
+
+serializeColor :: Color -> [Word8]
+serializeColor (Color r g b a) = [r, g, b, a]
 
 getString :: Int -> Get String
 getString = fmap (SB8.unpack . SB8.takeWhile (/= '\0')) . getByteString
@@ -166,8 +175,8 @@ uint8  unknown2[4]
 
 uint8  image[width * height]
 -}
-getBitmap :: Get Bitmap
-getBitmap = do
+getBitmap :: V.Vector Color -> Get Bitmap
+getBitmap vgaPal = do
     width <- getInt16
     height <- getInt16
     unknown1 <- replicateM 2 getWord16

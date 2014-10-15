@@ -21,6 +21,7 @@ import Data.Int
 import Data.List
 import Data.Maybe
 import Data.Bits
+import Data.Word
 import Data.Vect.Float
 import Data.Vect.Float.Instances ()
 import Data.Vect.Float.Util.Quaternion hiding (toU)
@@ -37,9 +38,8 @@ import System.FilePath (takeExtension)
 
 import Graphics.Text.TrueType( decodeFont, Font )
 
-import LambdaCube.GL hiding (Line)
+import LambdaCube.GL hiding (Line, Color)
 import LambdaCube.GL.Mesh hiding (loadMesh)
-import Stunts.Color
 import Stunts.Loader
 import Stunts.Unpack
 import Zip hiding (Archive)
@@ -157,13 +157,19 @@ loadRawRes :: SB.ByteString -> Archive (T.Trie LB.ByteString)
 loadRawRes = fmap readResources . readZipFile
 
 loadMesh :: SB.ByteString -> Archive (T.Trie [Mesh])
-loadMesh = (fmap . fmap) (toMesh . runGet getModel) . loadRes
+loadMesh r = do
+    materialMap <- getMaterialMap
+    fmap (toMesh materialMap . runGet getModel) <$> loadRes r
 
 loadBitmap :: SB.ByteString -> Archive (T.Trie Bitmap)
-loadBitmap = (fmap . fmap) (runGet getBitmap) . loadRes
+loadBitmap r = do
+    (vgaPal, _) <- getMaterialMap
+    fmap (runGet $ getBitmap vgaPal) <$> loadRes r
 
 loadCarMesh :: SB.ByteString -> Archive (T.Trie [Mesh])
-loadCarMesh n = T.mapBy (\k -> Just . toMesh . fixOp k . runGet getModel) <$> loadRes n
+loadCarMesh n = do
+    materialMap <- getMaterialMap
+    T.mapBy (\k -> Just . toMesh materialMap . fixOp k . runGet getModel) <$> loadRes n
   where
     fixOp k = if k == "car0" then addBottom . fixLambo else id
 
@@ -238,6 +244,7 @@ loadCarWheels n = do
 
 loadCar :: String -> Archive CarData
 loadCar n = do
+    materialMap <- getMaterialMap
     mesh <- loadCarMesh $ SB.pack $ "ST" ++ n ++ ".P3S"
     carRes <- loadRawRes $ SB.pack $ "CAR" ++ n ++ ".RES"
     let carSim = runGet (getCar carDesc carName) $ carRes ! "simd"
@@ -251,7 +258,7 @@ loadCar n = do
     bitmapsB <- loadBitmap $ SB.pack $ "STDB" ++ n ++ ".PVS"
     return $ CarData
         { carMesh     = [transformMesh' (scalingUniformProj4 (1/20) .*. toProj4 pi 0 0 False) m | m <- mesh ! "car0"]
-        , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh (wheelBase 16))) | (p,w,r) <- wheels]
+        , wheels      = [(p,w,r,map (transformMesh' (scaling $ Vec3 w r r)) (toMesh materialMap (wheelBase 16))) | (p,w,r) <- wheels]
         , carSimModel = carSim
         , carBitmaps  = T.unionL bitmapsA bitmapsB
         }
@@ -357,14 +364,94 @@ data StuntsData
 
 -- generic resource handling
 runArchive :: Archive a -> Zip.Archive -> StdGen -> a
-runArchive m arc g = evalState (runReaderT m ar) g
+runArchive m arc g = a
   where
+    (materialMap, a) = flip evalState g $ flip runReaderT (materialMap, ar) $ liftM2 (,) loadMaterialMap m
     ar = T.fromList $ map (\e -> (SB.pack $ eFilePath e, decompress e)) arc
+
+data Pattern
+    = Opaque
+    | Grate
+    | Transparent
+    | Grille
+    | InverseGrille
+    | Glass
+    | InverseGlass
+
+data Material
+    = Material
+    { pattern    :: Pattern
+    , colorIndex :: Int
+    , shininess  :: Float
+    }
+
+loadMaterialMap :: Archive (V.Vector Color, V.Vector Material)
+loadMaterialMap = do
+    unpackedCode <- extractDataFromPackedExecutable <$> executableImage
+    Just paletteData <- (T.lookup "!pal") <$> loadRes "SDMAIN.PVS"
+    let palette = V.fromList $ zipWith mkColor [0..] $ everyNth 3 $ LB.unpack $ LB.drop paletteOffset paletteData
+    let materials = V.generate (fromIntegral materialCount) $ mkMaterial unpackedCode . fromIntegral
+    return (palette, materials)
+
+  where
+    paletteOffset = 0x10
+    materialCount = 129 :: Int64
+    materialIndexOffset = 0xdbc8
+    materialOpaqueInfoOffset = materialIndexOffset + materialCount * 2
+    materialMaskOffset = materialIndexOffset + materialCount * 4
+    opaqueMask = 0xffff
+
+    mkColor :: Int -> [Word8] -> Color
+    mkColor i [r, g, b] = Color (r `shiftL` 2) (g `shiftL` 2) (b `shiftL` 2) (if i == 255 then 0 else 0xff)
+
+    mkMaterial unpackedCode i = Material
+        { pattern    = if isOpaque then Opaque else (if i `elem` [22,23,24,34,94] then Grate else Transparent)
+        , colorIndex = fromIntegral paletteIndex
+        , shininess  = materialShininessMap V.! fromIntegral i
+        }
+      where
+        paletteIndex = LB.index unpackedCode $ materialIndexOffset + i * 2
+        isOpaque = LB.index unpackedCode (materialOpaqueInfoOffset + i * 2) == 0
+        mask = if isOpaque then opaqueMask else readUshortAt $ materialMaskOffset + i * 2
+
+        image = unpackedCode
+        readUshortAt i = fromIntegral (LB.index image i) .|. (fromIntegral (LB.index image $ i+1) `shiftL` 8)
+
+materialShininessMap :: V.Vector Float
+materialShininessMap = V.fromList
+    [  4.0,  4.0,  4.0,  4.0,  4.0,  4.0, 20.0,  4.0
+    ,  4.0,  4.0,  4.0,  4.0,  4.0,  4.0,  4.0,  4.0
+    ,  4.0,  0.0, 20.0, 20.0, 20.0, 20.0, 15.0, 15.0
+    , 15.0,  4.0,  4.0,  4.0,  4.0,  4.0,  4.0,  4.0
+    ,  4.0,  4.0,  4.0, 15.0, 15.0,  4.0, 20.0, 20.0
+    , 40.0, 40.0, 40.0, 40.0, 40.0,  4.0,  4.0,  4.0
+    , 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0
+    , 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0
+    , 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0
+    , 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0
+    , 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0
+    , 30.0, 30.0, 30.0, 30.0,  4.0,  4.0,  4.0,  4.0
+    ,  0.0,  0.0,  4.0,  4.0, 50.0,  4.0,  4.0,  4.0
+    ,  4.0,  4.0,  4.0,  4.0,  4.0,  4.0, 30.0,  4.0
+    ,  4.0, 20.0, 20.0, 20.0, 20.0, 20.0,  0.0,  4.0
+    ,  4.0,  4.0,  4.0,  4.0,  4.0,  4.0,  4.0, 20.0
+    , 20.0
+    ]
+
+
+everyNth :: Int -> [a] -> [[a]]
+everyNth _ [] = []
+everyNth n xs = take n xs: everyNth n (drop n xs)
+
+{-
+var importSettings = FindOrCreateAssetAtPath<ImportSettings>(ImportSettingsPath);
+importSettings.SetDefaultMaterials();
+-}
 
 readStuntsData :: Zip.Archive -> StdGen -> StuntsData
 readStuntsData = runArchive $ do
     cars <- mapM loadCar ["ANSX","COUN","JAGU","LM02","PC04","VETT","AUDI","FGTO","LANC","P962","PMIN"]
-    keys <- asks T.keys
+    keys <- asks $ T.keys . snd 
     tracks <- mapM loadTrack [k | k <- keys, ".trk" == takeExtensionCI (SB.unpack k)]
     Right font1 <- decodeFont <$> readZipFile "Prototype.ttf"
     Right font2 <- decodeFont <$> readZipFile "Capture_it.ttf"
@@ -379,12 +466,15 @@ takeExtensionCI :: FilePath -> String
 takeExtensionCI = map toLower . takeExtension
 --isPrefixOfCI a b = isPrefixOf a $ map toLower b
 
-type Archive = ReaderT (T.Trie SB.ByteString) Rnd
+type Archive = ReaderT ((V.Vector Color, V.Vector Material), T.Trie SB.ByteString) Rnd
 
 type Rnd = State StdGen
 
 rnd :: Random a => Rnd a
 rnd = state random
+
+getMaterialMap :: Archive (V.Vector Color, V.Vector Material)
+getMaterialMap = asks fst
 
 infix 7 !
 (!) :: T.Trie a -> SB.ByteString -> a
@@ -395,7 +485,7 @@ readZipFile = fmap (LB.fromChunks . (:[])) . readZipFile'
 
 readZipFile' :: SB.ByteString -> Archive SB.ByteString
 readZipFile' n = do
-    x <- asks $ T.lookup n
+    x <- asks $ T.lookup n . snd
     return $ case x of
         Just d  -> d
         Nothing -> error $ "File not found: " ++ show n
@@ -478,8 +568,8 @@ data Model
     deriving Show
 -}
 -- TODO
-toMesh :: Model -> [Mesh]
-toMesh mdOrig = [Mesh attrs p Nothing | p <- sml]
+toMesh :: (V.Vector Color, V.Vector Material) -> Model -> [Mesh]
+toMesh (vgaPal, materialMap) mdOrig = [Mesh attrs p Nothing | p <- sml]
   where
     md = separateFaces . convertLines $ mdOrig
 
