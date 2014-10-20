@@ -7,6 +7,7 @@ import qualified Data.ByteString as BS
 --import qualified Data.ByteString.Lazy as LBS
 import Data.Word
 import Data.Bits
+import Data.Char
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 import System.IO.Unsafe
@@ -35,6 +36,8 @@ start ip = State
     , dx = 0
     , si = 0
     , di = 0
+
+    , flags = 0x7202
     }
 
 emulFun ip x = ax $ f $ s { stack = writeVec 502 x $ stack s }
@@ -44,6 +47,18 @@ emulFun ip x = ax $ f $ s { stack = writeVec 502 x $ stack s }
          | otherwise = f st'
       where
         (op, st') = step st
+
+emulFun2 ip x y = ax $ f $ s { stack = writeVec 504 y $ writeVec 502 x $ stack s }
+  where
+    s = start ip
+    f st | inOpcode (mdInst op) == Iretf = st
+         | otherwise = f st'
+      where
+        (op, st') = step st
+
+emulFun2' ip x y n = stepN n $ s { stack = writeVec 504 y $ writeVec 502 x $ stack s }
+  where
+    s = start ip
 
 emulFun' ip x n = stepN n $ s { stack = writeVec 502 x $ stack s }
   where
@@ -55,6 +70,8 @@ initFun ip x = s { stack = writeVec 502 x $ stack s }
 
 sinEmul = emulFun 0x3cbe
 cosEmul = emulFun 0x3d0c
+polarAngleEmul = emulFun2 0x2e
+polarAngleEmul' = emulFun2' 0x2e
 
 sinOK = quickCheck $ \i -> sinEmul i == sin_fast i
 cosOK = quickCheck $ \i -> cosEmul i == cos_fast i
@@ -70,6 +87,14 @@ cosOK = quickCheck $ \i -> cosEmul i == cos_fast i
 
 stepN 1 s = step s
 stepN n s = stepN (n-1) $ snd $ step s
+
+showFlags State{..} = overflowF ++ signF ++ zeroF ++ carryF
+  where
+        getFlag c i = [if (flags `shiftR` i) .&. 1 == 0 then toLower c else c]
+        carryF    = getFlag 'C' 0
+        zeroF     = getFlag 'Z' 6
+        signF     = getFlag 'S' 7
+        overflowF = getFlag 'O' 11
 
 step :: State -> (Metadata, State)
 step s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
@@ -87,20 +112,45 @@ step s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
             where
                 sp' = sp + 2
         Inst [] Imov [dest, src] -> update dest (fetch src) s
-        Inst [] Ixor [dest, src] -> update dest (fetch dest `xor` fetch src) s
-        Inst [] Iand [dest, src] -> update dest (fetch dest .&. fetch src) s
-        Inst [] Ishl [dest, src] -> update dest (fetch dest `shiftL` fromIntegral (fetch src)) s
+        Inst [] Ixchg [dest, src] -> update src (fetch dest) $ update dest (fetch src) s
+        Inst [] Idiv [src] -> update (Reg $ Reg16 RAX) (fromIntegral d) $ update (Reg $ Reg16 RDX) (fromIntegral m) s
+            where
+                (d, m) = (((fromIntegral dx :: Word32) `shiftL` 16) .|. fromIntegral ax) `quotRem` fromIntegral (fetch src)
+        Inst [] Ixor [dest, src] -> twoOp True xor xor dest src
+        Inst [] Ior  [dest, src] -> twoOp True (.|.) (.|.) dest src --update dest (fetch dest .|. fetch src) s
+        Inst [] Iand [dest, src] -> twoOp True (.&.) (.&.) dest src --update dest (fetch dest .&. fetch src) s
+        Inst [] Ishl [dest, src] -> twoOp True (\a b -> a `shiftL` fromIntegral b) (\a b -> a `shiftL` fromIntegral b) dest src -- update dest (fetch dest `shiftL` fromIntegral (fetch src)) s
         Inst [] Ineg [dest] -> update dest (- fetch dest) s
-        Inst [] Iadd [dest, src] -> update dest (fetch dest + fetch src) s
-        Inst [] Isub [dest, src] -> update dest (fetch dest - fetch src) s
+        Inst [] Iadd [dest, src] -> twoOp True (+) (+) dest src --update dest (fetch dest + fetch src) s
+        Inst [] Iadc [dest, src] -> twoOp True adc adc dest src --update dest (fetch dest + fetch src) s
+        Inst [] Isub [dest, src] -> twoOp True (-) (-) dest src --update dest (fetch dest - fetch src) s
+        Inst [] Icmp [dest, src] -> twoOp False (-) (-) dest src --update dest (fetch dest - fetch src) s
         Inst [Seg seg] Ijmp [Mem (Memory Bits16 r RegNone 0 (Immediate Bits16 v))] ->
             s { ip = fetchMem seg (fromIntegral (fetch $ Reg r) + fromIntegral v) }
         Inst [] Ijmp [Jump (Immediate Bits8 v)] ->
             s { ip = ip + extend8_16 (fromIntegral v) }
+        Inst [] Ijge [Jump (Immediate Bits8 v)] ->
+            if signF == overflowF then s { ip = ip + extend8_16 (fromIntegral v) } else s
+        Inst [] Ijl [Jump (Immediate Bits8 v)] ->
+            if signF /= overflowF then s { ip = ip + extend8_16 (fromIntegral v) } else s
+        Inst [] Ijz [Jump (Immediate Bits8 v)] ->
+            if zeroF == 1 then s { ip = ip + extend8_16 (fromIntegral v) } else s
       where
+        getFlag i = (flags `shiftR` i) .&. 1
+        carryF    = getFlag 0
+        zeroF     = getFlag 6
+        signF     = getFlag 7
+        overflowF = getFlag 11
+
+        adc a b = a + b + fromIntegral carryF
+
         fetchMem seg i = fromIntegral low + (fromIntegral high `shiftL` 8)
           where
             (low: high: _) = BS.unpack $ BS.drop (fetchS seg + i) code
+
+        fetchMem8 seg i = fromIntegral low
+          where
+            (low: _) = BS.unpack $ BS.drop (fetchS seg + i) code
 
         fetchS x = case x of
             CS  -> fromIntegral cs `shiftL` 4
@@ -115,6 +165,8 @@ step s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
                 -> stack V.! ((fromIntegral bp + fromIntegral v) `shiftR` 1)
             Mem (Memory Bits16 (Reg16 RBX) RegNone 0 (Immediate Bits16 v))
                 -> fetchMem DS $ fromIntegral bx + fromIntegral v
+            Mem (Memory Bits8 (Reg16 RBX) RegNone 0 (Immediate Bits16 v))
+                -> fetchMem8 DS $ fromIntegral bx + fromIntegral v
             Imm (Immediate Bits8 v) -> fromIntegral v
             Imm (Immediate Bits16 v) -> fromIntegral v
             Const (Immediate Bits0 0) -> 1 -- !!!
@@ -124,6 +176,30 @@ step s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
                 RSP -> sp
                 RAX -> ax
                 RBX -> bx
+                RCX -> cx
+                RDX -> dx
+                RSI -> si
+                RDI -> di
+
+        updateFlags :: Bool -> Bool -> Word16 -> State -> State
+        updateFlags car ovf x s
+            = s { flags = (flags .&. 0xef3e)
+                      .|. (if car then 1 else 0)      -- carry flag
+                      .|. ((x .&. 0x8000) `shiftR` 3)      -- sign flag
+                      .|. (if x == 0 then 2^6 else 0)      -- zero flag
+                      .|. (if ovf then 2^11 else 0)        -- overflow flag
+                }
+
+        twoOp :: Bool -> (Word16 -> Word16 -> Word16) -> (Int -> Int -> Int) -> Operand -> Operand -> State
+        twoOp store op op' x y = (if store then update x r else id) $ updateFlags carry overflow r s
+          where
+            a = fetch x
+            b = fetch y
+            r = op a b
+            r' = fromIntegral $ op' (fromIntegral' a) (fromIntegral' b)
+            r'' = fromIntegral $ op' (fromIntegral a) (fromIntegral b)
+            overflow = r /= r'
+            carry = r /= r''
 
         update :: Operand -> Word16 -> State -> State
         update x y s@State{..} = case x of
@@ -131,33 +207,45 @@ step s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
                 RBP -> s { bp = y }
                 RAX -> s { ax = y }
                 RBX -> s { bx = y }
+                RCX -> s { cx = y }
+                RDX -> s { dx = y }
+                RSI -> s { si = y }
+                RDI -> s { di = y }
             Reg (Reg8 r L) -> case r of
+                RAX -> s { ax = (ax .&. 0xff00) .|. y }
                 RBX -> s { bx = (bx .&. 0xff00) .|. y }
             Reg (Reg8 r H) -> case r of
                 RAX -> s { ax = (ax .&. 0xff) .|. (y `shiftL` 8) }
+                RBX -> s { bx = (bx .&. 0xff) .|. (y `shiftL` 8) }
+
+fromIntegral' :: Word16 -> Int
+fromIntegral' v = if v >= 0x8000 then fromIntegral v - 0x10000 else fromIntegral v
 
 writeVec :: Int -> a -> V.Vector a -> V.Vector a
 writeVec i a = V.modify $ \v -> MV.write v i a
 
 data State = State
-    { cs :: Word16          -- code segment
-    , ss :: Word16          -- stack segment
-    , ds :: Word16          -- data segment
-    , es :: Word16          -- extra segment
+    { cs :: !Word16          -- code segment
+    , ss :: !Word16          -- stack segment
+    , ds :: !Word16          -- data segment
+    , es :: !Word16          -- extra segment
 
-    , ip :: Word16          -- instruction pointer
-    , sp :: Word16          -- stack pointer
-    , bp :: Word16
+    , ip :: !Word16          -- instruction pointer
+    , sp :: !Word16          -- stack pointer
+    , bp :: !Word16
 
-    , ax :: Word16
-    , bx :: Word16
-    , cx :: Word16
-    , dx :: Word16
-    , si :: Word16
-    , di :: Word16
-    , code  :: ByteString    -- code segments
-    , heap  :: V.Vector Word8
-    , stack :: V.Vector Word16
+    , ax :: !Word16
+    , bx :: !Word16
+    , cx :: !Word16
+    , dx :: !Word16
+    , si :: !Word16
+    , di :: !Word16
+
+    , flags :: !Word16
+
+    , code  :: !ByteString    -- code segments
+    , heap  :: !(V.Vector Word8)
+    , stack :: !(V.Vector Word16)
     }
 
 extend8_16 :: Word8 -> Word16
@@ -189,9 +277,9 @@ mat_mul_vector invec m = V.fromList
     , invec V.! 0 * m V.! 1 + invec V.! 1 * m V.! 4 + invec V.! 2 * m V.! 7
     , invec V.! 0 * m V.! 2 + invec V.! 1 * m V.! 5 + invec V.! 2 * m V.! 8
     ]
-{-
+
 polarAngle :: Int -> Int -> Int
-polarAngle 0 0 = undefined
+polarAngle 0 0 = 0 --undefined
 polarAngle z y = case (z < 0, y < 0, z > y) of
     (False, False, False) ->  result
     (False, False,  True) -> -result + 0x100
@@ -207,12 +295,12 @@ polarAngle z y = case (z < 0, y < 0, z > y) of
     result
         | z == y = 0x80
         | otherwise = atantable V.! index
-    
-    index = 
-    
-        index = (((unsigned long)z << 16) / y);
-        if ((index & 0xFF) >= 0x80) // round upwards
-            index += 0x100;
-        result = atantable[index >> 8];
--}
+
+    index = round ((fromIntegral z' `shiftL` 16) `div` y') `shiftR` 8
+
+    round x | (x .&. 0xFF) >= 0x80 = x + 0x100
+            | otherwise            = x
+
+atantable :: V.Vector Int
+atantable = V.fromList [0, 1, 1, 2, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 12, 13, 13, 14, 15, 15, 16, 16, 17, 18, 18, 19, 20, 20, 21, 22, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 28, 29, 30, 30, 31, 31, 32, 33, 33, 34, 34, 35, 36, 36, 37, 38, 38, 39, 39, 40, 41, 41, 42, 42, 43, 44, 44, 45, 45, 46, 46, 47, 48, 48, 49, 49, 50, 51, 51, 52, 52, 53, 53, 54, 55, 55, 56, 56, 57, 57, 58, 58, 59, 60, 60, 61, 61, 62, 62, 63, 63, 64, 65, 65, 66, 66, 67, 67, 68, 68, 69, 69, 70, 70, 71, 71, 72, 72, 73, 74, 74, 75, 75, 76, 76, 77, 77, 78, 78, 79, 79, 80, 80, 81, 81, 82, 82, 83, 83, 84, 84, 84, 85, 85, 86, 86, 87, 87, 88, 88, 89, 89, 90, 90, 91, 91, 91, 92, 92, 93, 93, 94, 94, 95, 95, 96, 96, 96, 97, 97, 98, 98, 99, 99, 99, 100, 100, 101, 101, 102, 102, 102, 103, 103, 104, 104, 104, 105, 105, 106, 106, 106, 107, 107, 108, 108, 108, 109, 109, 110, 110, 110, 111, 111, 112, 112, 112, 113, 113, 113, 114, 114, 115, 115, 115, 116, 116, 116, 117, 117, 118, 118, 118, 119, 119, 119, 120, 120, 120, 121, 121, 121, 122, 122, 122, 123, 123, 123, 124, 124, 124, 125, 125, 125, 126, 126, 126, 127, 127, 127, 128, 128]
 
