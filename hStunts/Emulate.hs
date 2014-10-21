@@ -27,12 +27,16 @@ gameExe = unsafePerformIO $ BS.drop headerSize <$> BS.readFile "original/game.ex
 headerSize = 0x2890
 dataSegment = 0x2b77
 
+segments :: V.Vector Word16
+segments = V.fromList [0, 0, 0, 0, 0,  0, 0x15f2{-?-}, 0, 0, 0,  0, 0x1ea0{-?-}, 0x1ea2]
+
 symbols =
-    [ (,) "sin"               (0x1ea2, 0x3cbe)    -- 0x24f6e - hs
-    , (,) "cos"               (0x1ea2, 0x3d0c)
-    , (,) "polarAngle"        (0x1ea2, 0x2e)      -- 0x212de - hs
-    , (,) "polarRadius2D"     (0x1ea2, 0x1696)
-    , (,) "polarRadius3D"     (0x1ea0, 0x8)       -- 0x21298 - hs
+    [ (,) "sin"               (12, 0x3cbe)    -- 0x24f6e - hs
+    , (,) "cos"               (12, 0x3d0c)
+    , (,) "polarAngle"        (12, 0x2e)      -- 0x212de - hs
+    , (,) "polarRadius2D"     (12, 0x1696)
+    , (,) "polarRadius3D"     (11, 0x8)       -- 0x21298 - hs
+    , (,) "rectComparePoint"  ( 6, 0xe) -- 0x187be - hs   -- x * 16 + y = 0x15ee2
     ]
 
 disasmConfig = Config Intel Mode16 SyntaxIntel 0
@@ -42,11 +46,18 @@ tests = do
     quickCheck $ \i -> eval (call "cos" @. i) == cos_fast i
     quickCheck $ \i j -> eval (call "polarAngle" @. j @. i) == fromIntegral (polarAngle (fromIntegral' i) (fromIntegral' j))
     quickCheck $ \i j -> eval (call "polarRadius2D" @. j @. i) == fromIntegral (polarRadius2D (fromIntegral' i) (fromIntegral' j))
+    q3d
 
-q3d = quickCheck $ \i j k -> let
+q3d = quickCheck $ \i_ j_ k_ -> let
+        i = extend8_16 i_
+        j = extend8_16 j_
+        k = extend8_16 k_
         v = V.fromList [i,j,k] :: Vect
-    in polarRadius2D (fromIntegral' i) (fromIntegral' j) == 0x8000
-     || eval (call "polarRadius3D" @. v) == fromIntegral (polarRadius3D $ V.map fromIntegral' v)
+    in {-polarRadius2D (fromIntegral' i) (fromIntegral' j) == 0x8000
+     || -} eval (call "polarRadius3D" @. v) == fromIntegral (polarRadius3D $ V.map fromIntegral' v)
+
+qrp = quickCheck $ \i j ->
+        eval (call "rectComparePoint" @. (V.fromList [i,j] :: Vect)) == 1
 
 ----------------------------------------------
 
@@ -74,14 +85,14 @@ data State = State
     , stack :: !(V.Vector Word16)
     }
 
-initState :: (Word16, Word16) -> State
-initState (cs, ip) = State
+initState :: (Int, Word16) -> State
+initState (seg, ip) = State
     { stack = V.replicate (2^10) 0
     , heap  = IM.empty
     , code  = gameExe
 
     , ss = 0
-    , cs = cs
+    , cs = segments V.! seg
     , ds = dataSegment
     , es = 0
 
@@ -134,13 +145,13 @@ showReg n r = n ++ ":" ++ showHex' 4 r
 
 pad i s = s ++ take (i - length s) (repeat ' ')
 
-numOfDisasmLines = 20
+numOfDisasmLines = 30
 
 instance Show State where
     show s@State{..} = unlines
         [ "  Flags: " ++ overflowF ++ signF ++ zeroF ++ carryF
         , ("  "++) $ unwords $ zipWith showReg ["AX","BX","CX","DX","SI","DI"] [ax,bx,cx,dx]
-        , ("  "++) $ unwords $ zipWith showReg ["BP","","IP","SP"] [bp,0,ip,sp]
+        , ("  "++) $ unwords $ zipWith showReg ["SI","DI","IP","SP","BP"] [si,di,ip,sp,bp]
         , ("  "++) $ unwords $ zipWith showReg ["DS","ES","CS","SS"] [ds,es,cs,ss]
         , ("Stack: " ++) $ unwords $ take' 10 . zipWith (\i _ -> showHex' 4 i) [sp,sp+2..] $ V.toList $ V.drop (fromIntegral sp `div` 2) stack
         , ("       " ++) $ unwords $ take' 10 . map (showHex' 4) $ V.toList $ V.drop (fromIntegral sp `div` 2) stack
@@ -223,28 +234,40 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
     ip' = ip + fromIntegral (mdLength md)
 
     exec i s@State{..} = case i of
-        Inst [] Ipush [x] -> push (fetch x) s
+        Inst [] Ipush [x] -> push (fetch Nothing x) s
         Inst [] Ipop [x] -> update x y s'
             where
                 (y,s') = pop s
-        Inst [] Imov [dest, src] -> update dest (fetch src) s
-        Inst [] Ixchg [dest, src] -> update src (fetch dest) $ update dest (fetch src) s
+        Inst [] Imov [dest, src] -> update dest (fetch Nothing src) s
+        Inst [Seg seg] Imov [dest, src] -> update dest (fetch (Just seg) src) s
+        Inst [] Iles [dest, Mem src] -> updateSegment ES (fetchMem' $ addAddr 2 ad) $ update dest (fetchMem' ad) s
+            where ad = compAddr src
+        Inst [] Ixchg [dest, src] -> update src (fetch Nothing dest) $ update dest (fetch Nothing src) s
         Inst [] Idiv [src] -> update (Reg $ Reg16 RAX) (fromIntegral d) $ update (Reg $ Reg16 RDX) (fromIntegral m) s
             where
-                (d, m) = (((fromIntegral dx :: Word32) `shiftL` 16) .|. fromIntegral ax) `quotRem'` fromIntegral (fetch src)
-        Inst [] Ixor [dest, src] -> twoOp True xor xor dest src
-        Inst [] Ior  [dest, src] -> twoOp True (.|.) (.|.) dest src
-        Inst [] Iand [dest, src] -> twoOp True (.&.) (.&.) dest src
+                (d, m) = (((fromIntegral dx :: Word32) `shiftL` 16) .|. fromIntegral ax) `quotRem'` fromIntegral (fetch Nothing src)
+        Inst [] Imul [src] -> update (Reg $ Reg16 RAX) low $ update (Reg $ Reg16 RDX) high s
+            where
+                high = fromIntegral $ r `shiftR` 16 
+                low = fromIntegral $ r
+                r = fromIntegral ax * fromIntegral (fetch Nothing src) :: Int
+        Inst [] Ixor [dest, src] -> twoOp Nothing True xor xor dest src
+        Inst [] Ior  [dest, src] -> twoOp Nothing True (.|.) (.|.) dest src
+        Inst [] Iand [dest, src] -> twoOp Nothing True (.&.) (.&.) dest src
         Inst [] Ishl [dest, src] -> shiftOp shiftL' dest src
         Inst [] Isar [dest, src] -> shiftOp shiftAR dest src
         Inst [] Ircr [dest, src] -> shiftOp shiftRCR dest src
-        Inst [] Ineg [dest]      -> update dest (- fetch dest) s
-        Inst [] Iadd [dest, src] -> twoOp True (+) (+) dest src
-        Inst [] Iadc [dest, src] -> twoOp True adc adc dest src
-        Inst [] Isub [dest, src] -> twoOp True (-) (-) dest src
-        Inst [] Icmp [dest, src] -> twoOp False (-) (-) dest src
+        Inst [] Ineg [dest]      -> update dest (- fetch Nothing dest) s
+        Inst [] Icwd []          -> update (Reg $ Reg16 RDX) (if ax >= 0x8000 then 0xffff else 0) s
+        Inst [] Icbw []          -> update (Reg $ Reg16 RAX) (extend8_16 $ fromIntegral ax) s
+        Inst [] Iadd [dest, src] -> twoOp Nothing True (+) (+) dest src
+        Inst [] Iadc [dest, src] -> twoOp Nothing True adc adc dest src
+        Inst [] Isbb [dest, src] -> twoOp Nothing True sbb sbb dest src
+        Inst [] Isub [dest, src] -> twoOp Nothing True (-) (-) dest src
+        Inst [Seg seg] Isub [dest, src] -> twoOp (Just seg) True (-) (-) dest src
+        Inst [] Icmp [dest, src] -> twoOp Nothing False (-) (-) dest src
         Inst [Seg seg] Ijmp [Mem (Memory size r RegNone 0 (Immediate Bits16 v))] ->
-            s { ip = fetchMem size seg (fromIntegral (fetch $ Reg r) + fromIntegral v) }
+            s { ip = fetchMem size seg (fromIntegral (fetch Nothing $ Reg r) + fromIntegral v) }
         Inst [] Ijmp [Jump (Immediate Bits8 v)] ->
             s { ip = ip + extend8_16 (fromIntegral v) }
         Inst [] Ijge [Jump (Immediate Bits8 v)] ->
@@ -253,14 +276,23 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
             if signF == overflowF && zeroF == 0 then s { ip = ip + extend8_16 (fromIntegral v) } else s
         Inst [] Ijl [Jump (Immediate Bits8 v)] ->
             if signF /= overflowF then s { ip = ip + extend8_16 (fromIntegral v) } else s
+        Inst [] Ijle [Jump (Immediate Bits8 v)] ->
+            if signF /= overflowF || zeroF == 1 then s { ip = ip + extend8_16 (fromIntegral v) } else s
         Inst [] Ijz [Jump (Immediate Bits8 v)] ->
             if zeroF == 1 then s { ip = ip + extend8_16 (fromIntegral v) } else s
+        Inst [] Ijnz [Jump (Immediate Bits8 v)] ->
+            if zeroF == 0 then s { ip = ip + extend8_16 (fromIntegral v) } else s
         Inst [] Icall [Ptr (Pointer seg (Immediate Bits16 v))] ->
             push ip $ push cs $ s { cs = fromIntegral seg, ip = fromIntegral v }
         Inst [] Iretf [] -> s'' { cs = cs, ip = ip }
           where
             (ip, s') = pop s
             (cs, s'') = pop s'
+        Inst [] Iretf [Imm i] -> s'' { cs = cs, ip = ip, sp = sp + imm i }
+          where
+            (ip, s') = pop s
+            (cs, s'') = pop s'
+        i -> error $ "step: " ++ show i
       where
         getFlag i = (flags `shiftR` i) .&. 1
         carryF    = getFlag 0
@@ -269,21 +301,28 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
         overflowF = getFlag 11
 
         adc a b = a + b + fromIntegral carryF
+        sbb a b = a - b - fromIntegral carryF
 
+        fetchMem' (a,b,c) = fetchMem a b c
+
+        writeMem (Bits16, SS, i) v s@State{..} = s { stack = writeVec (fromIntegral $ i `shiftR` 1) v stack }
+
+        fetchMem Bits16 SS i = stack V.! (i `shiftR` 1)
         fetchMem Bits16 seg i = fromIntegral low + (fromIntegral high `shiftL` 8)
           where
             addr = fetchS seg + i
             low = fromMaybe low_ $ IM.lookup addr heap
             high = fromMaybe high_ $ IM.lookup (addr + 1) heap
-            (low_: high_: _) = BS.unpack $ BS.drop addr code
+            (low_: high_: _) = BS.unpack (BS.drop addr code) ++ repeat 0
         fetchMem Bits8 seg i = fromIntegral low
           where
             addr = fetchS seg + i
             low = fromMaybe low_ $ IM.lookup addr heap
-            (low_: _) = BS.unpack $ BS.drop addr code
+            (low_: _) = BS.unpack (BS.drop addr code) ++ repeat 0
 
         fetchS x = case x of
             CS  -> fromIntegral cs `shiftL` 4
+            ES  -> fromIntegral es `shiftL` 4
             DS  -> fromIntegral ds `shiftL` 4
 
         imm :: Immediate Word64 -> Word16
@@ -295,18 +334,29 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
         imm' (Immediate Bits8 v) = fromIntegral v
         imm' (Immediate Bits16 v) = fromIntegral v
 
-        fetch :: Operand -> Word16
-        fetch x = case x of
+        addAddr d (a,b,c) = (a,b,c+d)
+        compAddr (Memory Bits0 (Reg16 RBP) RegNone 0 i) = (Bits16, SS, fromIntegral bp + imm' i)
+        compAddr (Memory Bits16 (Reg16 RBP) RegNone 0 i) = (Bits16, SS, fromIntegral bp + imm' i)
+        compAddr m = error $ "compAddr: " ++ show m
+
+        fetch :: Maybe Segment -> Operand -> Word16
+        fetch ms x = case x of
             Reg (Reg16 r) -> reg r
             Reg (Reg8 r L) -> reg r .&. 0xff
             Reg (Reg8 r H) -> reg r `shiftR` 8
-            Mem (Memory Bits16 (Reg16 RBP) RegNone 0 i)
-                -> stack V.! ((fromIntegral bp + imm' i) `shiftR` 1)
+            Mem (Memory s (Reg16 RBP) RegNone 0 i)
+                -> fetchMem s (ff SS) $ fromIntegral bp + imm' i
             Mem (Memory s (Reg16 RBX) RegNone 0 i)
-                -> fetchMem s DS $ fromIntegral bx + imm' i
+                -> fetchMem s (ff DS) $ fromIntegral bx + imm' i
+            Mem (Memory s (Reg16 RSI) RegNone 0 i)
+                -> fetchMem s (ff DS) $ fromIntegral si + imm' i
+            Mem (Memory s RegNone RegNone 0 i)
+                -> fetchMem s (ff DS) $ imm' i
             Imm i -> imm i
             Const (Immediate Bits0 0) -> 1 -- !!!
+            _ -> error $ "fetch: " ++ show x
           where
+            ff x = fromMaybe x ms
             reg r = case r of
                 RBP -> bp
                 RSP -> sp
@@ -334,17 +384,17 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
         shiftOp :: (forall a . (Integral a, FiniteBits a) => a -> Int -> (Bool, a)) -> Operand -> Operand -> State
         shiftOp op x y = update x r $ updateFlags' carry s
           where
-            a = fetch x
-            b = fromIntegral $ fetch y :: Int
+            a = fetch Nothing x
+            b = fromIntegral $ fetch Nothing y :: Int
             (carry, r) = case size x of
                 16 -> op a b
                 8 -> id *** fromIntegral $ op (fromIntegral a :: Word8) b
 
-        twoOp :: Bool -> (forall a . (Integral a, FiniteBits a) => a -> a -> a) -> (Int -> Int -> Int) -> Operand -> Operand -> State
-        twoOp store op op' x y = (if store then update x r else id) $ updateFlags carry overflow r s
+        twoOp :: Maybe Segment -> Bool -> (forall a . (Integral a, FiniteBits a) => a -> a -> a) -> (Int -> Int -> Int) -> Operand -> Operand -> State
+        twoOp ms store op op' x y = (if store then update x r else id) $ updateFlags carry overflow r s
           where
-            a = fetch x
-            b = fetch y
+            a = fetch ms x
+            b = fetch ms y
             r = case size x of
                 16 -> op a b
                 8 -> fromIntegral $ op (fromIntegral a :: Word8) (fromIntegral b)
@@ -355,6 +405,10 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
 
         size (Reg (Reg16 _)) = 16
         size (Reg (Reg8 _ _)) = 8
+        size (Mem (Memory Bits16 _ _ _ _)) = 16
+        size s = error $ "size: " ++ show s
+
+        updateSegment ES x s@State{..} = s { es = x }
 
         update :: Operand -> Word16 -> State -> State
         update x y s@State{..} = case x of
@@ -373,6 +427,8 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
             Reg (Reg8 r H) -> case r of
                 RAX -> s { ax = (ax .&. 0xff) .|. (y `shiftL` 8) }
                 RBX -> s { bx = (bx .&. 0xff) .|. (y `shiftL` 8) }
+            Mem m -> writeMem (compAddr m) y s
+            x -> error $ "update: " ++ show x
 
         shiftRCR :: FiniteBits a => a -> Int -> (Bool, a)
         shiftRCR x i = (testBit x 0, setBit' r s $ carryF == 1)
