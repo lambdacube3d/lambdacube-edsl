@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleInstances #-}
 import Hdis86
 import Hdis86.Types
 import Hdis86.Incremental
@@ -10,6 +11,7 @@ import Data.Word
 import Data.Bits
 import Data.Char
 import Data.Maybe
+import qualified Data.IntMap as IM
 import Numeric
 import Control.Applicative hiding (Const)
 import Control.Arrow
@@ -17,6 +19,7 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 import System.IO.Unsafe
 import Test.QuickCheck hiding ((.&.))
+import GHC.Int (Int64)
 
 ----------------------------------------------
 
@@ -35,10 +38,15 @@ symbols =
 disasmConfig = Config Intel Mode16 SyntaxIntel 0
 
 tests = do
-    quickCheck $ \i -> run (call "sin" @. i) == sin_fast i
-    quickCheck $ \i -> run (call "cos" @. i) == cos_fast i
-    quickCheck $ \i j -> run (call "polarAngle" @. j @. i) == fromIntegral (polarAngle (fromIntegral' i) (fromIntegral' j))
-    quickCheck $ \i j -> run (call "polarRadius2D" @. j @. i) == fromIntegral (polarRadius2D (fromIntegral' i) (fromIntegral' j))
+    quickCheck $ \i -> eval (call "sin" @. i) == sin_fast i
+    quickCheck $ \i -> eval (call "cos" @. i) == cos_fast i
+    quickCheck $ \i j -> eval (call "polarAngle" @. j @. i) == fromIntegral (polarAngle (fromIntegral' i) (fromIntegral' j))
+    quickCheck $ \i j -> eval (call "polarRadius2D" @. j @. i) == fromIntegral (polarRadius2D (fromIntegral' i) (fromIntegral' j))
+
+q3d = quickCheck $ \i j k -> let
+        v = V.fromList [i,j,k] :: Vect
+    in polarRadius2D (fromIntegral' i) (fromIntegral' j) == 0x8000
+     || eval (call "polarRadius3D" @. v) == fromIntegral (polarRadius3D $ V.map fromIntegral' v)
 
 ----------------------------------------------
 
@@ -62,13 +70,14 @@ data State = State
     , flags :: !Word16
 
     , code  :: !ByteString    -- code segments
-    , heap  :: !(V.Vector Word8)
+    , heap  :: !(IM.IntMap Word8)
     , stack :: !(V.Vector Word16)
     }
 
+initState :: (Word16, Word16) -> State
 initState (cs, ip) = State
-    { stack = V.replicate 2000 0
-    , heap  = V.replicate 2000 0
+    { stack = V.replicate (2^10) 0
+    , heap  = IM.empty
     , code  = gameExe
 
     , ss = 0
@@ -78,7 +87,7 @@ initState (cs, ip) = State
 
     , ip = ip
     , bp = 0
-    , sp = 1000
+    , sp = 2^10
 
     , ax = 0
     , bx = 0
@@ -90,6 +99,7 @@ initState (cs, ip) = State
     , flags = 0x7202
     }
 
+call :: String -> State
 call x = initState $ head [addr | (x',addr) <- symbols, x == x']
 
 stateDiff :: State -> State -> String
@@ -124,16 +134,18 @@ showReg n r = n ++ ":" ++ showHex' 4 r
 
 pad i s = s ++ take (i - length s) (repeat ' ')
 
+numOfDisasmLines = 20
+
 instance Show State where
     show s@State{..} = unlines
         [ "  Flags: " ++ overflowF ++ signF ++ zeroF ++ carryF
         , ("  "++) $ unwords $ zipWith showReg ["AX","BX","CX","DX","SI","DI"] [ax,bx,cx,dx]
         , ("  "++) $ unwords $ zipWith showReg ["BP","","IP","SP"] [bp,0,ip,sp]
         , ("  "++) $ unwords $ zipWith showReg ["DS","ES","CS","SS"] [ds,es,cs,ss]
-        , ("Stack: " ++) $ unwords $ take' 10 . zipWith (\i _ -> showHex' 2 i ++ ": ") [0,2..] $ V.toList $ V.drop (fromIntegral sp `div` 2) stack
+        , ("Stack: " ++) $ unwords $ take' 10 . zipWith (\i _ -> showHex' 4 i) [sp,sp+2..] $ V.toList $ V.drop (fromIntegral sp `div` 2) stack
         , ("       " ++) $ unwords $ take' 10 . map (showHex' 4) $ V.toList $ V.drop (fromIntegral sp `div` 2) stack
         , "Code: "
-        , unlines $ map (take 149 . ("  " ++)) . take' 20 $ coode True s
+        , unlines $ map (take 149 . ("  " ++)) . take' numOfDisasmLines $ coode True s
         ]
       where
         getFlag c i = [if (flags `shiftR` i) .&. 1 == 0 then toLower c else c]
@@ -150,8 +162,11 @@ coode sc s@State{..} = zipWith (\x (b, y) -> (if sc then pad 14 (map toUpper $ m
 sts :: Bool -> State -> [(Bool, String)]
 sts sc s
     | cs s == cs s' && ip s' == ip s + (fromIntegral $ mdLength i) = (True, stateDiff s s'): sts sc s'
+    | inOpcode (mdInst i) == Icall = (True, stateDiff s s''): sts sc s''
     | otherwise = (True, "JUMP"): map ((,) False . ("|" ++)) (coode False s')
-  where (i, s') = step_ s
+  where
+    (i, s') = step_ s
+    s'' = stepthrough s
 
 stepthrough = step 1 . findRet 0 . step 1
 
@@ -165,10 +180,20 @@ findRet n st
 
 infixl 9 @.
 
-(@.) :: State -> Word16 -> State
-s@State{..} @. x = s { stack = writeVec (fromIntegral $ (sp + 2) `div` 2) x stack, sp = sp - 2 }
+class PushVal a where
+    (@.) :: State -> a -> State
+instance PushVal Word16 where
+    s@State{..} @. x = s { stack = writeVec (fromIntegral $ (sp + 2) `div` 2) x stack, sp = sp - 2 }
+instance PushVal (V.Vector Word16) where
+    s@State{..} @. v = s { stack = writeVec (fromIntegral $ (sp + 2) `div` 2) x stack, sp = sp - 2, heap = h `IM.union` heap }
+        where
+        x = 0xf000
+        h = IM.fromList $ zip [(fromIntegral ds `shiftL` 4) + fromIntegral x ..] $ concatMap spl $ V.toList v
 
-run s = ax $ findRet 0 $ s
+spl :: Word16 -> [Word8]
+spl w = [fromIntegral w, fromIntegral (w `shiftR` 8)]
+
+eval s = ax $ findRet 0 $ s
 
 step 0 s = s
 step n s = step (n-1) $ snd $ step_ s
@@ -177,6 +202,17 @@ step n s = step (n-1) $ snd $ step_ s
 x & f = f x
 
 infixl 0 &
+
+push x s@State{..} = s { sp = sp', stack = writeVec (fromIntegral $ sp' `shiftR` 1) x stack }
+    where
+        sp' = sp - 2
+pop s@State{..} = (stack V.! fromIntegral (sp `shiftR` 1), s { sp = sp' })
+    where
+        sp' = sp + 2
+
+quotRem' :: Integral a => a -> a -> (a, a)
+quotRem' a 0 = (0, 0)
+quotRem' a b = quotRem a b
 
 step_ :: State -> (Metadata, State)
 step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
@@ -195,20 +231,20 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
         Inst [] Ixchg [dest, src] -> update src (fetch dest) $ update dest (fetch src) s
         Inst [] Idiv [src] -> update (Reg $ Reg16 RAX) (fromIntegral d) $ update (Reg $ Reg16 RDX) (fromIntegral m) s
             where
-                (d, m) = (((fromIntegral dx :: Word32) `shiftL` 16) .|. fromIntegral ax) `quotRem` fromIntegral (fetch src)
+                (d, m) = (((fromIntegral dx :: Word32) `shiftL` 16) .|. fromIntegral ax) `quotRem'` fromIntegral (fetch src)
         Inst [] Ixor [dest, src] -> twoOp True xor xor dest src
-        Inst [] Ior  [dest, src] -> twoOp True (.|.) (.|.) dest src --update dest (fetch dest .|. fetch src) s
-        Inst [] Iand [dest, src] -> twoOp True (.&.) (.&.) dest src --update dest (fetch dest .&. fetch src) s
+        Inst [] Ior  [dest, src] -> twoOp True (.|.) (.|.) dest src
+        Inst [] Iand [dest, src] -> twoOp True (.&.) (.&.) dest src
         Inst [] Ishl [dest, src] -> shiftOp shiftL' dest src
         Inst [] Isar [dest, src] -> shiftOp shiftAR dest src
         Inst [] Ircr [dest, src] -> shiftOp shiftRCR dest src
-        Inst [] Ineg [dest] -> update dest (- fetch dest) s
-        Inst [] Iadd [dest, src] -> twoOp True (+) (+) dest src --update dest (fetch dest + fetch src) s
-        Inst [] Iadc [dest, src] -> twoOp True adc adc dest src --update dest (fetch dest + fetch src) s
-        Inst [] Isub [dest, src] -> twoOp True (-) (-) dest src --update dest (fetch dest - fetch src) s
-        Inst [] Icmp [dest, src] -> twoOp False (-) (-) dest src --update dest (fetch dest - fetch src) s
-        Inst [Seg seg] Ijmp [Mem (Memory Bits16 r RegNone 0 (Immediate Bits16 v))] ->
-            s { ip = fetchMem seg (fromIntegral (fetch $ Reg r) + fromIntegral v) }
+        Inst [] Ineg [dest]      -> update dest (- fetch dest) s
+        Inst [] Iadd [dest, src] -> twoOp True (+) (+) dest src
+        Inst [] Iadc [dest, src] -> twoOp True adc adc dest src
+        Inst [] Isub [dest, src] -> twoOp True (-) (-) dest src
+        Inst [] Icmp [dest, src] -> twoOp False (-) (-) dest src
+        Inst [Seg seg] Ijmp [Mem (Memory size r RegNone 0 (Immediate Bits16 v))] ->
+            s { ip = fetchMem size seg (fromIntegral (fetch $ Reg r) + fromIntegral v) }
         Inst [] Ijmp [Jump (Immediate Bits8 v)] ->
             s { ip = ip + extend8_16 (fromIntegral v) }
         Inst [] Ijge [Jump (Immediate Bits8 v)] ->
@@ -226,13 +262,6 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
             (ip, s') = pop s
             (cs, s'') = pop s'
       where
-        push x s@State{..} = s { sp = sp', stack = writeVec (fromIntegral $ sp' `shiftR` 1) x stack }
-            where
-                sp' = sp - 2
-        pop s@State{..} = (stack V.! fromIntegral (sp `shiftR` 1), s { sp = sp' })
-            where
-                sp' = sp + 2
-
         getFlag i = (flags `shiftR` i) .&. 1
         carryF    = getFlag 0
         zeroF     = getFlag 6
@@ -241,31 +270,41 @@ step_ s@State{..} = (md, exec (mdInst md) $ s { ip = ip' })
 
         adc a b = a + b + fromIntegral carryF
 
-        fetchMem seg i = fromIntegral low + (fromIntegral high `shiftL` 8)
+        fetchMem Bits16 seg i = fromIntegral low + (fromIntegral high `shiftL` 8)
           where
-            (low: high: _) = BS.unpack $ BS.drop (fetchS seg + i) code
-
-        fetchMem8 seg i = fromIntegral low
+            addr = fetchS seg + i
+            low = fromMaybe low_ $ IM.lookup addr heap
+            high = fromMaybe high_ $ IM.lookup (addr + 1) heap
+            (low_: high_: _) = BS.unpack $ BS.drop addr code
+        fetchMem Bits8 seg i = fromIntegral low
           where
-            (low: _) = BS.unpack $ BS.drop (fetchS seg + i) code
+            addr = fetchS seg + i
+            low = fromMaybe low_ $ IM.lookup addr heap
+            (low_: _) = BS.unpack $ BS.drop addr code
 
         fetchS x = case x of
             CS  -> fromIntegral cs `shiftL` 4
             DS  -> fromIntegral ds `shiftL` 4
+
+        imm :: Immediate Word64 -> Word16
+        imm (Immediate Bits8 v) = fromIntegral v
+        imm (Immediate Bits16 v) = fromIntegral v
+
+        imm' :: Immediate Int64 -> Int
+        imm' (Immediate Bits0 _) = 0
+        imm' (Immediate Bits8 v) = fromIntegral v
+        imm' (Immediate Bits16 v) = fromIntegral v
 
         fetch :: Operand -> Word16
         fetch x = case x of
             Reg (Reg16 r) -> reg r
             Reg (Reg8 r L) -> reg r .&. 0xff
             Reg (Reg8 r H) -> reg r `shiftR` 8
-            Mem (Memory Bits16 (Reg16 RBP) RegNone 0 (Immediate Bits8 v))
-                -> stack V.! ((fromIntegral bp + fromIntegral v) `shiftR` 1)
-            Mem (Memory Bits16 (Reg16 RBX) RegNone 0 (Immediate Bits16 v))
-                -> fetchMem DS $ fromIntegral bx + fromIntegral v
-            Mem (Memory Bits8 (Reg16 RBX) RegNone 0 (Immediate Bits16 v))
-                -> fetchMem8 DS $ fromIntegral bx + fromIntegral v
-            Imm (Immediate Bits8 v) -> fromIntegral v
-            Imm (Immediate Bits16 v) -> fromIntegral v
+            Mem (Memory Bits16 (Reg16 RBP) RegNone 0 i)
+                -> stack V.! ((fromIntegral bp + imm' i) `shiftR` 1)
+            Mem (Memory s (Reg16 RBX) RegNone 0 i)
+                -> fetchMem s DS $ fromIntegral bx + imm' i
+            Imm i -> imm i
             Const (Immediate Bits0 0) -> 1 -- !!!
           where
             reg r = case r of
