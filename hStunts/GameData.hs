@@ -89,7 +89,7 @@ executableImage = do
 
 extractDataFromPackedExecutable :: LB.ByteString -> LB.ByteString
 extractDataFromPackedExecutable image
-    = LB.reverse $ LB.concat $ readInst $ LB.dropWhile (== 0xff) $ LB.reverse $ LB.take (packedDataStart + packedDataLength) image
+    = LB.reverse $ LB.concat $ readInst $ LB.dropWhile (== 0xff) $ LB.reverse $ LB.take packedDataLength $ LB.drop packedDataStart image
   where
     paragraphsInHeader  = readUshortAt 8
     codeSegment         = readUshortAt 22
