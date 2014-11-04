@@ -15,6 +15,7 @@ import System.IO.Unsafe
 
 import Emulate
 import DosBox
+import Parse (getLabels)
 
 --------------------------------------------------------------------------------
 
@@ -32,14 +33,14 @@ comTestMain = do
 -}
     let framebuffer = do
             x <- readIORef st
-            let gs = x ^. heap16 0x6
-                v = V.fromList $ take (320 * 200) $ seqToList $ S.drop (paragraph gs) $ x ^. heap
+            let gs = x ^. heap16 0x6 . paragraph
+                v = x ^. heap
 --            assert "err" $ V.length v == 320 * 200
-            return $ \x y -> v V.! (320 * y + x)
+            return $ \x y -> v ^. byteAt (gs + 320 * y + x) 
     drawWithFrameBuffer framebuffer $ do
         x <- readIORef st
         writeIORef st $ flip execState x $ runErrorT $ do
-            replicateM_ 100000 $ void $ step_
+            replicateM_ 10000 $ cachedStep
             clearHist
         putStrLn "."
 
@@ -47,7 +48,9 @@ comTestMain = do
 
 loadSegment = 0x120 -- can be arbitrary > 0
 
-initState = unsafePerformIO $ loadExe loadSegment <$> BS.readFile "../original/game.exe"
+initState = unsafePerformIO $ do
+    l <- getLabels
+    loadExe l loadSegment <$> BS.readFile "../original/game.exe"
 
 eval_ = flip evalState initState . runErrorT
 exec = flip execState initState . runErrorT
@@ -57,7 +60,7 @@ eval s = either f undefined v
   where
     f Halt = s' ^. ax
     f e = error $ show e
-    (v, s') = flip runState initState $ runErrorT $ s >> forever (void step_)
+    (v, s') = flip runState initState $ runErrorT $ s >> forever cachedStep --(void step_)
 
 call :: String -> Machine ()
 call name = do
@@ -71,7 +74,7 @@ call name = do
     dataSegment = 0x2b77 + loadSegment
 
     segments :: V.Vector Word16
-    segments = V.fromList $ map (+ loadSegment) [0, 0, 0, 0, 0,  0, 0x15f2{-?-}, 0, 0, 0,  0, 0x1ea0{-?-}, 0x1ea2, initState ^. cs]
+    segments = V.fromList $ map (+ loadSegment) [0, 0, 0, 0, 0,  0, 0x15f2{-?-}, 0, 0, 0,  0, 0x1ea0{-?-}, 0x1ea2]
 
     symbols =
         [ (,) "sin"               (12, 0x3cbe)    -- 0x24f6e - hs
@@ -80,11 +83,12 @@ call name = do
         , (,) "polarRadius2D"     (12, 0x1696)
         , (,) "polarRadius3D"     (11, 0x8)       -- 0x21298 - hs
         , (,) "rectComparePoint"  ( 6, 0xe) -- 0x187be - hs   -- x * 16 + y = 0x15ee2
-        , (,) "main"              (13, initState ^. ip)
         ]
 
 
 --------------------------------------------------------------------------------
+
+fromIntegral' = fromIntegral . asSigned
 
 tests = do
     quickCheck $ \i -> eval (push i >> call "sin") == sin_fast i
@@ -93,7 +97,7 @@ tests = do
     quickCheck $ \i j -> eval (call "polarAngle" @. (i :: Word16) @. (j :: Word16)) == fromIntegral (polarAngle (fromIntegral' i) (fromIntegral' j))
     quickCheck $ \i j -> eval (call "polarRadius2D" @. (i :: Word16) @. (j :: Word16)) == fromIntegral (polarRadius2D (fromIntegral' i) (fromIntegral' j))
 --    q3d
-
+{-
 q3d = quickCheck $ \i_ j_ k_ -> let
         i = fromIntegral (i_ :: Int8)
         j = fromIntegral (j_ :: Int8)
@@ -104,7 +108,7 @@ q3d = quickCheck $ \i_ j_ k_ -> let
 
 qrp = quickCheck $ \i j ->
         eval (call "rectComparePoint" @. (V.fromList [i,j] :: Vect)) == 1
-
+-}
 
 ------------------------
 
