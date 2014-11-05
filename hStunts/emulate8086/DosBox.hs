@@ -8,7 +8,6 @@ import Data.Vector as Vec
 import Data.Vector.Mutable as MVec
 import Data.Vector.Storable as SVec
 import Control.Monad as Prelude
-import Graphics.Rendering.OpenGL
 import Graphics.Rendering.OpenGL.Raw.Core32
 import Graphics.Rendering.OpenGL.Raw.ARB.Compatibility
 import Graphics.UI.GLFW as GLFW

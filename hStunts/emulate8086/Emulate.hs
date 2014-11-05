@@ -97,6 +97,10 @@ class (Integral a, Integral (X2 a)) => Extend a where
     extend :: a -> X2 a
     combine :: Iso' (a, a) (X2 a)
 
+    high, low :: Extend a => Lens' (X2 a) a
+    high = from combine . _1
+    low  = from combine . _2
+
 instance Extend Word8 where
     type X2 Word8 = Word16
     extend = fromIntegral
@@ -114,10 +118,6 @@ instance Extend Int16 where
     extend = fromIntegral
     combine = iso (\(hi,lo) -> fromIntegral hi `shiftL` 16 .|. fromIntegral lo) (\d -> (fromIntegral $ d `shiftR` 16, fromIntegral d))
 
-high, low :: Extend a => Lens' (X2 a) a
-high = from combine . _1
-low  = from combine . _2
-
 bit :: Bits a => Int -> Lens' a Bool
 bit i = lens (`testBit` i) $ \x b -> if b then x `setBit` i else x `clearBit` i
 
@@ -134,7 +134,11 @@ segAddr s w = s ^. paragraph + fromIntegral w
 
 data Annot
     = NoAnnot
+    | Low Annot
+    | High Annot
+    | CombAnn Annot Annot
     | Annot BS.ByteString
+    deriving (Eq, Ord)
 
 data Ann a = Ann
     { _annot :: Annot
@@ -142,6 +146,32 @@ data Ann a = Ann
     }
 
 $(makeLenses ''Ann)
+
+showAnn NoAnnot = ""
+showAnn (Annot b) = BSC.unpack b
+showAnn (CombAnn a b) = showAnn a ++ ":" ++ showAnn b
+showAnn (Low a) = "lo " ++ showAnn a
+showAnn (High a) = "hi " ++ showAnn a
+
+annMap x f (Ann a b) = Ann (g a) (f b) where
+    g (Annot i) = Annot $ x `BS.append` i
+    g _ = NoAnnot
+
+combineAnnot :: Iso' (Ann a, Ann a) (Ann (a, a))
+combineAnnot = iso f g
+  where
+    f (Ann a x, Ann b y) = Ann (combAnn a b) (x, y)
+    g (Ann a (x, y)) = (Ann (low a) x, Ann (high a) y)
+
+    low NoAnnot = NoAnnot
+    low (CombAnn a b) = a
+    low a = Low a
+    high NoAnnot = NoAnnot
+    high (CombAnn a b) = b
+    high a = High a
+    combAnn NoAnnot NoAnnot = NoAnnot
+    combAnn (Low a) (High a') | a == a' = a
+    combAnn a b = CombAnn a b
 
 clearAnn = iso (^. ann) $ Ann NoAnnot
 
@@ -159,7 +189,7 @@ instance Functor Ann where
     fmap f (Ann x y) = Ann x (f y)
 
 showA (Ann NoAnnot a) = a
-showA (Ann (Annot x) a) = BSC.unpack x ++ "(" ++ a ++ ")"
+showA (Ann x a) = a ++ "{" ++ showAnn x ++ "}"
 
 
 class Rom a where
@@ -228,7 +258,7 @@ extendRom' a b r = error $ "extendRom' " ++ showHex' 5 a ++ " " ++ showHex' 5 b 
 instance Rom ERom where
     readByte_ (Rom a) i = readByte_ a i
     readByte_ (Zeros a b) i
-        | a <= i && i < a + b = Just (noAnn 0)
+        | a <= i && i < a + b = Just (noAnn 0) -- $ error "mem uninitialized byte") --noAnn 0)
         | otherwise        = Nothing
     readByte_ (Split v a b) i
         | i < v = readByte_ a i
@@ -270,8 +300,14 @@ byteAt i = byteAt' i . clearAnn
 bytesAt :: Ram a => Int -> Int -> Lens' a [Word8]
 bytesAt i j = lens (fromRom i j) $ \x bs -> foldl (flip ($)) x $ zipWith writeByte [i..i+j-1] $ map noAnn bs
 
+wordAt' :: Ram a => Int -> Lens' a (Ann Word16)
+wordAt' i = (byteAt' (i+1) `uComb` byteAt' i) . combineAnnot . mapping combine
+
 wordAt :: Ram a => Int -> Lens' a Word16
 wordAt i = (byteAt (i+1) `uComb` byteAt i) . combine
+
+dwordAt' :: Ram a => Int -> Lens' a (Ann Word32)
+dwordAt' i = (wordAt' (i+2) `uComb` wordAt' i) . combineAnnot . mapping combine
 
 dwordAt :: Ram a => Int -> Lens' a Word32
 dwordAt i = (wordAt (i+2) `uComb` wordAt i) . combine
@@ -309,12 +345,14 @@ instance Show Key where
 
 data Config_ = Config_
     { _numOfDisasmLines :: Int
+    , _verboseLevel :: Int
     }
 
 $(makeLenses ''Config_)
 
 defConfig = Config_
     { _numOfDisasmLines = 30
+    , _verboseLevel = 2
     }
 
 data MachineState = MachineState
@@ -327,7 +365,7 @@ data MachineState = MachineState
     , _config   :: Config_
     , _cache    :: IM.IntMap (Machine ())
     , _labels   :: IM.IntMap BS.ByteString
-    , _files    :: IM.IntMap (BS.ByteString, Int)  -- file, position
+    , _files    :: IM.IntMap (FilePath, BS.ByteString, Int)  -- filename, file, position
     , _dta      :: Int
     }
 
@@ -376,7 +414,7 @@ reg16Lenses@[ax,dx,bx,cx, si,di, cs,ss,ds,es, ip,sp,bp]
     = [ addHist (KReg 2 i) $ regs . wordAt i | i <- [0,2..24] ]
 reg8Lenses@[al,ah,dl,dh,bl,bh,cl,ch]
     = [ addHist (KReg 1 i) $ regs . byteAt i | i <- [0..7] ]
-dxax = addHist (KReg 4 0) $ regs . dwordAt 0
+dxax = addHist (KReg 4 0) $ regs . dwordAt' 0
 
 
 segAddr_ seg off = to $ \s -> segAddr (s ^. seg) (s ^. off)
@@ -384,29 +422,31 @@ segAddr_ seg off = to $ \s -> segAddr (s ^. seg) (s ^. off)
 ips = segAddr_ cs ip
 sps = segAddr_ ss sp
 
-xx :: MachinePart Word16
+xx :: MachinePart (Ann Word16)
 xx = lens (const $ error "xx") $ \s _ -> s
 
 flags = addHist Flags flags'
 
-heap8  i = addHist (Heap 1 i) $ heap . byteAt i
-heap16 i = addHist (Heap 2 i) $ heap . wordAt i
+heap8  i = addHist (Heap 1 i) $ heap . byteAt' i
+heap16 i = addHist (Heap 2 i) $ heap . wordAt' i
 
-stackTop :: MachinePart Word16
+stackTop :: MachinePart (Ann Word16)
 stackTop = sps >- heap16
 
 -- experimental
+reg16Lenses'@[ax',dx',bx',cx', si',di', cs',ss',ds',es', ip',sp',bp']
+    = [ addHist (KReg 2 i) $ regs . wordAt' i | i <- [0,2..24] ]
 [al',ah',dl',dh',bl',bh',cl',ch']
     = [ addHist (KReg 1 i) $ regs . byteAt' i | i <- [0..7] ]
 
 ----------------------
 
-push :: Word16 -> Machine ()
+push :: Ann Word16 -> Machine ()
 push x = do
     sp %= (+ (-2))
     stackTop .= x
 
-pop :: Machine Word16
+pop :: Machine (Ann Word16)
 pop = do
     x <- use stackTop
     sp %= (+ 2)
@@ -465,35 +505,36 @@ showInst s Metadata{mdLength = len, mdInst = Inst{..}} = showPrefix (filter nonS
         [] -> ""
 
     showSeg = \case
-        ES -> "es"
-        DS -> "ds"
-        SS -> "ss"
-        CS -> "cs"
+        ES -> val16 es' "es"
+        DS -> val16 ds' "ds"
+        SS -> val16 ss' "ss"
+        CS -> val16 cs' "cs"
 
     val8 k n = n ++ "{" ++ showA (showHex' 2 <$> s ^. k) ++ "}"
+    val16 k n = n ++ "{" ++ showA (showHex' 4 <$> s ^. k) ++ "}"
 
     showReg = \case
         Reg8 r L -> case r of
             RAX -> val8 al' "al"
-            RBX -> "bl"
-            RCX -> "cl"
-            RDX -> "dl"
+            RBX -> val8 bl' "bl"
+            RCX -> val8 cl' "cl"
+            RDX -> val8 dl' "dl"
         Reg8 r H -> case r of
             RAX -> val8 ah' "ah"
-            RBX -> "bh"
-            RCX -> "ch"
-            RDX -> "dh"
+            RBX -> val8 bh' "bh"
+            RCX -> val8 ch' "ch"
+            RDX -> val8 dh' "dh"
         Reg16 r -> case r of
-            RBP -> "bp"
-            RSP -> "sp"
-            RAX -> "ax"
-            RBX -> "bx"
-            RCX -> "cx"
-            RDX -> "dx"
-            RSI -> "si"
-            RDI -> "di"
+            RBP -> val16 bp' "bp"
+            RSP -> val16 sp' "sp"
+            RAX -> val16 ax' "ax"
+            RBX -> val16 bx' "bx"
+            RCX -> val16 cx' "cx"
+            RDX -> val16 dx' "dx"
+            RSI -> val16 si' "si"
+            RDI -> val16 di' "di"
         RegSeg r -> showSeg r
-        RegIP -> "ip"
+        RegIP -> val16 ip' "ip"
         RegNone -> ""
 
     showSign v | v < 0 = "-"
@@ -519,10 +560,20 @@ showInst s Metadata{mdLength = len, mdInst = Inst{..}} = showPrefix (filter nonS
         Bits8 -> showHex' 2 (fromIntegral v :: Word8) ++ "h"
         Bits16 -> showHex' 4 (fromIntegral v :: Word16) ++ "h"
 
+ifff "" = []
+ifff x = [x]
+
 showCode :: MachineState -> [String]
 showCode s = case x of
     Left e -> ("  " ++ show e): []
-    Right x ->
+    Right x -> case s ^. config . verboseLevel of 
+      1 -> 
+        (  ifff (intercalate "; " (reverse (s' ^. traceQ)))
+        ++ case y of
+        Left e -> show e: []
+        Right () -> showCode s'
+        )
+      2 -> 
         maybeToList (BSC.unpack <$> IM.lookup (s ^. ips) (s ^. labels))
          ++
         (("  " ++ pad 14 (map toUpper $ mdHex x) ++ " "
@@ -595,55 +646,55 @@ segOf = \case
 
 reg = \case
     Reg16 r -> case r of
-        RBP -> bp
-        RSP -> sp
-        RAX -> ax
-        RBX -> bx
-        RCX -> cx
-        RDX -> dx
-        RSI -> si
-        RDI -> di
+        RBP -> bp'
+        RSP -> sp'
+        RAX -> ax'
+        RBX -> bx'
+        RCX -> cx'
+        RDX -> dx'
+        RSI -> si'
+        RDI -> di'
     RegSeg r -> case r of
-        ES -> es
-        DS -> ds
-        SS -> ss
-        CS -> cs
-    RegIP -> ip
-    RegNone -> immLens 0
+        ES -> es'
+        DS -> ds'
+        SS -> ss'
+        CS -> cs'
+    RegIP -> ip'
+    RegNone -> immLens $ noAnn 0
     x -> error $ "reg: " ++ show x
 
 addressOf :: Maybe Segment -> Memory -> Getter MachineState Int
 addressOf segmentPrefix m
-    = segAddr_ (maybe (segOf $ mBase m) (reg . RegSeg) segmentPrefix) (addressOf' m)
+    = segAddr_ (maybe (segOf $ mBase m) ((. ann) . reg . RegSeg) segmentPrefix) (addressOf' m)
 
 addressOf' :: Memory -> Getter MachineState Word16
-addressOf' (Memory _ r r' 0 i) = to $ \s -> imm i + s ^. reg r + s ^. reg r'
+addressOf' (Memory _ r r' 0 i) = to $ \s -> imm i + s ^. (reg r . ann) + s ^. (reg r' . ann)
 addressOf' m = error $ "addressOf: " ++ show m
 
-byteOperand :: Maybe Segment -> Operand -> MachinePart Word8
+byteOperand :: Maybe Segment -> Operand -> MachinePart (Ann Word8)
 byteOperand segmentPrefix x = case x of
     Reg r -> case r of
         Reg8 r L -> case r of
-            RAX -> al
-            RBX -> bl
-            RCX -> cl
-            RDX -> dl
+            RAX -> al'
+            RBX -> bl'
+            RCX -> cl'
+            RDX -> dl'
         Reg8 r H -> case r of
-            RAX -> ah
-            RBX -> bh
-            RCX -> ch
-            RDX -> dh
+            RAX -> ah'
+            RBX -> bh'
+            RCX -> ch'
+            RDX -> dh'
     Mem m -> addressOf segmentPrefix m >- heap8
-    Imm (Immediate Bits8 v) -> immLens $ fromIntegral v
-    Hdis86.Const (Immediate Bits0 0) -> immLens 1 -- !!!
+    Imm (Immediate Bits8 v) -> immLens $ noAnn $ fromIntegral v
+    Hdis86.Const (Immediate Bits0 0) -> immLens $ noAnn 1 -- !!!
     _ -> error $ "byteOperand: " ++ show x
 
-wordOperand :: Maybe Segment -> Operand -> MachinePart Word16
+wordOperand :: Maybe Segment -> Operand -> MachinePart (Ann Word16)
 wordOperand segmentPrefix x = case x of
     Reg r -> reg r
     Mem m -> addressOf segmentPrefix m >- heap16
-    Imm i -> immLens $ imm' i
-    Jump i -> ip >- (immLens . (+ imm i))
+    Imm i -> immLens $ noAnn $ imm' i
+    Jump i -> ip >- (immLens . noAnn . (+ imm i))
     _ -> error $ "fetch: " ++ show x
 
 imm = fromIntegral . iValue
@@ -718,29 +769,29 @@ execInstructionBody i@Inst{..} = case inOpcode of
     _ | inOpcode `elem` [Ijmp, Icall] -> jump $ case op1 of
         Ptr (Pointer seg (Immediate Bits16 v)) -> do
             when (inOpcode == Icall) $ do
-                use cs >>= push
-                use ip >>= push
+                use cs' >>= push
+                use ip' >>= push
             cs .= fromIntegral seg
             ip .= fromIntegral v
         Mem _ -> do
             when (inOpcode == Icall) $ do
-                use cs >>= push
-                use ip >>= push
+                use cs' >>= push
+                use ip' >>= push
             ad <- addr op1
-            move ip $ heap16 ad
-            move cs $ heap16 $ ad + 2
+            move ip' $ heap16 ad
+            move cs' $ heap16 $ ad + 2
         _ -> do
             when (inOpcode == Icall) $ do
-                use ip >>= push
-            move ip op1'
+                use ip' >>= push
+            move ip' op1'
 
     _ | inOpcode `elem` [Iret, Iretf, Iiretw] -> jump $ do
-        pop >>= (ip .=)
-        when (inOpcode `elem` [Iretf, Iiretw]) $ pop >>= (cs .=)
-        when (inOpcode == Iiretw) $ pop >>= (flags .=)
-        when (length inOperands == 1) $ op1w >>= (sp %=) . (+)
+        pop >>= (ip' .=)
+        when (inOpcode `elem` [Iretf, Iiretw]) $ pop >>= (cs' .=)
+        when (inOpcode == Iiretw) $ pop >>= (flags .=) . (^. ann)
+        when (length inOperands == 1) $ op1w >>= (sp %=) . (+) . (^. ann)
 
-    Iint  -> jump $ use (byteOperand segmentPrefix op1) >>= interrupt
+    Iint  -> jump $ use (byteOperand segmentPrefix op1) >>= interrupt . (^. ann)
     Iinto -> jump $ do
         b <- use overflowF
         when b $ interrupt 4
@@ -775,10 +826,10 @@ execInstructionBody i@Inst{..} = case inOpcode of
         _ | inOpcode `elem` [Iaaa, Iaad, Iaam, Iaas, Idaa, Idas] -> throwError $ Err $ "step: not implemented: " ++ show i
           | length inOperands > 2 -> throwError $ Err "more than 2 operands are not supported"
 
-        Ipusha  -> sequence_ [use r >>= push | r <- [ax,cx,dx,bx,sp,bp,si,di]]
-        Ipopa   -> sequence_ [pop >>= (r .=) | r <- [di,si,bp,xx,bx,dx,cx,ax]]
-        Ipushfw -> use flags >>= push
-        Ipopfw  -> pop >>= (flags .=)
+        Ipusha  -> sequence_ [use r >>= push | r <- [ax',cx',dx',bx',sp',bp',si',di']]
+        Ipopa   -> sequence_ [pop >>= (r .=) | r <- [di',si',bp',xx,bx',dx',cx',ax']]
+        Ipushfw -> use flags >>= push . noAnn
+        Ipopfw  -> pop >>= (flags .=) . (^. ann)
 
         Iclc  -> carryF     .= False
         Icmc  -> carryF     %= not
@@ -793,35 +844,35 @@ execInstructionBody i@Inst{..} = case inOpcode of
         Isahf -> move (flags . low) ah
         Ixlatb -> do
             x <- use al
-            move al $ byteOperand segmentPrefix $ Mem $ Memory undefined (Reg16 RBX) RegNone 0 $ Immediate Bits16 $ fromIntegral x
+            move al' $ byteOperand segmentPrefix $ Mem $ Memory undefined (Reg16 RBX) RegNone 0 $ Immediate Bits16 $ fromIntegral x
 
-        Ilea -> op2addr' >>= setOp1
+        Ilea -> op2addr' >>= setOp1 . noAnn
         _ | inOpcode `elem` [Iles, Ilds] -> do
             ad <- addr op2
             move op1' $ heap16 ad
-            move (case inOpcode of Iles -> es; Ilds -> ds) $ heap16 $ ad + 2
+            move (case inOpcode of Iles -> es'; Ilds -> ds') $ heap16 $ ad + 2
 
         Ipush -> op1w >>= push
         Ipop  -> pop >>= setOp1
 
         _ -> case sizeByte of
-            1 -> withSize (byteOperand segmentPrefix) al ah ax
-            2 -> withSize (wordOperand segmentPrefix) ax dx dxax
+            1 -> withSize (byteOperand segmentPrefix) al' ah' ax'
+            2 -> withSize (wordOperand segmentPrefix) ax' dx' dxax
 
   where
     jump x = (True, x)
     nojump x = (False, x)
 
     withSize :: forall a . (AsSigned a, AsSigned (X2 a), X2 (Signed a) ~ Signed (X2 a))
-        => (Operand -> MachinePart a)
-        -> MachinePart a
-        -> MachinePart a
-        -> MachinePart (X2 a)
+        => (Operand -> MachinePart (Ann a))
+        -> MachinePart (Ann a)
+        -> MachinePart (Ann a)
+        -> MachinePart (Ann (X2 a))
         -> Machine ()
     withSize tr alx ahd axd = case inOpcode of
         Imov  -> move (tr op1) (tr op2)
         Ixchg -> move (uComb (tr op1) (tr op2)) (uComb (tr op2) (tr op1))
-        Inot  -> move (tr op1) $ tr op1 . to complement
+        Inot  -> move (tr op1) $ tr op1 . to (annMap "not" complement)      -- ann compl!
 
         Isal  -> shiftOp $ \_ x -> (x ^. highBit, x `shiftL` 1)
         Ishl  -> shiftOp $ \_ x -> (x ^. highBit, x `shiftL` 1)
@@ -845,58 +896,58 @@ execInstructionBody i@Inst{..} = case inOpcode of
         Isbb  -> do
             c <- use carryF
             twoOp True $ \a b -> a - b - fromIntegral (fromEnum c)
-        Ineg  -> twoOp_ True (flip (-)) (tr op1) (immLens 0)
-        Idec  -> twoOp_ True (+) (tr op1) (immLens (-1))
-        Iinc  -> twoOp_ True (+) (tr op1) (immLens 1)
+        Ineg  -> twoOp_ True (flip (-)) (tr op1) (immLens $ noAnn 0)
+        Idec  -> twoOp_ True (+) (tr op1) (immLens $ noAnn (-1))
+        Iinc  -> twoOp_ True (+) (tr op1) (immLens $ noAnn 1)
 
         Idiv  -> divide id id
         Iidiv -> divide asSigned asSigned
         Imul  -> multiply id
         Iimul -> multiply asSigned
 
-        _ | inOpcode `elem` [Icwd, Icbw] -> move axd $ alx . to (fromIntegral . asSigned)
-          | inOpcode `elem` [Istosb, Istosw] -> move di' alx >> adjustIndex di
-          | inOpcode `elem` [Ilodsb, Ilodsw] -> move alx si' >> adjustIndex si
-          | inOpcode `elem` [Imovsb, Imovsw] -> move di' si' >> adjustIndex si >> adjustIndex di
+        _ | inOpcode `elem` [Icwd, Icbw] -> move axd $ alx . to (annMap "ext" $ fromIntegral . asSigned)        -- ann ext!
+          | inOpcode `elem` [Istosb, Istosw] -> move di'' alx >> adjustIndex di
+          | inOpcode `elem` [Ilodsb, Ilodsw] -> move alx si'' >> adjustIndex si
+          | inOpcode `elem` [Imovsb, Imovsw] -> move di'' si'' >> adjustIndex si >> adjustIndex di
           | inOpcode `elem` [Iscasb, Iscasw] -> do
-            twoOp_ False (-) di' alx
+            twoOp_ False (-) di'' alx
             adjustIndex di
           | inOpcode `elem` [Icmpsb, Icmpsw] -> do
-            twoOp_ False (-) si' di'
+            twoOp_ False (-) si'' di''
             adjustIndex si
             adjustIndex di
 
         Iin -> do
             v <- use $ wordOperand segmentPrefix op2
-            input v >>= (tr op1 .=) . fromIntegral
+            input (v ^. ann) >>= (tr op1 .=) . fmap fromIntegral
         Iout -> do
             c <- use $ wordOperand segmentPrefix op1
             v <- op2v
-            output' c $ fromIntegral v
+            output' (c ^. ann) $ fromIntegral (v ^. ann)
 
         _ -> error $ "fatal error step: " ++ show i
 
       where
-        si', di' :: MachinePart a
-        si' = tr $ Mem $ memIndex RSI
-        di' = tr $ Mem $ memIndex RDI
+        si'', di'' :: MachinePart (Ann a)
+        si'' = tr $ Mem $ memIndex RSI
+        di'' = tr $ Mem $ memIndex RDI
 
         divide :: (Integral c, Integral (X2 c)) => (a -> c) -> (X2 a -> X2 c) -> Machine ()
         divide asSigned asSigned' = do
-            q <- quotRemSafe <$> (asSigned' <$> use axd) <*> (fromIntegral . asSigned <$> op1v)
+            q <- quotRemSafe <$> (asSigned' <$> use (axd . ann)) <*> (fromIntegral . asSigned . (^. ann) <$> op1v)
             case q of
               Just (d, m) -> do
-                alx .= fromIntegral d
-                ahd .= fromIntegral m
+                alx .= noAnn (fromIntegral d)
+                ahd .= noAnn (fromIntegral m)
               Nothing -> throwError Halt
 
         multiply :: (Integral c) => (a -> c) -> Machine ()
         multiply asSigned = do
-            x <- asSigned <$> use alx
-            y <- asSigned <$> op1v
+            x <- asSigned <$> use (alx . ann)
+            y <- asSigned . (^. ann) <$> op1v
             let r = fromIntegral x * fromIntegral y :: Int
                 c = r == fromIntegral (x * y)
-            axd .= fromIntegral r
+            axd .= noAnn (fromIntegral r)
             carryF .= c
             overflowF .= c
 
@@ -905,22 +956,26 @@ execInstructionBody i@Inst{..} = case inOpcode of
 
         shiftOp :: (forall b . (AsSigned b) => Bool -> b -> (Bool, b)) -> Machine ()
         shiftOp op = do
-            a <- op1v
-            n <- fromIntegral <$> use (byteOperand segmentPrefix op2)
-            c <- use carryF
-            let (c'_, r_) = iterate (uncurry op) (c, a) !! (n - 1)
-            let (c', r)   = op c'_ r_
-            carryF .= c'
-            overflowF .= (r ^. highBit /= r_ ^. highBit)
-            tr op1 .= r
+            a <- (^. ann) <$> op1v
+            n <- fromIntegral <$> use (byteOperand segmentPrefix op2 . ann)
+            case n of
+              0 -> do
+                return ()
+              _ -> do
+                c <- use carryF
+                let (c'_, r_) = iterate (uncurry op) (c, a) !! (n - 1)
+                let (c', r)   = op c'_ r_
+                carryF .= c'
+                overflowF .= (r ^. highBit /= r_ ^. highBit)
+                tr op1 .= noAnn r
 
         twoOp :: Bool -> (forall b . (Integral b, FiniteBits b) => b -> b -> b) -> Machine ()
         twoOp store op = twoOp_ store op (tr op1) (tr op2)
 
-        twoOp_ :: Bool -> (forall a . (Integral a, FiniteBits a) => a -> a -> a) -> MachinePart a -> MachinePart a -> Machine ()
+        twoOp_ :: Bool -> (forall a . (Integral a, FiniteBits a) => a -> a -> a) -> MachinePart (Ann a) -> MachinePart (Ann a) -> Machine ()
         twoOp_ store op op1 op2 = do
-            a <- use op1
-            b <- use op2
+            a <- use (op1 . ann)
+            b <- use (op2 . ann)
             let r = op a b
 
             when (inOpcode `notElem` [Idec, Iinc]) $
@@ -932,7 +987,7 @@ execInstructionBody i@Inst{..} = case inOpcode of
             parityF   .= even (popCount r)
 --          adjustF   .= undefined            -- ADC, ADD, CMP, CMPSB, CMPSW, DEC, ...
 
-            when store $ op1 .= r
+            when store $ op1 .= noAnn r
 
     move a b = use b >>= (a .=)
 
@@ -940,7 +995,7 @@ execInstructionBody i@Inst{..} = case inOpcode of
         cx %= pred
         condJump =<< (&&) <$> ((/= 0) <$> use cx) <*> cond
 
-    condJump b = when b $ op1w >>= (ip .=)
+    condJump b = when b $ op1w >>= (ip' .=)
 
     adjustIndex i = do
         d <- use directionF
@@ -951,7 +1006,7 @@ execInstructionBody i@Inst{..} = case inOpcode of
 
     ~(op1: ~(op2:_)) = inOperands
 
-    op1' :: MachinePart Word16
+    op1' :: MachinePart (Ann Word16)
     op1' = wordOperand segmentPrefix op1
     setOp1 = (op1' .=)
     op1w = use op1'
@@ -963,18 +1018,18 @@ execInstructionBody i@Inst{..} = case inOpcode of
         [Seg s] -> Just s
         [] -> Nothing
 
-input :: Word16 -> Machine Word16
+input :: Word16 -> Machine (Ann Word16)
 input v = do
     case v of
         0x21 -> do
             trace_ "interrupt control port" -- ?
-            return 0xff  -- 
+            return $ "???" @: 0xff  -- 
         0x60 -> do
             trace_ "keyboard"
-            return 0
+            return $ "???" @: 0
         0x61 -> do
             trace_ "internal speaker"
-            return (-1)
+            return $ "???" @: (-1)
         _ -> throwError $ Err $ "input #" ++ showHex' 4 v
 
 output' :: Word16 -> Word16 -> Machine ()
@@ -1012,26 +1067,27 @@ interrupt 0x10 = do
             case video_mode_number of
                 0x00 -> do
                     trace_ "text mode"
-                    return ()
                 0x13 -> do
                     bx .= 4
         0x0b -> do
             trace_ "Select Graphics Palette or Text Border Color"
 
         0x0f -> do
-            trace_ "Query Current Video Info"
+            trace_ "Get Current Video Mode"
             al' .= "text mode" @: 3
             ah' .= "width of screen, in character columns" @: 80
             bh' .= "current active video page (0-based)" @: 0xb8
 
         v  -> throwError $ Err $ "interrupt #10,#" ++ showHex' 2 v
+
 interrupt 0x15 = do
     trace_ "Misc System Services"
     v <- use ah
     case v of
         0x00 -> do
-            trace_ "Casette"
+            trace_ "Turn on casette driver motor"
         v  -> throwError $ Err $ "interrupt #15,#" ++ showHex' 2 v
+
 interrupt 0x16 = do
     trace_ "Keyboard Services"
     v <- use ah
@@ -1039,14 +1095,16 @@ interrupt 0x16 = do
         0x00 -> do
             trace_ "Read (Wait for) Next Keystroke"
             ah' .= "Esc scan code" @: 0x39
-            al' .= "ASCII character code" @: 0x20
+            al' .= "Esc ASCII code" @: 0x1b
         0x01 -> do
             trace_ "Query Keyboard Status / Preview Key"
             zeroF .= False  -- no keys in buffer
         v  -> throwError $ Err $ "interrupt #16,#" ++ showHex' 2 v
+
 interrupt 0x20 = do
     trace_ "halt"
     throwError Halt
+
 interrupt 0x21 = do
     trace_ "DOS rutine"
     v <- use ah
@@ -1055,67 +1113,81 @@ interrupt 0x21 = do
             trace_ "Set Disk Transfer Address (DTA)"
             addr <- use $ addressOf Nothing $ memIndex RDX
             dta .= addr
+
         0x25 -> do
             v <- fromIntegral <$> use al     -- interrupt vector number
             trace_ $ "Set Interrupt Vector " ++ showHex' 2 v
-            use ds >>= (heap16 (4*v + 2) .=)
-            use dx >>= (heap16 (4*v) .=)     -- DS:DX = pointer to interrupt handler
+            use dx' >>= (heap16 (4*v) .=)     -- DS:DX = pointer to interrupt handler
+            use ds' >>= (heap16 (4*v + 2) .=)
+
         0x30 -> do
             trace_ "Get DOS version"
             al' .= "major version number" @: 0x04      --  (2-5)
             ah' .= "minor version number" @: 0x00      --  (in hundredths decimal)
-            bh .= 0xff      -- 0xFF indicates MS-DOS
+            bh' .= "MS-DOS" @: 0xff
             do              -- 24 bit OEM serial number
-                bl .= 0
-                cx .= 0
+                bl' .= "OEM serial number (high bits)" @: 0
+                cx' .= "OEM serial number (low bits)" @: 0
+
         0x35 -> do
             v <- fromIntegral <$> use al     -- interrupt vector number
             trace_ $ "Get Interrupt Vector " ++ showHex' 2 v
-            use (heap16 (4*v+2)) >>= (es .=)   -- ES:BX = pointer to interrupt handler
-            use (heap16 (4*v)) >>= (bx .=)
+            use (heap16 (4*v)) >>= (bx' .=)
+            use (heap16 (4*v+2)) >>= (es' .=)   -- ES:BX = pointer to interrupt handler
+
         0x3d -> do
             trace_ "Open File Using Handle"
             open_access_mode <- use al
 --            v <- use dx
-            addr <- use $ addressOf Nothing $ memIndex RDX
-            fname <- use $ heap . bytesAt addr 20
-            let f = map (chr . fromIntegral) $ takeWhile (/=0) fname
-            trace_ $ "File: " ++ show f
-            let s = unsafePerformIO $ BS.readFile $ "../original/" ++ map toUpper f
---            ax .= 02  -- File not found
-            handle <- imMax <$> use files
-            files %= IM.insert handle (s, 0)
-            ax .= fromIntegral handle -- file handle
-            carryF .= False
+            case open_access_mode of
+              0 -> do   -- read mode
+                addr <- use $ addressOf Nothing $ memIndex RDX
+                fname <- use $ heap . bytesAt addr 20
+                let f = map (chr . fromIntegral) $ takeWhile (/=0) fname
+                trace_ $ "File: " ++ show f
+                let s = unsafePerformIO $ BS.readFile $ "../original/" ++ map toUpper f
+    --            ax .= 02  -- File not found
+                handle <- imMax <$> use files
+                files %= IM.insert handle (f, s, 0)
+                ax' .= "file handle" @: fromIntegral handle
+                carryF .= False
+
         0x3e -> do
             trace_ "Close file"
             handle <- fromIntegral <$> use bx
-            files %= IM.delete handle
-            carryF .= False
+            x <- IM.lookup handle <$> use files
+            case x of
+              Just (fn, _, _) -> do
+                trace_ $ "file: " ++ fn
+                files %= IM.delete handle
+                carryF .= False
+
         0x3f -> do
             trace_ "Read from file or device"
             handle <- fromIntegral <$> use bx
             num <- fromIntegral <$> use cx
             loc <- use $ addressOf Nothing $ memIndex RDX
-            s <- BS.take num . (\(s, p) -> BS.drop p s) . (IM.! handle) <$> use files
+            s <- BS.take num . (\(fn, s, p) -> BS.drop p s) . (IM.! handle) <$> use files
             let len = BS.length s
-            files %= flip IM.adjust handle (\(s, p) -> (s, p+len))
+            files %= flip IM.adjust handle (\(fn, s, p) -> (fn, s, p+len))
             heap . bytesAt loc len .= BS.unpack s
-            ax .= fromIntegral len
+            ax' .= "length" @: fromIntegral len
             carryF .= False
+
         0x42 -> do
             trace_ "Set Current File Position"
             handle <- fromIntegral <$> use bx
             mode <- use al
-            pos <- fromIntegral <$> use (uComb cx dx . combine)
-            files %= (flip IM.adjust handle $ \(s, p) -> case mode of
-                0 -> (s, pos)
-                1 -> (s, p + pos)
-                2 -> (s, BS.length s - pos)
+            pos <- fromIntegral . asSigned <$> use (uComb cx dx . combine)
+            files %= (flip IM.adjust handle $ \(fn, s, p) -> case mode of
+                0 -> (fn, s, pos)
+                1 -> (fn, s, p + pos)
+                2 -> (fn, s, BS.length s - pos)
                 )
-            pos' <- snd . (IM.! handle) <$> use files
-            (uComb cx dx . combine) .= fromIntegral pos'
+            pos' <- (^. _3) . (IM.! handle) <$> use files
+            (uComb dx ax . combine) .= fromIntegral pos'
             carryF .= False
+
         0x44 -> do
             trace_ "I/O Control for Devices (IOCTL)"
             0x44 <- use ah
@@ -1127,7 +1199,7 @@ interrupt 0x21 = do
             data_or_buffer <- use dx
 -}
             case function_value of
-              0x0 -> do
+              0x00 -> do
                 trace_ "Get Device Information" 
                 handle <- use bx
                 case handle of
@@ -1142,7 +1214,7 @@ interrupt 0x21 = do
             trace_ "Allocate Memory"
             memory_paragraphs_requested <- use bx
             x <- zoom heap $ extendMem $ memory_paragraphs_requested + 1
-            ax .= x + 1 -- segment address of allocated memory block (MCB + 1para)
+            ax' .= "segment address of allocated memory block" @: x + 1 -- (MCB + 1para)
             carryF .= False
 
         0x4a -> do
@@ -1166,13 +1238,14 @@ interrupt 0x21 = do
 
             let s = unsafePerformIO $ BS.readFile $ "../original/" ++ map toUpper f
 --            ax .= 02  -- File not found
-            heap . wordAt (ad + 0x1a) .= fromIntegral (BS.length s)
+            heap . bytesAt 0 0x1a .= repeat (error "undefined byte")
+            heap . dwordAt (ad + 0x1a) .= fromIntegral (BS.length s)
             heap . bytesAt (ad + 0x1e) 13 .= map (fromIntegral . ord) f ++ [0]
             carryF .= False
 
         0x62 -> do
             trace_ "Get PSP address (DOS 3.x)"
-            bx .= 0x120 - 0x10  -- hack      -- segment address of current process
+            bx' .= "segment address of current process" @: 0x100 - 0x10  -- hack!!!
             carryF .= False
 
         _    -> throwError $ Err $ "dos function #" ++ showHex' 2 v
@@ -1183,8 +1256,8 @@ interrupt 0x33 = do
     case v of
         0x00 -> do
             trace_ "Mouse Reset/Get Mouse Installed Flag"
-            ax .= 0x0000 -- "mouse driver not installed"
-            bx .= 0  -- number of buttons
+            ax' .= "mouse driver not installed" @: 0x0000
+            bx' .= "number of buttons" @: 0
 
 interrupt v = throwError $ Err $ "interrupt #" ++ showHex' 2 v
 {-
@@ -1205,7 +1278,7 @@ m @. i = push_ i >> m
 class PushVal a where
     push_ :: a -> Machine ()
 instance PushVal Word16 where
-    push_ = push
+    push_ = push . noAnn
 
 ----------------------------------------------
 
@@ -1234,13 +1307,13 @@ loadCom com = flip execState emptyState $ do
     si .= 0x0100
 
     forM_ [0xfff4..0xffff] $ \i -> do
-        heap8 (segAddr gs i) .= 1
-    heap8 (segAddr gs 0x20cd) .= 1
+        heap8 (segAddr gs i) .= "junk" @: 1
+    heap8 (segAddr gs 0x20cd) .= "junk" @: 1
 
     ss .= l' ^. from paragraph
     sp .= fromIntegral stacksize
-    heap16 4 .= 0 --0x20cd
-    heap16 6 .= gs       -- segment
+    heap16 4 .= "???" @: 0
+    heap16 6 .= "segment" @: gs
 
     clearHist
   where
@@ -1253,10 +1326,10 @@ loadCom com = flip execState emptyState $ do
     loadSegment = 0x100
 
 programSegmentPrefix :: Word16 -> Word16 -> BS.ByteString -> IM.IntMap (Ann Word8)
-programSegmentPrefix envseg endseg args = flip execState (toRom $ replicate 0x100 0) $ do
+programSegmentPrefix envseg endseg args = flip execState (toRom $ replicate 0x100 (error "psp uninitialized byte")) $ do
 
-    bytesAt 0x00 2 .= [0xCD, 0x20]     -- CP/M exit, always contain code 'int 20h'
-    wordAt 2 .= endseg   -- Segment of the first byte beyond the memory allocated to the program
+    wordAt' 0x00 .= "CP/M exit, always contain code 'int 20h'" @: 0x20CD
+    wordAt' 0x02 .= "Segment of the first byte beyond the memory allocated to the program" @: endseg
 --    bytesAt 0x05 5 .= [0xea, 0xff, 0xff, 0xad, 0xde]   -- FAR call to MSDOS function dispatcher (int 21h)?
 --    dwordAt 0x0a .= 0xf00020c8    -- Terminate address of previous program (old INT 22h)
 --    dwordAt 0x0e .= 0x01180000    -- Break address of previous program (old INT 23h)
@@ -1266,7 +1339,7 @@ programSegmentPrefix envseg endseg args = flip execState (toRom $ replicate 0x10
     -- Job File Table (JFT) (internal)
 --    bytesAt 0x18 20 .= [0x01, 0x01, 0x01, 0x00, 0x02, 0x03] ++ repeat 0xff
 
-    wordAt 0x2c .= envseg -- Environment segment
+    wordAt' 0x2c .= "Environment segment" @: envseg
 --    dwordAt 0x2e .= 0x0192ffe6 -- SS:SP on entry to last INT 21h call (internal)
 
 --    wordAt 0x32 .= 0x0014 -- JFT size (internal)
@@ -1281,9 +1354,9 @@ programSegmentPrefix envseg endseg args = flip execState (toRom $ replicate 0x10
 
     -- 5Ch-6Bh     16 bytes     Unopened Standard FCB 1
     -- 6Ch-7Fh     20 bytes     Unopened Standard FCB 2 (overwritten if FCB 1 is opened)
-    bytesAt 0x5c (16 + 20) .= repeat 0
+--    bytesAt 0x5c (16 + 20) .= repeat 0
 
-    byteAt 0x80 .= fromIntegral (min maxlength $ BS.length args)
+    byteAt' 0x80 .= "args length" @: fromIntegral (min maxlength $ BS.length args)
     bytesAt 0x81 (maxlength + 1) .= take maxlength (BS.unpack args) ++ [0x0D]  -- Command line string
 --    byteAt 0xff .= 0x36   -- dosbox specific?
   where

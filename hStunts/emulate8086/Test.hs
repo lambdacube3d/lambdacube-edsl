@@ -21,7 +21,7 @@ import Parse (getLabels)
 
 comTest = unsafePerformIO $ loadCom <$> BS.readFile "bushes.com"
 
-main = comTestMain
+main = print $ config . verboseLevel .~ 1 $ steps .~ 2000000 $ initState
 
 comTestMain = do
     st <- loadCom <$> BS.readFile "bushes.com" >>= newIORef
@@ -33,7 +33,7 @@ comTestMain = do
 -}
     let framebuffer = do
             x <- readIORef st
-            let gs = x ^. heap16 0x6 . paragraph
+            let gs = x ^. heap16 0x6 . ann . paragraph
                 v = x ^. heap
 --            assert "err" $ V.length v == 320 * 200
             return $ \x y -> v ^. byteAt (gs + 320 * y + x) 
@@ -50,7 +50,7 @@ loadSegment = 0x100 -- can be arbitrary > 0
 
 initState = unsafePerformIO $ do
     l <- getLabels
-    loadExe l loadSegment <$> BS.readFile "../original/game.exe"
+    loadExe l loadSegment <$> BS.readFile "../restunts/stunts/game.exe"
 
 eval_ = flip evalState initState . runErrorT
 exec = flip execState initState . runErrorT
@@ -65,8 +65,8 @@ eval s = either f undefined v
 call :: String -> Machine ()
 call name = do
     let Just (seg, ipInit) = lookup name symbols
-    push 0x0000
-    push 0x0000
+    push $ noAnn 0x0000
+    push $ noAnn 0x0000
     ds .= dataSegment
     cs .= segments V.! seg
     ip .= ipInit
@@ -91,8 +91,8 @@ call name = do
 fromIntegral' = fromIntegral . asSigned
 
 tests = do
-    quickCheck $ \i -> eval (push i >> call "sin") == sin_fast i
-    quickCheck $ \i -> eval (push i >> call "cos") == cos_fast i
+    quickCheck $ \i -> eval (call "sin" @. (i :: Word16)) == sin_fast i
+    quickCheck $ \i -> eval (call "cos" @. (i :: Word16)) == cos_fast i
 
     quickCheck $ \i j -> eval (call "polarAngle" @. (i :: Word16) @. (j :: Word16)) == fromIntegral (polarAngle (fromIntegral' i) (fromIntegral' j))
     quickCheck $ \i j -> eval (call "polarRadius2D" @. (i :: Word16) @. (j :: Word16)) == fromIntegral (polarRadius2D (fromIntegral' i) (fromIntegral' j))
@@ -176,4 +176,5 @@ polarRadius2D z y = g $ f $ abs $ polarAngle z y
 
 polarRadius3D :: V.Vector Int -> Int
 polarRadius3D vec = polarRadius2D (polarRadius2D (vec V.! 0) (vec V.! 1)) (vec V.! 2)
+
 
