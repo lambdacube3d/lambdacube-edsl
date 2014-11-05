@@ -1077,6 +1077,14 @@ interrupt 0x10 = do
             al' .= "text mode" @: 3
             ah' .= "width of screen, in character columns" @: 80
             bh' .= "current active video page (0-based)" @: 0xb8
+        0x10 -> do
+            trace_ "Set/Get Palette Registers (EGA/VGA)"
+            f <- use al
+            case f of
+              0x12 -> do
+                trace_ "set block of DAC color registers"
+
+              v -> throwError $ Err $ "interrupt #10,#10,#" ++ showHex' 2 f
 
         v  -> throwError $ Err $ "interrupt #10,#" ++ showHex' 2 v
 
