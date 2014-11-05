@@ -46,7 +46,7 @@ comTestMain = do
 
 --------------------------------------------------------------------------------
 
-loadSegment = 0x120 -- can be arbitrary > 0
+loadSegment = 0x100 -- can be arbitrary > 0
 
 initState = unsafePerformIO $ do
     l <- getLabels
