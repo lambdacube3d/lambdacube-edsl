@@ -10,7 +10,11 @@ import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Error
 import Control.Lens as Lens
+import Control.Concurrent
+import Control.Concurrent.MVar
 import Test.QuickCheck hiding ((.&.))
+import System.Environment
+import System.IO
 import System.IO.Unsafe
 
 import Emulate
@@ -21,7 +25,25 @@ import Parse (getLabels)
 
 comTest = unsafePerformIO $ loadCom <$> BS.readFile "bushes.com"
 
-main = print $ config . verboseLevel .~ 1 $ steps .~ 2000000 $ initState
+main = do
+    vid <- newEmptyMVar
+    hSetBuffering stdout NoBuffering
+    args <- getArgs
+    forkIO $ 
+{-
+            writeIORef st $ flip execState x $ runErrorT $ do
+                replicateM_ 10000 $ cachedStep
+                clearHist
+-}
+--            putStrLn "."
+
+        print $ config . videoMVar .~ vid $ config . disassStart .~ f args $ config . verboseLevel .~ 1 $ config . termLength .~ 1000 $ steps .~ 2000000 $ initState
+    drawWithFrameBuffer (takeMVar vid) $ return ()
+
+  where
+    f [i] = read i
+    f _ = 0
+
 
 comTestMain = do
     st <- loadCom <$> BS.readFile "bushes.com" >>= newIORef
