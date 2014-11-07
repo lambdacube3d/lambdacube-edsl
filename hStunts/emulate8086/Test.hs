@@ -22,6 +22,41 @@ import DosBox
 import Parse (getLabels)
 
 --------------------------------------------------------------------------------
+testCases =
+  [ "add"
+  , "bcdcnv"
+  , "bitwise"
+  , "cmpneg"
+  , "control"
+--  , "datatrnf"
+  , "div"
+  , "interrupt"
+--  , "jmpmov"
+  , "jump1"
+--  , "jump2"
+  , "mul"
+  , "rep"
+  , "rotate"
+  , "segpr"
+  , "shifts"
+  , "strings"
+  , "sub"
+  ]
+
+-- http://orbides.1gb.ru/80186_tests.zip
+testTest = forM_ testCases $ \n -> do
+  putStr $ "Test " ++ n ++ ": "
+  m <- mkSteps . loadTest <$> BS.readFile ("tests/" ++ n ++ ".bin")
+  let resName = "tests/res_" ++ n ++ ".bin"
+  res <- BS.readFile resName
+  case m of
+    (Halt,x) -> do
+      let v = x ^. heap
+          r = BS.pack [v ^. byteAt i | i <- [0xe0000..0xeffff]]
+          out = BS.take (BS.length res) r
+      print $ out == res
+      BS.writeFile (resName ++ ".out") out
+    (h,_) -> putStrLn $ "Error " ++ show h
 
 comTest = unsafePerformIO $ loadCom <$> BS.readFile "bushes.com"
 

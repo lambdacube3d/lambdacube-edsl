@@ -1592,6 +1592,31 @@ origTimer =
     [0x50, 0xb0, 0x20, 0xe6, 0x20, 0x58, 0xcf]       -- push ax; mov al, 20h; out 20h, al; pop ax; iret
     ++ replicate (maxInstLength - 1) 0  -- hack for fetchinstruction
 
+loadTest :: BS.ByteString -> MachineState
+loadTest com = flip execState emptyState $ do
+    heap .= toRom (concat
+        [ replicate 0xf0000 0
+        , BS.unpack com
+        , replicate 64 0 -- extra bytes for decoding
+        ])
+    cs .= loadSegment
+    ds .= loadSegment
+    es .= loadSegment
+    ip .= 0xfff0
+    ax .= 0
+    bx .= 0
+    cx .= 1
+    di .= 0
+    si .= 0
+
+    ss .= stackSegment
+    sp .= 0
+
+    clearHist
+  where
+    loadSegment = 0xf000
+    stackSegment = 0xe000
+
 loadCom :: BS.ByteString -> MachineState
 loadCom com = flip execState emptyState $ do
     heap .= toRom (concat
