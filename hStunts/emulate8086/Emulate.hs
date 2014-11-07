@@ -976,7 +976,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
 
         Ipusha  -> sequence_ [use r >>= push | r <- [ax',cx',dx',bx',sp',bp',si',di']]
         Ipopa   -> sequence_ [pop >>= (r .=) | r <- [di',si',bp',xx,bx',dx',cx',ax']]
-        Ipushfw -> use flags'' >>= push
+        Ipushfw -> use flags'' >>= push . fmap ((.&. 0xefd7) . (.|. 0x0002))
         Ipopfw  -> pop >>= (flags .=) . (^. ann)
 
         Iclc  -> carryF     .= False
@@ -1111,10 +1111,10 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
         shiftOp :: (forall b . (AsSigned b) => Bool -> b -> (Bool, b)) -> Machine ()
         shiftOp op = do
             a <- (^. ann) <$> op1v
-            n <- fromIntegral <$> use (byteOperand segmentPrefix op2 . ann)
-            case n of
+            n <- (`mod` (finiteBitSize a + 1)) . fromIntegral <$> use (byteOperand segmentPrefix op2 . ann)
+            r <- case n of
               0 -> do
-                return ()
+                return a
               _ -> do
                 c <- use carryF
                 let (c'_, r_) = iterate (uncurry op) (c, a) !! (n - 1)
@@ -1122,6 +1122,16 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
                 carryF .= c'
                 overflowF .= (r ^. highBit /= r_ ^. highBit)
                 tr op1 .= noAnn r
+                return r
+            when (inOpcode `elem` [Isal, Isar, Ishl, Ishr]) $ do
+                zeroF     .= (r == 0)
+                signF     .= r ^. highBit
+                parityF   .= even (popCount (fromIntegral r :: Word8))
+            -- ???
+            when (inOpcode `elem` [Ircl, Ircr, Irol, Iror]) $ do
+                zeroF     .= False --(r == 0)
+                signF     .= False --r ^. highBit
+                parityF   .= False --even (popCount (fromIntegral r :: Word8))
 
         twoOp :: Bool -> (forall b . (Integral b, FiniteBits b) => b -> b -> b) -> Machine ()
         twoOp store op = twoOp_ store op (tr op1) (tr op2)

@@ -61,8 +61,8 @@ testThis n = do
 --      BS.writeFile (resName ++ ".out") out
     (h,_) -> putStrLn $ "Error " ++ show h
 
-similar a (Ann (High (Annot "flags")) b) = (a .&. 0x0f) == (b .&. 0x0f)
-similar a (Ann (Low (Annot "flags")) b) = (a .&. 0xc5) == (b .&. 0xc5)
+--similar a (Ann (High (Annot "flags")) b) = (a .&. 0x0f) == (b .&. 0x0f)
+similar a (Ann (Low (Annot "flags")) b) = (a .&. 0xef) == (b .&. 0xef)
 similar a (Ann _ b) = a == b
 --similar _ x = error $ "similar: " ++ show x
 
