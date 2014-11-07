@@ -143,7 +143,7 @@ data Annot
     | High Annot
     | CombAnn Annot Annot
     | Annot BS.ByteString
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Show)
 
 data Ann a = Ann
     { _annot :: Annot
@@ -197,7 +197,7 @@ instance (Eq a) => Eq (Ann a) where
 
 instance Show a => Show (Ann a) where
     show (Ann NotInit a) = "undef2"
-    show (Ann _ a) = show a
+    show (Ann x a) = show x ++ " @: " ++ show a
 
 instance Functor Ann where
     fmap f (Ann x y) = Ann x (f y)
@@ -397,7 +397,7 @@ defConfig = Config_
     }
 
 data MachineState = MachineState
-    { _flags'   :: Word16
+    { _flags'   :: Ann Word16
     , _regs     :: IM.IntMap (Ann Word8)
     , _heap     :: Overlay (IM.IntMap (Ann Word8)) ERom
 
@@ -413,7 +413,7 @@ data MachineState = MachineState
     }
 
 emptyState = MachineState
-    { _flags'   = 0x7202
+    { _flags'   = "flags" @: 0x7202
     , _regs     = toRom (replicate 26 0)
     , _heap     = toRom []
 
@@ -467,7 +467,7 @@ addHist :: Key -> MachinePart a -> MachinePart a
 addHist sh k = lens (^. k) $ \s a -> hist %~ Set.insert sh $ set k a s
 
 flagLenses@[_,_,_,_,overflowF,directionF,interruptF,trapF,signF,zeroF,_,adjustF,_,parityF,_,carryF]
-    = [ addHist (Flag i) $ flags' . bit i | i <- [15,14..0] ]
+    = [ addHist (Flag i) $ flags' . ann . bit i | i <- [15,14..0] ]
 reg16Lenses@[ax,dx,bx,cx, si,di, cs,ss,ds,es, ip,sp,bp]
     = [ addHist (KReg 2 i) $ regs . wordAt i | i <- [0,2..24] ]
 reg8Lenses@[al,ah,dl,dh,bl,bh,cl,ch]
@@ -483,7 +483,8 @@ sps = segAddr_ ss sp
 xx :: MachinePart (Ann Word16)
 xx = lens (const $ error "xx") $ \s _ -> s
 
-flags = addHist Flags flags'
+flags = flags'' . ann
+flags'' = addHist Flags flags'
 
 heap8  i = addHist (Heap 1 i) $ heap . byteAt' i
 heap16 i = addHist (Heap 2 i) $ heap . wordAt' i
@@ -975,7 +976,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
 
         Ipusha  -> sequence_ [use r >>= push | r <- [ax',cx',dx',bx',sp',bp',si',di']]
         Ipopa   -> sequence_ [pop >>= (r .=) | r <- [di',si',bp',xx,bx',dx',cx',ax']]
-        Ipushfw -> use flags >>= push . noAnn
+        Ipushfw -> use flags'' >>= push
         Ipopfw  -> pop >>= (flags .=) . (^. ann)
 
         Iclc  -> carryF     .= False
@@ -1136,7 +1137,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
 
             zeroF     .= (r == 0)
             signF     .= r ^. highBit
-            parityF   .= even (popCount r)
+            parityF   .= even (popCount (fromIntegral r :: Word8))
 --          adjustF   .= undefined            -- ADC, ADD, CMP, CMPSB, CMPSW, DEC, ...
 
             when store $ op1 .= noAnn r
@@ -1609,13 +1610,16 @@ loadTest com = flip execState emptyState $ do
     di .= 0
     si .= 0
 
+    ds .= 0
     ss .= stackSegment
     sp .= 0
+
+    flags .= 0x0057
 
     clearHist
   where
     loadSegment = 0xf000
-    stackSegment = 0xe000
+    stackSegment = 0 --0xe000
 
 loadCom :: BS.ByteString -> MachineState
 loadCom com = flip execState emptyState $ do

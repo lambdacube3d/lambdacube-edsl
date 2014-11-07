@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 import Data.Word
 import Data.Int
 import Data.Bits hiding (bit)
@@ -44,7 +45,9 @@ testCases =
   ]
 
 -- http://orbides.1gb.ru/80186_tests.zip
-testTest = forM_ testCases $ \n -> do
+testTest = forM_ testCases $ testThis
+
+testThis n = do
   putStr $ "Test " ++ n ++ ": "
   m <- mkSteps . loadTest <$> BS.readFile ("tests/" ++ n ++ ".bin")
   let resName = "tests/res_" ++ n ++ ".bin"
@@ -52,11 +55,15 @@ testTest = forM_ testCases $ \n -> do
   case m of
     (Halt,x) -> do
       let v = x ^. heap
-          r = BS.pack [v ^. byteAt i | i <- [0xe0000..0xeffff]]
-          out = BS.take (BS.length res) r
-      print $ out == res
-      BS.writeFile (resName ++ ".out") out
+--          r = BS.pack [v ^. byteAt i | i <- [0xe0000..0xeffff]]
+--          out = BS.take (BS.length res) r
+      print [(i, a, b) | (i, a) <- zip [0..] (BS.unpack res), let b = v ^. byteAt' (i + 0), not $ similar a b]
+--      BS.writeFile (resName ++ ".out") out
     (h,_) -> putStrLn $ "Error " ++ show h
+
+similar a (Ann (High (Annot "flags")) b) = (a .&. 0xef) == (b .&. 0xef)
+similar a (Ann _ b) = a == b
+--similar _ x = error $ "similar: " ++ show x
 
 comTest = unsafePerformIO $ loadCom <$> BS.readFile "bushes.com"
 
