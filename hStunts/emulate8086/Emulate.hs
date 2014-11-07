@@ -138,6 +138,7 @@ segAddr s w = s ^. paragraph + fromIntegral w
 
 data Annot
     = NoAnnot
+    | NotInit
     | Low Annot
     | High Annot
     | CombAnn Annot Annot
@@ -152,6 +153,7 @@ data Ann a = Ann
 $(makeLenses ''Ann)
 
 showAnn NoAnnot = ""
+showAnn NotInit = "undef"
 showAnn (Annot b) = BSC.unpack b
 showAnn (CombAnn a b) = showAnn a ++ ":" ++ showAnn b
 showAnn (Low a) = "lo " ++ showAnn a
@@ -168,30 +170,39 @@ combineAnnot = iso f g
     g (Ann a (x, y)) = (Ann (low a) x, Ann (high a) y)
 
     low NoAnnot = NoAnnot
+    low NotInit = NotInit
     low (CombAnn a b) = a
     low a = Low a
     high NoAnnot = NoAnnot
+    high NotInit = NotInit
     high (CombAnn a b) = b
     high a = High a
+    combAnn NotInit _ = NotInit
+    combAnn _ NotInit = NotInit
     combAnn NoAnnot NoAnnot = NoAnnot
     combAnn (Low a) (High a') | a == a' = a
     combAnn a b = CombAnn a b
 
 clearAnn = iso (^. ann) $ Ann NoAnnot
+notInit x = Ann NotInit $ error $ "not initialized " ++ x
 
 noAnn = Ann NoAnnot
 b @: x = Ann (Annot b) x
 infix 5 @:
 
 instance (Eq a) => Eq (Ann a) where
+    Ann NotInit _ == _ = False
+    _ == Ann NotInit _ = False
     a == b = a ^. ann == b ^. ann
 
 instance Show a => Show (Ann a) where
+    show (Ann NotInit a) = "undef2"
     show (Ann _ a) = show a
 
 instance Functor Ann where
     fmap f (Ann x y) = Ann x (f y)
 
+showA (Ann NotInit a) = "undef3"
 showA (Ann NoAnnot a) = a
 showA (Ann x a) = a ++ "{" ++ showAnn x ++ "}"
 
@@ -238,33 +249,35 @@ data Overlay a b = Overlay a b
 data ERom
     = Rom (V.Vector (Ann Word8))
     | Split Int ERom ERom
-    | Zeros Int Int
+    | Zeros Bool Int Int
 
 showMem (Overlay a b) = "Overlay _ (" ++  showRom b ++ ")"
 
 showRom :: ERom -> String
 showRom (Rom v) = "Rom " ++ showHex' 5 (V.length v)
 showRom (Split i a b) = "Split " ++ showHex' 5 i ++ " (" ++ showRom a ++ ") (" ++ showRom b ++ ")"
-showRom (Zeros i j) = "Zeros " ++ showHex' 5 i ++ " " ++ showHex' 5 j
+showRom (Zeros _ i j) = "Zeros " ++ showHex' 5 i ++ " " ++ showHex' 5 j
 
 extendRom' :: Int -> Int -> ERom -> ERom
 extendRom' beg size r@(Rom v)
     | beg + size <= V.length v = r
-    | beg <= V.length v = Split (V.length v) r $ Zeros (V.length v) $ beg + size - V.length v
+    | beg <= V.length v = Split (V.length v) r $ Zeros False (V.length v) $ beg + size - V.length v
 extendRom' beg size (Split i a b)
     | beg + size <= i = Split i (extendRom' beg size a) b
     | beg >= i = Split i a (extendRom' beg size b)
 --    | beg <= V.length v = Split (V.length v) r $ Zeros (V.length v) $ beg + size - 1
 --extendRom' beg size (Zeros a b)
-extendRom' beg size (Zeros a b)
-    | a <= beg && beg <= a + b = Zeros a $ max b $ beg - a + size
+extendRom' beg size (Zeros False a b)
+    | a <= beg && beg <= a + b = Zeros False a $ max b $ beg - a + size
 extendRom' a b r = error $ "extendRom' " ++ showHex' 5 a ++ " " ++ showHex' 5 b ++ " (" ++ showRom r ++ ")"
 
 
 instance Rom ERom where
     readByte_ (Rom a) i = readByte_ a i
-    readByte_ (Zeros a b) i
+    readByte_ (Zeros True a b) i
         | a <= i && i < a + b = Just ("mb" @: 0xfa) -- $ error "mem uninitialized byte 2") --noAnn 0)
+    readByte_ (Zeros False a b) i
+        | a <= i && i < a + b = Just (notInit $ "byte 2") --noAnn 0)
 --        | a <= i && i < a + 0x10 = Just (noAnn $ error "mem uninitialized byte") --noAnn 0)
 --        | a + 0x10 <= i && i < a + b = Just ("mb" @: 0xfa) -- $ error "mem uninitialized byte 2") --noAnn 0)
         | otherwise        = Nothing
@@ -288,11 +301,11 @@ instance ExtRom ERom where
         needed = x ^. paragraph
         (len, w) = head $ f 0x100000 v
         f u (Split v a b) = [(l, Split v a' b) | (l, a') <- f v a] ++ [(l, Split v a b') | (l, b') <- f u b]
-        f u w@(Zeros a b) = [add x w | let x = align' (a + b), x + needed <= u ]
+        f u w@(Zeros False a b) = [add x w | let x = align' (a + b), x + needed <= u ]
         f u w@(Rom v) = [add x w | let x = align' $ V.length v, x + needed <= u]
         align' = align 16
 
-        add len v = (len, Split len v (Zeros len $ x ^. paragraph))
+        add len v = (len, Split len v (Zeros False len $ x ^. paragraph))
 
 instance (Ram a, ExtRom b) => ExtRom (Overlay a b) where
     extendRom x (Overlay s v) = (r, Overlay s y)
@@ -356,10 +369,14 @@ data Config_ = Config_
     , _disassStart :: Int
     , _verboseLevel :: Int
     , _termLength :: Int
-    , _instPerSec :: Int
     , _videoMVar :: MVar (Int -> Int -> Word8)
-    , _counter :: Maybe Int
-    , _speaker :: Word8
+    , _instPerSec :: Int
+
+    , _stackTrace :: [Int]
+    , _stepsCounter :: Int
+
+    , _counter :: Maybe Int -- counter to count down
+    , _speaker :: Word8     -- 0x61 port
     }
 
 $(makeLenses ''Config_)
@@ -371,8 +388,12 @@ defConfig = Config_
     , _termLength = 149
     , _instPerSec = 1000000
     , _videoMVar = undefined --return $ \_ _ -> 0
+
+    , _stackTrace = []
+    , _stepsCounter = 0
+
     , _counter = Nothing
-    , _speaker = 0
+    , _speaker = 0  -- speaker off
     }
 
 data MachineState = MachineState
@@ -419,6 +440,7 @@ type Machine = ErrorT Halt (State MachineState)
 $(makeLenses ''MachineState)
 
 setCounter = do
+    trace_ "setCounter"
     v <- use $ config . instPerSec
     config . counter .= Just (v `div` 24)
 
@@ -433,8 +455,11 @@ trace_ s = traceQ %= (s:)
 steps = config . numOfDisasmLines
 
 clearHist = do
+    hi <- use hist
     hist .= Set.empty
+    h <- use traceQ
     traceQ .= []
+    return (hi, intercalate "; " $ reverse h)
 
 type MachinePart a = Lens' MachineState a
 
@@ -502,7 +527,7 @@ instance Show MachineState where
             $ zip (map (showHex' 4) [s ^. sp, s ^. sp + 2..0xffff] ++ repeat "####")
                     (take 20 . map ff . everyNth 2 $ map (maybe "##" (showHex' 2. (^. ann)) . (readByte_ heap_)) [s ^. sps ..])
         , "Code: "
-        ] ++ map (take $ s ^. config . termLength) (take' (s ^. config . numOfDisasmLines) $ showCode 0 (initQueue s) s)
+        ] ++ map (take $ s ^. config . termLength) (take' (s ^. config . numOfDisasmLines) $ showCode (initQueue s) s)
       where
         ff [a,b] = b ++ a
         heap_ = s ^. heap
@@ -607,68 +632,90 @@ addQueue s q = length q' `seq` q'
 getQueueLast :: Queue -> MachineState
 getQueueLast = last
 
-showCode :: Int -> Queue -> MachineState -> [String]
-showCode ns q s = case x_ of
+--runTillHalt st = flip evalState st . runErrorT $ do
+
+mkSteps :: MachineState -> (Halt, MachineState)
+mkSteps s = either (\x -> (x, s')) (const $ either (\x -> (x, s')) (const $ mkSteps s') b) a
+  where
+    (a, b, s') = mkStep s
+
+mkStep s = (x_, y, s') where
+    (x__, s_) = flip runState s $ runErrorT $ do
+        cc <- use $ config . counter
+        if maybe False (<=0) cc
+          then do
+            trace_ "timer now"            
+            config . counter .= Nothing
+            --setCounter
+            return $ Left $ Metadata {mdOffset = 0, mdLength = 2, mdHex = "cd08", mdBytes = "\205\b", mdAssembly = "int 0x8", mdInst = Inst [] Iint [Imm (Immediate {iSize = Bits8, iValue = 8})]}
+          else do
+            md <- fetchInstr
+            _ <- clearHist
+            config . counter %= fmap pred
+            return $ Right md
+
+    x_ = either id id <$> x__
+
+    (y, s'_) = flip runState s_ $ runErrorT $ do        
+        case x__ of
+          Left _ -> timerInt
+          Right _ -> do
+            snd $ execInstruction $ either (error . show) id $ x_
+        clearHist
+
+    s' = s'_ & config . stepsCounter %~ succ & config . verboseLevel %~ max (if s'_ ^. config . stepsCounter > s'_ ^. config . disassStart then 2 else 1)
+
+showCode :: Queue -> MachineState -> [String]
+showCode q s = case x_ of
     Left e -> showErr e
     Right x -> case s ^. config . verboseLevel of 
       1 -> 
-           ifff (intercalate "; " (reverse (s' ^. traceQ)))
+           ifff traces
         ++ [vid | ns `mod` ((s ^. config . instPerSec) `div` 25) == 0]
         ++ next
       2 -> 
         maybeToList (BSC.unpack <$> IM.lookup (s ^. ips) (s ^. labels))
          ++
-        (("  " ++ pad 14 (map toUpper $ mdHex x) ++ " "
-        ++ pad 27 (showInst s x) ++ "" ++ intercalate "; " (reverse (s' ^. traceQ))
-        ++ "  " ++ unwords (map shKey $ combineKey $ Set.toList $ s' ^. hist)): next
+        (("  " ++ pad 14 (map toUpper $ mdHex x)
+         ++ " "++ pad 27 (showInst s x) 
+         ++ "" ++ traces
+         ++ (if inOpcode (mdInst x) `elem` [Icall] then " " ++ intercalate "/" (map BSC.unpack . catMaybes . map (`IM.lookup` (s ^. labels)) $ s ^. config . stackTrace) else "")
+         ++ "  " ++ unwords (map shKey $ combineKey $ Set.toList hist_)): next
         )
  where
+    ns = s ^. config . stepsCounter
+
     vid = unsafePerformIO $ do
-        let gs = 0x30000 -- x ^. heap16 0x6 . ann . paragraph
+        let gs = 0xa0000 --0x30000 -- x ^. heap16 0x6 . ann . paragraph
             v = s ^. heap
         putMVar (s ^. config . videoMVar) $ \x y -> maybe 0 (^. ann) $ readByte_ v (gs + 320 * y + x)
         return $ show ns
 
+    (hist_, traces) = case y of
+        Left e -> (Set.empty, "lost history")
+        Right s -> s
+
     next = case y of
         Left e -> showErr e
-        Right () -> q' `seq` showCode (ns + 1) q' s'
+        Right _ -> q' `seq` showCode q' s'
     q' = addQueue s' q
 
     showErr e = case s ^. config . verboseLevel of
-      1 -> showCode (ns + 1) (initQueue s'') s''
+      1 -> showCode (initQueue s'') s''
       _ -> show e: []
      where
         s'' = getQueueLast q & config . verboseLevel .~ 2
 
-    x_ = either id id <$> x__
-
-    (x__, s_) = flip runState s $ runErrorT $ do
-        cc <- use $ config . counter
-        if maybe False (<=0) cc
-          then do
-            --config . counter .= Nothing
-            setCounter
-            return $ Left $ Metadata {mdOffset = 0, mdLength = 2, mdHex = "cd08", mdBytes = "\205\b", mdAssembly = "int 0x8", mdInst = Inst [] Iint [Imm (Immediate {iSize = Bits8, iValue = 8})]}
-          else do
-            config . counter %= fmap pred
-            Right <$> fetchInstr
-
-    s' = s'_ & config . verboseLevel %~ max (if ns >= s'_ ^. config . disassStart then 2 else 1)
-
-    (y, s'_) = flip runState s_ $ runErrorT $ do
-        clearHist
-        case x__ of
-          Left _ -> timerInt
-          Right _ -> snd $ execInstruction $ either (error . show) id $ x_
+    (x_, y, s') = mkStep s
 
     shKey k = case k of
-        Heap 1 i  -> diff (sh' 1) $ heap . byteAt i
-        Heap 2 i  -> diff (sh' 2) $ heap . wordAt i
+        Heap 1 i  -> diff (sh'' 1) $ heap . byteAt' i
+        Heap 2 i  -> diff (sh'' 2) $ heap . wordAt' i
         Heap n i  -> "[" ++ showHex' 5 i ++ "-" ++ showHex' 5 (i+n-1) ++ "]"
         Flag i    -> diff sf $ flags . bit i
         Flags     -> diff showFlags flags
         KReg 1 i  -> diff (sh'' 1) $ regs . byteAt' i
-        KReg 2 i  -> diff (sh 2) $ regs . wordAt i
+        KReg 2 i  -> diff (sh'' 2) $ regs . wordAt' i
         KReg 4 i  -> diff (sh 4) $ regs . dwordAt i
       where
         diff :: Eq a => (a -> String) -> Lens' MachineState a -> String
@@ -682,9 +729,6 @@ showCode ns q s = case x_ of
         sh :: (Show a, Integral a) => Int -> a -> String
         sh i v = show k ++ ":" ++ showHex' (2*i) v
 
-        sh' :: (Show a, Integral a) => Int -> a -> String
-        sh' i v = lok i (show k) ++ ":" ++ showHex' (2*i) v
-
         sh'' :: (Show a, Integral a) => Int -> Ann a -> String
         sh'' i v = lok i (show k) ++ ":" ++ showA (showHex' (2*i) <$> v)
 
@@ -695,8 +739,8 @@ showCode ns q s = case x_ of
         par False a = a
 
 sizeByte_ i@Inst{..}
-    | inOpcode `elem` [Icmpsb, Icbw, Imovsb, Istosb, Ilodsb, Iscasb] = 1
-    | inOpcode `elem` [Icmpsw, Icwd, Imovsw, Istosw, Ilodsw, Iscasw] = 2
+    | inOpcode `elem` [Icbw, Icmpsb, Imovsb, Istosb, Ilodsb, Iscasb] = 1
+    | inOpcode `elem` [Icwd, Icmpsw, Imovsw, Istosw, Ilodsw, Iscasw] = 2
     | inOpcode == Iout  = fromJust $ operandSize $ inOperands !! 1
     | otherwise = fromMaybe (error $ "size: " ++ show i) $ listToMaybe $ catMaybes $ map operandSize inOperands
 
@@ -782,14 +826,18 @@ fetchInstr :: Machine Metadata
 fetchInstr = do
     cs_ <- use cs
     case cs_ of
+
       0xffff -> do
         ip_ <- use ip
         return $ Metadata {mdOffset = 0, mdLength = 0, mdHex = "cdxx", mdBytes = BS.pack [fromIntegral ip_], mdAssembly = "int", mdInst = Inst [] Iint [Imm (Immediate {iSize = Bits8, iValue = fromIntegral ip_})]}
+
       _ -> do
         ips <- use ips
-        Just (md, _) <- disassembleOne disasmConfig . BS.pack . fromRom ips 20 <$> use heap
+        Just (md, _) <- disassembleOne disasmConfig . BS.pack . fromRom ips maxInstLength <$> use heap
         ip %= (+ fromIntegral (mdLength md))
         return md
+
+maxInstLength = 7
 
 disasmConfig = Config Intel Mode16 SyntaxIntel 0
 
@@ -815,7 +863,7 @@ cachedStep = do
 
 execInstruction :: Metadata -> (Bool, Machine ())
 execInstruction mdat@Metadata{mdInst = i@Inst{..}}
-  | mdLength mdat == 0 = (True, origInt $ head $ BS.unpack $ mdBytes mdat) 
+  | mdLength mdat == 0 = (True, origInterrupt $ head $ BS.unpack $ mdBytes mdat) 
   | otherwise = case filter nonSeg inPrefixes of
     [Rep, RepE]
         | inOpcode `elem` [Icmpsb, Icmpsw, Iscasb, Iscasw] -> (,) jump $ cycle $ use zeroF      -- repe
@@ -846,7 +894,8 @@ execInstruction mdat@Metadata{mdInst = i@Inst{..}}
 execInstructionBody :: Metadata -> (Bool, Machine ())
 execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
 
-    _ | inOpcode `elem` [Ijmp, Icall] -> jump $ case op1 of
+    _ | inOpcode `elem` [Ijmp, Icall] -> jump $ do
+      case op1 of
         Ptr (Pointer seg (Immediate Bits16 v)) -> do
             when (inOpcode == Icall) $ do
                 use cs' >>= push
@@ -864,14 +913,25 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
             when (inOpcode == Icall) $ do
                 use ip' >>= push
             move ip' op1'
+      when (inOpcode == Icall) $ do
+            x <- use ips
+            config . stackTrace %= (x :)
 
     _ | inOpcode `elem` [Iret, Iretf, Iiretw] -> jump $ do
+        when (inOpcode /= Iiretw) $ config . stackTrace %= tail
         when (inOpcode == Iiretw) $ trace_ "iret"
         pop >>= (ip' .=)
         when (inOpcode `elem` [Iretf, Iiretw]) $ pop >>= (cs' .=)
         when (inOpcode == Iiretw) $ pop >>= (flags .=) . (^. ann)
         when (length inOperands == 1) $ op1w >>= (sp %=) . (+) . (^. ann)
-
+--        x <- use ips
+{-
+      where
+        clearStack x [] = []
+        clearStack x (a:as)
+            | x == a -> as
+            | otherwise ->
+-}
     Iint  -> jump $ use (byteOperand segmentPrefix op1) >>= interrupt . (^. ann)
     Iinto -> jump $ do
         b <- use overflowF
@@ -879,23 +939,29 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
 
     Ihlt  -> jump $ throwError Halt
 
-    Ija   -> jump $ condJump =<< (&&) <$> (not <$> use carryF) <*> (not <$> use zeroF)
-    Ijae  -> jump $ condJump =<< not <$> use carryF
-    Ijb   -> jump $ condJump =<< use carryF
-    Ijbe  -> jump $ condJump =<< (||) <$> use carryF <*> use zeroF
-    Ijcxz -> jump $ condJump =<< (== 0) <$> use cx
-    Ijg   -> jump $ condJump =<< (&&) <$> ((==) <$> use signF <*> use overflowF) <*> (not <$> use zeroF)
-    Ijge  -> jump $ condJump =<< (==) <$> use signF <*> use overflowF
-    Ijl   -> jump $ condJump =<< (/=) <$> use signF <*> use overflowF
-    Ijle  -> jump $ condJump =<< (||) <$> ((/=) <$> use signF <*> use overflowF) <*> use zeroF
-    Ijno  -> jump $ condJump =<< not <$> use overflowF
+    Ijp   -> jump $ condJump =<< use parityF
     Ijnp  -> jump $ condJump =<< not <$> use parityF
-    Ijns  -> jump $ condJump =<< not <$> use signF
+    Ijz   -> jump $ condJump =<< use zeroF
     Ijnz  -> jump $ condJump =<< not <$> use zeroF
     Ijo   -> jump $ condJump =<< use overflowF
-    Ijp   -> jump $ condJump =<< use parityF
+    Ijno  -> jump $ condJump =<< not <$> use overflowF
     Ijs   -> jump $ condJump =<< use signF
-    Ijz   -> jump $ condJump =<< use zeroF
+    Ijns  -> jump $ condJump =<< not <$> use signF
+
+    Ijb   -> jump $ condJump =<< use carryF
+    Ijae  -> jump $ condJump =<< not <$> use carryF
+
+    Ijbe  -> jump $ condJump =<< (||) <$> use carryF <*> use zeroF
+    Ija   -> jump $ condJump =<< not <$> ((||) <$> use carryF <*> use zeroF)
+
+    Ijl   -> jump $ condJump =<< (/=) <$> use signF <*> use overflowF
+    Ijge  -> jump $ condJump =<< (==) <$> use signF <*> use overflowF
+
+    Ijle  -> jump $ condJump =<< (||) <$> ((/=) <$> use signF <*> use overflowF) <*> use zeroF
+    Ijg   -> jump $ condJump =<< not <$> ((||) <$> ((/=) <$> use signF <*> use overflowF) <*> use zeroF)
+
+    Ijcxz -> jump $ condJump =<< (== 0) <$> use cx
+
     Iloop   -> jump $ loop $ return True
     Iloope  -> jump $ loop $ use zeroF
     Iloopnz -> jump $ loop $ not <$> use zeroF
@@ -946,7 +1012,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
 
     far = " far " `isInfixOf` mdAssembly mdat
 
-    withSize :: forall a . (AsSigned a, AsSigned (X2 a), X2 (Signed a) ~ Signed (X2 a))
+    withSize :: forall a . (AsSigned a, Extend a, Extend (Signed a), AsSigned (X2 a), X2 (Signed a) ~ Signed (X2 a))
         => (Maybe Segment -> Operand -> MachinePart (Ann a))
         -> MachinePart (Ann a)
         -> MachinePart (Ann a)
@@ -955,15 +1021,15 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
     withSize tr_ alx ahd axd = case inOpcode of
         Imov  -> move (tr op1) (tr op2)
         Ixchg -> move (uComb (tr op1) (tr op2)) (uComb (tr op2) (tr op1))
-        Inot  -> move (tr op1) $ tr op1 . to (annMap "not" complement)      -- ann compl!
+        Inot  -> move (tr op1) $ tr op1 . to (annMap "not" complement)
 
         Isal  -> shiftOp $ \_ x -> (x ^. highBit, x `shiftL` 1)
         Ishl  -> shiftOp $ \_ x -> (x ^. highBit, x `shiftL` 1)
-        Ircl  -> shiftOp $ \c x -> (x ^. highBit, bit 0 .~ c $ x `shiftL` 1)
+        Ircl  -> shiftOp $ \c x -> (x ^. highBit, x `shiftL` 1 & bit 0 .~ c)
         Irol  -> shiftOp $ \_ x -> (x ^. highBit, x `rotateL` 1)
-        Isar  -> shiftOp $ \_ x -> (x ^. bit 0, fromIntegral $ asSigned x `shiftR` 1)
+        Isar  -> shiftOp $ \_ x -> (x ^. bit 0, asSigned x `shiftR` 1 & fromIntegral)
         Ishr  -> shiftOp $ \_ x -> (x ^. bit 0, x `shiftR` 1)
-        Ircr  -> shiftOp $ \c x -> (x ^. bit 0, highBit .~ c $ x `shiftR` 1)
+        Ircr  -> shiftOp $ \c x -> (x ^. bit 0, x `shiftR` 1 & highBit .~ c)
         Iror  -> shiftOp $ \_ x -> (x ^. bit 0, x `rotateR` 1)
 
         Iadd  -> twoOp True  (+)
@@ -988,7 +1054,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
         Imul  -> multiply id
         Iimul -> multiply asSigned
 
-        _ | inOpcode `elem` [Icwd, Icbw] -> move axd $ alx . to (annMap "ext" $ fromIntegral . asSigned)        -- ann ext!
+        _ | inOpcode `elem` [Icwd, Icbw] -> move axd $ alx . to (annMap "ext" $ fromIntegral . asSigned)
           | inOpcode `elem` [Istosb, Istosw] -> move di'' alx >> adjustIndex di
           | inOpcode `elem` [Ilodsb, Ilodsw] -> move alx si'' >> adjustIndex si
           | inOpcode `elem` [Imovsb, Imovsw] -> move di'' si'' >> adjustIndex si >> adjustIndex di
@@ -1027,12 +1093,12 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
                 ahd .= noAnn (fromIntegral m)
               Nothing -> throwError Halt
 
-        multiply :: (Integral c) => (a -> c) -> Machine ()
+        multiply :: forall c . (Extend c) => (a -> c) -> Machine ()
         multiply asSigned = do
-            x <- asSigned <$> use (alx . ann)
-            y <- asSigned . (^. ann) <$> op1v
-            let r = fromIntegral x * fromIntegral y :: Int
-                c = r == fromIntegral (x * y)
+            x <- extend . asSigned <$> use (alx . ann)
+            y <- extend . asSigned . (^. ann) <$> op1v
+            let r = x * y
+                c = r /= extend (fromIntegral r :: c)
             axd .= noAnn (fromIntegral r)
             carryF .= c
             overflowF .= c
@@ -1140,7 +1206,10 @@ output' v x = do
         0x41 -> do
             trace_ $ "timer chip 41 " ++ showHex' 2 x  -- ?
         0x43 -> do
-            trace_ $ "set timer channel to " ++ showHex' 2 x
+            trace_ $ "set timer control " ++ showHex' 2 x
+            case x of
+                0x36  -> trace_ "set timer frequency lsb+msb, square wave"
+                0xb6  -> trace_ "set speaker frequency lsb+msb, square wave"
         0x61 -> do
             config . speaker .= fromIntegral x
             trace_ $ "set internal speaker: " ++ showHex' 2 x
@@ -1150,17 +1219,57 @@ output' v x = do
 
 imMax m | IM.null m = 0
         | otherwise = succ . fst . IM.findMax $ m
-
+{-
 origInt v = case v of
     0x08 -> return ()
     _ -> throwError $ Err $ "origInt " ++ showHex' 2 v
+-}
+interrupt_, interrupt, origInterrupt :: Word8 -> Machine ()
+interrupt_ n = do
+    i <- use interruptF
+    if i then interrupt n
+         else trace_ $ "interrupt cancelled " ++ showHex' 2 n
 
-interrupt 0x00 = checkInt 0x00 $ throwError $ Err $ "int 00"
-interrupt 0x08 = checkInt 0x08 $ trace_ "int 08"
-interrupt 0x09 = checkInt 0x09 $ throwError $ Err $ "int 09"
-interrupt 0x24 = checkInt 0x24 $ throwError $ Err $ "int 24"
+origInterrupt = \case
 
-interrupt 0x10 = do
+  0x00 -> do
+    throwError $ Err $ "int 00"
+
+  0x09 -> do
+    throwError $ Err $ "int 09"
+
+  0x16 -> do
+    v <- use ah
+    case v of
+        0x00 -> do
+            trace_ "Read (Wait for) Next Keystroke"
+            ah' .= "Esc scan code" @: 0x39
+            al' .= "Esc ASCII code" @: 0x1b
+        0x01 -> do
+            trace_ "Query Keyboard Status / Preview Key"
+            zeroF .= False  -- no keys in buffer
+        v  -> throwError $ Err $ "interrupt #16,#" ++ showHex' 2 v
+
+  0x24 -> do
+    throwError $ Err $ "int 24"
+
+  v -> throwError $ Err $ "original interrupt #" ++ showHex' 2 v
+
+interrupt v = case v of
+
+  0x00 -> do
+    trace_ "divison by zero interrupt"
+    checkInt
+
+  0x08 -> do
+    trace_ "timer interrupt again"
+    checkInt
+
+  0x09 -> do
+    trace_ "keyboard interrupt again"
+    checkInt
+
+  0x10 -> do
     trace_ "Video Services"
     v <- use ah
     case v of
@@ -1194,7 +1303,7 @@ interrupt 0x10 = do
 
         v  -> throwError $ Err $ "interrupt #10,#" ++ showHex' 2 v
 
-interrupt 0x15 = do
+  0x15 -> do
     trace_ "Misc System Services"
     v <- use ah
     case v of
@@ -1209,25 +1318,15 @@ interrupt 0x15 = do
             carryF .= False
       v  -> throwError $ Err $ "interrupt #15,#" ++ showHex' 2 v
 
-interrupt 0x16 = do
-  checkInt 0x16 $ do
-    trace_ "Keyboard Services"
-    v <- use ah
-    case v of
-        0x00 -> do
-            trace_ "Read (Wait for) Next Keystroke"
-            ah' .= "Esc scan code" @: 0x39
-            al' .= "Esc ASCII code" @: 0x1b
-        0x01 -> do
-            trace_ "Query Keyboard Status / Preview Key"
-            zeroF .= False  -- no keys in buffer
-        v  -> throwError $ Err $ "interrupt #16,#" ++ showHex' 2 v
+  0x16 -> do
+   trace_ "Keyboard Services"
+   checkInt
 
-interrupt 0x20 = do
+  0x20 -> do
     trace_ "halt"
     throwError Halt
 
-interrupt 0x21 = do
+  0x21 -> do
     trace_ "DOS rutine"
     v <- use ah
     case v of
@@ -1328,11 +1427,11 @@ interrupt 0x21 = do
             fn <- (^. _1) . (IM.! handle) <$> use files
             mode <- use al
             pos <- fromIntegral . asSigned <$> use (uComb cx dx . combine)
-            trace_ $ "Set Position of " ++ showHex' 4 handle ++ ":" ++ fn ++ " to " ++ show mode ++ ":" ++ showHex' 8 pos
+            trace_ $ "Seek " ++ showHex' 4 handle ++ ":" ++ fn ++ " to " ++ show mode ++ ":" ++ showHex' 8 pos
             files %= (flip IM.adjust handle $ \(fn, s, p) -> case mode of
                 0 -> (fn, s, pos)
                 1 -> (fn, s, p + pos)
-                2 -> (fn, s, BS.length s - pos)
+                2 -> (fn, s, BS.length s + pos)
                 )
             pos' <- (^. _3) . (IM.! handle) <$> use files
             (uComb dx ax . combine) .= fromIntegral pos'
@@ -1419,7 +1518,11 @@ interrupt 0x21 = do
 
         _    -> throwError $ Err $ "dos function #" ++ showHex' 2 v
 
-interrupt 0x33 = do
+  0x24 -> do
+    trace_ "critical error handler interrupt"
+    checkInt
+
+  0x33 -> do
     trace_ "Mouse Services"
     v <- use ax
     case v of
@@ -1434,28 +1537,30 @@ interrupt 0x33 = do
             bx' .= "button status" @: 0
         _    -> throwError $ Err $ "#" ++ showHex' 2 v
 
-interrupt v = throwError $ Err $ "interrupt #" ++ showHex' 2 v
+  v -> throwError $ Err $ "interrupt #" ++ showHex' 2 v
+ where
+    checkInt :: Machine ()
+    checkInt = do
+
+        lo <- use $ heap16 (4*fromIntegral v)
+        hi <- use $ heap16 (4*fromIntegral v + 2)
+        case (hi ^. ann) of
+          0xffff -> origInterrupt $ fromIntegral (lo ^. ann)
+          _ -> do
+            trace_ $ "user interrupt " ++ showHex' 2 v
+            use flags >>= push . noAnn
+            use cs' >>= push
+            use ip' >>= push
+            interruptF .= False
+            cs' .= hi
+            ip' .= lo
+
+
 
 timerInt = do
     trace_ "timer"
     mask <- use intMask
-    ifl <- use interruptF
-    when (ifl && not (mask ^. bit 0)) $ checkInt 0x08 $ throwError $ Err $ "interrupt 8"
-
---checkInt :: 
-checkInt v m = do
-    lo <- use $ heap16 (4*fromIntegral v)
-    hi <- use $ heap16 (4*fromIntegral v + 2)
-    case (hi ^. ann, lo ^. ann) of
-      (0xffff, 0xffff) -> m
-      _ -> do
-        trace_ $ "user interrupt " ++ showHex' 2 v
-        use flags >>= push . noAnn
-        use cs' >>= push
-        use ip' >>= push
-        interruptF .= False
-        cs' .= hi
-        ip' .= lo
+    when (not (mask ^. bit 0)) $ interrupt_ 0x08
         
 
 ----------------------------------------------
@@ -1470,15 +1575,22 @@ instance PushVal Word16 where
 
 ----------------------------------------------
 
-prelude :: [Word8]
-prelude
+prelude1, prelude :: [Word8]
+prelude1
      = [error $ "interruptTable " ++ showHex' 2 (i `div` 4) | i <- [0..1023]]
     ++ replicate 172 (error "BIOS communication area")
     ++ replicate 68 (error "reserved by IBM")
     ++ replicate 16 (error "user communication area")
     ++ replicate 256 (error "DOS communication area")
-    ++ [0xcf,0,0,0]       -- iret
-    ++ [0  | i <- [0x604..0x800-1]]
+    ++ [error $ "dos area " ++ showHex' 2 i | i <- [0x600 ..0x700-1]]
+prelude
+     = prelude1
+    ++ origTimer
+    ++ [error $ "dos area " ++ showHex' 2 i | i <- [0x700 + length origTimer..0x800-1]]
+
+origTimer =
+    [0x50, 0xb0, 0x20, 0xe6, 0x20, 0x58, 0xcf]       -- push ax; mov al, 20h; out 20h, al; pop ax; iret
+    ++ replicate (maxInstLength - 1) 0  -- hack for fetchinstruction
 
 loadCom :: BS.ByteString -> MachineState
 loadCom com = flip execState emptyState $ do
@@ -1575,7 +1687,7 @@ loadExe labs loadSegment gameExe = flip execState emptyState $ do
                 , BS.unpack $ relocate relocationTable loadSegment $ BS.drop headerSize gameExe
                 , replicate (additionalMemoryAllocated ^. paragraph) (fromIntegral $ ord '?')
                 ])
-            (Zeros 0xa0000 0x10000)
+            (Zeros True 0xa0000 0x10000)
         )
     ss .= ssInit + loadSegment
     sp .= spInit
@@ -1595,7 +1707,7 @@ loadExe labs loadSegment gameExe = flip execState emptyState $ do
   where
     inter' i = do
         heap16 (4*i) .= "interrupt lo" @: 0
-        heap16 (4*i+2) .= "interrupt hi" @: 0x60
+        heap16 (4*i+2) .= "interrupt hi" @: (length prelude1 ^. from paragraph)
 
     inter i = do
         heap16 (4*i) .= "interrupt lo" @: fromIntegral i

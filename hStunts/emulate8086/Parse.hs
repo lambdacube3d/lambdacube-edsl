@@ -86,7 +86,7 @@ disasmConfig = Config Intel Mode16 SyntaxIntel 0
 
 getLabels_ = do
     s <- mapM BS.readFile [ "../restunts/src/restunts/asm/" ++ x
-                          | x <- ("structs.inc":) $ map (++ ".asm") $ (++["dseg"]) $ map (("seg0" ++) . reverse . take 2 . (++ "0") . reverse . show) [0..13]]
+                          | x <- ("structs.inc":) $ map (++ ".asm") $ (++["dseg"]) $ map (("seg0" ++) . reverse . take 2 . (++ "0") . reverse . show) ([0..39] ++ [41])]
     ss <- loadExe <$> BS.readFile "../original/game.exe"
     let lines = map remo $ concatMap BSC.lines s
     return $ align 5 0 ss $ getInfo $ map (\x -> (x, BS.length x /= 0 && BS.index x 0 == 0x20, BSC.words x)) lines
@@ -122,6 +122,7 @@ getInfo ((orig, tab, s): bs)
     (s:"group":_) -> cont
     (s:"segment":_) -> cont
     (s:"ends":[]) -> cont
+    (".stack":n:[]) -> (orig, Bytes $ read $ BSC.unpack n): cont
     [] -> cont
     x -> error $ show x
   | otherwise = case s of
