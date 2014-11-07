@@ -167,20 +167,20 @@ combineAnnot :: Iso' (Ann a, Ann a) (Ann (a, a))
 combineAnnot = iso f g
   where
     f (Ann a x, Ann b y) = Ann (combAnn a b) (x, y)
-    g (Ann a (x, y)) = (Ann (low a) x, Ann (high a) y)
+    g (Ann a (x, y)) = (Ann (high a) x, Ann (low a) y)
 
     low NoAnnot = NoAnnot
     low NotInit = NotInit
-    low (CombAnn a b) = a
+    low (CombAnn a b) = b
     low a = Low a
     high NoAnnot = NoAnnot
     high NotInit = NotInit
-    high (CombAnn a b) = b
+    high (CombAnn a b) = a
     high a = High a
     combAnn NotInit _ = NotInit
     combAnn _ NotInit = NotInit
     combAnn NoAnnot NoAnnot = NoAnnot
-    combAnn (Low a) (High a') | a == a' = a
+    combAnn (High a') (Low a) | a == a' = a
     combAnn a b = CombAnn a b
 
 clearAnn = iso (^. ann) $ Ann NoAnnot
@@ -1047,6 +1047,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
             c <- use carryF
             twoOp True $ \a b -> a - b - fromIntegral (fromEnum c)
         Ineg  -> twoOp_ True (flip (-)) (tr op1) (immLens $ noAnn 0)
+--        Inot  -> twoOp_ True (\a _ -> complement a) (tr op1) (immLens undefined)
         Idec  -> twoOp_ True (+) (tr op1) (immLens $ noAnn (-1))
         Iinc  -> twoOp_ True (+) (tr op1) (immLens $ noAnn 1)
 
