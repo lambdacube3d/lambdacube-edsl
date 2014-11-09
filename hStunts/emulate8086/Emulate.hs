@@ -976,7 +976,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
 
         Ipusha  -> sequence_ [use r >>= push | r <- [ax',cx',dx',bx',sp',bp',si',di']]
         Ipopa   -> sequence_ [pop >>= (r .=) | r <- [di',si',bp',xx,bx',dx',cx',ax']]
-        Ipushfw -> use flags'' >>= push . fmap ((.&. 0xefd7) . (.|. 0x0002))
+        Ipushfw -> use flags'' >>= push . fmap ((.&. 0x0fd7) . (.|. 0x0002))
         Ipopfw  -> pop >>= (flags .=) . (^. ann)
 
         Iclc  -> carryF     .= False
