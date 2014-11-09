@@ -1625,7 +1625,7 @@ loadTest com = flip execState emptyState $ do
     ss .= stackSegment
     sp .= 0
 
-    flags .= 0x0057
+    flags .= 0x0017
 
     clearHist
   where
