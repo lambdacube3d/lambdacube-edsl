@@ -547,8 +547,11 @@ nonSeg = \case
     Seg _ -> False
     x -> True
 
-showInst s Metadata{mdLength = len, mdInst = Inst{..}} = showPrefix (filter nonSeg inPrefixes)
-        .++ showOpcode inOpcode ++ " " ++ intercalate ", " (map showOp inOperands)
+showInst s Metadata{mdLength = len, mdInst = Inst{..}}
+        = showPrefix (filter nonSeg inPrefixes)
+        .++ (if inOpcode `elem` [Ixlatb] then segOverride else "")
+        .++ showOpcode inOpcode
+        .++ intercalate ", " (map showOp inOperands)
   where
     showOpcode op = tail $ show op
 
@@ -1093,7 +1096,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
               Just (d, m) -> do
                 alx .= noAnn (fromIntegral d)
                 ahd .= noAnn (fromIntegral m)
-              Nothing -> throwError Halt
+              Nothing -> throwError $ Err $ "divide by zero interrupt is not called (not implemented)"
 
         multiply :: forall c . (Extend c) => (a -> c) -> Machine ()
         multiply asSigned = do
@@ -1111,9 +1114,16 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
         shiftOp :: (forall b . (AsSigned b) => Bool -> b -> (Bool, b)) -> Machine ()
         shiftOp op = do
             a <- (^. ann) <$> op1v
-            n <- (`mod` (finiteBitSize a + 1)) . fromIntegral <$> use (byteOperand segmentPrefix op2 . ann)
+{-
+            let fm | inOpcode `elem` [Ircl, Ircr] = (`mod` (finiteBitSize a + 1))
+                   | inOpcode `elem` [Irol, Iror] = (`mod` finiteBitSize a)
+                   | otherwise = min (finiteBitSize a + 1)
+-}
+            let fm = id
+            n <- fm . (.&. 0x1f) . fromIntegral <$> use (byteOperand segmentPrefix op2 . ann)
             r <- case n of
               0 -> do
+--                when (
                 return a
               _ -> do
                 c <- use carryF
@@ -1122,16 +1132,19 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
                 carryF .= c'
                 overflowF .= (r ^. highBit /= r_ ^. highBit)
                 tr op1 .= noAnn r
+
+                when (inOpcode `elem` [Isal, Isar, Ishl, Ishr]) $ do
+                    zeroF     .= (r == 0)
+                    signF     .= r ^. highBit
+                    parityF   .= even (popCount (fromIntegral r :: Word8))
+                -- ???
+                when (inOpcode `elem` [Ircl, Ircr, Irol, Iror]) $ do
+                    zeroF     .= False --(r == 0)
+                    signF     .= False --r ^. highBit
+                    parityF   .= False --even (popCount (fromIntegral r :: Word8))
+
                 return r
-            when (inOpcode `elem` [Isal, Isar, Ishl, Ishr]) $ do
-                zeroF     .= (r == 0)
-                signF     .= r ^. highBit
-                parityF   .= even (popCount (fromIntegral r :: Word8))
-            -- ???
-            when (inOpcode `elem` [Ircl, Ircr, Irol, Iror]) $ do
-                zeroF     .= False --(r == 0)
-                signF     .= False --r ^. highBit
-                parityF   .= False --even (popCount (fromIntegral r :: Word8))
+            return ()
 
         twoOp :: Bool -> (forall b . (Integral b, FiniteBits b) => b -> b -> b) -> Machine ()
         twoOp store op = twoOp_ store op (tr op1) (tr op2)
@@ -1626,6 +1639,7 @@ loadTest com = flip execState emptyState $ do
     sp .= 0
 
     flags .= 0x0017
+    carryF .= False
 
     clearHist
   where

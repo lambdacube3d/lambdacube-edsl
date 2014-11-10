@@ -36,7 +36,7 @@ testCases =
   , "jump1"
 --  , "jump2"
   , "mul"
-  , "rep"
+--  , "rep"
   , "rotate"
   , "segpr"
   , "shifts"
@@ -57,7 +57,7 @@ testThis n = do
       let v = x ^. heap
 --          r = BS.pack [v ^. byteAt i | i <- [0xe0000..0xeffff]]
 --          out = BS.take (BS.length res) r
-      print [(i, a, b) | (i, a) <- zip [0..] (BS.unpack res), let b = v ^. byteAt' (i + 0), not $ similar a b]
+      putStrLn $ unwords [showHex' 4 i ++ ":" ++ showHex' 2 a ++ "/" ++ showA (showHex' 2 <$> b) | (i, a) <- zip [0..] (BS.unpack res), let b = v ^. byteAt' (i + 0), not $ similar a b]
 --      BS.writeFile (resName ++ ".out") out
     (h,_) -> putStrLn $ "Error " ++ show h
 
