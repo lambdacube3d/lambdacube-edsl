@@ -32,17 +32,19 @@ testCases =
 --  , "datatrnf"
   , "div"
   , "interrupt"
---  , "jmpmov"
+  , "jmpmov"
   , "jump1"
---  , "jump2"
+  , "jump2"
   , "mul"
 --  , "rep"
   , "rotate"
   , "segpr"
   , "shifts"
-  , "strings"
+--  , "strings"
   , "sub"
   ]
+
+testHelp n = unsafePerformIO $ loadTest <$> BS.readFile ("tests/" ++ n ++ ".bin")
 
 -- http://orbides.1gb.ru/80186_tests.zip
 testTest = forM_ testCases $ testThis
@@ -50,15 +52,14 @@ testTest = forM_ testCases $ testThis
 testThis n = do
   putStr $ "Test " ++ n ++ ": "
   m <- mkSteps . loadTest <$> BS.readFile ("tests/" ++ n ++ ".bin")
-  let resName = "tests/res_" ++ n ++ ".bin"
-  res <- BS.readFile resName
   case m of
     (Halt,x) -> do
+      res <- case n of
+          "jmpmov" -> return $ BS.pack [0x01, 0x40]
+          _ -> BS.readFile $ "tests/res_" ++ n ++ ".bin"
       let v = x ^. heap
---          r = BS.pack [v ^. byteAt i | i <- [0xe0000..0xeffff]]
---          out = BS.take (BS.length res) r
       putStrLn $ unwords [showHex' 4 i ++ ":" ++ showHex' 2 a ++ "/" ++ showA (showHex' 2 <$> b) | (i, a) <- zip [0..] (BS.unpack res), let b = v ^. byteAt' (i + 0), not $ similar a b]
---      BS.writeFile (resName ++ ".out") out
+      when (n == "jmpmov" && x ^. ips /= 0xf400d) $ putStrLn $ "jmpmov failed " ++ showHex' 5 (x ^. ips)
     (h,_) -> putStrLn $ "Error " ++ show h
 
 --similar a (Ann (High (Annot "flags")) b) = (a .&. 0x0f) == (b .&. 0x0f)

@@ -655,7 +655,7 @@ mkStep s = (x_, y, s') where
           else do
             md <- fetchInstr
             _ <- clearHist
-            config . counter %= fmap pred
+            config . counter %= fmap (+(-1)) --pred
             return $ Right md
 
     x_ = either id id <$> x__
@@ -746,6 +746,7 @@ sizeByte_ i@Inst{..}
     | inOpcode `elem` [Icbw, Icmpsb, Imovsb, Istosb, Ilodsb, Iscasb] = 1
     | inOpcode `elem` [Icwd, Icmpsw, Imovsw, Istosw, Ilodsw, Iscasw] = 2
     | inOpcode == Iout  = fromJust $ operandSize $ inOperands !! 1
+    | inOpcode == Ilahf  = error "lahf not implemented"
     | otherwise = fromMaybe (error $ "size: " ++ show i) $ listToMaybe $ catMaybes $ map operandSize inOperands
 
 operandSize = \case
@@ -1169,7 +1170,7 @@ execInstructionBody mdat@Metadata{mdInst = i@Inst{..}} = case inOpcode of
     move a b = use b >>= (a .=)
 
     loop cond = do
-        cx %= pred
+        cx %= (+(-1)) --pred
         condJump =<< (&&) <$> ((/= 0) <$> use cx) <*> cond
 
     condJump b = when b $ op1w >>= (ip' .=)
@@ -1238,6 +1239,8 @@ output' v x = do
         0x61 -> do
             config . speaker .= fromIntegral x
             trace_ $ "set internal speaker: " ++ showHex' 2 x
+        0xf100 -> do
+            trace_ "implemented for jmpmov test"
         _ -> throwError $ Err $ "output #" ++ showHex' 4 v ++ " 0x" ++ showHex' 4 x
 
 --------------------------------------------------------
