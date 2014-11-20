@@ -110,7 +110,7 @@ mutual
     FrameBuffer   : {n : ℕ} → Vec ImageType n → ℕ → LCType NonAddable OS
     UnitT         : LCType NonAddable IS
     _×_           : ∀ {i₁ i₂ s₁ s₂} → LCType i₁ s₁  → LCType i₂ s₂ → LCType NonAddable (maxS s₁ s₂)
-    RasterContext   : Primitive → ℕ → LCType NonAddable OS
+    RasterContext   : Primitive → LCType NonAddable OS
     AccumulationContext : ∀ {n} → Vec ImageType n → LCType NonAddable OS
     VertexStream    : ∀ {i} → Primitive → LCType i IS → LCType NonAddable OS
     PrimitiveStream : ∀ {i} → Primitive → ℕ → LCType i IS → LCType NonAddable OS
@@ -123,14 +123,14 @@ mutual
   natFloatBool BoolT = true
   natFloatBool _     = false
 
+trIT : ImageType → LCType Addable IS
+trIT Stenciled = Int B32 UnSigned
+trIT Depthed   = Float
+trIT Colored   = VecT D4 Float
+
 trITs : ∀ {n} → Vec ImageType n → LCType NonAddable IS
 trITs [] = UnitT
-trITs (i ∷ is) = f i × trITs is
-  where
-    f : ImageType → LCType Addable IS
-    f Stenciled = Int B32 UnSigned
-    f Depthed   = Float
-    f Colored   = VecT D4 Float
+trITs (i ∷ is) = trIT i × trITs is
 
 Name : Set
 Name = ⊤
@@ -143,19 +143,29 @@ inputType IBool = BoolT
 -}
 infixr 2 _⋆_➡_
 
-data _⋆_➡_ : ∀ {i₁ i₂} → Freq → LCType i₁ IS → LCType i₂ IS → Set where
+mutual
+  data _⋆_➡_ : ∀ {i₁ i₂} → Freq → LCType i₁ IS → LCType i₂ IS → Set where
     addV      : ∀ {f} {a : LCType Addable IS} → f ⋆ a × a ➡ a
     dot3      : ∀ {f d} → f ⋆ VecT d Float × VecT d Float ➡ Float
     cross     : ∀ {f} → f ⋆ VecT D3 Float × VecT D3 Float ➡ VecT D3 Float
+    mulMatVec : ∀ {f n m} → f ⋆ Mat n m Float × VecT m Float ➡ VecT n Float
+    mulMatMat : ∀ {f n m k} → f ⋆ Mat n m Float × Mat m k Float ➡ Mat n k Float
+    mulVecMat : ∀ {f n m} → f ⋆ VecT n Float × Mat n m Float ➡ VecT m Float
     transpose : ∀ {f d₁ d₂ i} {v : LCType i IS} {ok : T (natFloatBool v)} → f ⋆ Mat d₁ d₂ v {ok} ➡ Mat d₂ d₁ v {ok}
     fWith     : ∀ {d} → F ⋆ VecT d Float ➡ VecT d Float   -- TODO: skalárra is
+    id        : ∀ {f i} {a : LCType i IS} → f ⋆ a ➡ a
+    const     : ∀ {f i₁ i₂} {b : LCType i₂ IS} {a : LCType i₁ IS} → f ⋆ a → f ⋆ b ➡ a
 
-data _⋆_ : ∀ {i s} → Freq → LCType i s → Set where
+  data _⋆_ : ∀ {i s} → Freq → LCType i s → Set where
+    unit          : C ⋆ UnitT
     int           : ∀ {b s} → C ⋆ Int b s
     float         : C ⋆ Float
+    vecV          : ∀ {d} → C ⋆ Float → C ⋆ VecT d Float
     sampler       : ∀ f {ok : T (cObj f)} → f ⋆ Sampler
     textureFilter : ∀ f {ok : T (cObj f)} → f ⋆ TextureFilter
     _,_           : ∀ {f₁ f₂ i₁ i₂ s₁ s₂} {a : LCType i₁ s₁} {b : LCType i₂ s₂} → f₁ ⋆ a → f₂ ⋆ b → maxFreq f₁ f₂ ⋆ a × b
+    fst           : ∀ {f i₁ i₂ s₁ s₂} {a : LCType i₁ s₁} {b : LCType i₂ s₂} → f ⋆ a × b → f ⋆ a
+    snd           : ∀ {f i₁ i₂ s₁ s₂} {a : LCType i₁ s₁} {b : LCType i₂ s₂} → f ⋆ a × b → f ⋆ b
     image         : ∀ {lc} f {ok : T (cObj f)} (i : ImageType) → f ⋆ Image i lc
 
     []            : ∀ {lc} → C ⋆ FrameBuffer [] lc
@@ -165,20 +175,27 @@ data _⋆_ : ∀ {i s} → Freq → LCType i s → Set where
       → {eq' : T (icomp i₁ vt)}
       → maxFreq f₁ f₂ ⋆ FrameBuffer (i₁ ∷ vt) lc
 
-    input : ∀ {i} → Name → {t : LCType i IS} → Obj ⋆ t
+    input : ∀ {i s} → Name → {t : LCType i s} → Obj ⋆ t
 
-    fetch : ∀ {p i} {a : LCType i IS} → Obj ⋆ FetchPrimitive p → Obj ⋆ Array a → Obj ⋆ VertexStream p a
+    fetch : ∀ {p i f} {ok : T (cObj f)} {a : LCType i IS} → f ⋆ FetchPrimitive p → Obj ⋆ Array a → Obj ⋆ VertexStream p a
 
     transform : ∀ {p i} {a b : LCType i IS} → V ⋆ a ➡ b → Obj ⋆ VertexStream p a → Obj ⋆ PrimitiveStream p 1 b
 
-    rasterize : ∀ {p lc i} {a : LCType i IS} → Obj ⋆ RasterContext p lc → Obj ⋆ PrimitiveStream p lc a → Obj ⋆ FragmentStream lc a
+    rasterize : ∀ {p lc i} {a : LCType i IS} → Obj ⋆ RasterContext p → Obj ⋆ PrimitiveStream p lc a → Obj ⋆ FragmentStream lc a
 
-    accumulate : ∀ {n i lc} {v : Vec ImageType n} {a : LCType i IS}
+    accumulate : ∀ {n i lc f} {v : Vec ImageType n} {a : LCType i IS}
                → Obj ⋆ AccumulationContext v
-               → F ⋆ a ➡ trITs v
+               → f ⋆ a ➡ trITs v    -- TODO:  f is C or F
                → Obj ⋆ FragmentStream lc a
                → Obj ⋆ FrameBuffer v lc
                → Obj ⋆ FrameBuffer v lc
+
+    accumulateContext : ∀ {n} {v : Vec ImageType n} → Obj ⋆ AccumulationContext v
+
+    rasterContext : ∀ {p} → Obj ⋆ RasterContext p
+
+    fetchPrimitive : ∀ p → C ⋆ FetchPrimitive p
+
 {-
 add : ∀ {f₁ f₂ s} {a : LCType Addable s} → f₁ ⋆ a → f₂ ⋆ a → maxFreq f₁ f₂ ⋆ a
 add int   int   = int
@@ -196,3 +213,12 @@ example = image Obj Stenciled
 
 ex : Obj ⋆ BoolT × Int B16 Signed
 ex = input tt
+
+screenQuad : Obj ⋆ FrameBuffer (Colored ∷ []) 1
+screenQuad = accumulate accumulateContext fragmentShader (rasterize rasterContext (transform vertexShader (fetch (fetchPrimitive Triangle) (input tt)))) (image Obj Colored ∷ [])
+  where
+    vertexShader : V ⋆ VecT D2 Float ➡ VecT D2 Float
+    vertexShader = id
+
+    fragmentShader : C ⋆ VecT D2 Float ➡ VecT D4 Float × UnitT
+    fragmentShader = const (vecV float , unit)
