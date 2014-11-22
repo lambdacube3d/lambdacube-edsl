@@ -18,7 +18,8 @@
   The map name can be given as an argument of the q3demo executable.
     
     Install:
-        cd q3demo
+        git clone https://github.com/csabahruska/quake3
+        cd quake3
         cabal install
 
     Example usage:
@@ -32,7 +33,8 @@
   In order to make the stunts demo work, you need to download the original game as per the instructions given by the program.
     
     Install:
-        cd hStunts
+        git clone https://github.com/csabahruska/stunts
+        cd stunts
         cabal install
 
     Usage:
