@@ -29,7 +29,7 @@ import Geometry
 import Utility
 import Blur
 import Glow
-import OldFilm
+--import OldFilm
 
 
 screenQuad :: Exp Obj (FrameBuffer 1 (V4F,V4F))
@@ -97,9 +97,9 @@ n_time = "time"
 main :: IO ()
 main = do
     let lcnet :: Exp Obj (Image 1 V4F)
-        --lcnet = dummy512 $ fxBlur blur glowImg
+        lcnet = dummy512 $ fxBlur blur glowImg
         --lcnet = fxOldFilm oldFilm { ofTimeLapse = Uni (IFloat n_time) } sceneImg -- $ fxGlow glow sceneImg glowImg
-        lcnet = fxBlur blur $ sceneImg
+        --lcnet = fxBlur blur $ sceneImg
         glowImg = dummy512 $ PrjFrameBuffer "" tix0 screenQuad
         sceneImg = PrjFrameBuffer "" tix1 screenQuad
 

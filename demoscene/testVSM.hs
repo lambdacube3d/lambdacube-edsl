@@ -18,7 +18,7 @@ import LambdaCube.GL
 import Graphics.Rendering.OpenGL.Raw.Core32
 import LambdaCube.GL.Mesh
 
-import qualified Criterion.Measurement as C
+--import qualified Criterion.Measurement as C
 
 import VSM
 
@@ -124,8 +124,7 @@ main = do
 
     windowSize <- initCommon "LC DSL Texture Demo"
 
-    (t,renderer) <- C.time $ compileRenderer $ ScreenOut lcnet
-    putStrLn $ C.secs t ++ " - compile renderer"
+    renderer <- compileRenderer $ ScreenOut lcnet
     print $ slotUniform renderer
     print $ slotStream renderer
     print "renderer created"
@@ -136,15 +135,11 @@ main = do
     compiledQuad <- compileMesh quad
     addMesh renderer "postSlot" compiledQuad []
 
-    (t,mesh) <- C.time $ loadMesh "models/Monkey.lcmesh"
-    putStrLn $ C.secs t ++ " - loadMesh Monkey.lcmesh"
-    (t,mesh2) <- C.time $ loadMesh "models/Scene.lcmesh"
-    putStrLn $ C.secs t ++ " - loadMesh Scene.lcmesh"
+    mesh <- loadMesh "models/Monkey.lcmesh"
+    mesh2 <- loadMesh "models/Scene.lcmesh"
 
-    (t,obj) <- C.time $ addMesh renderer "streamSlot" mesh []
-    putStrLn $ C.secs t ++ " - addMesh Monkey.lcmesh"
-    (t,obj2) <- C.time $ addMesh renderer "streamSlot" mesh2 []
-    putStrLn $ C.secs t ++ " - addMesh Scene.lcmesh"
+    obj <- addMesh renderer "streamSlot" mesh []
+    obj2 <- addMesh renderer "streamSlot" mesh2 []
 
 --    addMesh renderer "streamSlot1" mesh []
 --    addMesh renderer "streamSlot1" mesh2 []
@@ -181,7 +176,7 @@ main = do
     let objU  = objectUniformSetter obj
         slotU = uniformSetter renderer
         draw _ = do
-            (t,_) <- C.time $ render renderer >> swapBuffers
+            render renderer >> swapBuffers
             --putStrLn $ C.secs t ++ " - render frame"
             return ()
         diffuse = uniformFTexture2D "ScreenQuad" slotU
@@ -270,7 +265,7 @@ scene setSize slotU objU windowSize mousePosition fblrPress = do
                 cm = fromProjective (lookat cam (cam + dir) up)
                 pm = perspective 0.1 50 (pi/2) (fromIntegral w / fromIntegral h)
                 lpm = perspective 0.1 100 (pi/(1.3 + 0.2 * sin (2.7 * time))) (fromIntegral w / fromIntegral h)
-            (t,_) <- C.time $ do
+            do
                 timeSetter time
                 scaleU $! 1 --512 / fromIntegral w
                 scaleV $! 1 --512 / fromIntegral h
@@ -317,7 +312,7 @@ driveNetwork network driver = do
     dt <- driver
     case dt of
         Just dt -> do
-            (t,_) <- C.time $ join $ network dt
+            join $ network dt
             --putStrLn $ C.secs t ++ " - FRP loop"
             --putStrLn ""
             driveNetwork network driver
@@ -371,7 +366,7 @@ updateFPS state t1 = do
     f <- readIORef fR
     let seconds = (t + t0') / 1000
         fps = fromIntegral f / seconds
-    putStrLn (show (round fps) ++ " FPS - " ++ show f ++ " frames in " ++ C.secs seconds)
+    putStrLn (show (round fps) ++ " FPS - " ++ show f ++ " frames in ")
     writeIORef tR 0
     writeIORef fR 0
 
