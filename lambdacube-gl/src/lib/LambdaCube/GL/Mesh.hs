@@ -3,6 +3,7 @@ module LambdaCube.GL.Mesh (
     saveMesh,
     addMesh,
     compileMesh,
+    updateMesh,
     Mesh(..),
     MeshPrimitive(..),
     MeshAttribute(..)
@@ -99,6 +100,47 @@ meshAttrToStream b i (A_M33F  v) = Stream TM33F b i 0 (V.length v)
 meshAttrToStream b i (A_M44F  v) = Stream TM44F b i 0 (V.length v)
 meshAttrToStream b i (A_Int   v) = Stream TInt b i 0 (V.length v)
 meshAttrToStream b i (A_Word  v) = Stream TWord b i 0 (V.length v)
+
+{-
+updateBuffer :: Buffer -> [(Int,Array)] -> IO ()
+
+    | Stream 
+        { streamType    :: StreamType
+        , streamBuffer  :: b
+        , streamArrIdx  :: Int
+        , streamStart   :: Int
+        , streamLength  :: Int
+        }
+
+-- stream of index values (for index buffer)
+data IndexStream b
+    = IndexStream
+    { indexBuffer   :: b
+    , indexArrIdx   :: Int
+    , indexStart    :: Int
+    , indexLength   :: Int
+    }
+-}
+updateMesh :: Mesh -> [(ByteString,MeshAttribute)] -> Maybe MeshPrimitive -> IO ()
+updateMesh (Mesh dMA dMP (Just (GPUData _ dS dI))) al mp = do
+  -- check type match
+  let arrayChk (Array t1 s1 _) (Array t2 s2 _) = t1 == t2 && s1 == s2
+      ok = and [T.member n dMA && arrayChk (meshAttrToArray a1) (meshAttrToArray a2) | (n,a1) <- al, let Just a2 = T.lookup n dMA]
+  if not ok then putStrLn "updateMesh: attribute mismatch!"
+    else do
+      forM_ al $ \(n,a) -> do
+        case T.lookup n dS of
+          Just (Stream _ b i _ _) -> updateBuffer b [(i,meshAttrToArray a)]
+          _ -> return ()
+{-
+      case mp of
+        Nothing -> return ()
+        Just p -> do
+          let ok2 = case (dMP,p) of
+                (Just (P_TriangleStripI v1, P_TriangleStripI v2) -> V.length v1 == V.length v2
+                (P_TrianglesI v1, P_TrianglesI v2) -> V.length v1 == V.length v2
+                (a,b) -> a == b
+-}
 
 compileMesh :: Mesh -> IO Mesh
 compileMesh (Mesh attrs mPrim Nothing) = do
