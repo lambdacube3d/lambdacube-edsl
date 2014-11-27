@@ -155,7 +155,7 @@ compileRenderer l = do
     GL.compileRenderer dag' root
 
 nullSetter :: ByteString -> String -> a -> IO ()
-nullSetter n t _ = Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t
+nullSetter n t _ = return () -- Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t
 
 uniformBool  :: ByteString -> Trie InputSetter -> SetterFun Bool
 uniformV2B   :: ByteString -> Trie InputSetter -> SetterFun V2B
