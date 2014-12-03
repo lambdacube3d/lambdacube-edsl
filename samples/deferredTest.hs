@@ -19,9 +19,7 @@ import LambdaCube.GL.Mesh
 import Graphics.Rendering.OpenGL.Raw.Core32
 import Codec.Image.STB hiding (Image)
 
---import qualified Criterion.Measurement as C
 
-import VSM
 {-
 simpleTexturing :: Exp Obj (FrameBuffer 1 (Float,V4F))
 simpleTexturing = Accumulate fragCtx PassAll frag rast clear
@@ -113,6 +111,24 @@ deferredGeometry = Accumulate fragCtx PassAll frag rast clear
         (p,n,t) = untup3 pnt
         V2 u v  = unpack' t
 
+floatV :: Float -> Exp V Float
+floatV = Const
+
+v3F :: V3F -> Exp F V3F
+v3F = Const
+
+v4F :: V4F -> Exp F V4F
+v4F = Const
+
+snoc v n = pack' (V4 x y z (Const n))
+  where 
+    V3 x y z = unpack' v
+
+drop4 :: Exp s V4F -> Exp s V3F
+drop4 v = pack' (V3 x y z)
+  where
+    V4 x y z _ = unpack' v
+
 prj1 a = drop4 $ worldView @*. snoc a 1
 prj0 a = drop4 $ worldView @*. snoc a 0
 
@@ -180,10 +196,9 @@ main :: IO ()
 main = do
     let lcnet = deferredLighting
 
-    windowSize <- initCommon "LC DSL TextureSlot Demo"
+    (win,windowSize) <- initCommon "LC Deferred Shading Demo"
 
     renderer <- compileRenderer $ ScreenOut lcnet
-    --putStrLn $ C.secs t ++ " - compile renderer"
     print $ slotUniform renderer
     print $ slotStream renderer
     print "renderer created"
@@ -195,22 +210,17 @@ main = do
     addMesh renderer "Quad" compiledQuad []
 
     mesh <- loadMesh "Monkey.lcmesh"
-    --putStrLn $ C.secs t ++ " - loadMesh Monkey.lcmesh"
     mesh2 <- loadMesh "Scene.lcmesh"
-    --putStrLn $ C.secs t ++ " - loadMesh Scene.lcmesh"
 
     obj <- addMesh renderer "scene" mesh []
-    --putStrLn $ C.secs t ++ " - addMesh Monkey.lcmesh"
     obj2 <- addMesh renderer "scene" mesh2 []
-    --putStrLn $ C.secs t ++ " - addMesh Scene.lcmesh"
 
     let objU  = objectUniformSetter obj
         slotU = uniformSetter renderer
         diffuse = uniformFTexture2D "diffuse" slotU
         normal  = uniformFTexture2D "normal" slotU
         draw _ = do
-            render renderer >> swapBuffers
-            --putStrLn $ C.secs t ++ " - render frame"
+            render renderer >> swapBuffers win >> pollEvents
             return ()
     Right img <- loadImage "Panels_Diffuse.png"
     diffuse =<< compileTexture2DRGBAF True False img
@@ -222,11 +232,12 @@ main = do
     sc <- start $ do
         u <- scene (setScreenSize renderer) slotU objU windowSize mousePosition fblrPress
         return $ draw <$> u
-    driveNetwork sc (readInput s mousePositionSink fblrPressSink)
+    driveNetwork sc (readInput win s mousePositionSink fblrPressSink)
 
     dispose renderer
     print "renderer destroyed"
-    closeWindow
+    destroyWindow win
+    terminate
 
 scene :: (Word -> Word -> IO ())
       -> T.Trie InputSetter
@@ -258,21 +269,23 @@ vec4ToV4F (Vec4 x y z w) = V4 x y z w
 mat4ToM44F :: Mat4 -> M44F
 mat4ToM44F (Mat4 a b c d) = V4 (vec4ToV4F a) (vec4ToV4F b) (vec4ToV4F c) (vec4ToV4F d)
 
-readInput :: State
+{-readInput :: State
           -> ((Float, Float) -> IO a)
           -> ((Bool, Bool, Bool, Bool, Bool) -> IO c)
           -> IO (Maybe Float)
-readInput s mousePos fblrPress = do
-    t <- getTime
-    resetTime
+-}
+readInput win s mousePos fblrPress = do
+    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
+    Just t <- getTime
+    setTime 0
 
-    (x,y) <- getMousePosition
-    mousePos (fromIntegral x,fromIntegral y)
+    (x,y) <- getCursorPos win
+    mousePos (realToFrac x,realToFrac y)
 
-    fblrPress =<< ((,,,,) <$> keyIsPressed KeyLeft <*> keyIsPressed KeyUp <*> keyIsPressed KeyDown <*> keyIsPressed KeyRight <*> keyIsPressed KeyRightShift)
+    fblrPress =<< ((,,,,) <$> keyIsPressed Key'Left <*> keyIsPressed Key'Up <*> keyIsPressed Key'Down <*> keyIsPressed Key'Right <*> keyIsPressed Key'RightShift)
 
     updateFPS s t
-    k <- keyIsPressed KeyEsc
+    k <- keyIsPressed Key'Escape
     return $ if k then Nothing else Just (realToFrac t)
 
 -- FRP boilerplate
@@ -282,38 +295,31 @@ driveNetwork network driver = do
     case dt of
         Just dt -> do
             join $ network dt
-            --putStrLn $ C.secs t ++ " - FRP loop"
-            --putStrLn ""
             driveNetwork network driver
         Nothing -> return ()
 
 -- OpenGL/GLFW boilerplate
 
-initCommon :: String -> IO (Signal (Int, Int))
+initCommon :: String -> IO (Window,Signal (Int, Int))
 initCommon title = do
-    initialize
-    openWindow defaultDisplayOptions
-        { displayOptions_numRedBits         = 8
-        , displayOptions_numGreenBits       = 8
-        , displayOptions_numBlueBits        = 8
-        , displayOptions_numAlphaBits       = 8
-        , displayOptions_numDepthBits       = 24
-        , displayOptions_width              = 800
-        , displayOptions_height             = 600
-        , displayOptions_windowIsResizable  = True
-        , displayOptions_openGLVersion      = (3,2)
-        , displayOptions_openGLProfile      = CoreProfile
---        , displayOptions_displayMode    = Fullscreen
-        }
-    setWindowTitle title
+    GLFW.init
+    GLFW.defaultWindowHints
+    mapM_ windowHint
+      [ WindowHint'ContextVersionMajor 3
+      , WindowHint'ContextVersionMinor 3
+      , WindowHint'OpenGLProfile OpenGLProfile'Core
+      , WindowHint'OpenGLForwardCompat True
+      ]
+    Just win <- GLFW.createWindow 1024 768 title Nothing Nothing
+    makeContextCurrent $ Just win
 
-    (windowSize,windowSizeSink) <- external (0,0)
-    setWindowSizeCallback $ \w h -> do
+    (windowSize,windowSizeSink) <- external (1024,768)
+    setWindowSizeCallback win $ Just $ \_ w h -> do
         glViewport 0 0 (fromIntegral w) (fromIntegral h)
         putStrLn $ "window size changed " ++ show (w,h)
         windowSizeSink (fromIntegral w, fromIntegral h)
 
-    return windowSize
+    return (win,windowSize)
 
 -- FPS tracking
 
@@ -334,7 +340,6 @@ updateFPS state t1 = do
     f <- readIORef fR
     let seconds = (t + t0') / 1000
         fps = fromIntegral f / seconds
-    --putStrLn (show (round fps) ++ " FPS - " ++ show f ++ " frames in " ++ C.secs seconds)
     writeIORef tR 0
     writeIORef fR 0
 
