@@ -145,14 +145,16 @@ smp t = Sampler LinearFilter ClampToEdge t
 
 main :: IO ()
 main = do
-    initialize
-    openWindow defaultDisplayOptions
-        { displayOptions_width              = 1024
-        , displayOptions_height             = 768
-        , displayOptions_openGLVersion      = (3,2)
-        , displayOptions_openGLProfile      = CoreProfile
-        }
-    setWindowTitle "LambdaCube 3D Textured Cube"
+    GLFW.init
+    defaultWindowHints
+    mapM_ windowHint
+      [ WindowHint'ContextVersionMajor 3
+      , WindowHint'ContextVersionMinor 3
+      , WindowHint'OpenGLProfile OpenGLProfile'Core
+      , WindowHint'OpenGLForwardCompat True
+      ]
+    Just win <- createWindow 1024 768 "LambdaCube 3D Textured Cube" Nothing Nothing
+    makeContextCurrent $ Just win
 
     let frameImage :: Exp Obj (Image 1 V4F)
         frameImage = PrjFrameBuffer "" tix0 $ texturing $ Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV")
@@ -171,22 +173,24 @@ main = do
     gpuCube <- compileMesh cube
     addMesh renderer "stream" gpuCube []
 
-    let cm  = fromProjective (lookat (Vec3 4 3 3) (Vec3 0 0 0) (Vec3 0 1 0))
+    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
+        cm  = fromProjective (lookat (Vec3 4 3 3) (Vec3 0 0 0) (Vec3 0 1 0))
         pm  = perspective 0.1 100 (pi/4) (1024 / 768)
         loop = do
-            t <- getTime
+            Just t <- getTime
             let angle = pi / 2 * realToFrac t
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
             mvp $! mat4ToM44F $! mm .*. cm .*. pm
             render renderer
-            swapBuffers
+            swapBuffers win >> pollEvents
 
-            k <- keyIsPressed KeyEsc
+            k <- keyIsPressed Key'Escape
             unless k $ loop
     loop
 
     dispose renderer
-    closeWindow
+    destroyWindow win
+    terminate
 
 vec4ToV4F :: Vec4 -> V4F
 vec4ToV4F (Vec4 x y z w) = V4 x y z w

@@ -39,7 +39,8 @@ main = do
     let pipeline :: Exp Obj (Image 1 V4F)
         pipeline = PrjFrameBuffer "outFB" tix0 finalImage
 
-    initWindow "LambdaCube 3D Convolution Filter Demo" windowWidth windowHeight
+    (win,_) <- initWindow "LambdaCube 3D Convolution Filter Demo" windowWidth windowHeight
+    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
 
     (duration, renderer) <- measureDuration $ compileRenderer (ScreenOut pipeline)
     putStrLn $ "Renderer compiled - " ++ show duration
@@ -68,14 +69,14 @@ main = do
 
     startTime <- getCurrentTime
     flip fix (0, startTime) $ \loop (frameCount, lastTime) -> do
-        input <- readInput
+        input <- readInput keyIsPressed
         case input of
             Nothing -> return ()
             Just dt -> do
-                (w, h) <- getWindowDimensions
+                (w, h) <- getWindowSize win
                 setScreenSize renderer (fromIntegral w) (fromIntegral h)
                 render renderer
-                swapBuffers
+                swapBuffers win >> pollEvents
                 currentTime <- getCurrentTime
                 let elapsedTime = realToFrac (diffUTCTime currentTime lastTime) :: Float
                     next = case elapsedTime > 5.0 of 
@@ -90,14 +91,15 @@ main = do
     dispose renderer
     putStrLn "Renderer destroyed."
 
-    closeWindow
+    destroyWindow win
+    terminate
 
-readInput :: IO (Maybe Float)
-readInput = do
-    t <- getTime
-    resetTime
+--readInput :: IO (Maybe Float)
+readInput keyIsPressed = do
+    Just t <- getTime
+    setTime 0
 
-    k <- keyIsPressed KeyEsc
+    k <- keyIsPressed Key'Escape
     return $ if k then Nothing else Just (realToFrac t)
 
 -- the threshold and offsetWeight optimisations can be commented out independently

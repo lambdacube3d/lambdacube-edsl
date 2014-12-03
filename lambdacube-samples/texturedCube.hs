@@ -189,14 +189,15 @@ main = do
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
             mvp $! mat4ToM44F $! mm .*. cm .*. pm
             render renderer
-            swapBuffers
+            swapBuffers win >> pollEvents
 
             k <- keyIsPressed KeyEsc
             unless k $ loop
     loop
 
     dispose renderer
-    closeWindow
+    destroyWindow win
+    terminate
 
 vec4ToV4F :: Vec4 -> V4F
 vec4ToV4F (Vec4 x y z w) = V4 x y z w

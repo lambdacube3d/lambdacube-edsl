@@ -201,7 +201,7 @@ main = do
             mvp $! mat4ToM44F $! mm .*. cm .*. pm
             render renderer
             render renderer2
-            swapBuffers
+            swapBuffers win >> pollEvents
 
             k <- keyIsPressed KeyEsc
             unless k $ loop
@@ -209,7 +209,8 @@ main = do
 
     dispose renderer2
     dispose renderer
-    closeWindow
+    destroyWindow win
+    terminate
 
 vec4ToV4F :: Vec4 -> V4F
 vec4ToV4F (Vec4 x y z w) = V4 x y z w

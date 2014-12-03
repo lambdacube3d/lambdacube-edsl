@@ -38,7 +38,8 @@ main = do
     let pipeline :: Exp Obj (Image 1 V4F)
         pipeline = PrjFrameBuffer "outFB" tix0 sceneRender
 
-    windowSize <- initWindow "LambdaCube 3D Cube Map Demo" 1280 720
+    (win,windowSize) <- initWindow "LambdaCube 3D Cube Map Demo" 1280 720
+    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
 
     (duration, renderer) <- measureDuration $ compileRenderer (ScreenOut pipeline)
     putStrLn $ "Renderer compiled - " ++ show duration
@@ -75,23 +76,24 @@ main = do
         draw command = do
             render renderer
             command
-            swapBuffers
+            swapBuffers win >> pollEvents
 
     sceneSignal <- start $ do
-        thread <- scene (setScreenSize renderer) sceneSlots objectSlots windowSize
+        thread <- scene win keyIsPressed (setScreenSize renderer) sceneSlots objectSlots windowSize
         return $ draw <$> thread
-    driveNetwork sceneSignal readInput
+    driveNetwork sceneSignal $ readInput keyIsPressed
 
     dispose renderer
     putStrLn "Renderer destroyed."
 
-    closeWindow
+    destroyWindow win
+    terminate
 
-scene setSize sceneSlots (reflectorSlot:planeSlot:cubeSlots) windowSize = do
-    pause <- toggle =<< risingEdge =<< effectful (keyIsPressed (CharKey 'P'))
+scene win keyIsPressed setSize sceneSlots (reflectorSlot:planeSlot:cubeSlots) windowSize = do
+    pause <- toggle =<< risingEdge =<< effectful (keyIsPressed (Key'P))
     time <- transfer 0 (\dt paused time -> time + if paused then 0 else dt) pause 
     
-    capture <- toggle =<< risingEdge =<< effectful (keyIsPressed (CharKey 'C'))
+    capture <- toggle =<< risingEdge =<< effectful (keyIsPressed (Key'C))
     frameCount <- stateful (0 :: Int) (const (+1))
     
     fpsTracking <- stateful (0, 0, Nothing) $ \dt (time, count, _) -> 
@@ -102,14 +104,14 @@ scene setSize sceneSlots (reflectorSlot:planeSlot:cubeSlots) windowSize = do
            else (time', count + 1, Nothing)
 
     mousePosition <- effectful $ do
-        (x, y) <- getMousePosition
-        return $ Vec2 (fromIntegral x) (fromIntegral y)
+        (x, y) <- getCursorPos win
+        return $ Vec2 (realToFrac x) (realToFrac y)
     directionControl <- effectful $ (,,,,)
-                 <$> keyIsPressed KeyLeft
-                 <*> keyIsPressed KeyUp
-                 <*> keyIsPressed KeyDown
-                 <*> keyIsPressed KeyRight
-                 <*> keyIsPressed KeyRightShift
+                 <$> keyIsPressed Key'Left
+                 <*> keyIsPressed Key'Up
+                 <*> keyIsPressed Key'Down
+                 <*> keyIsPressed Key'Right
+                 <*> keyIsPressed Key'RightShift
     
     mousePosition' <- delay zero mousePosition
     camera <- userCamera (Vec3 (-4) 0 10) (mousePosition - mousePosition') directionControl
@@ -171,12 +173,12 @@ scene setSize sceneSlots (reflectorSlot:planeSlot:cubeSlots) windowSize = do
     
     effectful4 setupRendering ((,,) <$> fpsTracking <*> frameCount <*> capture) windowSize camera time
 
-readInput :: IO (Maybe Float)
-readInput = do
-    t <- getTime
-    resetTime
+--readInput :: IO (Maybe Float)
+readInput keyIsPressed = do
+    Just t <- getTime
+    setTime 0
 
-    k <- keyIsPressed KeyEsc
+    k <- keyIsPressed Key'Escape
     return $ if k then Nothing else Just (realToFrac t)
 
 sceneRender :: Exp Obj (FrameBuffer 1 (Float, V4F))

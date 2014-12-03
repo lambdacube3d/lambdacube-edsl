@@ -422,7 +422,8 @@ main = do
     dispose renderer
     putStrLn "Renderer destroyed."
 
-    closeWindow
+    destroyWindow win
+    terminate
 
 updateScene :: Renderer -> ([(String, Proj4)] -> IO ()) -> (Float -> IO Int) -> [(String, BtRigidBody)] -> Vec2 -> Maybe Vec3 -> Proj4 -> IO ()
 updateScene renderer updateTransforms stepPhysics ragdollBodies (Vec2 w h) hitPosition brickTrans = do
@@ -446,7 +447,7 @@ updateScene renderer updateTransforms stepPhysics ragdollBodies (Vec2 w h) hitPo
     stepPhysics (realToFrac dt)
     
     render renderer
-    swapBuffers
+    swapBuffers win >> pollEvents
 
 -- Picking
 
