@@ -20,7 +20,7 @@ finMax zero b = b
 finMax (suc a) zero = suc a
 finMax (suc a) (suc b) = suc (finMax a b)
 
-finMax-comm : {n : ℕ} (f₁ f₂ : Fin n) → finMax f₁ f₂ ≡ finMax f₂ f₁
+finMax-comm : ∀ {n} (f₁ f₂ : Fin n) → finMax f₁ f₂ ≡ finMax f₂ f₁
 finMax-comm zero zero = refl
 finMax-comm zero (suc b) = refl
 finMax-comm (suc a) zero = refl
