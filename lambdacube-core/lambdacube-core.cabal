@@ -1,6 +1,6 @@
 Name:           lambdacube-core
 Version:        0.2.0
-Cabal-Version:  >= 1.6 && < 2
+Cabal-Version:  >= 1.10
 Build-Type:     Simple
 License:        BSD3
 License-File:   LICENSE
@@ -15,7 +15,7 @@ Synopsis:       LambdaCube 3D IR
 
 Library
   Build-Depends:
-        base >=4.6,
+        base >=4.6 && <5,
         containers >=0.5 && <0.6,
         mtl >=2.2 && <2.3,
         bytestring >=0.10 && <0.11,
@@ -48,7 +48,7 @@ Library
 --        -auto-all
 --        -caf-all
 
-  Extensions:
+  default-extensions:
         DeriveDataTypeable
         BangPatterns
         TypeSynonymInstances

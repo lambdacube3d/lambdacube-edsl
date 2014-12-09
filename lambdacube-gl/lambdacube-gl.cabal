@@ -1,6 +1,6 @@
 Name:           lambdacube-gl
 Version:        0.2.0
-Cabal-Version:  >= 1.6 && < 2
+Cabal-Version:  >= 1.10
 Build-Type:     Simple
 License:        BSD3
 License-File:   LICENSE
@@ -30,17 +30,17 @@ Library
   default-language:  Haskell2010
   hs-source-dirs:    src/lib
   Build-Depends: 
-        base,
-        binary,
-        bytestring,
-        containers,
-        mtl,
-        vector,
+        base >=4.6 && <5,
+        binary >=0.7 && <0.8,
+        bytestring >=0.10 && <0.11,
+        containers >=0.5 && <0.6,
+        mtl >=2.2 && <2.3,
+        vector >=0.10 && <0.11,
         prettyclass >=1.0 && <1.1,
 
-        bytestring-trie,
-        OpenGLRaw,
-        bitmap,
+        bytestring-trie >=0.2 && <0.3,
+        OpenGLRaw >=1.5 && <1.6,
+        bitmap >= 0.0.2 && <0.0.3,
         language-glsl >=0.1 && <0.2,
 
         lambdacube-core == 0.2.0,
@@ -73,7 +73,7 @@ Library
 --        -auto-all
 --        -caf-all
 
-  Extensions:
+  default-extensions:
         DataKinds
         DeriveDataTypeable
         OverloadedStrings
