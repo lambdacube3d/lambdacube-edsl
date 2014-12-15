@@ -112,8 +112,8 @@ freeVars _ = mempty
 
 bindVar :: TName -> Ty -> Unique Subst
 bindVar n t
-  | n `Set.member` freeVars t = throwError $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
   | TVar n == t = return mempty
+  | n `Set.member` freeVars t = throwError $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
   | otherwise = return $ Map.singleton n t
 
 compose :: Subst -> Subst -> Subst
@@ -161,11 +161,11 @@ ok =
   , ELam "x" $ EApp (EVar "x") (ELit LBool)
   , ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")
   , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LBool)))
+  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LFloat)))
   ]
 err =
   [ ELam "x" $ EApp (EVar "x") (EVar "x")
   , EApp (ELit LInt) (ELit LInt)
-  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LFloat)))
   ]
 
 test = do

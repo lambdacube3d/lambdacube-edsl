@@ -27,6 +27,7 @@ data Exp
   | EApp Exp Exp
   | ELam EName Exp
   | ELet EName Exp Exp
+  | EFix EName Exp
   deriving (Show,Eq,Ord)
 
 infixr 7 :->
@@ -39,9 +40,11 @@ data Ty
   | TFloat
   deriving (Show,Eq,Ord)
 
+data Scheme = Scheme (Set TName) Ty
+
 type EName = String
 type TName = String
-type Env = Map EName Ty
+type Env = Map EName Scheme
 type Subst = Map TName Ty
 
 inferPrimFun :: PrimFun -> Ty
@@ -65,7 +68,25 @@ newVar = do
   return $ TVar $ 't':show n
 
 applyEnv :: Env -> Subst -> Env
-applyEnv e s = fmap (flip apply s) e
+applyEnv e s = fmap (flip applyScheme s) e
+
+applyScheme :: Scheme -> Subst -> Scheme
+applyScheme (Scheme vars t) s = Scheme vars (apply t (Map.filterWithKey (\k _ -> Set.notMember k vars) s))
+
+freeVarsScheme :: Scheme -> Set TName
+freeVarsScheme (Scheme vars t) = freeVars t `Set.difference` vars
+
+freeVarsEnv :: Env -> Set TName
+freeVarsEnv env = Set.unions . Map.elems . fmap freeVarsScheme $ env
+
+generalize :: Env -> Ty -> Scheme
+generalize env t = Scheme (freeVars t `Set.difference` freeVarsEnv env) t
+
+instantiate :: Scheme -> Unique Ty
+instantiate (Scheme vars t) = do
+  let l = Set.toList vars
+  s <- mapM (\_ -> newVar) l
+  return $ apply t $ Map.fromList $ zip l s
 
 apply :: Ty -> Subst -> Ty
 apply (TVar a) st = case Map.lookup a st of
@@ -102,11 +123,14 @@ compose a b = mappend a $ (flip apply) a <$> b
 remove :: EName -> Env -> Env
 remove n e = Map.delete n e
 
+infer :: Env -> Exp -> Unique (Subst,Ty)
 infer env (EPrimFun f) = return (mempty,inferPrimFun f)
 infer env (ELit l) = return (mempty,inferLit l)
 infer env (EVar n) = case Map.lookup n env of
   Nothing -> throwError $ "unbounded variable: " ++ n
-  Just t  -> return (mempty,t)
+  Just t  -> do
+    t' <- instantiate t
+    return (mempty,t')
 infer env (EApp f a) = do
   (s1,t1) <- infer env f
   (s2,t2) <- infer env a
@@ -115,13 +139,18 @@ infer env (EApp f a) = do
   return (s1 `compose` s2 `compose` s3, apply tv s3)
 infer env (ELam n e) = do
   tv <- newVar
-  (s1,tbody) <- infer (Map.insert n tv env) e
+  (s1,tbody) <- infer (Map.insert n (Scheme mempty tv) env) e
   return (s1,(apply tv s1) :-> tbody)
 infer env (ELet n e1 e2) = do
   (s1,t1) <- infer env e1
-  let env' = applyEnv (Map.insert n t1 env) s1
+  let env' = applyEnv (Map.insert n (generalize env t1) env) s1
   (s2,t2) <- infer env' e2
   return (s1 `compose` s2,t2)
+infer env (EFix n e) = do
+  tv <- newVar
+  (s1,t1) <- infer (Map.insert n (Scheme mempty tv) env) e
+  s2 <- unify t1 $ apply tv s1
+  return (s1 `compose` s2,apply t1 s2)
 
 inference :: Exp -> Either String Ty
 inference e = runIdentity $ runExceptT $ (flip evalStateT) 0 act
@@ -138,11 +167,13 @@ ok =
   , ELam "x" $ EApp (EVar "x") (ELit LBool)
   , ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")
   , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LBool)))
+  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LFloat)))
+  , EFix "f" $ ELam "x" $ EApp (EVar "f") $ ELit LFloat
   ]
 err =
   [ ELam "x" $ EApp (EVar "x") (EVar "x")
   , EApp (ELit LInt) (ELit LInt)
-  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LFloat)))
+  , EFix "f" $ ELam "x" $ EApp (EVar "f") $ EVar "f"
   ]
 
 test = do
