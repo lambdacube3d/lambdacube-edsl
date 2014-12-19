@@ -146,7 +146,7 @@ infer env (ELet n e1 e2) = do
   let env' = applyEnv (Map.insert n (generalize env t1) env) s1
   (s2,t2) <- infer env' e2
   return (s1 `compose` s2,t2)
-infer env (EFix n e) = do
+infer env (EFix n e) = do -- Does this support polymorphic recursion?
   tv <- newVar
   (s1,t1) <- infer (Map.insert n (Scheme mempty tv) env) e
   s2 <- unify t1 $ apply tv s1
