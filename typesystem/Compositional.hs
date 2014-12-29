@@ -7,6 +7,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Monoid
 import Data.Functor
+import qualified Data.Traversable as T
+import qualified Data.Foldable as F
 
 data Lit
   = LInt
@@ -79,27 +81,63 @@ applyTy _ t = t
 applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
 
--- TODO
+freeVarsTy :: Ty -> Set TName
+freeVarsTy (TVar a) = Set.singleton a
+freeVarsTy (a :-> b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy _ = mempty
+
+freeVarsMonoEnv :: MonoEnv -> Set TName
+freeVarsMonoEnv m = F.foldMap freeVarsTy m
+
+-- union mono envs matching on intersection
 joinMonoEnv :: MonoEnv -> MonoEnv -> Unique MonoEnv
-joinMonoEnv = undefined
+joinMonoEnv a b = do
+  let merge k ml mr = do
+        l <- ml
+        r <- mr
+        if l == r then ml else throwError $ k ++ " mismatch " ++ show l ++ " with " ++ show r
+  T.sequence $ Map.unionWithKey merge (fmap return a) (fmap return b)
 
 instTyping :: Typing -> Unique Typing
-instTyping = undefined
+instTyping (m,t) = do
+  let fv = freeVarsTy t `mappend` freeVarsMonoEnv m
+  newVars <- replicateM (Set.size fv) newVar
+  let s = Map.fromList $ zip (Set.toList fv) newVars
+  return (applyMonoEnv s m,applyTy s t)
 
-unify :: [MonoEnv] -> [(Ty,Ty)] -> Unique Subst
-unify = undefined
-{-
-unify (TVar u) t = bindVar u t
-unify t (TVar u) = bindVar u t
-unify (a1 :-> b1) (a2 :-> b2) = do
-  s1 <- unify a1 a2
-  s2 <- unify (apply b1 s1) (apply b2 s1)
+bindVar :: TName -> Ty -> Unique Subst
+bindVar n t
+  | TVar n == t = return mempty
+  | n `Set.member` freeVarsTy t = throwError $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
+  | otherwise = return $ Map.singleton n t
+
+compose :: Subst -> Subst -> Subst
+compose a b = mappend a $ applyTy a <$> b
+
+unifyTy :: Ty -> Ty -> Unique Subst
+unifyTy (TVar u) t = bindVar u t
+unifyTy t (TVar u) = bindVar u t
+unifyTy (a1 :-> b1) (a2 :-> b2) = do
+  s1 <- unifyTy a1 a2
+  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
   return $ s1 `compose` s2
-unify a b
+unifyTy a b
   | a == b = return mempty
   | otherwise = throwError $ "can not unify " ++ show a ++ " with " ++ show b
--}
--- END TODO
+
+unify :: [MonoEnv] -> [(Ty,Ty)] -> Unique Subst
+unify ml tl = do
+  s1 <- foldM (\s (a,b) -> unifyTy (applyTy s a) (applyTy s b)) mempty tl
+  let ks = Set.unions $ map Map.keysSet ml
+  vars <- T.sequence $ Map.fromSet (const newVar) ks
+  let uni s (k,v) = do
+        let vars' = applyMonoEnv s vars
+        a <- case Map.lookup k vars' of
+          Nothing -> throwError $ "internal error - unknown key: " ++ k
+          Just t  -> return t
+        s' <- unifyTy a v
+        return $ s `compose` s'
+  foldM uni s1 $ concatMap Map.toList ml
 
 infer :: PolyEnv -> Exp -> Unique Typing
 infer penv (ELit l) = return (mempty,inferLit l)
