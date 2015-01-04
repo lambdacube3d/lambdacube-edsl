@@ -24,11 +24,11 @@ data PrimFun
 
 data Exp
   = ELit Lit
---  | EPrimFun PrimFun
+  | EPrimFun PrimFun
   | EVar EName
   | EApp Exp Exp
   | ELam EName Exp
---  | ELet EName Exp Exp
+  | ELet EName Exp Exp
 --  | EFix EName Exp
   deriving (Show,Eq,Ord)
 
@@ -141,6 +141,7 @@ unify ml tl = do
 
 infer :: PolyEnv -> Exp -> Unique Typing
 infer penv (ELit l) = return (mempty,inferLit l)
+infer penv (EPrimFun f) = return (mempty,inferPrimFun f)
 infer penv (EVar n) = case Map.lookup n penv of
   Nothing -> do
     t <- newVar
@@ -160,24 +161,37 @@ infer penv (EApp f a) = do
   s <- unify [m1,m2] [(t1,t2 :-> a)]
   m3 <- joinMonoEnv (applyMonoEnv s m1) (applyMonoEnv s m2)
   return (m3,applyTy s a)
+infer penv (ELet n x e) = do
+  (m1,t1) <- infer penv x
+  a <- newVar
+  s0 <- unify [m1] [(t1,a)] -- TODO
+  let m0 = Map.delete n $ applyMonoEnv s0 m1
+      penv' = Map.insert n (m0,applyTy s0 a) penv
+  (m',t') <- infer penv' e
+  s <- unify [m0,m'] []
+  m <- joinMonoEnv (applyMonoEnv s m') (applyMonoEnv s m0)
+  return (m,applyTy s t')
 
 inference :: Exp -> Either String Ty
 inference e = case scopeChk e of
-  Just m  -> Left m
-  Nothing -> runIdentity $ runExceptT $ (flip evalStateT) 0 act
+  Left m  -> Left m
+  Right () -> runIdentity $ runExceptT $ (flip evalStateT) 0 act
    where
     act = do
       (m,t) <- infer mempty e
       return t
 
 -- scope checking
-scopeCheck :: Set EName -> Exp -> Maybe String
-scopeCheck vars (EVar n) = if Set.member n vars then Nothing else Just $ "Variable " ++ n ++ " is not in scope."
+scopeCheck :: Set EName -> Exp -> Either String ()
+scopeCheck vars (EVar n) = if Set.member n vars then return () else throwError $ "Variable " ++ n ++ " is not in scope."
 scopeCheck vars (EApp f a) = scopeCheck vars f >> scopeCheck vars a
-scopeCheck vars (ELam n f) = if Set.notMember n vars then scopeCheck (Set.insert n vars) f else Just $ "Variable name clash: " ++ n
-scopeCheck vars _ = Nothing
+scopeCheck vars (ELam n f) = if Set.notMember n vars then scopeCheck (Set.insert n vars) f else throwError $ "Variable name clash: " ++ n
+scopeCheck vars (ELet n x e) = do
+  let vars' = Set.insert n vars
+  if Set.notMember n vars then scopeCheck vars' x >> scopeCheck vars' e else throwError $ "Variable name clash: " ++ n
+scopeCheck vars _ = return ()
 
-scopeChk :: Exp -> Maybe String
+scopeChk :: Exp -> Either String ()
 scopeChk e = scopeCheck mempty e
 
 -- test
@@ -186,14 +200,17 @@ ok =
   , ELam "x" $ EVar "x"
   , ELam "x" $ ELam "y" $ ELit LFloat
   , ELam "x" $ EApp (EVar "x") (ELit LBool)
---  , ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")
---  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LBool)))
---  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LFloat)))
+  , ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")
+  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LBool)))
+  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LFloat)))
+  , ELet "f" (ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")) (EVar "f")
 --  , EFix "f" $ ELam "x" $ EApp (EVar "f") $ ELit LFloat
   ]
 err =
   [ ELam "x" $ EApp (EVar "x") (EVar "x")
   , EApp (ELit LInt) (ELit LInt)
+  , ELet "f" (ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")) (EApp (EVar "f") (ELit LBool))
+  , ELet "f1" (ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")) (EVar "f")
 --  , EFix "f" $ ELam "x" $ EApp (EVar "f") $ EVar "f"
   ]
 
@@ -202,4 +219,3 @@ test = do
   mapM_ (\e -> print e >> (print . inference $ e)) ok
   putStrLn "Error:"
   mapM_ (\e -> print e >> (print . inference $ e)) err
-
