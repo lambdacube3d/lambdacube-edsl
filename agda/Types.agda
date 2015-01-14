@@ -53,14 +53,14 @@ cObj Obj = true
 cObj _   = false
 
 data ImageType : Set where
-    Stenciled : ImageType
-    Depthed   : ImageType
-    Colored   : ImageType
+    Stencil : ImageType
+    Depth   : ImageType
+    Color   : ImageType
 
 icomp : ∀ {n} → ImageType → Vec ImageType n → Bool
 icomp b         []            = true
-icomp b         (Colored ∷ _) = true
-icomp Stenciled (Depthed ∷ _) = true
+icomp b         (Color ∷ _) = true
+icomp Stencil (Depth ∷ _) = true
 icomp _         _             = false
 
 data Primitive : Set where
@@ -124,9 +124,9 @@ mutual
   natFloatBool _     = false
 
 trIT : ImageType → LCType Addable IS
-trIT Stenciled = Int B32 UnSigned
-trIT Depthed   = Float
-trIT Colored   = VecT D4 Float
+trIT Stencil = Int B32 UnSigned
+trIT Depth   = Float
+trIT Color   = VecT D4 Float
 
 trITs : ∀ {n} → Vec ImageType n → LCType NonAddable IS
 trITs [] = UnitT
@@ -134,13 +134,7 @@ trITs (i ∷ is) = trIT i × trITs is
 
 Name : Set
 Name = ⊤
-{-
-data InputType : Set where
-    IBool : InputType
 
-inputType : InputType → LCType NonAddable IS
-inputType IBool = BoolT
--}
 infixr 2 _⋆_➡_
 
 mutual
@@ -196,26 +190,20 @@ mutual
 
     fetchPrimitive : ∀ p → C ⋆ FetchPrimitive p
 
-{-
-add : ∀ {f₁ f₂ s} {a : LCType Addable s} → f₁ ⋆ a → f₂ ⋆ a → maxFreq f₁ f₂ ⋆ a
-add int   int   = int
-add float float = float
+----------------------------------------------------
 
-swap⋆ : ∀ {i₁ i₂ s₁ s₂ f} {a : LCType i₁ s₁} {b : LCType i₂ s₂} → f ⋆ a × b → f ⋆ b × a
-swap⋆ (_,_ {f₁} {f₂} a₁ a₂) rewrite maxFreq-comm f₁ f₂ = (a₂ , a₁)
--}
-example : _ ⋆ FrameBuffer _ 3
-example = image Obj Stenciled
-        ∷ image Obj Depthed
-        ∷ image C   Colored
-        ∷ image Obj Colored
+example : Obj ⋆ FrameBuffer _ 3
+example = image Obj Stencil
+        ∷ image Obj Depth
+        ∷ image C   Color
+        ∷ image Obj Color
         ∷ []
 
 ex : Obj ⋆ BoolT × Int B16 Signed
 ex = input tt
 
-screenQuad : Obj ⋆ FrameBuffer (Colored ∷ []) 1
-screenQuad = accumulate accumulateContext fragmentShader (rasterize rasterContext (transform vertexShader (fetch (fetchPrimitive Triangle) (input tt)))) (image Obj Colored ∷ [])
+screenQuad : Obj ⋆ FrameBuffer (Color ∷ []) 1
+screenQuad = accumulate accumulateContext fragmentShader (rasterize rasterContext (transform vertexShader (fetch (fetchPrimitive Triangle) (input tt)))) (image Obj Color ∷ [])
   where
     vertexShader : V ⋆ VecT D2 Float ➡ VecT D2 Float
     vertexShader = id
