@@ -1,6 +1,6 @@
 Name:           lambdacube-gl
-Version:        0.1.0
-Cabal-Version:  >= 1.6 && < 2
+Version:        0.2.0
+Cabal-Version:  >= 1.10
 Build-Type:     Simple
 License:        BSD3
 License-File:   LICENSE
@@ -10,28 +10,41 @@ Stability:      experimental
 Homepage:       http://www.haskell.org/haskellwiki/LambdaCubeEngine
 Bug-Reports:    https://github.com/csabahruska/lc-dsl/issues
 Category:       Graphics
-Tested-With:    GHC == 7.8.2
-Synopsis:       OpenGL backend for LambdaCube graphics language
+Tested-With:    GHC == 7.8.3
+Synopsis:       OpenGL backend for LambdaCube graphics language (main package)
+Description:
+    LambdaCube 3D is a domain specific language and library that makes
+    it possible to program GPUs in a purely functional style.
+    Programming with LambdaCube constitutes of composing a data-flow
+    description, which is compiled into a specialised library. The
+    language provides a uniform way to define shaders and compositor
+    chains by treating both streams and framebuffers as first-class
+    values.
+    .
+    As a user of the library you only need to import the "LambdaCube.GL" and
+    "LambdaCube.GL.Mesh" modules. You should check out the pointers at <http://lambdacube3d.wordpress.com/getting-started/>
+    to understand the principle behind the library, and also have a good look
+    at the @lambdacube-samples@ package.
 
 Library
   default-language:  Haskell2010
   hs-source-dirs:    src/lib
   Build-Depends: 
-        base,
-        binary,
-        bytestring,
-        containers,
-        mtl,
-        vector,
+        base >=4.7 && <5,
+        binary >=0.7 && <0.8,
+        bytestring >=0.10 && <0.11,
+        containers >=0.5 && <0.6,
+        mtl >=2.2 && <2.3,
+        vector >=0.10 && <0.11,
         prettyclass >=1.0 && <1.1,
 
-        bytestring-trie,
-        OpenGLRaw,
-        bitmap,
+        bytestring-trie >=0.2 && <0.3,
+        OpenGLRaw >=1.5 && <1.6,
+        bitmap >= 0.0.2 && <0.0.3,
         language-glsl >=0.1 && <0.2,
 
-        lambdacube-core == 0.1.0,
-        lambdacube-edsl == 0.1.0
+        lambdacube-core == 0.2.0,
+        lambdacube-edsl == 0.2.0
 
   Exposed-modules:
         LambdaCube.GL
@@ -60,7 +73,7 @@ Library
 --        -auto-all
 --        -caf-all
 
-  Extensions:
+  default-extensions:
         DataKinds
         DeriveDataTypeable
         OverloadedStrings
