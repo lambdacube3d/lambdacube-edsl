@@ -1,3 +1,5 @@
+module Compositional where
+
 import Data.Functor.Identity
 import Control.Monad.Except
 import Control.Monad.State
@@ -12,13 +14,13 @@ import qualified Data.Foldable as F
 
 data Lit
   = LInt
-  | LBool
+  | LChar
   | LFloat
   deriving (Show,Eq,Ord)
 
 data PrimFun
   = PAddI
-  | PAnd
+  | PUpper
   | PMulF
   deriving (Show,Eq,Ord)
 
@@ -38,7 +40,7 @@ data Ty
   | Ty :-> Ty
   -- primitive types
   | TInt
-  | TBool
+  | TChar
   | TFloat
   deriving (Show,Eq,Ord)
 
@@ -54,13 +56,13 @@ type Env = (PolyEnv,MonoEnv)
 inferPrimFun :: PrimFun -> Ty
 inferPrimFun a = case a of
   PAddI   -> TInt :-> TInt :-> TInt
-  PAnd    -> TBool :-> TBool :-> TBool
+  PUpper  -> TChar :-> TChar
   PMulF   -> TFloat :-> TFloat :-> TFloat
 
 inferLit :: Lit -> Ty
 inferLit a = case a of
   LInt    -> TInt
-  LBool   -> TBool
+  LChar   -> TChar
   LFloat  -> TFloat
 
 type Unique a = StateT Int (Except String) a
@@ -199,17 +201,17 @@ ok =
   [ ELit LInt
   , ELam "x" $ EVar "x"
   , ELam "x" $ ELam "y" $ ELit LFloat
-  , ELam "x" $ EApp (EVar "x") (ELit LBool)
+  , ELam "x" $ EApp (EVar "x") (ELit LChar)
   , ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")
-  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LBool)))
-  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LBool)) (EApp (EVar "id") (ELit LFloat)))
+  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LChar)) (EApp (EVar "id") (ELit LChar)))
+  , ELet "id" (ELam "x" $ EVar "x") (ELet "a" (EApp (EVar "id") (ELit LChar)) (EApp (EVar "id") (ELit LFloat)))
   , ELet "f" (ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")) (EVar "f")
 --  , EFix "f" $ ELam "x" $ EApp (EVar "f") $ ELit LFloat
   ]
 err =
   [ ELam "x" $ EApp (EVar "x") (EVar "x")
   , EApp (ELit LInt) (ELit LInt)
-  , ELet "f" (ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")) (EApp (EVar "f") (ELit LBool))
+  , ELet "f" (ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")) (EApp (EVar "f") (ELit LChar))
   , ELet "f1" (ELam "x" $ EApp (EApp (EPrimFun PAddI) (ELit LInt)) (EVar "x")) (EVar "f")
 --  , EFix "f" $ ELam "x" $ EApp (EVar "f") $ EVar "f"
   ]
