@@ -1,9 +1,11 @@
 import Data.ByteString.Char8 (unpack,pack)
+import qualified Data.ByteString.Char8 as BS
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import Data.Monoid
 import Control.Applicative
 import Text.Trifecta
 import Text.Trifecta.Indentation as I
+import Text.Trifecta.Delta
 import Text.Parser.Token.Style
 import qualified Data.HashSet as HashSet
 
@@ -43,46 +45,45 @@ var = ident lcIdents
 lit :: P Lit
 lit = LFloat <$ try double <|> LInt <$ integer <|> LChar <$ charLiteral
 
---block :: P Exp
+block :: P Exp
 block = do
   spaces
   localIndentation Ge $ do
-    l <- kw "let" *> (localIndentation Ge $ do
-      (localIndentation Gt $ some $ localAbsoluteIndentation $ assign)) -- WORKS
-    r <- rend
-    p <- position
-    c <- careting
-    (a :~ s,t) <- kw "in" *> (slicedWith (,) $ spanned $ localIndentation Gt expr)
-    --liftM $ raiseErr $ Err Nothing [explain r mempty] mempty
-    return $ (unpack t,p,{-r <> render c <> -}render s,foldr ($) a l)
-    --return $ (p,r <> render s,foldr ($) a l))
+    l <- kw "let" *> (localIndentation Gt $ some $ localAbsoluteIndentation $ assign) -- WORKS
+    a <- kw "in" *> (localIndentation Gt expr)
+    return $ foldr ($) a l
 
 assign :: P (Exp -> Exp)
-assign = ELet <$> var <* kw "=" <*> expr
+assign = (\p1 n d p2 e -> ELet (p1,p2) n d e) <$> position <*> var <* kw "=" <*> expr <*> position
 
 expr :: P Exp
 expr =  lam <|> formula
 
-formula = (foldl1 EApp) `fmap` (some atom)
+formula = (\p1 l p2 -> foldl1 (EApp (p1,p2)) l) <$> position <*> some atom <*> position
 
-atom = EPrimFun <$> primFun <|> ELit <$> lit <|> EVar <$> var <|> parens expr
+atom =
+  (\p1 f p2 -> EPrimFun (p1,p2) f) <$> position <*> primFun <*> position <|> 
+  (\p1 l p2 -> ELit (p1,p2) l) <$> position <*> lit <*> position <|>
+  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
+  parens expr
 
 primFun = PUpper <$ kw "upper"
 
 lam :: P Exp
-lam = ELam <$ op "\\" <*> var <* op "->" <*> expr
+lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
 
 indentState = mkIndentationState 1 infIndentation True Gt
 
 test :: IO ()
 test = do
-  r <- parseFromFileEx (evalIndentationParserT (block <* eof) indentState) "example01.lc"
-  case r of
+  let fname = "example01.lc"
+  src <- BS.readFile fname
+  case parseByteString (evalIndentationParserT (block <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
     Failure m -> print m
-    Success (a,d,r,e) -> do
-      --putStrLn a
-      print $ pretty d
-      print $ pretty r
-      case inference e of
+    Success e -> do
+      --let r = render s
+      --print $ pretty $ delta r
+      --print $ pretty r
+      case inference src e of
         Right t   -> putStrLn $ show e ++ " :: " ++ show t
         Left m    -> putStrLn $ "error: " ++ m
