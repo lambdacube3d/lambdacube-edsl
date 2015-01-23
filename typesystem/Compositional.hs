@@ -73,6 +73,14 @@ inferLit a = case a of
 
 type Unique a = StateT (Int,ByteString,[Range]) (Except String) a
 
+getRange :: Exp -> Range
+getRange (ELit      r _) = r
+getRange (EPrimFun  r _) = r
+getRange (EVar      r _) = r
+getRange (EApp      r _ _) = r
+getRange (ELam      r _ _) = r
+getRange (ELet      r _ _ _) = r
+
 withRanges :: [Range] -> Unique a -> Unique a
 withRanges rl a = do
   (x,y,rl0) <- get
