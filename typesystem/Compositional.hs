@@ -1,9 +1,11 @@
 module Compositional where
 
+--import Debug.Trace
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.Functor.Identity
+import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Map (Map)
@@ -16,6 +18,8 @@ import qualified Data.Traversable as T
 import qualified Data.Foldable as F
 import Text.Trifecta hiding (err)
 import Text.Trifecta.Delta
+
+trace _ = id
 
 data Lit
   = LInt
@@ -50,26 +54,53 @@ data Ty
   | TFloat
   deriving (Show,Eq,Ord)
 
+data Constraint
+  = CNum
+  deriving (Show,Eq,Ord)
+
+instances :: Map Constraint (Set Ty)
+instances = Map.fromList [(CNum,Set.fromList [TInt,TFloat])]
+
 type EName = String
 type TName = String
 type Subst = Map TName Ty
 
 type MonoEnv = Map EName Ty
 type PolyEnv = Map EName Typing
-type Typing = (MonoEnv,Ty)
-type Env = (PolyEnv,MonoEnv)
+type InstEnv = [(Constraint,Ty)]
+type Typing = (MonoEnv,InstEnv,Ty)
+type Env = (PolyEnv,MonoEnv,InstEnv)
 
-inferPrimFun :: PrimFun -> Ty
+{-
+  ->>
+  perdicate resolution operator
+
+  O
+  instance environment
+
+  +
+  e.g. O + O'
+  substitution-resolution-combinator
+
+  typing = type + mono env + instance env
+-}
+
+
+inferPrimFun :: PrimFun -> Unique Typing
 inferPrimFun a = case a of
-  PAddI   -> TInt :-> TInt :-> TInt
-  PUpper  -> TChar :-> TChar
-  PMulF   -> TFloat :-> TFloat :-> TFloat
+  PAddI -> do
+    t <- newVar
+    return (mempty,[(CNum,t)],t :-> t :-> t)
+  PUpper -> return (mempty,mempty,TChar :-> TChar)
+  PMulF -> return (mempty,mempty,TFloat :-> TFloat :-> TFloat)
 
-inferLit :: Lit -> Ty
+inferLit :: Lit -> Unique Typing
 inferLit a = case a of
-  LInt    -> TInt
-  LChar   -> TChar
-  LFloat  -> TFloat
+  LInt    -> do
+    t <- newVar
+    return (mempty,[(CNum,t)],t)
+  LChar   -> return (mempty,mempty,TChar)
+  LFloat  -> return (mempty,mempty,TFloat)
 
 type Unique a = StateT (Int,ByteString,[Range]) (Except String) a
 
@@ -97,10 +128,11 @@ throwErrorUnique s = do
 
 throwErrorSrc src rl s = do
   let sl = map mkSpan rl
-      mkSpan (s,e) = unlines [show $ pretty s, {-BS.unpack str-}show $ pretty r]
+      fullCode = True
+      mkSpan (s,e) = unlines [show $ pretty (s,e), if fullCode then BS.unpack str else show $ pretty r]
         where
           r = render spn
-          str = x <> BS.takeWhile (\a -> notElem a ['\n','\r']) y
+          str = x -- <> BS.takeWhile (\a -> notElem a ['\n','\r']) y
           spn = Span s e str
           (x,y) = BS.splitAt (se - sb) $ BS.drop sb src
           b = rewind s
@@ -124,6 +156,14 @@ applyTy _ t = t
 applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
 
+applyInstEnv :: Subst -> InstEnv -> Unique InstEnv -- TODO: check constraints, remove redundant superclass
+applyInstEnv s e = return $ (trace (show (s,e,"->",e'))) e'
+ where
+  e' = fmap (\(c,t) -> (c,applyTy s t)) e
+
+joinInstEnv :: [InstEnv] -> InstEnv
+joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
+
 freeVarsTy :: Ty -> Set TName
 freeVarsTy (TVar a) = Set.singleton a
 freeVarsTy (a :-> b) = freeVarsTy a `mappend` freeVarsTy b
@@ -131,6 +171,9 @@ freeVarsTy _ = mempty
 
 freeVarsMonoEnv :: MonoEnv -> Set TName
 freeVarsMonoEnv m = F.foldMap freeVarsTy m
+
+freeVarsInstEnv :: InstEnv -> Set TName
+freeVarsInstEnv i = F.foldMap (freeVarsTy . snd) i
 
 -- union mono envs matching on intersection
 joinMonoEnv :: MonoEnv -> MonoEnv -> Unique MonoEnv
@@ -142,11 +185,12 @@ joinMonoEnv a b = do
   T.sequence $ Map.unionWithKey merge (fmap return a) (fmap return b)
 
 instTyping :: Typing -> Unique Typing
-instTyping (m,t) = do
-  let fv = freeVarsTy t `mappend` freeVarsMonoEnv m
+instTyping (m,i,t) = do
+  let fv = freeVarsTy t `mappend` freeVarsMonoEnv m -- `mappend` freeVarsInstEnv i
   newVars <- replicateM (Set.size fv) newVar
   let s = Map.fromList $ zip (Set.toList fv) newVars
-  return (applyMonoEnv s m,applyTy s t)
+  i' <- applyInstEnv s i
+  return (applyMonoEnv s m,i',applyTy s t)
 
 bindVar :: TName -> Ty -> Unique Subst
 bindVar n t
@@ -155,7 +199,7 @@ bindVar n t
   | otherwise = return $ Map.singleton n t
 
 compose :: Subst -> Subst -> Subst
-compose a b = mappend a $ applyTy a <$> b
+compose b a = mappend a $ applyTy a <$> b
 
 unifyTy :: Ty -> Ty -> Unique Subst
 unifyTy (TVar u) t = bindVar u t
@@ -182,47 +226,61 @@ unify ml tl = do
         return $ s `compose` s'
   foldM uni s1 $ concatMap Map.toList ml
 
+unamb :: Typing -> Unique ()
+unamb (m,i,t) = do
+  let v = Set.map TVar $ freeVarsTy t `mappend` freeVarsMonoEnv m
+  forM_ i $ \(_,a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m]
+
 infer :: PolyEnv -> Exp -> Unique Typing
-infer penv (ELit r l) = withRanges [r] $ return (mempty,inferLit l)
-infer penv (EPrimFun r f) = withRanges [r] $ return (mempty,inferPrimFun f)
+infer penv (ELit r l) = withRanges [r] $ inferLit l
+infer penv (EPrimFun r f) = withRanges [r] $ inferPrimFun f
 infer penv (EVar r n) = withRanges [r] $ case Map.lookup n penv of
   Nothing -> do
-    t <- newVar
-    return (Map.singleton n t,t)
-  Just t -> instTyping t
+    t <- trace "mono var" <$> newVar
+    return (Map.singleton n t,mempty,t)
+  Just t -> trace "poly var" <$> instTyping t
 infer penv (ELam r n f) = withRanges [r] $ do
-  (m,t) <- infer penv f
+  (m,i,t) <- infer penv f
   case Map.lookup n m of
     Nothing -> do
       a <- newVar
-      return (m,a :-> t)
-    Just a -> return (Map.delete n m,a :-> t)
+      return (m,i,a :-> t)
+    Just a -> return (Map.delete n m,i,a :-> t)
 infer penv (EApp r f a) = withRanges [r] $ do
-  (m1,t1) <- infer penv f
-  (m2,t2) <- infer penv a
+  (m1,i1,t1) <- infer penv f
+  (m2,i2,t2) <- infer penv a
   a <- newVar
   s <- unify [m1,m2] [(t1,t2 :-> a)]
   m3 <- joinMonoEnv (applyMonoEnv s m1) (applyMonoEnv s m2)
-  return (m3,applyTy s a)
+  i3 <- (\a1 a2 -> joinInstEnv [a1,a2]) <$> applyInstEnv s i1 <*> applyInstEnv s i2
+  unamb (m3,i3,applyTy s a)
+  return (m3,i3,applyTy s a)
 infer penv (ELet r n x e) = withRanges [r] $ do
-  (m1,t1) <- infer penv x
+  (m1,i1,t1) <- infer penv x
   a <- newVar
   s0 <- unify [m1] [(t1,a)] -- TODO
   let m0 = Map.delete n $ applyMonoEnv s0 m1
-      penv' = Map.insert n (m0,applyTy s0 a) penv
-  (m',t') <- infer penv' e
-  s <- unify [m0,m'] []
+      t0 = applyTy s0 a
+  i0 <- trace "1" <$> applyInstEnv s0 i1
+  unamb (m0,i0,t0)
+  let penv' = Map.insert n (m0,mempty,t0) penv
+  (m',i',t') <- infer penv' e
+  s <- unify [m0,m'] [(t',t0)]
   m <- joinMonoEnv (applyMonoEnv s m') (applyMonoEnv s m0)
-  return (m,applyTy s t')
+  a1 <- trace "2" <$> applyInstEnv s i'
+  a2 <- trace "3" <$> applyInstEnv s i0
+  let i = joinInstEnv [a1,a2]
+  return $ trace (show $ ("s0",s0,m1,"s",s,m0,m')) $ (m,i,applyTy s t')
 
-inference :: ByteString -> Exp -> Either String Ty
+inference :: ByteString -> Exp -> Either String (InstEnv,Ty)
 inference src e = case scopeChk src e of
   Left m  -> Left m
   Right () -> runIdentity $ runExceptT $ (flip evalStateT) (0,src,[]) act
    where
     act = do
-      (m,t) <- infer mempty e
-      return t
+      a@(m,i,t) <- infer mempty e
+      unamb a
+      return (i,t)
 
 -- scope checking
 scopeCheck :: ByteString -> Set EName -> Exp -> Either String ()
