@@ -57,7 +57,7 @@ assign :: P (Exp -> Exp)
 assign = (\p1 n d p2 e -> ELet (p1,p2) n d e) <$> position <*> var <* kw "=" <*> expr <*> position
 
 expr :: P Exp
-expr =  lam <|> formula
+expr = block <|> lam <|> formula
 
 formula = (\p1 l p2 -> foldl1 (EApp (p1,p2)) l) <$> position <*> some atom <*> position
 
@@ -67,7 +67,8 @@ atom =
   (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
   parens expr
 
-primFun = PUpper <$ kw "upper"
+primFun = PUpper <$ kw "upper" <|>
+          PAddI <$ kw "add"
 
 lam :: P Exp
 lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
@@ -78,7 +79,7 @@ test :: IO ()
 test = do
   let fname = "example01.lc"
   src <- BS.readFile fname
-  case parseByteString (evalIndentationParserT (block <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
+  case parseByteString (evalIndentationParserT (expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
     Failure m -> print m
     Success e -> do
       --let r = render s
