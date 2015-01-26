@@ -45,19 +45,19 @@ var = ident lcIdents
 lit :: P Lit
 lit = LFloat <$ try double <|> LInt <$ integer <|> LChar <$ charLiteral
 
-block :: P Exp
-block = do
+letin :: P Exp
+letin = do
   spaces
   localIndentation Ge $ do
-    l <- kw "let" *> (localIndentation Gt $ some $ localAbsoluteIndentation $ assign) -- WORKS
+    l <- kw "let" *> (localIndentation Gt $ some $ localAbsoluteIndentation $ def) -- WORKS
     a <- kw "in" *> (localIndentation Gt expr)
     return $ foldr ($) a l
 
-assign :: P (Exp -> Exp)
-assign = (\p1 n d p2 e -> ELet (p1,p2) n d e) <$> position <*> var <* kw "=" <*> expr <*> position
+def :: P (Exp -> Exp)
+def = (\p1 n d p2 e -> ELet (p1,p2) n d e) <$> position <*> var <* kw "=" <*> expr <*> position
 
 expr :: P Exp
-expr = block <|> lam <|> formula
+expr = letin <|> lam <|> formula
 
 formula = (\p1 l p2 -> foldl1 (EApp (p1,p2)) l) <$> position <*> some atom <*> position
 
