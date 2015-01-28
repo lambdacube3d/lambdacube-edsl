@@ -1,0 +1,5 @@
+let c = ' '
+    b = let a = ' '
+            q = 'e'
+        in 'x'
+ in \x -> x
