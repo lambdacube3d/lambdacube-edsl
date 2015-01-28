@@ -1,6 +1,7 @@
 module Compositional where
 
---import Debug.Trace
+import Debug.Trace
+import Data.Maybe
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
@@ -19,7 +20,7 @@ import qualified Data.Foldable as F
 import Text.Trifecta hiding (err)
 import Text.Trifecta.Delta
 
-trace _ = id
+trace_ _ = id
 
 data Lit
   = LInt
@@ -31,6 +32,8 @@ data PrimFun
   = PAddI
   | PUpper
   | PMulF
+  | PShow
+  | PRead
   deriving (Show,Eq,Ord)
 
 type Range = (Delta,Delta)
@@ -52,10 +55,12 @@ data Ty
   | TInt
   | TChar
   | TFloat
+  | TString
   deriving (Show,Eq,Ord)
 
 data Constraint
   = CNum
+  | CTextual
   deriving (Show,Eq,Ord)
 
 instances :: Map Constraint (Set Ty)
@@ -93,6 +98,12 @@ inferPrimFun a = case a of
     return (mempty,[(CNum,t)],t :-> t :-> t)
   PUpper -> return (mempty,mempty,TChar :-> TChar)
   PMulF -> return (mempty,mempty,TFloat :-> TFloat :-> TFloat)
+  PShow -> do
+    t <- newVar
+    return (mempty,[(CTextual,t)],t :-> TString)
+  PRead -> do
+    t <- newVar
+    return (mempty,[(CTextual,t)],TString :-> t)
 
 inferLit :: Lit -> Unique Typing
 inferLit a = case a of
@@ -157,7 +168,7 @@ applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
 
 applyInstEnv :: Subst -> InstEnv -> Unique InstEnv -- TODO: check constraints, remove redundant superclass
-applyInstEnv s e = return $ (trace (show (s,e,"->",e'))) e'
+applyInstEnv s e = return $ (trace_ (show (s,e,"->",e'))) e'
  where
   e' = fmap (\(c,t) -> (c,applyTy s t)) e
 
@@ -212,24 +223,43 @@ unifyTy a b
   | a == b = return mempty
   | otherwise = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
 
-unify :: [MonoEnv] -> [(Ty,Ty)] -> Unique Subst
-unify ml tl = do
-  s1 <- foldM (\s (a,b) -> unifyTy (applyTy s a) (applyTy s b)) mempty tl
-  let ks = Set.unions $ map Map.keysSet ml
-  vars <- T.sequence $ Map.fromSet (const newVar) ks
-  let uni s (k,v) = do
-        let vars' = applyMonoEnv s vars
-        a <- case Map.lookup k vars' of
-          Nothing -> throwErrorUnique $ "internal error - unknown key: " ++ k
-          Just t  -> return t
-        s' <- unifyTy a v
+unifyEqs :: [(Ty,Ty)] -> Unique Subst
+unifyEqs eqs = do
+  let uniTy s (a,b) = do
+        s' <- unifyTy (applyTy s a) (applyTy s b)
         return $ s `compose` s'
-  foldM uni s1 $ concatMap Map.toList ml
+  foldM uniTy mempty eqs
 
-unamb :: Typing -> Unique ()
-unamb (m,i,t) = do
+unify :: [MonoEnv] -> [Ty] -> Unique Subst
+unify ml tl = do
+  a <- newVar
+  let toEqs :: EName -> [(Ty,Ty)]
+      toEqs v = case mapMaybe (Map.lookup v) ml of
+        [] -> []
+        x:xs -> map ((,) x) xs
+
+      vars :: Set EName
+      vars = mconcat . map Map.keysSet $ ml
+
+      varEqs :: [(Ty,Ty)]
+      varEqs = concatMap toEqs . Set.toList $ vars
+
+      tyEqs :: [(Ty,Ty)]
+      tyEqs = map ((,) a) tl
+
+  unifyEqs $ tyEqs ++ varEqs
+
+prune :: Typing -> Typing
+prune (m,i,t) = (m,i',t)
+ where
+  v = Set.map TVar $ freeVarsTy t `mappend` freeVarsMonoEnv m
+  i' = filter (\(_,a) -> Set.member a v) i
+
+unamb :: PolyEnv -> Typing -> Unique ()
+unamb env (m,i,t) = do
   let v = Set.map TVar $ freeVarsTy t `mappend` freeVarsMonoEnv m
-  forM_ i $ \(_,a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m]
+  return ()
+  forM_ i $ \(_,a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
 
 infer :: PolyEnv -> Exp -> Unique Typing
 infer penv (ELit r l) = withRanges [r] $ inferLit l
@@ -250,27 +280,30 @@ infer penv (EApp r f a) = withRanges [r] $ do
   (m1,i1,t1) <- infer penv f
   (m2,i2,t2) <- infer penv a
   a <- newVar
-  s <- unify [m1,m2] [(t1,t2 :-> a)]
+  s <- unify [m1,m2] [t1,t2 :-> a]
   m3 <- joinMonoEnv (applyMonoEnv s m1) (applyMonoEnv s m2)
   i3 <- (\a1 a2 -> joinInstEnv [a1,a2]) <$> applyInstEnv s i1 <*> applyInstEnv s i2
-  unamb (m3,i3,applyTy s a)
+  unamb penv (m3,i3,applyTy s a)
   return (m3,i3,applyTy s a)
+
+--- bugfix begin
 infer penv (ELet r n x e) = withRanges [r] $ do
-  (m1,i1,t1) <- infer penv x
-  a <- newVar
-  s0 <- unify [m1] [(t1,a)] -- TODO
+  d1@(m1,i1,t1) <- infer penv x
+  s0 <- unify [m1] [t1]
   let m0 = Map.delete n $ applyMonoEnv s0 m1
-      t0 = applyTy s0 a
-  i0 <- trace "1" <$> applyInstEnv s0 i1
-  unamb (m0,i0,t0)
-  let penv' = Map.insert n (m0,mempty,t0) penv
+      t0 = applyTy s0 t1
+  i0 <- trace_ "1" <$> applyInstEnv s0 i1
+  trace (show ("m1",m1,"let1",d1,"let2",(m0,i0,t0))) $ unamb penv (m0,i0,t0)
+  let penv' = Map.insert n (m0,i0,t0) penv
   (m',i',t') <- infer penv' e
-  s <- unify [m0,m'] [(t',t0)]
+  s_ <- unify [m0,m'] []
+  let s = s0 `compose` s_
   m <- joinMonoEnv (applyMonoEnv s m') (applyMonoEnv s m0)
-  a1 <- trace "2" <$> applyInstEnv s i'
-  a2 <- trace "3" <$> applyInstEnv s i0
+  a1 <- trace_ "2" <$> applyInstEnv s i'
+  a2 <- trace_ "3" <$> applyInstEnv s i0
   let i = joinInstEnv [a1,a2]
-  return $ trace (show $ ("s0",s0,m1,"s",s,m0,m')) $ (m,i,applyTy s t')
+  return $ prune $ trace (show ("s",s,"penv",penv',"in",(m',i',t'))) $ trace_ (show $ ("s0",s0,m1,"s",s,m0,m')) $ (m,i,applyTy s t')
+--- bugfix end
 
 inference :: ByteString -> Exp -> Either String (InstEnv,Ty)
 inference src e = case scopeChk src e of
@@ -279,7 +312,7 @@ inference src e = case scopeChk src e of
    where
     act = do
       a@(m,i,t) <- infer mempty e
-      unamb a
+      unamb mempty a
       return (i,t)
 
 -- scope checking

@@ -33,6 +33,9 @@ lcIdents = emptyIdents { _styleReserved = HashSet.fromList reservedIdents }
       [ "let"
       , "upper"
       , "in"
+      , "add"
+      , "show"
+      , "read"
       ]
 
 kw w = reserve lcIdents w
@@ -68,16 +71,19 @@ atom =
   parens expr
 
 primFun = PUpper <$ kw "upper" <|>
-          PAddI <$ kw "add"
+          PAddI <$ kw "add" <|>
+          PShow <$ kw "show" <|>
+          PRead <$ kw "read"
 
 lam :: P Exp
 lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
 
 indentState = mkIndentationState 1 infIndentation True Gt
 
-test :: IO ()
-test = do
-  let fname = "example01.lc"
+test' = test "example01.lc"
+
+test :: String -> IO ()
+test fname = do
   src <- BS.readFile fname
   case parseByteString (evalIndentationParserT (expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
     Failure m -> print m
@@ -85,6 +91,7 @@ test = do
       --let r = render s
       --print $ pretty $ delta r
       --print $ pretty r
+      print e
       case inference src e of
-        Right t   -> putStrLn $ show e ++ " :: " ++ show t
+        Right t   -> putStrLn $ show t
         Left m    -> putStrLn $ "error: " ++ m
