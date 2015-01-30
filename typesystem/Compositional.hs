@@ -333,6 +333,7 @@ spn = (mempty,mempty)
 
 ok =
   [ ELit spn LInt
+  , ELet spn "a" (ELit spn LInt) (EVar spn "a")
   , ELam spn "x" $ EVar spn "x"
   , ELam spn "x" $ ELam spn "y" $ ELit spn LFloat
   , ELam spn "x" $ EApp spn (EVar spn "x") (ELit spn LChar)
