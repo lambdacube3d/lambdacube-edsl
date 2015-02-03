@@ -1,6 +1,6 @@
 module Compositional where
 
-import Debug.Trace
+--import Debug.Trace
 import Data.Maybe
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import Data.ByteString.Char8 (ByteString)
@@ -21,6 +21,7 @@ import Text.Trifecta hiding (err)
 import Text.Trifecta.Delta
 
 trace_ _ = id
+trace = trace_
 
 data Lit
   = LInt

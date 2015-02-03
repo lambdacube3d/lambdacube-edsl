@@ -1,5 +1,6 @@
 let  a = 4
-     b = 'c'
+     b =
+      'c'
      c = (let qwe = 'a'
               adf = 1
          in qwe)
