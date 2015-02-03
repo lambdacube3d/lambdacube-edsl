@@ -50,17 +50,16 @@ lit = LFloat <$ try double <|> LInt <$ integer <|> LChar <$ charLiteral
 
 letin :: P Exp
 letin = do
-  spaces
   localIndentation Ge $ do
-    l <- kw "let" *> (localIndentation Gt $ some $ localAbsoluteIndentation $ def) -- WORKS
+    l <- kw "let" *> (localIndentation Gt $ localAbsoluteIndentation $ some def) -- WORKS
     a <- kw "in" *> (localIndentation Gt expr)
     return $ foldr ($) a l
 
 def :: P (Exp -> Exp)
-def = (\p1 n d p2 e -> ELet (p1,p2) n d e) <$> position <*> var <* kw "=" <*> expr <*> position
+def = (\p1 n d p2 e -> ELet (p1,p2) n d e) <$> position <*> var <* kw "=" <*> localIndentation Gt expr <*> position
 
 expr :: P Exp
-expr = letin <|> lam <|> formula
+expr = lam <|> letin <|> formula
 
 formula = (\p1 l p2 -> foldl1 (EApp (p1,p2)) l) <$> position <*> some atom <*> position
 
@@ -78,14 +77,14 @@ primFun = PUpper <$ kw "upper" <|>
 lam :: P Exp
 lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
 
-indentState = mkIndentationState 1 infIndentation True Gt
+indentState = mkIndentationState 0 infIndentation True Ge
 
 test' = test "example01.lc"
 
 test :: String -> IO ()
 test fname = do
   src <- BS.readFile fname
-  case parseByteString (evalIndentationParserT (expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
+  case parseByteString (evalIndentationParserT (whiteSpace *> expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
     Failure m -> print m
     Success e -> do
       --let r = render s

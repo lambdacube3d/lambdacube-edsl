@@ -1,7 +1,7 @@
-let id = \x -> x
-    c = ' '
-    i = 1
-    a = id c
-    b = id i
-    inc = \x -> add 1 x
- in id inc
+let  id = \x -> x
+     c = ' '
+     i = 1
+     a = id c
+     b = id i
+     inc = \x -> add 1 x
+in id inc
