@@ -1,0 +1,7 @@
+let {-
+  multi
+    line
+      comment
+-}id = \x -> x -- comment
+  a = (1,'c',id)
+in id a

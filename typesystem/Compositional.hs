@@ -45,6 +45,7 @@ data Exp
   | EApp      Range Exp Exp
   | ELam      Range EName Exp
   | ELet      Range EName Exp Exp
+  | ETuple    Range [Exp]
 --  | EFix EName Exp
   deriving (Show,Eq,Ord)
 
@@ -52,6 +53,9 @@ infixr 7 :->
 data Ty
   = TVar TName
   | Ty :-> Ty
+  -- composit
+  | TTuple [Ty]
+  | TArray Ty
   -- primitive types
   | TInt
   | TChar
@@ -263,6 +267,9 @@ unamb env (m,i,t) = do
   forM_ i $ \(_,a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
 
 infer :: PolyEnv -> Exp -> Unique Typing
+infer penv (ETuple r t) = withRanges [r] $ do
+  (ml,il,tl) <- unzip3 <$> mapM (infer penv) t
+  return (mempty,mempty,TTuple tl) -- TODO
 infer penv (ELit r l) = withRanges [r] $ inferLit l
 infer penv (EPrimFun r f) = withRanges [r] $ inferPrimFun f
 infer penv (EVar r n) = withRanges [r] $ case Map.lookup n penv of

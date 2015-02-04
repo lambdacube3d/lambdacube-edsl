@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 import Data.ByteString.Char8 (unpack,pack)
 import qualified Data.ByteString.Char8 as BS
 import Text.PrettyPrint.ANSI.Leijen (pretty)
@@ -8,6 +10,9 @@ import Text.Trifecta.Indentation as I
 import Text.Trifecta.Delta
 import Text.Parser.Token.Style
 import qualified Data.HashSet as HashSet
+
+import Control.Monad
+import Text.Parser.LookAhead
 
 import Compositional hiding (test)
 
@@ -22,12 +27,26 @@ class IndentationParsing m where
   ignoreAbsoluteIndentation :: m a -> m a
   localAbsoluteIndentation :: m a -> m a
 -}
-type P a = IndentationParserT Char Parser a
+type P a = IndentationParserT Char (LCParser Parser) a
+
+newtype LCParser p a = LCParser { runLCParser :: p a }
+  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, LookAheadParsing, DeltaParsing)
+
+instance TokenParsing p => TokenParsing (LCParser p) where
+  someSpace = LCParser $ buildSomeSpaceParser someSpace lcCommentStyle
+  nesting = LCParser . nesting . runLCParser
+  highlight h = LCParser . highlight h . runLCParser
+  semi = token $ char ';' <?> ";"
+  token p = p <* whiteSpace
 
 --buildSomeSpaceParser :: CharParsing m => m () -> CommentStyle -> m ()
 --haskellIdents :: TokenParsing m => IdentifierStyle m
 
-lcIdents = emptyIdents { _styleReserved = HashSet.fromList reservedIdents }
+--lcSpace = buildSomeSpaceParser _ haskellCommentStyle
+
+lcCommentStyle = haskellCommentStyle
+
+lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
   where
     reservedIdents =
       [ "let"
@@ -67,6 +86,7 @@ atom =
   (\p1 f p2 -> EPrimFun (p1,p2) f) <$> position <*> primFun <*> position <|> 
   (\p1 l p2 -> ELit (p1,p2) l) <$> position <*> lit <*> position <|>
   (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
+  (\p1 v p2 -> if length v == 1 then head v else ETuple (p1,p2) v) <$> position <*> parens (commaSep expr) <*> position <|>
   parens expr
 
 primFun = PUpper <$ kw "upper" <|>
@@ -84,7 +104,7 @@ test' = test "example01.lc"
 test :: String -> IO ()
 test fname = do
   src <- BS.readFile fname
-  case parseByteString (evalIndentationParserT (whiteSpace *> expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
+  case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
     Failure m -> print m
     Success e -> do
       --let r = render s
