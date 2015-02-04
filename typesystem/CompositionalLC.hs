@@ -26,15 +26,41 @@ trace = trace_
 data Lit
   = LInt
   | LChar
+  | LString String
   | LFloat
   deriving (Show,Eq,Ord)
 
 data PrimFun
+  -- temp
   = PAddI
   | PUpper
   | PMulF
   | PShow
   | PRead
+  -- lc prims
+  | PAccumulate
+  | PAccumulationContext
+  | PColorImage
+  | PColorOp
+  | PCullNone
+  | PFetch
+  | PFragmentOutRastDepth
+  | PFrameBuffer
+  | PIV3F
+  | PLastVertex
+  | PNoBlending
+  | PNoOffset
+  | PPassAll
+  | PPolygonFill
+  | PRasterize
+  | PScreenOut
+  | PSmooth
+  | PTransform
+  | PTriangleCtx
+  | PTriangles
+  | PV4
+  | PVertexOut
+  | Pone
   deriving (Show,Eq,Ord)
 
 type Range = (Delta,Delta)
@@ -109,14 +135,40 @@ inferPrimFun a = case a of
   PRead -> do
     t <- newVar
     return (mempty,[(CTextual,t)],TString :-> t)
+  a -> throwErrorUnique $ "unknown primitive: " ++ show a
+{-
+  | PAccumulate
+  | PAccumulationContext
+  | PColorImage
+  | PColorOp
+  | PCullNone
+  | PFetch
+  | PFragmentOutRastDepth
+  | PFrameBuffer
+  | PIV3F
+  | PLastVertex
+  | PNoBlending
+  | PNoOffset
+  | PPassAll
+  | PPolygonFill
+  | PRasterize
+  | PSmooth
+  | PTransform
+  | PTriangleCtx
+  | PTriangles
+  | PV4
+  | PVertexOut
+  | Pone
+-}
 
 inferLit :: Lit -> Unique Typing
 inferLit a = case a of
   LInt    -> do
     t <- newVar
     return (mempty,[(CNum,t)],t)
-  LChar   -> return (mempty,mempty,TChar)
-  LFloat  -> return (mempty,mempty,TFloat)
+  LChar     -> return (mempty,mempty,TChar)
+  LFloat    -> return (mempty,mempty,TFloat)
+  LString _ -> return (mempty,mempty,TString)
 
 type Unique a = StateT (Int,ByteString,[Range]) (Except String) a
 

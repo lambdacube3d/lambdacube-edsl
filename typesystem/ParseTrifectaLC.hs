@@ -50,11 +50,37 @@ lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
   where
     reservedIdents =
       [ "let"
-      , "upper"
       , "in"
+      -- temp begin
+      , "upper"
       , "add"
       , "show"
       , "read"
+      -- temp end
+
+      , "Accumulate"
+      , "AccumulationContext"
+      , "ColorImage"
+      , "ColorOp"
+      , "CullNone"
+      , "Fetch"
+      , "FragmentOutRastDepth"
+      , "FrameBuffer"
+      , "IV3F"
+      , "LastVertex"
+      , "NoBlending"
+      , "NoOffset"
+      , "Nothing"
+      , "PassAll"
+      , "PolygonFill"
+      , "Rasterize"
+      , "Smooth"
+      , "Transform"
+      , "TriangleCtx"
+      , "Triangles"
+      , "V4"
+      , "VertexOut"
+      , "one"
       ]
 
 kw w = reserve lcIdents w
@@ -65,7 +91,7 @@ var :: P String
 var = ident lcIdents
 
 lit :: P Lit
-lit = LFloat <$ try double <|> LInt <$ integer <|> LChar <$ charLiteral
+lit = LFloat <$ try double <|> LInt <$ integer <|> LChar <$ charLiteral <|> LString <$> stringLiteral
 
 letin :: P Exp
 letin = do
@@ -94,7 +120,31 @@ atom =
 primFun = PUpper <$ kw "upper" <|>
           PAddI <$ kw "add" <|>
           PShow <$ kw "show" <|>
-          PRead <$ kw "read"
+          PRead <$ kw "read" <|>
+
+          PAccumulate <$ kw "Accumulate" <|>
+          PAccumulationContext <$ kw "AccumulationContext" <|>
+          PColorImage <$ kw "ColorImage" <|>
+          PColorOp <$ kw "ColorOp" <|>
+          PCullNone <$ kw "CullNone" <|>
+          PFetch <$ kw "Fetch" <|>
+          PFragmentOutRastDepth <$ kw "FragmentOutRastDepth" <|>
+          PFrameBuffer <$ kw "FrameBuffer" <|>
+          PIV3F <$ kw "IV3F" <|>
+          PLastVertex <$ kw "LastVertex" <|>
+          PNoBlending <$ kw "NoBlending" <|>
+          PNoOffset <$ kw "NoOffset" <|>
+          PPassAll <$ kw "PassAll" <|>
+          PPolygonFill <$ kw "PolygonFill" <|>
+          PRasterize <$ kw "Rasterize" <|>
+          PScreenOut <$ kw "ScreenOut" <|>
+          PSmooth <$ kw "Smooth" <|>
+          PTransform <$ kw "Transform" <|>
+          PTriangleCtx <$ kw "TriangleCtx" <|>
+          PTriangles <$ kw "Triangles" <|>
+          PV4 <$ kw "V4" <|>
+          PVertexOut <$ kw "VertexOut" <|>
+          Pone <$ kw "one"
 
 lam :: P Exp
 lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
