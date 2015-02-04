@@ -75,7 +75,9 @@ letin = do
     return $ foldr ($) a l
 
 def :: P (Exp -> Exp)
-def = (\p1 n d p2 e -> ELet (p1,p2) n d e) <$> position <*> var <* kw "=" <*> localIndentation Gt expr <*> position
+def = (\p1 n a d p2 e -> ELet (p1,p2) n (foldr (args (p1,p2)) d a) e) <$> position <*> var <*> many var <* kw "=" <*> localIndentation Gt expr <*> position
+  where
+    args r n e = ELam r n e
 
 expr :: P Exp
 expr = lam <|> letin <|> formula
