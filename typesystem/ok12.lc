@@ -1,0 +1,6 @@
+let fun x y z = add x y
+    fun2 a b c = let
+        d = ' '
+        e = 1
+      in (d)
+in (fun,fun2)
