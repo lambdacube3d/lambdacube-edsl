@@ -183,6 +183,8 @@ joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
 freeVarsTy :: Ty -> Set TName
 freeVarsTy (TVar a) = Set.singleton a
 freeVarsTy (a :-> b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy (TTuple a) = foldl mappend mempty $ map freeVarsTy a
+freeVarsTy (TArray a) = freeVarsTy a
 freeVarsTy _ = mempty
 
 freeVarsMonoEnv :: MonoEnv -> Set TName
@@ -269,7 +271,10 @@ unamb env (m,i,t) = do
 infer :: PolyEnv -> Exp -> Unique Typing
 infer penv (ETuple r t) = withRanges [r] $ do
   (ml,il,tl) <- unzip3 <$> mapM (infer penv) t
-  return (mempty,mempty,TTuple tl) -- TODO
+  s <- unify ml []
+  m <- foldM (\a b -> joinMonoEnv (applyMonoEnv s a) (applyMonoEnv s b)) mempty ml
+  i <- joinInstEnv <$> mapM (applyInstEnv s) il
+  return (m,i,TTuple $ map (applyTy s) tl)
 infer penv (ELit r l) = withRanges [r] $ inferLit l
 infer penv (EPrimFun r f) = withRanges [r] $ inferPrimFun f
 infer penv (EVar r n) = withRanges [r] $ case Map.lookup n penv of
