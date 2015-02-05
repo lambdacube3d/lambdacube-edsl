@@ -87,6 +87,11 @@ data Ty
   | TChar
   | TFloat
   | TString
+  -- lambdacube types
+  | TV4F
+  | TImage
+  | TFrameBuffer
+  | TOutput
   deriving (Show,Eq,Ord)
 
 data Constraint
@@ -135,6 +140,14 @@ inferPrimFun a = case a of
   PRead -> do
     t <- newVar
     return (mempty,[(CTextual,t)],TString :-> t)
+  PV4 -> do
+    return (mempty,mempty,TFloat :-> TFloat :-> TFloat :-> TFloat :-> TV4F)
+  PColorImage -> do
+    return (mempty,mempty,TInt :-> TV4F :-> TImage)
+  PFrameBuffer -> do
+    return (mempty,mempty,TImage :-> TFrameBuffer)
+  PScreenOut -> do
+    return (mempty,mempty,TFrameBuffer :-> TOutput)
   a -> throwErrorUnique $ "unknown primitive: " ++ show a
 
 {-
@@ -237,10 +250,15 @@ applyTy _ t = t
 applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
 
-applyInstEnv :: Subst -> InstEnv -> Unique InstEnv -- TODO: check constraints, remove redundant superclass
-applyInstEnv s e = return $ (trace_ (show (s,e,"->",e'))) e'
+applyInstEnv :: Subst -> InstEnv -> Unique InstEnv
+applyInstEnv s e = filterM tyInst $ (trace_ (show (s,e,"->",e'))) e'
  where
   e' = fmap (\(c,t) -> (c,applyTy s t)) e
+  tyInst (c,TVar _) = return True
+  tyInst (c,t) = case Map.lookup c instances of
+    Nothing -> err
+    Just ts -> if Set.member t ts then return False else err
+   where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
 
 joinInstEnv :: [InstEnv] -> InstEnv
 joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
