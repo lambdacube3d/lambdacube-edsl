@@ -48,6 +48,7 @@ module LambdaCube.GL (
 
     Renderer,
     compileRenderer,
+    compileRendererFromCore,
     slotUniform,
     slotStream,
     uniformSetter,
@@ -137,10 +138,12 @@ import qualified Data.IntMap as IM
 import System.IO as IO
 
 compileRenderer :: H.GPOutput H.SingleOutput -> IO Renderer
-compileRenderer l = do
+compileRenderer l = compileRendererFromCore $ convertGPOutput l
 
+compileRendererFromCore :: U.N -> IO Renderer
+compileRendererFromCore l = do
     let root =  U.toExp dag l'
-        (l', dag) = runState (U.unN $ convertGPOutput l) U.emptyDAG
+        (l', dag) = runState (U.unN l) U.emptyDAG
         U.DAG (BiMap _ em) tm _ _ _ = dag
         unis = U.mkExpUni dag
         gunis = U.mkGPUni dag
