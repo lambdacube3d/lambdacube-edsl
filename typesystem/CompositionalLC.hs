@@ -24,10 +24,10 @@ trace_ _ = id
 trace = trace_
 
 data Lit
-  = LInt
-  | LChar
+  = LInt    Integer
+  | LChar   Char
   | LString String
-  | LFloat
+  | LFloat  Double
   deriving (Show,Eq,Ord)
 
 data PrimFun
@@ -64,15 +64,22 @@ data PrimFun
   deriving (Show,Eq,Ord)
 
 type Range = (Delta,Delta)
-data Exp
-  = ELit      Range Lit
-  | EPrimFun  Range PrimFun
-  | EVar      Range EName
-  | EApp      Range Exp Exp
-  | ELam      Range EName Exp
-  | ELet      Range EName Exp Exp
-  | ETuple    Range [Exp]
+data Exp a
+  = ELit      a Lit
+  | EPrimFun  a PrimFun
+  | EVar      a EName
+  | EApp      a (Exp a) (Exp a)
+  | ELam      a EName (Exp a)
+  | ELet      a EName (Exp a) (Exp a)
+  | ETuple    a [Exp a]
 --  | EFix EName Exp
+  deriving (Show,Eq,Ord)
+
+data Frequency
+  = C
+  | O
+  | V
+  | F
   deriving (Show,Eq,Ord)
 
 infixr 7 :->
@@ -189,22 +196,22 @@ data AccumulationContext t
 
 inferLit :: Lit -> Unique Typing
 inferLit a = case a of
-  LInt    -> do
+  LInt _ -> do
     t <- newVar
     return (mempty,[(CNum,t)],t)
-  LChar     -> return (mempty,mempty,TChar)
-  LFloat    -> return (mempty,mempty,TFloat)
+  LChar   _ -> return (mempty,mempty,TChar)
+  LFloat  _ -> return (mempty,mempty,TFloat)
   LString _ -> return (mempty,mempty,TString)
 
 type Unique a = StateT (Int,ByteString,[Range]) (Except String) a
 
-getRange :: Exp -> Range
-getRange (ELit      r _) = r
-getRange (EPrimFun  r _) = r
-getRange (EVar      r _) = r
-getRange (EApp      r _ _) = r
-getRange (ELam      r _ _) = r
-getRange (ELet      r _ _ _) = r
+getTag :: Exp a -> a
+getTag (ELit      r _) = r
+getTag (EPrimFun  r _) = r
+getTag (EVar      r _) = r
+getTag (EApp      r _ _) = r
+getTag (ELam      r _ _) = r
+getTag (ELet      r _ _ _) = r
 
 withRanges :: [Range] -> Unique a -> Unique a
 withRanges rl a = do
@@ -241,8 +248,8 @@ newVar = do
   return $ TVar $ 't':show n
 
 applyTy :: Subst -> Ty -> Ty
-applyTy st (TVar a) = case Map.lookup a st of
-  Nothing -> TVar a
+applyTy st tv@(TVar a) = case Map.lookup a st of
+  Nothing -> tv
   Just t  -> t
 applyTy st (a :-> b) = (applyTy st a) :-> (applyTy st b)
 applyTy _ t = t
@@ -351,68 +358,73 @@ unamb env (m,i,t) = do
   return ()
   forM_ i $ \(_,a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
 
-infer :: PolyEnv -> Exp -> Unique Typing
+infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
 infer penv (ETuple r t) = withRanges [r] $ do
-  (ml,il,tl) <- unzip3 <$> mapM (infer penv) t
+  te <- mapM (infer penv) t
+  let (ml,il,tl) = unzip3 $ map getTag te
   s <- unify ml []
   m <- foldM (\a b -> joinMonoEnv (applyMonoEnv s a) (applyMonoEnv s b)) mempty ml
   i <- joinInstEnv <$> mapM (applyInstEnv s) il
-  return (m,i,TTuple $ map (applyTy s) tl)
-infer penv (ELit r l) = withRanges [r] $ inferLit l
-infer penv (EPrimFun r f) = withRanges [r] $ inferPrimFun f
+  let ty = (m,i,TTuple $ map (applyTy s) tl)
+  return (ETuple ty te)
+infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
+infer penv (EPrimFun r f) = withRanges [r] $ EPrimFun <$> inferPrimFun f <*> pure f
 infer penv (EVar r n) = withRanges [r] $ case Map.lookup n penv of
   Nothing -> do
     t <- trace "mono var" <$> newVar
-    return (Map.singleton n t,mempty,t)
-  Just t -> trace "poly var" <$> instTyping t
+    return $ EVar (Map.singleton n t,mempty,t) n
+  Just t -> trace "poly var" <$> EVar <$> instTyping t <*> pure n
 infer penv (ELam r n f) = withRanges [r] $ do
-  (m,i,t) <- infer penv f
+  tf <- infer penv f
+  let (m,i,t) = getTag tf
   case Map.lookup n m of
     Nothing -> do
       a <- newVar
-      return (m,i,a :-> t)
-    Just a -> return (Map.delete n m,i,a :-> t)
+      return $ ELam (m,i,a :-> t) n tf
+    Just a -> return $ ELam (Map.delete n m,i,a :-> t) n tf
 infer penv (EApp r f a) = withRanges [r] $ do
-  (m1,i1,t1) <- infer penv f
-  (m2,i2,t2) <- infer penv a
+  tf <- infer penv f
+  ta <- infer penv a
+  let (m1,i1,t1) = getTag tf
+      (m2,i2,t2) = getTag ta
   a <- newVar
   s <- unify [m1,m2] [t1,t2 :-> a]
   m3 <- joinMonoEnv (applyMonoEnv s m1) (applyMonoEnv s m2)
   i3 <- (\a1 a2 -> joinInstEnv [a1,a2]) <$> applyInstEnv s i1 <*> applyInstEnv s i2
   unamb penv (m3,i3,applyTy s a)
-  return (m3,i3,applyTy s a)
-
---- bugfix begin
+  return $ EApp (m3,i3,applyTy s a) tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
-  d1@(m1,i1,t1) <- infer penv x
+  tx <- infer penv x
+  let d1@(m1,i1,t1) = getTag tx
   s0 <- unify [m1] [t1]
   let m0 = Map.delete n $ applyMonoEnv s0 m1
       t0 = applyTy s0 t1
   i0 <- trace_ "1" <$> applyInstEnv s0 i1
   trace (show ("m1",m1,"let1",d1,"let2",(m0,i0,t0))) $ unamb penv (m0,i0,t0)
   let penv' = Map.insert n (m0,i0,t0) penv
-  (m',i',t') <- infer penv' e
+  te <- infer penv' e
+  let (m',i',t') = getTag te
   s_ <- unify [m0,m'] []
   let s = s0 `compose` s_
   m <- joinMonoEnv (applyMonoEnv s m') (applyMonoEnv s m0)
   a1 <- trace_ "2" <$> applyInstEnv s i'
   a2 <- trace_ "3" <$> applyInstEnv s i0
   let i = joinInstEnv [a1,a2]
-  return $ prune $ trace (show ("s",s,"penv",penv',"in",(m',i',t'))) $ trace_ (show $ ("s0",s0,m1,"s",s,m0,m')) $ (m,i,applyTy s t')
---- bugfix end
+      ty = prune $ trace (show ("s",s,"penv",penv',"in",(m',i',t'))) $ trace_ (show $ ("s0",s0,m1,"s",s,m0,m')) $ (m,i,applyTy s t')
+  return $ ELet ty n tx te
 
-inference :: ByteString -> Exp -> Either String (InstEnv,Ty)
+inference :: ByteString -> Exp Range -> Either String (Exp Typing)
 inference src e = case scopeChk src e of
   Left m  -> Left m
   Right () -> runIdentity $ runExceptT $ (flip evalStateT) (0,src,[]) act
    where
     act = do
-      a@(m,i,t) <- infer mempty e
-      unamb mempty a
-      return (i,t)
+      a <- infer mempty e
+      unamb mempty $ getTag a
+      return a
 
 -- scope checking
-scopeCheck :: ByteString -> Set EName -> Exp -> Either String ()
+scopeCheck :: ByteString -> Set EName -> Exp Range -> Either String ()
 scopeCheck src vars (EVar r n) = if Set.member n vars then return () else throwErrorSrc src [r] $ "Variable " ++ n ++ " is not in scope."
 scopeCheck src vars (EApp r f a) = scopeCheck src vars f >> scopeCheck src vars a
 scopeCheck src vars (ELam r n f) = if Set.notMember n vars then scopeCheck src (Set.insert n vars) f else throwErrorSrc src [r] $ "Variable name clash: " ++ n
@@ -421,12 +433,12 @@ scopeCheck src vars (ELet r n x e) = do
   if Set.notMember n vars then scopeCheck src vars' x >> scopeCheck src vars' e else throwErrorSrc src [r] $ "Variable name clash: " ++ n
 scopeCheck src vars _ = return ()
 
-scopeChk :: ByteString -> Exp -> Either String ()
+scopeChk :: ByteString -> Exp Range -> Either String ()
 scopeChk src e = scopeCheck src mempty e
 
 -- test
-spn = (mempty,mempty)
-
+--spn = (mempty,mempty)
+{-
 ok =
   [ ELit spn LInt
   , ELet spn "a" (ELit spn LInt) (EVar spn "a")
@@ -452,3 +464,4 @@ test = do
   mapM_ (\e -> print e >> (print . inference mempty $ e)) ok
   putStrLn "Error:"
   mapM_ (\e -> print e >> (print . inference mempty $ e)) err
+-}

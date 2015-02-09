@@ -91,21 +91,21 @@ var :: P String
 var = ident lcIdents
 
 lit :: P Lit
-lit = LFloat <$ try double <|> LInt <$ integer <|> LChar <$ charLiteral <|> LString <$> stringLiteral
+lit = LFloat <$> try double <|> LInt <$> integer <|> LChar <$> charLiteral <|> LString <$> stringLiteral
 
-letin :: P Exp
+letin :: P (Exp Range)
 letin = do
   localIndentation Ge $ do
     l <- kw "let" *> (localIndentation Gt $ localAbsoluteIndentation $ some def) -- WORKS
     a <- kw "in" *> (localIndentation Gt expr)
     return $ foldr ($) a l
 
-def :: P (Exp -> Exp)
+def :: P (Exp Range -> Exp Range)
 def = (\p1 n a d p2 e -> ELet (p1,p2) n (foldr (args (p1,p2)) d a) e) <$> position <*> var <*> many var <* kw "=" <*> localIndentation Gt expr <*> position
   where
     args r n e = ELam r n e
 
-expr :: P Exp
+expr :: P (Exp Range)
 expr = lam <|> letin <|> formula
 
 formula = (\p1 l p2 -> foldl1 (EApp (p1,p2)) l) <$> position <*> some atom <*> position
@@ -146,7 +146,7 @@ primFun = PUpper <$ kw "upper" <|>
           PVertexOut <$ kw "VertexOut" <|>
           Pone <$ kw "one"
 
-lam :: P Exp
+lam :: P (Exp Range)
 lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
 
 indentState = mkIndentationState 0 infIndentation True Ge
