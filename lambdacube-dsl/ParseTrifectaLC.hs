@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+module ParseTrifectaLC where
 
 import Data.ByteString.Char8 (unpack,pack)
 import qualified Data.ByteString.Char8 as BS
@@ -166,3 +167,23 @@ test fname = do
       case inference src e of
         Right t   -> putStrLn $ show t
         Left m    -> putStrLn $ "error: " ++ m
+
+parseLC :: String -> IO (Either String (Exp Typing))
+parseLC fname = do
+  src <- BS.readFile fname
+  case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
+    Failure m -> do
+      print m
+      return (Left $ show m)
+    Success e -> do
+      --let r = render s
+      --print $ pretty $ delta r
+      --print $ pretty r
+      print e
+      case inference src e of
+        Right t   -> do
+          putStrLn $ show t
+          return (Right t)
+        Left m    -> do
+          putStrLn $ "error: " ++ m
+          return (Left m)

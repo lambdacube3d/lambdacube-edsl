@@ -105,6 +105,23 @@ data Ty -- star kind
   | TImage  Frequency
   | TFrameBuffer  Frequency
   | TOutput Frequency
+  | TRasterContext Frequency
+  | TCullMode Frequency
+  | TPolygonMode Frequency
+  | TPolygonOffset Frequency
+  | TProvokingVertex Frequency
+  | TAccumulationContext Frequency
+  | TFragmentOperation Frequency
+  | TBlending Frequency
+  | TVertexOut Frequency
+  | TInterpolated Frequency
+  | TFetchPrimitive Frequency
+  | TInput Frequency
+  | TVertexStream Frequency
+  | TPrimitiveStream Frequency
+  | TFragmentStream Frequency
+  | TFragmentOut Frequency
+  | TFragmentFilter Frequency
   deriving (Show,Eq,Ord)
 
 data Constraint
@@ -161,44 +178,43 @@ inferPrimFun a = case a of
     return (mempty,mempty,TImage C ~> TFrameBuffer C)
   PScreenOut -> do
     return (mempty,mempty,TFrameBuffer C ~> TOutput C)
+  PTriangleCtx -> do
+    return (mempty,mempty,TCullMode C ~> TPolygonMode C ~> TPolygonOffset C ~> TProvokingVertex C ~> TRasterContext C)
+  PCullNone -> do
+    return (mempty,mempty,TCullMode C)
+  PPolygonFill -> do
+    return (mempty,mempty,TPolygonMode C)
+  PNoOffset -> do
+    return (mempty,mempty,TPolygonOffset C)
+  PLastVertex -> do
+    return (mempty,mempty,TProvokingVertex C)
+  PAccumulationContext -> do
+    return (mempty,mempty,TFragmentOperation C ~> TAccumulationContext C)
+  PColorOp -> do
+    return (mempty,mempty,TBlending C ~> TFragmentOperation C)
+  PNoBlending -> do
+    return (mempty,mempty,TBlending C)
+  PVertexOut -> do
+    return (mempty,mempty,TV4F C ~> TFloat C ~> TTuple C [] ~> TInterpolated C ~> TVertexOut C)
+  PSmooth -> do
+    return (mempty,mempty,TV4F C ~> TInterpolated C)
+  PFetch -> do
+    return (mempty,mempty,TString C ~> TFetchPrimitive C ~> TInput C ~> TVertexStream C)
+  PTriangles -> do
+    return (mempty,mempty,TFetchPrimitive C)
+  PIV3F -> do
+    return (mempty,mempty,TString C ~> TInput C)
+  PTransform -> do
+    return (mempty,mempty,(TV4F C ~> TVertexOut C) ~> TVertexStream C ~> TPrimitiveStream C)
+  PRasterize -> do
+    return (mempty,mempty,TRasterContext C ~> TPrimitiveStream C ~> TFragmentStream C)
+  PFragmentOutRastDepth -> do
+    return (mempty,mempty,TV4F C ~> TFragmentOut C)
+  PAccumulate -> do
+    return (mempty,mempty,TAccumulationContext C ~> TFragmentFilter C ~> (TV4F C ~> TFragmentOut C) ~> TFragmentStream C ~> TFrameBuffer C ~> TFrameBuffer C)
+  PPassAll -> do
+    return (mempty,mempty, TFragmentFilter C)
   a -> throwErrorUnique $ "unknown primitive: " ++ show a
-
-{-
-    FrameBuffer     :: FrameBuffer layerCount t -> Exp Obj (FrameBuffer layerCount (FTRepr' t))
-    Accumulate      :: AccumulationContext b -> FragmentFilter a -> (Exp F a -> FragmentOut (NoStencilRepr b)) -> 
-                       Exp Obj (FragmentStream layerCount a) -> Exp Obj (FrameBuffer layerCount (FTRepr' b)) -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
-
-data AccumulationContext t
-    = AccumulationContext
-    { accViewportSize   :: Maybe (Exp Obj V4U)
-    , accOperations     :: FlatTuple NoConstraint FragmentOperation t
-    }
-
--}
-{-
-  | PAccumulate
-  | PAccumulationContext
-  | PColorImage
-  | PColorOp
-  | PCullNone
-  | PFetch
-  | PFragmentOutRastDepth
-  | PFrameBuffer
-  | PIV3F
-  | PLastVertex
-  | PNoBlending
-  | PNoOffset
-  | PPassAll
-  | PPolygonFill
-  | PRasterize
-  | PSmooth
-  | PTransform
-  | PTriangleCtx
-  | PTriangles
-  | PV4
-  | PVertexOut
-  | Pone
--}
 
 inferLit :: Lit -> Unique Typing
 inferLit a = case a of
@@ -211,13 +227,15 @@ inferLit a = case a of
 
 type Unique a = StateT (Int,ByteString,[Range]) (Except String) a
 
-getTag :: Exp a -> a
+getTag :: Show a => Exp a -> a
 getTag (ELit      r _) = r
 getTag (EPrimFun  r _) = r
 getTag (EVar      r _) = r
 getTag (EApp      r _ _) = r
 getTag (ELam      r _ _) = r
 getTag (ELet      r _ _ _) = r
+getTag (ETuple    r _) = r
+getTag x = error $ "getTag error: " ++ show x
 
 withRanges :: [Range] -> Unique a -> Unique a
 withRanges rl a = do

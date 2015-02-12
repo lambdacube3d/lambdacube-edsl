@@ -1,6 +1,6 @@
 module ToDeBruijn where
 
-import Data.Map
+import Data.Map as Map
 import Data.Monoid
 import CompositionalLC
 import LambdaCube.Core.DeBruijn hiding (Exp,N)
@@ -162,13 +162,19 @@ data NF
 instance Show N where
   show _ = "N"
 
+type NFEnv = Map EName [NF]
 -- TODO: add let
-toNF :: Exp Typing -> [NF]
-toNF (ELit t l) = [Arg l]
-toNF (EPrimFun t f) = [Fun f]
-toNF (EApp t a b) = eval $ toNF a `mappend` toNF b
-  --EVar      t EName
-  --ELet      t EName (Exp a) (Exp a)
+toNF :: NFEnv -> Exp Typing -> [NF]
+toNF env (ELit t l) = [Arg l]
+toNF env (EPrimFun t f) = [Fun f]
+toNF env (EApp t a b) = eval $ toNF env a `mappend` toNF env b
+toNF env (ELet t n a b) = case toNF env a of -- TODO
+  -- x@(N _:_) -> error $ "let is not fully supported: " ++ show x
+  x -> toNF (Map.insert n x env) b
+toNF env (EVar t n) = case Map.lookup n env of
+  Nothing -> error $ "unknown variable: " ++ n
+  Just x -> x
+toNF _ x = error $ "toNF error: " ++ show x
   --ETuple    t [Exp a]
   --ELam      t EName (Exp a) -- only to evaluate functions in compile time
 
@@ -176,7 +182,7 @@ eval :: [NF] -> [NF]
 eval (Fun PV4:Arg (LFloat x):Arg (LFloat y):Arg (LFloat z):Arg (LFloat w):xs) = Val (VV4F (V4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))) : eval xs
 eval (Fun PColorImage:Arg (LInt i):Val v:xs) = Img (ColorImage (fromIntegral i) v) : eval xs
 eval (Fun PFrameBuffer:Img i:xs) = N (frameBuffer [i]) : eval xs
-eval (Fun PScreenOut:N n:xs) = N (screenOut n) : eval xs
+eval (Fun PScreenOut:N n:xs) = N (screenOut $ prjFrameBuffer mempty 0 n) : eval xs
 eval l = l
 
 {-
