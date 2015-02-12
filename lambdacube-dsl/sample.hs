@@ -1,0 +1,181 @@
+{-# LANGUAGE OverloadedStrings, PackageImports #-}
+
+import Graphics.Rendering.OpenGL.Raw.Core32 (glViewport)
+import "GLFW-b" Graphics.UI.GLFW as GLFW
+import Data.Monoid
+import Control.Monad
+import Data.Vect
+import qualified Data.Trie as T
+import qualified Data.Vector.Storable as SV
+
+import LambdaCube.GL
+import LambdaCube.GL.Mesh
+
+import System.Environment
+
+import Codec.Image.STB hiding (Image)
+
+import ToDeBruijn
+import ParseTrifectaLC
+
+--  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
+--  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
+g_vertex_buffer_data =
+    [ ( 1.0, 1.0,-1.0)
+    , ( 1.0,-1.0,-1.0)
+    , (-1.0,-1.0,-1.0)
+    , ( 1.0, 1.0,-1.0)
+    , (-1.0,-1.0,-1.0)
+    , (-1.0, 1.0,-1.0)
+    , ( 1.0, 1.0,-1.0)
+    , ( 1.0, 1.0, 1.0)
+    , ( 1.0,-1.0, 1.0)
+    , ( 1.0, 1.0,-1.0)
+    , ( 1.0,-1.0, 1.0)
+    , ( 1.0,-1.0,-1.0)
+    , ( 1.0, 1.0, 1.0)
+    , (-1.0,-1.0, 1.0)
+    , ( 1.0,-1.0, 1.0)
+    , ( 1.0, 1.0, 1.0)
+    , (-1.0, 1.0, 1.0)
+    , (-1.0,-1.0, 1.0)
+    , (-1.0, 1.0, 1.0)
+    , (-1.0,-1.0,-1.0)
+    , (-1.0,-1.0, 1.0)
+    , (-1.0, 1.0, 1.0)
+    , (-1.0, 1.0,-1.0)
+    , (-1.0,-1.0,-1.0)
+    , ( 1.0, 1.0,-1.0)
+    , (-1.0, 1.0,-1.0)
+    , (-1.0, 1.0, 1.0)
+    , ( 1.0, 1.0,-1.0)
+    , (-1.0, 1.0, 1.0)
+    , ( 1.0, 1.0, 1.0)
+    , ( 1.0, 1.0,-1.0)
+    , ( 1.0, 1.0, 1.0)
+    , (-1.0, 1.0, 1.0)
+    , ( 1.0, 1.0,-1.0)
+    , (-1.0, 1.0, 1.0)
+    , (-1.0, 1.0,-1.0)
+    ]
+
+--  Two UV coordinatesfor each vertex. They were created with Blender.
+g_uv_buffer_data =
+    [ (0.0, 0.0)
+    , (0.0, 1.0)
+    , (1.0, 1.0)
+    , (0.0, 0.0)
+    , (1.0, 1.0)
+    , (1.0, 0.0)
+    , (0.0, 0.0)
+    , (1.0, 0.0)
+    , (1.0, 1.0)
+    , (0.0, 0.0)
+    , (1.0, 1.0)
+    , (0.0, 1.0)
+    , (1.0, 0.0)
+    , (0.0, 1.0)
+    , (1.0, 1.0)
+    , (1.0, 0.0)
+    , (0.0, 0.0)
+    , (0.0, 1.0)
+    , (0.0, 0.0)
+    , (1.0, 1.0)
+    , (0.0, 1.0)
+    , (0.0, 0.0)
+    , (1.0, 0.0)
+    , (1.0, 1.0)
+    , (0.0, 0.0)
+    , (1.0, 0.0)
+    , (1.0, 1.0)
+    , (0.0, 0.0)
+    , (1.0, 1.0)
+    , (0.0, 1.0)
+    , (0.0, 0.0)
+    , (0.0, 1.0)
+    , (1.0, 1.0)
+    , (0.0, 0.0)
+    , (1.0, 1.0)
+    , (1.0, 0.0)
+    ]
+
+myCube :: Mesh
+myCube = Mesh
+    { mAttributes   = T.fromList
+        [ ("vertexPosition_modelspace", A_V3F $ SV.fromList [V3 x y z | (x,y,z) <- g_vertex_buffer_data])
+        , ("vertexUV",                  A_V2F $ SV.fromList [V2 u v | (u,v) <- g_uv_buffer_data])
+        ]
+    , mPrimitive    = P_Triangles
+    , mGPUData      = Nothing
+    }
+
+rendererFromDSL :: String -> IO Renderer
+rendererFromDSL fname = do
+  Right lcAST <- parseLC fname
+  let lcNet = case toNF mempty lcAST of
+        [N a] -> a
+        a -> error $ show a
+  compileRendererFromCore lcNet
+
+main :: IO ()
+main = do
+    win <- initWindow "LambdaCube 3D DSL Sample" 1024 768
+    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
+
+    n <- getArgs
+    renderer <- rendererFromDSL $ case n of
+      [fn]  -> fn
+      _     -> "gfx01.lc"
+
+    let uniformMap      = uniformSetter renderer
+        texture         = uniformFTexture2D "myTextureSampler" uniformMap
+        mvp             = uniformM44F "MVP" uniformMap
+        setWindowSize   = setScreenSize renderer
+
+    setWindowSize 1024 768
+
+    gpuCube <- compileMesh myCube
+    addMesh renderer "stream" gpuCube []
+
+    --let cm  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
+    let --cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
+        --pm  = perspective 0.1 100 (pi/4) (1024 / 768)
+        loop = do
+            Just t <- getTime
+            let angle = pi / 24 * realToFrac t
+                --mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
+            --mvp $! mat4ToM44F $! mm .*. cm .*. pm
+            render renderer
+            swapBuffers win >> pollEvents
+
+            k <- keyIsPressed Key'Escape
+            unless k $ loop
+    loop
+
+    dispose renderer
+    destroyWindow win
+    terminate
+
+vec4ToV4F :: Vec4 -> V4F
+vec4ToV4F (Vec4 x y z w) = V4 x y z w
+
+mat4ToM44F :: Mat4 -> M44F
+mat4ToM44F (Mat4 a b c d) = V4 (vec4ToV4F a) (vec4ToV4F b) (vec4ToV4F c) (vec4ToV4F d)
+
+initWindow :: String -> Int -> Int -> IO Window
+initWindow title width height = do
+    GLFW.init
+    defaultWindowHints
+    mapM_ windowHint
+      [ WindowHint'ContextVersionMajor 3
+      , WindowHint'ContextVersionMinor 3
+      , WindowHint'OpenGLProfile OpenGLProfile'Core
+      , WindowHint'OpenGLForwardCompat True
+      ]
+    Just win <- createWindow width height title Nothing Nothing
+    makeContextCurrent $ Just win
+
+    setWindowSizeCallback win $ Just $ \_ w h -> do
+        glViewport 0 0 (fromIntegral w) (fromIntegral h)
+
+    return win
