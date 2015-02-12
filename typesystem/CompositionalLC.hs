@@ -75,30 +75,36 @@ data Exp a
 --  | EFix EName Exp
   deriving (Show,Eq,Ord)
 
-data Frequency
+data Frequency -- frequency kind
+  -- frequency values
   = C
   | O
   | V
   | F
+  -- type family representation
+  | FVar TName
+  | FMax [Frequency]
   deriving (Show,Eq,Ord)
 
-infixr 7 :->
-data Ty
-  = TVar TName
-  | Ty :-> Ty
+infixr 7 ~>
+a ~> b = TArr C a b
+
+data Ty -- star kind
+  = TVar    Frequency TName
+  | TArr    Frequency Ty Ty -- ????
   -- composit
-  | TTuple [Ty]
-  | TArray Ty
+  | TTuple  Frequency [Ty]
+  | TArray  Frequency Ty
   -- primitive types
-  | TInt
-  | TChar
-  | TFloat
-  | TString
+  | TInt    Frequency
+  | TChar   Frequency
+  | TFloat  Frequency
+  | TString Frequency
   -- lambdacube types
-  | TV4F
-  | TImage
-  | TFrameBuffer
-  | TOutput
+  | TV4F    Frequency
+  | TImage  Frequency
+  | TFrameBuffer  Frequency
+  | TOutput Frequency
   deriving (Show,Eq,Ord)
 
 data Constraint
@@ -107,7 +113,7 @@ data Constraint
   deriving (Show,Eq,Ord)
 
 instances :: Map Constraint (Set Ty)
-instances = Map.fromList [(CNum,Set.fromList [TInt,TFloat])]
+instances = Map.fromList [(CNum,Set.fromList [TInt C,TFloat C])]
 
 type EName = String
 type TName = String
@@ -137,24 +143,24 @@ type Env = (PolyEnv,MonoEnv,InstEnv)
 inferPrimFun :: PrimFun -> Unique Typing
 inferPrimFun a = case a of
   PAddI -> do
-    t <- newVar
-    return (mempty,[(CNum,t)],t :-> t :-> t)
-  PUpper -> return (mempty,mempty,TChar :-> TChar)
-  PMulF -> return (mempty,mempty,TFloat :-> TFloat :-> TFloat)
+    t <- newVar C
+    return (mempty,[(CNum,t)],t ~> t ~> t)
+  PUpper -> return (mempty,mempty,TChar C ~> TChar C)
+  PMulF -> return (mempty,mempty,TFloat C ~> TFloat C ~> TFloat C)
   PShow -> do
-    t <- newVar
-    return (mempty,[(CTextual,t)],t :-> TString)
+    t <- newVar C
+    return (mempty,[(CTextual,t)],t ~> TString C)
   PRead -> do
-    t <- newVar
-    return (mempty,[(CTextual,t)],TString :-> t)
+    t <- newVar C
+    return (mempty,[(CTextual,t)],TString C ~> t)
   PV4 -> do
-    return (mempty,mempty,TFloat :-> TFloat :-> TFloat :-> TFloat :-> TV4F)
+    return (mempty,mempty,TFloat C ~> TFloat C ~> TFloat C ~> TFloat C ~> TV4F C)
   PColorImage -> do
-    return (mempty,mempty,TInt :-> TV4F :-> TImage)
+    return (mempty,mempty,TInt C ~> TV4F C ~> TImage C)
   PFrameBuffer -> do
-    return (mempty,mempty,TImage :-> TFrameBuffer)
+    return (mempty,mempty,TImage C ~> TFrameBuffer C)
   PScreenOut -> do
-    return (mempty,mempty,TFrameBuffer :-> TOutput)
+    return (mempty,mempty,TFrameBuffer C ~> TOutput C)
   a -> throwErrorUnique $ "unknown primitive: " ++ show a
 
 {-
@@ -197,11 +203,11 @@ data AccumulationContext t
 inferLit :: Lit -> Unique Typing
 inferLit a = case a of
   LInt _ -> do
-    t <- newVar
-    return (mempty,[(CNum,t)],t)
-  LChar   _ -> return (mempty,mempty,TChar)
-  LFloat  _ -> return (mempty,mempty,TFloat)
-  LString _ -> return (mempty,mempty,TString)
+    t <- newVar C
+    return (mempty,[(CNum,t)],t) -- ????
+  LChar   _ -> return (mempty,mempty,TChar C)
+  LFloat  _ -> return (mempty,mempty,TFloat C)
+  LString _ -> return (mempty,mempty,TString C)
 
 type Unique a = StateT (Int,ByteString,[Range]) (Except String) a
 
@@ -241,17 +247,17 @@ throwErrorSrc src rl s = do
           se = fromIntegral $ bytes e
   throwError $ concat sl ++ s
 
-newVar :: Unique Ty
-newVar = do
+newVar :: Frequency -> Unique Ty
+newVar f = do
   (n,s,r) <- get
   put (n+1,s,r)
-  return $ TVar $ 't':show n
+  return $ TVar f $ 't':show n
 
 applyTy :: Subst -> Ty -> Ty
-applyTy st tv@(TVar a) = case Map.lookup a st of
+applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
-applyTy st (a :-> b) = (applyTy st a) :-> (applyTy st b)
+applyTy st (TArr f a b) = TArr f (applyTy st a) (applyTy st b)
 applyTy _ t = t
 
 applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
@@ -261,7 +267,7 @@ applyInstEnv :: Subst -> InstEnv -> Unique InstEnv
 applyInstEnv s e = filterM tyInst $ (trace_ (show (s,e,"->",e'))) e'
  where
   e' = fmap (\(c,t) -> (c,applyTy s t)) e
-  tyInst (c,TVar _) = return True
+  tyInst (c,TVar{}) = return True
   tyInst (c,t) = case Map.lookup c instances of
     Nothing -> err
     Just ts -> if Set.member t ts then return False else err
@@ -271,10 +277,10 @@ joinInstEnv :: [InstEnv] -> InstEnv
 joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
 
 freeVarsTy :: Ty -> Set TName
-freeVarsTy (TVar a) = Set.singleton a
-freeVarsTy (a :-> b) = freeVarsTy a `mappend` freeVarsTy b
-freeVarsTy (TTuple a) = foldl mappend mempty $ map freeVarsTy a
-freeVarsTy (TArray a) = freeVarsTy a
+freeVarsTy (TVar _ a) = Set.singleton a
+freeVarsTy (TArr f a b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy (TTuple _ a) = foldl mappend mempty $ map freeVarsTy a
+freeVarsTy (TArray _ a) = freeVarsTy a
 freeVarsTy _ = mempty
 
 freeVarsMonoEnv :: MonoEnv -> Set TName
@@ -295,24 +301,27 @@ joinMonoEnv a b = do
 instTyping :: Typing -> Unique Typing
 instTyping (m,i,t) = do
   let fv = freeVarsTy t `mappend` freeVarsMonoEnv m -- `mappend` freeVarsInstEnv i
-  newVars <- replicateM (Set.size fv) newVar
+  newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
   i' <- applyInstEnv s i
   return (applyMonoEnv s m,i',applyTy s t)
 
 bindVar :: TName -> Ty -> Unique Subst
 bindVar n t
-  | TVar n == t = return mempty
+  | tvarEq t = return mempty
   | n `Set.member` freeVarsTy t = throwErrorUnique $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
   | otherwise = return $ Map.singleton n t
+ where
+  tvarEq (TVar _ m) = m == n
+  tvarEq _ = False
 
 compose :: Subst -> Subst -> Subst
 compose b a = mappend a $ applyTy a <$> b
 
 unifyTy :: Ty -> Ty -> Unique Subst
-unifyTy (TVar u) t = bindVar u t
-unifyTy t (TVar u) = bindVar u t
-unifyTy (a1 :-> b1) (a2 :-> b2) = do
+unifyTy (TVar _ u) t = bindVar u t
+unifyTy t (TVar _ u) = bindVar u t
+unifyTy (TArr f1 a1 b1) (TArr f2 a2 b2) = do
   s1 <- unifyTy a1 a2
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
   return $ s1 `compose` s2
@@ -329,7 +338,7 @@ unifyEqs eqs = do
 
 unify :: [MonoEnv] -> [Ty] -> Unique Subst
 unify ml tl = do
-  a <- newVar
+  a <- newVar C
   let toEqs :: EName -> [(Ty,Ty)]
       toEqs v = case mapMaybe (Map.lookup v) ml of
         [] -> []
@@ -349,12 +358,12 @@ unify ml tl = do
 prune :: Typing -> Typing
 prune (m,i,t) = (m,i',t)
  where
-  v = Set.map TVar $ freeVarsTy t `mappend` freeVarsMonoEnv m
+  v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
   i' = filter (\(_,a) -> Set.member a v) i
 
 unamb :: PolyEnv -> Typing -> Unique ()
 unamb env (m,i,t) = do
-  let v = Set.map TVar $ freeVarsTy t `mappend` freeVarsMonoEnv m
+  let v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
   return ()
   forM_ i $ \(_,a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
 
@@ -365,13 +374,13 @@ infer penv (ETuple r t) = withRanges [r] $ do
   s <- unify ml []
   m <- foldM (\a b -> joinMonoEnv (applyMonoEnv s a) (applyMonoEnv s b)) mempty ml
   i <- joinInstEnv <$> mapM (applyInstEnv s) il
-  let ty = (m,i,TTuple $ map (applyTy s) tl)
+  let ty = (m,i,TTuple C $ map (applyTy s) tl)
   return (ETuple ty te)
 infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
 infer penv (EPrimFun r f) = withRanges [r] $ EPrimFun <$> inferPrimFun f <*> pure f
 infer penv (EVar r n) = withRanges [r] $ case Map.lookup n penv of
   Nothing -> do
-    t <- trace "mono var" <$> newVar
+    t <- trace "mono var" <$> newVar C
     return $ EVar (Map.singleton n t,mempty,t) n
   Just t -> trace "poly var" <$> EVar <$> instTyping t <*> pure n
 infer penv (ELam r n f) = withRanges [r] $ do
@@ -379,16 +388,16 @@ infer penv (ELam r n f) = withRanges [r] $ do
   let (m,i,t) = getTag tf
   case Map.lookup n m of
     Nothing -> do
-      a <- newVar
-      return $ ELam (m,i,a :-> t) n tf
-    Just a -> return $ ELam (Map.delete n m,i,a :-> t) n tf
+      a <- newVar C
+      return $ ELam (m,i,a ~> t) n tf
+    Just a -> return $ ELam (Map.delete n m,i,a ~> t) n tf
 infer penv (EApp r f a) = withRanges [r] $ do
   tf <- infer penv f
   ta <- infer penv a
   let (m1,i1,t1) = getTag tf
       (m2,i2,t2) = getTag ta
-  a <- newVar
-  s <- unify [m1,m2] [t1,t2 :-> a]
+  a <- newVar C
+  s <- unify [m1,m2] [t1,t2 ~> a]
   m3 <- joinMonoEnv (applyMonoEnv s m1) (applyMonoEnv s m2)
   i3 <- (\a1 a2 -> joinInstEnv [a1,a2]) <$> applyInstEnv s i1 <*> applyInstEnv s i2
   unamb penv (m3,i3,applyTy s a)
@@ -435,33 +444,3 @@ scopeCheck src vars _ = return ()
 
 scopeChk :: ByteString -> Exp Range -> Either String ()
 scopeChk src e = scopeCheck src mempty e
-
--- test
---spn = (mempty,mempty)
-{-
-ok =
-  [ ELit spn LInt
-  , ELet spn "a" (ELit spn LInt) (EVar spn "a")
-  , ELam spn "x" $ EVar spn "x"
-  , ELam spn "x" $ ELam spn "y" $ ELit spn LFloat
-  , ELam spn "x" $ EApp spn (EVar spn "x") (ELit spn LChar)
-  , ELam spn "x" $ EApp spn (EApp spn (EPrimFun spn PAddI) (ELit spn LInt)) (EVar spn "x")
-  , ELet spn "id" (ELam spn "x" $ EVar spn "x") (ELet spn "a" (EApp spn (EVar spn "id") (ELit spn LChar)) (EApp spn (EVar spn "id") (ELit spn LChar)))
-  , ELet spn "id" (ELam spn "x" $ EVar spn "x") (ELet spn "a" (EApp spn (EVar spn "id") (ELit spn LChar)) (EApp spn (EVar spn "id") (ELit spn LFloat)))
-  , ELet spn "f" (ELam spn "x" $ EApp spn (EApp spn (EPrimFun spn PAddI) (ELit spn LInt)) (EVar spn "x")) (EVar spn "f")
---  , EFix "f" $ ELam "x" $ EApp (EVar "f") $ ELit LFloat
-  ]
-err =
-  [ ELam spn "x" $ EApp spn (EVar spn "x") (EVar spn "x")
-  , EApp spn (ELit spn LInt) (ELit spn LInt)
-  , ELet spn "f" (ELam spn "x" $ EApp spn (EApp spn (EPrimFun spn PAddI) (ELit spn LInt)) (EVar spn "x")) (EApp spn (EVar spn "f") (ELit spn LChar))
-  , ELet spn "f1" (ELam spn "x" $ EApp spn (EApp spn (EPrimFun spn PAddI) (ELit spn LInt)) (EVar spn "x")) (EVar spn "f")
---  , EFix "f" $ ELam "x" $ EApp (EVar "f") $ EVar "f"
-  ]
-
-test = do
-  putStrLn "Ok:"
-  mapM_ (\e -> print e >> (print . inference mempty $ e)) ok
-  putStrLn "Error:"
-  mapM_ (\e -> print e >> (print . inference mempty $ e)) err
--}
