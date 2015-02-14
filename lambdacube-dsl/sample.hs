@@ -138,13 +138,13 @@ main = do
     addMesh renderer "stream" gpuCube []
 
     --let cm  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
-    let --cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
-        --pm  = perspective 0.1 100 (pi/4) (1024 / 768)
+    let cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
+        pm  = perspective 0.1 100 (pi/4) (1024 / 768)
         loop = do
             Just t <- getTime
             let angle = pi / 24 * realToFrac t
-                --mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
-            --mvp $! mat4ToM44F $! mm .*. cm .*. pm
+                mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
+            mvp $! mat4ToM44F $! mm .*. cm .*. pm
             render renderer
             swapBuffers win >> pollEvents
 
@@ -179,3 +179,36 @@ initWindow title width height = do
         glViewport 0 0 (fromIntegral w) (fromIntegral h)
 
     return win
+
+-- | Perspective transformation matrix in row major order.
+perspective :: Float  -- ^ Near plane clipping distance (always positive).
+            -> Float  -- ^ Far plane clipping distance (always positive).
+            -> Float  -- ^ Field of view of the y axis, in radians.
+            -> Float  -- ^ Aspect ratio, i.e. screen's width\/height.
+            -> Mat4
+perspective n f fovy aspect = transpose $
+    Mat4 (Vec4 (2*n/(r-l))       0       (-(r+l)/(r-l))        0)
+         (Vec4     0        (2*n/(t-b))  ((t+b)/(t-b))         0)
+         (Vec4     0             0       (-(f+n)/(f-n))  (-2*f*n/(f-n)))
+         (Vec4     0             0            (-1)             0)
+  where
+    t = n*tan(fovy/2)
+    b = -t
+    r = aspect*t
+    l = -r
+
+-- | Pure orientation matrix defined by Euler angles.
+rotationEuler :: Vec3 -> Proj4
+rotationEuler (Vec3 a b c) = orthogonal $ toOrthoUnsafe $ rotMatrixY a .*. rotMatrixX b .*. rotMatrixZ c
+
+-- | Camera transformation matrix.
+lookat :: Vec3   -- ^ Camera position.
+       -> Vec3   -- ^ Target position.
+       -> Vec3   -- ^ Upward direction.
+       -> Proj4
+lookat pos target up = translateBefore4 (neg pos) (orthogonal $ toOrthoUnsafe r)
+  where
+    w = normalize $ pos &- target
+    u = normalize $ up &^ w
+    v = w &^ u
+    r = transpose $ Mat3 u v w

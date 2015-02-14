@@ -7,96 +7,8 @@ import CompositionalLC
 import LambdaCube.Core.DeBruijn hiding (Exp,N)
 import LambdaCube.Core.DeBruijn (N())
 import LambdaCube.Core.Type hiding (Ty)
+import qualified LambdaCube.Core.PrimFun as C
 import qualified LambdaCube.Core.Type as C
-
-{-
-data Exp a
-  = ELit      a Lit
-  | EPrimFun  a PrimFun
-  | EVar      a EName
-  | EApp      a (Exp a) (Exp a)
-  | ELam      a EName (Exp a)
-  | ELet      a EName (Exp a) (Exp a)
-  | ETuple    a [Exp a]
--}
-
-{-
-let frame = FrameBuffer (ColorImage 1 (V4 0.0 0.0 0.4 1.0))
-in ScreenOut frame
-
-ELet (fromList [],[],TOutput)
-     "frame" (EApp (fromList [],[],TFrameBuffer)
-                (EPrimFun (fromList [],[],TImage :-> TFrameBuffer) PFrameBuffer) 
-                (EApp (fromList [],[],TImage)
-                  (EApp (fromList [],[],TV4F :-> TImage)
-                    (EPrimFun (fromList [],[],TInt :-> (TV4F :-> TImage)) PColorImage)
-                    (ELit (fromList [],[(CNum,TVar "t0")],TVar "t0") (LInt 1)))
-                  (EApp (fromList [],[],TV4F)
-                  (EApp (fromList [],[],TFloat :-> TV4F)
-                  (EApp (fromList [],[],TFloat :-> (TFloat :-> TV4F))
-                  (EApp (fromList [],[],TFloat :-> (TFloat :-> (TFloat :-> TV4F)))
-                    (EPrimFun (fromList [],[],TFloat :-> (TFloat :-> (TFloat :-> (TFloat :-> TV4F)))) PV4)
-                    (ELit (fromList [],[],TFloat) (LFloat 0.0)))
-                    (ELit (fromList [],[],TFloat) (LFloat 0.0)))
-                    (ELit (fromList [],[],TFloat) (LFloat 0.4)))
-                    (ELit (fromList [],[],TFloat) (LFloat 1.0)))))
-      (EApp (fromList [],[],TOutput)
-        (EPrimFun (fromList [],[],TFrameBuffer :-> TOutput) PScreenOut)
-        (EVar (fromList [],[],TFrameBuffer) "frame"))
-
-with frequency:
-  ELet (fromList [],[],TOutput C)
-     "frame" (EApp (fromList [],[],TFrameBuffer C)
-                (EPrimFun (fromList [],[],TImage a :-> TFrameBuffer a) PFrameBuffer) 
-                (EApp (fromList [],[],TImage C)
-                  (EApp (fromList [],[],TV4F a :-> TImage a)
-                    (EPrimFun (fromList [],[],TInt C :-> (TV4F a :-> TImage a)) PColorImage)
-                    (ELit (fromList [],[(CNum,TVar "t0")],TVar "t0") (LInt 1)))
-                  (EApp (fromList [],[],TV4F C)
-                  (EApp (fromList [],[],TFloat a :-> TV4F a)
-                  (EApp (fromList [],[],TFloat a :-> (TFloat b :-> TV4F (max [a,b])))
-                  (EApp (fromList [],[],TFloat a :-> (TFloat b :-> (TFloat c :-> TV4F (max [a,b,c]))))
-                    (EPrimFun (fromList [],[],TFloat a :-> (TFloat b :-> (TFloat c :-> (TFloat d :-> TV4F (max [a,b,c,d]))))) PV4)
-                    (ELit (fromList [],[],TFloat C) (LFloat 0.0)))
-                    (ELit (fromList [],[],TFloat C) (LFloat 0.0)))
-                    (ELit (fromList [],[],TFloat C) (LFloat 0.4)))
-                    (ELit (fromList [],[],TFloat C) (LFloat 1.0)))))
-      (EApp (fromList [],[],TOutput C)
-        (EPrimFun (fromList [],[],TFrameBuffer a :-> TOutput a) PScreenOut)
-        (EVar (fromList [],[],TFrameBuffer C) "frame"))
-
-screenOut $ prjFrameBuffer "" 1 $ frameBuffer [ColorImage 1 (VV4F $ V4 0 0 0.4 1)]
--}
-{-
-compile time representation:
- gfx01
-  done: Value   - TV4F C
-  done: [Image] - TImage C
-
- gfx02
-  done: Filter
-  done: EdgeMode
-  done: FetchPrimitive
-  done: RasterContext
-  done: [FragmentOperation]
-  done: TextureType
-  done: MipMap
-  done: OutputPrimitive
--}
-
-{-
-  EApp (fromList [],[],TV4F C)
-  (EApp (fromList [],[],TFloat a :-> TV4F a)
-  (EApp (fromList [],[],TFloat a :-> (TFloat b :-> TV4F (max [a,b])))
-  (EApp (fromList [],[],TFloat a :-> (TFloat b :-> (TFloat c :-> TV4F (max [a,b,c]))))
-    (EPrimFun (fromList [],[],TFloat a :-> (TFloat b :-> (TFloat c :-> (TFloat d :-> TV4F (max [a,b,c,d]))))) PV4)
-    (ELit (fromList [],[],TFloat C) (LFloat 0.0)))
-    (ELit (fromList [],[],TFloat C) (LFloat 0.0)))
-    (ELit (fromList [],[],TFloat C) (LFloat 0.4)))
-    (ELit (fromList [],[],TFloat C) (LFloat 1.0))
-----------------------------------------------------------------------
-  Value (VV4F (V4 0 0 0.4 1))
--}
 
 expV4F :: Exp Typing
 expV4F =
@@ -145,6 +57,7 @@ data NF
   | FragmentOperation FragmentOperation
   | RasterContext RasterContext
   | IV4F ByteString
+  | IM44F ByteString
   deriving (Show)
 
 instance Show N where
@@ -176,6 +89,7 @@ eval (Fun PColorImage:Arg (LInt i):Val _ v:xs) = Img (ColorImage (fromIntegral i
 eval (Fun PFrameBuffer:Img i:xs) = N (frameBuffer [i]) : eval xs
 eval (Fun PScreenOut:N n:xs) = N (screenOut $ prjFrameBuffer mempty 0 n) : eval xs
 eval (Fun PFragmentOutRastDepth:Val t v:xs) = N (fragmentOutRastDepth [const_ t v]) : eval xs
+eval (Fun PFragmentOutRastDepth:N a:xs) = N (fragmentOutRastDepth [a]) : eval xs
 eval (Fun PSmooth:N a:xs) = N (smooth a) : eval xs
 eval (Fun PVertexOut:N a:Arg (LFloat b):N c:N d:xs) = N (vertexOut a (const_ (Single C.Float) (VFloat $ realToFrac b)) [c] [d]) : eval xs
 eval (Fun PScreenOut:N a:xs) = N (screenOut a) : eval xs
@@ -188,12 +102,15 @@ eval (Fun PTriangles:xs) = FetchPrimitive Triangles : eval xs
 eval (Fun PColorOp:Blending b:xs) = FragmentOperation (ColorOp b (VV4B $ V4 True True True True)) : eval xs
 eval (Fun PTriangleCtx:CullMode a:PolygonMode b:PolygonOffset c:ProvokingVertex d:xs) = RasterContext (TriangleCtx a b c d) : eval xs
 eval (Fun PIV4F:Arg (LString s):xs) = IV4F (pack s) : eval xs
+eval (Fun PIM44F:Arg (LString s):xs) = IM44F (pack s) : eval xs
 eval (Fun PPassAll:xs) = N passAll : eval xs
 eval (Fun PFetch:Arg (LString a):FetchPrimitive b:IV4F c:xs) = N (fetch (pack a) b [(c,V4F)]) : eval xs
 eval (Fun PTransform:N a:N b:xs) = N (transform a b) : eval xs
 eval (Fun PRasterize:RasterContext a:N b:xs) = N (rasterize a b) : eval xs
 eval (Fun PAccumulationContext:FragmentOperation a:xs) = N (accumulationContext Nothing [a]) : eval xs
 eval (Fun PAccumulate:N a:N b:N c:N d:N e:xs) = N (accumulate a b c d e) : eval xs
+eval (Fun PMulMV:N a:N b:xs) = N (primApp (Single V4F) C.PrimMulMatVec $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun PUni:IM44F a:xs) = N (uni (Single M44F) a) : eval xs
 eval (a:xs) = a : eval xs
 eval l = l
 

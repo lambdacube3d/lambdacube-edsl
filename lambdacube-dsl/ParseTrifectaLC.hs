@@ -82,6 +82,9 @@ lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
       , "V4"
       , "VertexOut"
       , "one"
+      , "MulMV"
+      , "Uni"
+      , "IM44F"
       ]
 
 kw w = reserve lcIdents w
@@ -145,7 +148,10 @@ primFun = PUpper <$ kw "upper" <|>
           PTriangles <$ kw "Triangles" <|>
           PV4 <$ kw "V4" <|>
           PVertexOut <$ kw "VertexOut" <|>
-          Pone <$ kw "one"
+          Pone <$ kw "one" <|>
+          PMulMV <$ kw "MulMV" <|>
+          PIM44F <$ kw "IM44F" <|>
+          PUni <$ kw "Uni"
 
 lam :: P (Exp Range)
 lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position

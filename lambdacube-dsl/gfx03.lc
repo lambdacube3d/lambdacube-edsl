@@ -1,8 +1,25 @@
+{-
+    modelViewProj :: Exp V M44F
+    modelViewProj = Uni (IM44F "MVP")
+
+    vertexShader :: Exp V (V3F,V2F) -> VertexOut () V2F
+    vertexShader puv = VertexOut v4 (Const 1) ZT (Smooth uv:.ZT)
+      where
+        v4 :: Exp V V4F
+        v4 = modelViewProj @*. v3v4 p
+        (p,uv) = untup2 puv
+
+v3v4 :: Exp s V3F -> Exp s V4F
+v3v4 v = pack' (V4 x y z (Const 1))
+  where 
+    V3 x y z = unpack' v
+-}
 let
   emptyFB           = FrameBuffer (ColorImage 1 (V4 0.0 0.0 0.4 1.0))
   rasterCtx         = TriangleCtx CullNone PolygonFill NoOffset LastVertex
   fragmentCtx       = AccumulationContext (ColorOp NoBlending)
-  vertexShader v    = VertexOut v 1.0 () (Smooth v)
+  modelViewProj     = Uni (IM44F "MVP")
+  vertexShader v    = VertexOut (MulMV modelViewProj v) 1.0 () (Smooth v)
   vertexStream      = Fetch "stream" Triangles (IV4F "position")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream

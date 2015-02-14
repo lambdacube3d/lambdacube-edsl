@@ -61,6 +61,9 @@ data PrimFun
   | PV4
   | PVertexOut
   | Pone
+  | PMulMV
+  | PUni
+  | PIM44F
   deriving (Show,Eq,Ord)
 
 type Range = (Delta,Delta)
@@ -101,6 +104,7 @@ data Ty -- star kind
   | TFloat  Frequency
   | TString Frequency
   -- lambdacube types
+  | TM44F   Frequency
   | TV4F    Frequency
   | TImage  Frequency
   | TFrameBuffer  Frequency
@@ -170,6 +174,8 @@ inferPrimFun a = case a of
   PRead -> do
     t <- newVar C
     return (mempty,[(CTextual,t)],TString C ~> t)
+  PMulMV -> do
+    return (mempty,mempty,TM44F C ~> TV4F C ~> TV4F C)
   PV4 -> do
     return (mempty,mempty,TFloat C ~> TFloat C ~> TFloat C ~> TFloat C ~> TV4F C)
   PColorImage -> do
@@ -204,6 +210,10 @@ inferPrimFun a = case a of
     return (mempty,mempty,TFetchPrimitive C)
   PIV4F -> do
     return (mempty,mempty,TString C ~> TInput C)
+  PIM44F -> do
+    return (mempty,mempty,TString C ~> TInput C)
+  PUni -> do
+    return (mempty,mempty,TInput C ~> TM44F C)
   PTransform -> do
     return (mempty,mempty,(TV4F C ~> TVertexOut C) ~> TVertexStream C ~> TPrimitiveStream C)
   PRasterize -> do
