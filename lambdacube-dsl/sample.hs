@@ -102,8 +102,8 @@ g_uv_buffer_data =
 myCube :: Mesh
 myCube = Mesh
     { mAttributes   = T.fromList
-        [ ("vertexPosition_modelspace", A_V3F $ SV.fromList [V3 x y z | (x,y,z) <- g_vertex_buffer_data])
-        , ("vertexUV",                  A_V2F $ SV.fromList [V2 u v | (u,v) <- g_uv_buffer_data])
+        [ ("position", A_V4F $ SV.fromList [V4 x y z 1 | (x,y,z) <- g_vertex_buffer_data])
+        , ("vertexUV", A_V2F $ SV.fromList [V2 u v | (u,v) <- g_uv_buffer_data])
         ]
     , mPrimitive    = P_Triangles
     , mGPUData      = Nothing

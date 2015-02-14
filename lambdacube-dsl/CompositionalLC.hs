@@ -46,7 +46,7 @@ data PrimFun
   | PFetch
   | PFragmentOutRastDepth
   | PFrameBuffer
-  | PIV3F
+  | PIV4F
   | PLastVertex
   | PNoBlending
   | PNoOffset
@@ -202,7 +202,7 @@ inferPrimFun a = case a of
     return (mempty,mempty,TString C ~> TFetchPrimitive C ~> TInput C ~> TVertexStream C)
   PTriangles -> do
     return (mempty,mempty,TFetchPrimitive C)
-  PIV3F -> do
+  PIV4F -> do
     return (mempty,mempty,TString C ~> TInput C)
   PTransform -> do
     return (mempty,mempty,(TV4F C ~> TVertexOut C) ~> TVertexStream C ~> TPrimitiveStream C)

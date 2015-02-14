@@ -67,7 +67,7 @@ lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
       , "Fetch"
       , "FragmentOutRastDepth"
       , "FrameBuffer"
-      , "IV3F"
+      , "IV4F"
       , "LastVertex"
       , "NoBlending"
       , "NoOffset"
@@ -131,7 +131,7 @@ primFun = PUpper <$ kw "upper" <|>
           PFetch <$ kw "Fetch" <|>
           PFragmentOutRastDepth <$ kw "FragmentOutRastDepth" <|>
           PFrameBuffer <$ kw "FrameBuffer" <|>
-          PIV3F <$ kw "IV3F" <|>
+          PIV4F <$ kw "IV4F" <|>
           PLastVertex <$ kw "LastVertex" <|>
           PNoBlending <$ kw "NoBlending" <|>
           PNoOffset <$ kw "NoOffset" <|>
