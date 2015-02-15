@@ -117,30 +117,32 @@ rendererFromDSL fname = do
         a -> error $ show a
   compileRendererFromCore lcNet
 
+-- TODO: recompile renderer on keypress
 main :: IO ()
 main = do
     win <- initWindow "LambdaCube 3D DSL Sample" 1024 768
     let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
 
     n <- getArgs
-    renderer <- rendererFromDSL $ case n of
-      [fn]  -> fn
-      _     -> "gfx01.lc"
-
-    let uniformMap      = uniformSetter renderer
-        texture         = uniformFTexture2D "myTextureSampler" uniformMap
-        mvp             = uniformM44F "MVP" uniformMap
-        setWindowSize   = setScreenSize renderer
-
-    setWindowSize 1024 768
 
     gpuCube <- compileMesh myCube
-    addMesh renderer "stream" gpuCube []
 
+    let setup = do
+          renderer <- rendererFromDSL $ case n of
+            [fn]  -> fn
+            _     -> "gfx01.lc"
+          addMesh renderer "stream" gpuCube []
+          return renderer
     --let cm  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
     let cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
         pm  = perspective 0.1 100 (pi/4) (1024 / 768)
-        loop = do
+        loop renderer = do
+            let uniformMap      = uniformSetter renderer
+                texture         = uniformFTexture2D "myTextureSampler" uniformMap
+                mvp             = uniformM44F "MVP" uniformMap
+                setWindowSize   = setScreenSize renderer
+
+            setWindowSize 1024 768
             Just t <- getTime
             let angle = pi / 24 * realToFrac t
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
@@ -149,10 +151,14 @@ main = do
             swapBuffers win >> pollEvents
 
             k <- keyIsPressed Key'Escape
-            unless k $ loop
-    loop
+            reload <- keyIsPressed Key'R
+            rend' <- if not reload then return renderer else do
+              dispose renderer
+              setup
+            when k $ dispose rend'
+            unless k $ loop rend'
+    loop =<< setup
 
-    dispose renderer
     destroyWindow win
     terminate
 
