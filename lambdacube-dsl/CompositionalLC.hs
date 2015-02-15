@@ -20,53 +20,11 @@ import qualified Data.Foldable as F
 import Text.Trifecta hiding (err)
 import Text.Trifecta.Delta
 
+import Type
+
 trace_ _ = id
 trace = trace_
 
-data Lit
-  = LInt    Integer
-  | LChar   Char
-  | LString String
-  | LFloat  Double
-  deriving (Show,Eq,Ord)
-
-data PrimFun
-  -- temp
-  = PAddI
-  | PUpper
-  | PMulF
-  | PShow
-  | PRead
-  -- lc prims
-  | PAccumulate
-  | PAccumulationContext
-  | PColorImage
-  | PColorOp
-  | PCullNone
-  | PFetch
-  | PFragmentOutRastDepth
-  | PFrameBuffer
-  | PIV4F
-  | PLastVertex
-  | PNoBlending
-  | PNoOffset
-  | PPassAll
-  | PPolygonFill
-  | PRasterize
-  | PScreenOut
-  | PSmooth
-  | PTransform
-  | PTriangleCtx
-  | PTriangles
-  | PV4
-  | PVertexOut
-  | Pone
-  | PMulMV
-  | PUni
-  | PIM44F
-  deriving (Show,Eq,Ord)
-
-type Range = (Delta,Delta)
 data Exp a
   = ELit      a Lit
   | EPrimFun  a PrimFun
@@ -78,73 +36,7 @@ data Exp a
 --  | EFix EName Exp
   deriving (Show,Eq,Ord)
 
-data Frequency -- frequency kind
-  -- frequency values
-  = C
-  | O
-  | V
-  | F
-  -- type family representation
-  | FVar TName
-  | FMax [Frequency]
-  deriving (Show,Eq,Ord)
-
-infixr 7 ~>
-a ~> b = TArr C a b
-
-data Ty -- star kind
-  = TVar    Frequency TName
-  | TArr    Frequency Ty Ty -- ????
-  -- composit
-  | TTuple  Frequency [Ty]
-  | TArray  Frequency Ty
-  -- primitive types
-  | TInt    Frequency
-  | TChar   Frequency
-  | TFloat  Frequency
-  | TString Frequency
-  -- lambdacube types
-  | TM44F   Frequency
-  | TV4F    Frequency
-  | TImage  Frequency
-  | TFrameBuffer  Frequency
-  | TOutput Frequency
-  | TRasterContext Frequency
-  | TCullMode Frequency
-  | TPolygonMode Frequency
-  | TPolygonOffset Frequency
-  | TProvokingVertex Frequency
-  | TAccumulationContext Frequency
-  | TFragmentOperation Frequency
-  | TBlending Frequency
-  | TVertexOut Frequency
-  | TInterpolated Frequency
-  | TFetchPrimitive Frequency
-  | TInput Frequency
-  | TVertexStream Frequency
-  | TPrimitiveStream Frequency
-  | TFragmentStream Frequency
-  | TFragmentOut Frequency
-  | TFragmentFilter Frequency
-  deriving (Show,Eq,Ord)
-
-data Constraint
-  = CNum
-  | CTextual
-  deriving (Show,Eq,Ord)
-
-instances :: Map Constraint (Set Ty)
-instances = Map.fromList [(CNum,Set.fromList [TInt C,TFloat C])]
-
-type EName = String
-type TName = String
 type Subst = Map TName Ty
-
-type MonoEnv = Map EName Ty
-type PolyEnv = Map EName Typing
-type InstEnv = [(Constraint,Ty)]
-type Typing = (MonoEnv,InstEnv,Ty)
-type Env = (PolyEnv,MonoEnv,InstEnv)
 
 {-
   ->>
@@ -159,83 +51,6 @@ type Env = (PolyEnv,MonoEnv,InstEnv)
 
   typing = type + mono env + instance env
 -}
-
-
-inferPrimFun :: PrimFun -> Unique Typing
-inferPrimFun a = case a of
-  PAddI -> do
-    t <- newVar C
-    return (mempty,[(CNum,t)],t ~> t ~> t)
-  PUpper -> return (mempty,mempty,TChar C ~> TChar C)
-  PMulF -> return (mempty,mempty,TFloat C ~> TFloat C ~> TFloat C)
-  PShow -> do
-    t <- newVar C
-    return (mempty,[(CTextual,t)],t ~> TString C)
-  PRead -> do
-    t <- newVar C
-    return (mempty,[(CTextual,t)],TString C ~> t)
-  PMulMV -> do
-    return (mempty,mempty,TM44F C ~> TV4F C ~> TV4F C)
-  PV4 -> do
-    return (mempty,mempty,TFloat C ~> TFloat C ~> TFloat C ~> TFloat C ~> TV4F C)
-  PColorImage -> do
-    return (mempty,mempty,TInt C ~> TV4F C ~> TImage C)
-  PFrameBuffer -> do
-    return (mempty,mempty,TImage C ~> TFrameBuffer C)
-  PScreenOut -> do
-    return (mempty,mempty,TFrameBuffer C ~> TOutput C)
-  PTriangleCtx -> do
-    return (mempty,mempty,TCullMode C ~> TPolygonMode C ~> TPolygonOffset C ~> TProvokingVertex C ~> TRasterContext C)
-  PCullNone -> do
-    return (mempty,mempty,TCullMode C)
-  PPolygonFill -> do
-    return (mempty,mempty,TPolygonMode C)
-  PNoOffset -> do
-    return (mempty,mempty,TPolygonOffset C)
-  PLastVertex -> do
-    return (mempty,mempty,TProvokingVertex C)
-  PAccumulationContext -> do
-    return (mempty,mempty,TFragmentOperation C ~> TAccumulationContext C)
-  PColorOp -> do
-    return (mempty,mempty,TBlending C ~> TFragmentOperation C)
-  PNoBlending -> do
-    return (mempty,mempty,TBlending C)
-  PVertexOut -> do
-    return (mempty,mempty,TV4F C ~> TFloat C ~> TTuple C [] ~> TInterpolated C ~> TVertexOut C)
-  PSmooth -> do
-    return (mempty,mempty,TV4F C ~> TInterpolated C)
-  PFetch -> do
-    return (mempty,mempty,TString C ~> TFetchPrimitive C ~> TInput C ~> TVertexStream C)
-  PTriangles -> do
-    return (mempty,mempty,TFetchPrimitive C)
-  PIV4F -> do
-    return (mempty,mempty,TString C ~> TInput C)
-  PIM44F -> do
-    return (mempty,mempty,TString C ~> TInput C)
-  PUni -> do
-    return (mempty,mempty,TInput C ~> TM44F C)
-  PTransform -> do
-    return (mempty,mempty,(TV4F C ~> TVertexOut C) ~> TVertexStream C ~> TPrimitiveStream C)
-  PRasterize -> do
-    return (mempty,mempty,TRasterContext C ~> TPrimitiveStream C ~> TFragmentStream C)
-  PFragmentOutRastDepth -> do
-    return (mempty,mempty,TV4F C ~> TFragmentOut C)
-  PAccumulate -> do
-    return (mempty,mempty,TAccumulationContext C ~> TFragmentFilter C ~> (TV4F C ~> TFragmentOut C) ~> TFragmentStream C ~> TFrameBuffer C ~> TFrameBuffer C)
-  PPassAll -> do
-    return (mempty,mempty, TFragmentFilter C)
-  a -> throwErrorUnique $ "unknown primitive: " ++ show a
-
-inferLit :: Lit -> Unique Typing
-inferLit a = case a of
-  LInt _ -> do
-    t <- newVar C
-    return (mempty,[(CNum,t)],t) -- ????
-  LChar   _ -> return (mempty,mempty,TChar C)
-  LFloat  _ -> return (mempty,mempty,TFloat C)
-  LString _ -> return (mempty,mempty,TString C)
-
-type Unique a = StateT (Int,ByteString,[Range]) (Except String) a
 
 getTag :: Show a => Exp a -> a
 getTag (ELit      r _) = r
@@ -256,36 +71,11 @@ withRanges rl a = do
   put (z,q,rl0)
   return res
 
-throwErrorUnique :: String -> Unique a
-throwErrorUnique s = do
-  (_,src,rl) <- get
-  throwErrorSrc src rl s
-
-throwErrorSrc src rl s = do
-  let sl = map mkSpan rl
-      fullCode = True
-      mkSpan (s,e) = unlines [show $ pretty (s,e), if fullCode then BS.unpack str else show $ pretty r]
-        where
-          r = render spn
-          str = x -- <> BS.takeWhile (\a -> notElem a ['\n','\r']) y
-          spn = Span s e str
-          (x,y) = BS.splitAt (se - sb) $ BS.drop sb src
-          b = rewind s
-          sb = fromIntegral $ bytes b
-          se = fromIntegral $ bytes e
-  throwError $ concat sl ++ s
-
-newVar :: Frequency -> Unique Ty
-newVar f = do
-  (n,s,r) <- get
-  put (n+1,s,r)
-  return $ TVar f $ 't':show n
-
 applyTy :: Subst -> Ty -> Ty
 applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
-applyTy st (TArr f a b) = TArr f (applyTy st a) (applyTy st b)
+applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
 applyTy _ t = t
 
 applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
@@ -306,7 +96,7 @@ joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
 
 freeVarsTy :: Ty -> Set TName
 freeVarsTy (TVar _ a) = Set.singleton a
-freeVarsTy (TArr f a b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy (TArr a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TTuple _ a) = foldl mappend mempty $ map freeVarsTy a
 freeVarsTy (TArray _ a) = freeVarsTy a
 freeVarsTy _ = mempty
@@ -349,10 +139,13 @@ compose b a = mappend a $ applyTy a <$> b
 unifyTy :: Ty -> Ty -> Unique Subst
 unifyTy (TVar _ u) t = bindVar u t
 unifyTy t (TVar _ u) = bindVar u t
-unifyTy (TArr f1 a1 b1) (TArr f2 a2 b2) = do
+unifyTy (TArr a1 b1) (TArr a2 b2) = do
   s1 <- unifyTy a1 a2
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
   return $ s1 `compose` s2
+unifyTy (TInput _ a1) (TInput _ a2) = do
+  s1 <- unifyTy a1 a2
+  return s1
 unifyTy a b
   | a == b = return mempty
   | otherwise = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b

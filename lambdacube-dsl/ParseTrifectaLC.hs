@@ -17,6 +17,7 @@ import Control.Monad
 import Text.Parser.LookAhead
 
 import CompositionalLC hiding (test)
+import Type
 
 {-
 type Indentation = Int

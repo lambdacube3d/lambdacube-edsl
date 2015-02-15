@@ -4,6 +4,7 @@ import Data.ByteString.Char8
 import Data.Map as Map
 import Data.Monoid
 import CompositionalLC
+import Type
 import LambdaCube.Core.DeBruijn hiding (Exp,N)
 import LambdaCube.Core.DeBruijn (N())
 import LambdaCube.Core.Type hiding (Ty)
@@ -76,7 +77,7 @@ toNF env (EVar t n) = case Map.lookup n env of
   Nothing -> error $ "unknown variable: " ++ n
   Just x -> x
 toNF env (ELam t n e) =
-  let (tm,ti,TArr _ ta tb) = t
+  let (tm,ti,TArr ta tb) = t
   in case toNF (Map.insert n ([N $ var (toTy (tm,ti,ta)) 0 ""]) env) e of
     [N x] -> [N $ lam (toTy t) $ body x]
     x -> error $ "lam is not fully supported: " ++ show x
