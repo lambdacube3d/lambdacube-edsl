@@ -9,6 +9,7 @@ import Control.Applicative
 import Text.Trifecta
 import Text.Trifecta.Indentation as I
 import Text.Trifecta.Delta
+import Text.Parser.Expression
 import Text.Parser.Token.Style
 import qualified Data.HashSet as HashSet
 
@@ -46,6 +47,10 @@ instance TokenParsing p => TokenParsing (LCParser p) where
 --lcSpace = buildSomeSpaceParser _ haskellCommentStyle
 
 lcCommentStyle = haskellCommentStyle
+
+lcOps = emptyOps
+  { _styleReserved = HashSet.fromList ["=","\\","*."]
+  }
 
 lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
   where
@@ -89,7 +94,7 @@ lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
 
 kw w = reserve lcIdents w
 
-op w = reserve haskellOps w
+op w = reserve lcOps w
 
 var :: P String
 var = ident lcIdents
@@ -110,7 +115,21 @@ def = (\p1 n a d p2 e -> ELet (p1,p2) n (foldr (args (p1,p2)) d a) e) <$> positi
     args r n e = ELam r n e
 
 expr :: P (Exp Range)
-expr = lam <|> letin <|> formula
+expr = buildExpressionParser table expr'
+
+table :: OperatorTable (IndentationParserT Char (LCParser Parser)) (Exp Range)
+table =
+  [ [binary "*." (\a b -> let r = mergeRange a b in EApp r (EApp r (EPrimFun r PMulMV) a) b) AssocLeft]
+   --[Prefix $ do op "*."; return id]
+  ]
+ where
+  mergeRange a b = let (a1,_) = getTag a
+                       (_,b2) = getTag b
+                   in (a1,b2)
+  binary  name fun assoc = Infix (do op name; return (fun)) assoc
+
+expr' :: P (Exp Range)
+expr' = lam <|> letin <|> formula
 
 formula = (\p1 l p2 -> foldl1 (EApp (p1,p2)) l) <$> position <*> some atom <*> position
 
