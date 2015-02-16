@@ -1,5 +1,5 @@
 let
-  emptyFB           = FrameBuffer (ColorImage 1 (V4 0.0 0.0 0.4 1.0))
+  emptyFB           = FrameBuffer (ColorImage #1 (V4 0.0 0.0 0.4 1.0))
   rasterCtx         = TriangleCtx CullNone PolygonFill NoOffset LastVertex
   fragmentCtx       = AccumulationContext (ColorOp NoBlending)
   modelViewProj     = Uni (IM44F "MVP")
@@ -7,6 +7,7 @@ let
   vertexStream      = Fetch "stream" Triangles (IV4F "position")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
-  fragmentShader v  = FragmentOutRastDepth v
-  frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
+  fragmentShader' v = FragmentOut (V4 1.0 0.4 0.0 1.0)
+  fragmentShader v  = FragmentOut v
+  frame             = Accumulate fragmentCtx PassAll fragmentShader' fragmentStream emptyFB
 in ScreenOut frame
