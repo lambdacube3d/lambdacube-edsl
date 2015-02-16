@@ -76,6 +76,20 @@ applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
 applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
+applyTy st (TImage f a b) = TImage f (applyTy st a) (applyTy st b)
+applyTy st (TVertexStream f a b) = TVertexStream f (applyTy st a) (applyTy st b)
+applyTy st (TFragmentStream f a b) = TFragmentStream f (applyTy st a) (applyTy st b)
+applyTy st (TPrimitiveStream f a b f' c) = TPrimitiveStream f (applyTy st a) (applyTy st b) f' (applyTy st c)
+applyTy st (TBlending f a) = TBlending f (applyTy st a)
+applyTy st (TFragmentOperation f a) = TFragmentOperation f (applyTy st a)
+applyTy st (TInterpolated f a) = TInterpolated f (applyTy st a)
+applyTy st (TFetchPrimitive f a) = TFetchPrimitive f (applyTy st a)
+applyTy st (TVertexOut f a) = TVertexOut f (applyTy st a)
+applyTy st (TRasterContext f a) = TRasterContext f (applyTy st a)
+applyTy st (TAccumulationContext f a) = TAccumulationContext f (applyTy st a)
+applyTy st (TFragmentFilter f a) = TFragmentFilter f (applyTy st a)
+applyTy st (TFragmentOut f a) = TFragmentOut f (applyTy st a)
+applyTy st (Color a) = Color (applyTy st a)
 applyTy _ t = t
 
 applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
@@ -97,8 +111,22 @@ joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
 freeVarsTy :: Ty -> Set TName
 freeVarsTy (TVar _ a) = Set.singleton a
 freeVarsTy (TArr a b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy (TVertexStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy (TFragmentStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy (TPrimitiveStream _ a b _ c) = freeVarsTy a `mappend` freeVarsTy b `mappend` freeVarsTy c
+freeVarsTy (TImage _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TTuple _ a) = foldl mappend mempty $ map freeVarsTy a
 freeVarsTy (TArray _ a) = freeVarsTy a
+freeVarsTy (TBlending _ a) = freeVarsTy a
+freeVarsTy (TFragmentOperation _ a) = freeVarsTy a
+freeVarsTy (TInterpolated _ a) = freeVarsTy a
+freeVarsTy (TFetchPrimitive _ a) = freeVarsTy a
+freeVarsTy (TVertexOut _ a) = freeVarsTy a
+freeVarsTy (TRasterContext _ a) = freeVarsTy a
+freeVarsTy (TAccumulationContext _ a) = freeVarsTy a
+freeVarsTy (TFragmentFilter _ a) = freeVarsTy a
+freeVarsTy (TFragmentOut _ a) = freeVarsTy a
+freeVarsTy (Color a) = freeVarsTy a
 freeVarsTy _ = mempty
 
 freeVarsMonoEnv :: MonoEnv -> Set TName
@@ -143,9 +171,34 @@ unifyTy (TArr a1 b1) (TArr a2 b2) = do
   s1 <- unifyTy a1 a2
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
   return $ s1 `compose` s2
-unifyTy (TInput _ a1) (TInput _ a2) = do
+unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = do
   s1 <- unifyTy a1 a2
-  return s1
+  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
+  return $ s1 `compose` s2
+unifyTy (TVertexStream f1 a1 b1) (TVertexStream f2 a2 b2) = do
+  s1 <- unifyTy a1 a2
+  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
+  return $ s1 `compose` s2
+unifyTy (TFragmentStream f1 a1 b1) (TFragmentStream f2 a2 b2) = do
+  s1 <- unifyTy a1 a2
+  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
+  return $ s1 `compose` s2
+unifyTy (TPrimitiveStream f1 a1 b1 g1 c1) (TPrimitiveStream f2 a2 b2 g2 c2) = do
+  s1 <- unifyTy a1 a2
+  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
+  s3 <- unifyTy (applyTy s2 $ applyTy s1 c1) (applyTy s2 $ applyTy s1 c2)
+  return $ s1 `compose` s2 `compose` s3
+unifyTy (TInput _ a1) (TInput _ a2) = unifyTy a1 a2
+unifyTy (TBlending _ a1) (TBlending _ a2) = unifyTy a1 a2
+unifyTy (TInterpolated _ a1) (TInterpolated _ a2) = unifyTy a1 a2
+unifyTy (TVertexOut _ a1) (TVertexOut _ a2) = unifyTy a1 a2
+unifyTy (TFetchPrimitive _ a1) (TFetchPrimitive _ a2) = unifyTy a1 a2
+unifyTy (TRasterContext _ a1) (TRasterContext _ a2) = unifyTy a1 a2
+unifyTy (TFragmentOperation _ a1) (TFragmentOperation _ a2) = unifyTy a1 a2
+unifyTy (TAccumulationContext _ a1) (TAccumulationContext _ a2) = unifyTy a1 a2
+unifyTy (TFragmentFilter _ a1) (TFragmentFilter _ a2) = unifyTy a1 a2
+unifyTy (TFragmentOut _ a1) (TFragmentOut _ a2) = unifyTy a1 a2
+unifyTy (Color a1) (Color a2) = unifyTy a1 a2
 unifyTy a b
   | a == b = return mempty
   | otherwise = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b

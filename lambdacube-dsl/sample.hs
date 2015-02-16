@@ -117,7 +117,6 @@ rendererFromDSL fname = do
         a -> error $ show a
   compileRendererFromCore lcNet
 
--- TODO: recompile renderer on keypress
 main :: IO ()
 main = do
     win <- initWindow "LambdaCube 3D DSL Sample" 1024 768
@@ -132,6 +131,7 @@ main = do
             [fn]  -> fn
             _     -> "gfx01.lc"
           addMesh renderer "stream" gpuCube []
+          putStrLn "reloaded"
           return renderer
     --let cm  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
     let cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))

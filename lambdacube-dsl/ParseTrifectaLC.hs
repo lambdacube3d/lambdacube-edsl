@@ -50,7 +50,7 @@ instance TokenParsing p => TokenParsing (LCParser p) where
 lcCommentStyle = haskellCommentStyle
 
 lcOps = emptyOps
-  { _styleReserved = HashSet.fromList ["=","\\","*."]
+  { _styleReserved = HashSet.fromList ["=","\\","*.","#"]
   }
 
 lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
@@ -71,7 +71,7 @@ lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
       , "ColorOp"
       , "CullNone"
       , "Fetch"
-      , "FragmentOutRastDepth"
+      , "FragmentOut"
       , "FrameBuffer"
       , "IV4F"
       , "LastVertex"
@@ -101,7 +101,11 @@ var :: P String
 var = ident lcIdents
 
 lit :: P Lit
-lit = LFloat <$> try double <|> LInt <$> integer <|> LChar <$> charLiteral <|> LString <$> stringLiteral
+lit = LFloat <$> try double <|>
+      LInt <$> integer <|>
+      LChar <$> charLiteral <|>
+      LString <$> stringLiteral <|>
+      LNat . fromIntegral <$ op "#" <*> integer
 
 letin :: P (Exp Range)
 letin = do
@@ -152,7 +156,7 @@ primFun = PUpper <$ kw "upper" <|>
           PColorOp <$ kw "ColorOp" <|>
           PCullNone <$ kw "CullNone" <|>
           PFetch <$ kw "Fetch" <|>
-          PFragmentOutRastDepth <$ kw "FragmentOutRastDepth" <|>
+          PFragmentOut <$ kw "FragmentOut" <|>
           PFrameBuffer <$ kw "FrameBuffer" <|>
           PIV4F <$ kw "IV4F" <|>
           PLastVertex <$ kw "LastVertex" <|>

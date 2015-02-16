@@ -30,6 +30,7 @@ data Lit
   | LChar   Char
   | LString String
   | LFloat  Double
+  | LNat    Int
   deriving (Show,Eq,Ord)
 
 data PrimFun
@@ -46,7 +47,7 @@ data PrimFun
   | PColorOp
   | PCullNone
   | PFetch
-  | PFragmentOutRastDepth
+  | PFragmentOut
   | PFrameBuffer
   | PIV4F
   | PLastVertex
@@ -82,6 +83,10 @@ data Frequency -- frequency kind
 infixr 7 ~>
 a ~> b = TArr a b
 
+type Semantic = Ty
+type PrimitiveType = Ty
+type Nat = Ty
+
 data Ty -- star kind
   = TVar    Frequency TName
   | TArr    Ty Ty
@@ -93,29 +98,44 @@ data Ty -- star kind
   | TChar   Frequency
   | TFloat  Frequency
   | TString Frequency
+
   -- lambdacube types
+  | TNat    Int
+
+  -- Semantic
+  | Depth   Ty
+  | Stencil Ty
+  | Color   Ty
+
+  -- PrimitiveType
+  | TTriangle
+  | TLine
+  | TPoint
+  | TTriangleAdjacency
+  | TLineAdjacency
+
   | TM44F   Frequency
   | TV4F    Frequency
-  | TImage  Frequency
-  | TFrameBuffer          Frequency
-  | TOutput               Frequency
-  | TRasterContext        Frequency
+  | TAccumulationContext  Frequency Ty
+  | TBlending             Frequency Ty
   | TCullMode             Frequency
+  | TFetchPrimitive       Frequency PrimitiveType
+  | TFragmentFilter       Frequency Ty
+  | TFragmentOperation    Frequency Semantic
+  | TFragmentOut          Frequency Semantic
+  | TFragmentStream       Frequency Nat Ty
+  | TFrameBuffer          Frequency -- ???
+  | TImage                Frequency Nat Semantic
+  | TInput                Frequency Ty
+  | TInterpolated         Frequency Ty -- ???
+  | TOutput               Frequency
   | TPolygonMode          Frequency
   | TPolygonOffset        Frequency
+  | TPrimitiveStream      Frequency PrimitiveType Nat Frequency Ty -- ???
   | TProvokingVertex      Frequency
-  | TAccumulationContext  Frequency
-  | TFragmentOperation    Frequency
-  | TBlending             Frequency
-  | TVertexOut            Frequency
-  | TInterpolated         Frequency
-  | TFetchPrimitive       Frequency
-  | TInput                Frequency Ty
-  | TVertexStream         Frequency
-  | TPrimitiveStream      Frequency
-  | TFragmentStream       Frequency
-  | TFragmentOut          Frequency
-  | TFragmentFilter       Frequency
+  | TRasterContext        Frequency PrimitiveType
+  | TVertexOut            Frequency Ty -- ???
+  | TVertexStream         Frequency PrimitiveType Ty
   deriving (Show,Eq,Ord)
 
 data Constraint
@@ -131,31 +151,31 @@ ty t = return (mempty,mempty,t)
 
 inferPrimFun :: PrimFun -> Unique Typing
 inferPrimFun a = case a of
-  PFragmentOutRastDepth -> ty $ TV4F C ~> TFragmentOut C
-  PAccumulationContext  -> ty $ TFragmentOperation C ~> TAccumulationContext C
+  PFragmentOut  -> do t <- newVar C ; ty $ t ~> TFragmentOut C t
+  PAccumulationContext  -> do t <- newVar C ; ty $ TFragmentOperation C t ~> TAccumulationContext C t
   PMulMV        -> ty $ TM44F C ~> TV4F C ~> TV4F C
   PV4           -> ty $ TFloat C ~> TFloat C ~> TFloat C ~> TFloat C ~> TV4F C
-  PColorImage   -> ty $ TInt C ~> TV4F C ~> TImage C
-  PFrameBuffer  -> ty $ TImage C ~> TFrameBuffer C
+  PColorImage   -> do [a,b] <- newVars 2 C ; ty $ a ~> b ~> TImage C a b
+  PFrameBuffer  -> do [a,b] <- newVars 2 C ; ty $ TImage C a b ~> TFrameBuffer C
   PScreenOut    -> ty $ TFrameBuffer C ~> TOutput C
-  PTriangleCtx  -> ty $ TCullMode C ~> TPolygonMode C ~> TPolygonOffset C ~> TProvokingVertex C ~> TRasterContext C
   PCullNone     -> ty $ TCullMode C
   PPolygonFill  -> ty $ TPolygonMode C
   PNoOffset     -> ty $ TPolygonOffset C
   PLastVertex   -> ty $ TProvokingVertex C
-  PColorOp      -> ty $ TBlending C ~> TFragmentOperation C
-  PNoBlending   -> ty $ TBlending C
-  PVertexOut    -> ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> TInterpolated C ~> TVertexOut C
-  PSmooth       -> ty $ TV4F C ~> TInterpolated C
-  PFetch        -> ty $ TString C ~> TFetchPrimitive C ~> TInput C (TV4F C) ~> TVertexStream C
-  PTriangles    -> ty $ TFetchPrimitive C
   PIV4F         -> ty $ TString C ~> TInput C (TV4F C)
   PIM44F        -> ty $ TString C ~> TInput C (TM44F C)
   PUni          -> do t <- newVar C ; ty $ TInput C t ~> t
-  PTransform    -> ty $ (TV4F C ~> TVertexOut C) ~> TVertexStream C ~> TPrimitiveStream C
-  PRasterize    -> ty $ TRasterContext C ~> TPrimitiveStream C ~> TFragmentStream C
-  PAccumulate   -> ty $ TAccumulationContext C ~> TFragmentFilter C ~> (TV4F C ~> TFragmentOut C) ~> TFragmentStream C ~> TFrameBuffer C ~> TFrameBuffer C
-  PPassAll      -> ty $ TFragmentFilter C
+  PTriangles    -> ty $ TFetchPrimitive C TTriangle
+  PNoBlending   -> do t <- newVar C ; ty $ TBlending C t
+  PTriangleCtx  -> ty $ TCullMode C ~> TPolygonMode C ~> TPolygonOffset C ~> TProvokingVertex C ~> TRasterContext C TTriangle
+  PSmooth       -> do t <- newVar C ; ty $ t ~> TInterpolated C t
+  PFetch        -> do [a,b] <- newVars 2 C ; ty $ TString C ~> TFetchPrimitive C a ~> TInput C b ~> TVertexStream C a b
+  PRasterize    -> do [a,b,c] <- newVars 3 C ; ty $ TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
+  PTransform    -> do [a,b,p] <- newVars 3 C ; ty $ (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
+  PVertexOut    -> do a <- newVar C ; ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> TInterpolated C a ~> TVertexOut C a
+  PAccumulate   -> do [a,b,n] <- newVars 3 C ; ty $ TAccumulationContext C b ~> TFragmentFilter C a ~> (a ~> TFragmentOut C b) ~> TFragmentStream C n a ~> TFrameBuffer C ~> TFrameBuffer C
+  PColorOp      -> do a <- newVar C ; ty $ TBlending C a ~> TFragmentOperation C ({-Color-} a) -- TODO: type family needed
+  PPassAll      -> do t <- newVar C ; ty $ TFragmentFilter C t
   a -> throwErrorUnique $ "unknown primitive: " ++ show a
 
 inferLit :: Lit -> Unique Typing
@@ -166,6 +186,7 @@ inferLit a = case a of
   LChar   _ -> ty $ TChar C
   LFloat  _ -> ty $ TFloat C
   LString _ -> ty $ TString C
+  LNat i    -> ty $ TNat i
 
 throwErrorUnique :: String -> Unique a
 throwErrorUnique s = do
@@ -185,6 +206,9 @@ throwErrorSrc src rl s = do
           sb = fromIntegral $ bytes b
           se = fromIntegral $ bytes e
   throwError $ concat sl ++ s
+
+newVars :: Int -> Frequency -> Unique [Ty]
+newVars n f = replicateM n $ newVar f
 
 newVar :: Frequency -> Unique Ty
 newVar f = do

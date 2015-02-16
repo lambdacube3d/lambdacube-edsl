@@ -10,7 +10,7 @@ import LambdaCube.Core.DeBruijn (N())
 import LambdaCube.Core.Type hiding (Ty)
 import qualified LambdaCube.Core.PrimFun as C
 import qualified LambdaCube.Core.Type as C
-
+{-
 expV4F :: Exp Typing
 expV4F =
   EApp (fromList [],[],TV4F C)
@@ -42,7 +42,7 @@ expOutput =
   EApp (fromList [],[],TOutput C)
     (EPrimFun (fromList [],[],TFrameBuffer C ~> TOutput C) PScreenOut)
     expFrameBuffer
-
+-}
 data NF
   = Arg Lit
   | Fun PrimFun
@@ -86,11 +86,11 @@ toNF _ x = error $ "toNF error: " ++ show x
 
 eval :: [NF] -> [NF]
 eval (Fun PV4:Arg (LFloat x):Arg (LFloat y):Arg (LFloat z):Arg (LFloat w):xs) = Val (Single C.V4F) (VV4F (V4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))) : eval xs
-eval (Fun PColorImage:Arg (LInt i):Val _ v:xs) = Img (ColorImage (fromIntegral i) v) : eval xs
+eval (Fun PColorImage:Arg (LNat i):Val _ v:xs) = Img (ColorImage i v) : eval xs
 eval (Fun PFrameBuffer:Img i:xs) = N (frameBuffer [i]) : eval xs
 eval (Fun PScreenOut:N n:xs) = N (screenOut $ prjFrameBuffer mempty 0 n) : eval xs
-eval (Fun PFragmentOutRastDepth:Val t v:xs) = N (fragmentOutRastDepth [const_ t v]) : eval xs
-eval (Fun PFragmentOutRastDepth:N a:xs) = N (fragmentOutRastDepth [a]) : eval xs
+eval (Fun PFragmentOut:Val t v:xs) = N (fragmentOut [const_ t v]) : eval xs
+eval (Fun PFragmentOut:N a:xs) = N (fragmentOut [a]) : eval xs
 eval (Fun PSmooth:N a:xs) = N (smooth a) : eval xs
 eval (Fun PVertexOut:N a:Arg (LFloat b):N c:N d:xs) = N (vertexOut a (const_ (Single C.Float) (VFloat $ realToFrac b)) [c] [d]) : eval xs
 eval (Fun PScreenOut:N a:xs) = N (screenOut a) : eval xs
@@ -115,42 +115,6 @@ eval (Fun PUni:IM44F a:xs) = N (uni (Single M44F) a) : eval xs
 eval (a:xs) = a : eval xs
 eval l = l
 
-{-
-data Ty -- star kind
-  = TVar    Frequency TName
-  | TArr    Frequency Ty Ty -- ????
-  -- composit
-  | TTuple  Frequency [Ty]
-  | TArray  Frequency Ty
-  -- primitive types
-  | TInt    Frequency
-  | TChar   Frequency
-  | TFloat  Frequency
-  | TString Frequency
-  -- lambdacube types
-  | TV4F    Frequency
-  | TImage  Frequency
-  | TFrameBuffer  Frequency
-  | TOutput Frequency
-  | TRasterContext Frequency
-  | TCullMode Frequency
-  | TPolygonMode Frequency
-  | TPolygonOffset Frequency
-  | TProvokingVertex Frequency
-  | TAccumulationContext Frequency
-  | TFragmentOperation Frequency
-  | TBlending Frequency
-  | TVertexOut Frequency
-  | TInterpolated Frequency
-  | TFetchPrimitive Frequency
-  | TInput Frequency
-  | TVertexStream Frequency
-  | TPrimitiveStream Frequency
-  | TFragmentStream Frequency
-  | TFragmentOut Frequency
-  | TFragmentFilter Frequency
-  deriving (Show,Eq,Ord)
--}
 toTy :: Typing -> C.Ty
 toTy (_,_,TV4F _) = Single C.V4F
 toTy t = Unknown (show t)
