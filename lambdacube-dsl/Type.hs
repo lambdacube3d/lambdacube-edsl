@@ -181,8 +181,9 @@ inferPrimFun a = case a of
 inferLit :: Lit -> Unique Typing
 inferLit a = case a of
   LInt _ -> do
-    t <- newVar C
-    return (mempty,[(CNum,t)],t) -- ????
+    --t <- newVar C
+    --return (mempty,[(CNum,t)],t) -- ????
+    ty $ TInt C
   LChar   _ -> ty $ TChar C
   LFloat  _ -> ty $ TFloat C
   LString _ -> ty $ TString C
