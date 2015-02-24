@@ -1,6 +1,6 @@
 module CompositionalLC where
 
---import Debug.Trace
+import qualified Debug.Trace as D
 import Data.Maybe
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import Data.ByteString.Char8 (ByteString)
@@ -21,6 +21,8 @@ import Text.Trifecta hiding (err)
 import Text.Trifecta.Delta
 
 import Type
+
+trace__ = D.trace
 
 trace_ _ = id
 trace = trace_
@@ -275,7 +277,10 @@ infer penv (EApp r f a) = withRanges [r] $ do
   m3 <- joinMonoEnv (applyMonoEnv s m1) (applyMonoEnv s m2)
   i3 <- (\a1 a2 -> joinInstEnv [a1,a2]) <$> applyInstEnv s i1 <*> applyInstEnv s i2
   unamb penv (m3,i3,applyTy s a)
-  return $ EApp (m3,i3,applyTy s a) tf ta
+  let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
+      tyFree = freeVarsTy tyF
+      (_,_,tyF) = getTag tf
+  return $ trace__ ("app subst:\n    " ++ show tyF ++ "\n    " ++ show tyBind) $ EApp (m3,i3,applyTy s a) tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
   tx <- infer penv x
   let d1@(m1,i1,t1) = getTag tx

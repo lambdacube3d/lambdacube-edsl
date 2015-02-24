@@ -13,6 +13,8 @@ import Text.Parser.Expression
 import Text.Parser.Token.Style
 import qualified Data.HashSet as HashSet
 
+import Text.Show.Pretty
+
 import Control.Monad
 import Text.Parser.LookAhead
 
@@ -193,9 +195,9 @@ test fname = do
       --let r = render s
       --print $ pretty $ delta r
       --print $ pretty r
-      print e
+      putStrLn $ ppShow e
       case inference src e of
-        Right t   -> putStrLn $ show t
+        Right t   -> putStrLn $ ppShow t
         Left m    -> putStrLn $ "error: " ++ m
 
 parseLC :: String -> IO (Either String (Exp Typing))
@@ -209,10 +211,10 @@ parseLC fname = do
       --let r = render s
       --print $ pretty $ delta r
       --print $ pretty r
-      print e
+      --putStrLn $ ppShow e
       case inference src e of
         Right t   -> do
-          putStrLn $ show t
+          putStrLn $ ppShow t
           return (Right t)
         Left m    -> do
           putStrLn $ "error: " ++ m
