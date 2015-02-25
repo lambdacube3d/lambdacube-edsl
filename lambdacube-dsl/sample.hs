@@ -17,6 +17,7 @@ import Codec.Image.STB hiding (Image)
 
 import ToDeBruijn
 import ParseTrifectaLC
+import Control.Applicative
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
 --  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
@@ -109,14 +110,16 @@ myCube = Mesh
     , mGPUData      = Nothing
     }
 
-rendererFromDSL :: String -> IO Renderer
+rendererFromDSL :: String -> IO (Maybe Renderer)
 rendererFromDSL fname = do
-  Right lcAST <- parseLC fname
-  let lcNet = case toNF mempty mempty lcAST of
-        [N a] -> a
-        a -> error $ show a
-  compileRendererFromCore lcNet
-
+  lcAST' <- parseLC fname
+  case lcAST' of
+    Right lcAST -> case toNF mempty mempty lcAST of
+        [N lcNet] -> Just <$> compileRendererFromCore lcNet
+        a -> do
+          putStrLn $ "rendererFromDSL error: " ++ show a
+          return Nothing
+    Left a -> putStrLn a >> return Nothing
 main :: IO ()
 main = do
     win <- initWindow "LambdaCube 3D DSL Sample" 1024 768
@@ -130,7 +133,11 @@ main = do
           renderer <- rendererFromDSL $ case n of
             [fn]  -> fn
             _     -> "gfx01.lc"
-          addMesh renderer "stream" gpuCube []
+          case renderer of
+            Nothing -> return ()
+            Just r  -> do
+              addMesh r "stream" gpuCube []
+              return ()
           putStrLn "reloaded"
           return renderer
     --let cm  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
@@ -153,11 +160,19 @@ main = do
             k <- keyIsPressed Key'Escape
             reload <- keyIsPressed Key'R
             rend' <- if not reload then return renderer else do
-              dispose renderer
-              setup
+              r <- setup
+              case r of
+                Nothing -> return renderer
+                Just a  -> do
+                  dispose renderer
+                  return a
             when k $ dispose rend'
             unless k $ loop rend'
-    loop =<< setup
+
+    r <- setup
+    case r of
+      Just a -> loop a
+      Nothing -> return ()
 
     destroyWindow win
     terminate
