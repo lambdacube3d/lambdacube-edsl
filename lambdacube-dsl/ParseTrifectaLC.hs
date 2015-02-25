@@ -214,7 +214,7 @@ parseLC fname = do
       --putStrLn $ ppShow e
       case inference src e of
         Right t   -> do
-          putStrLn $ ppShow t
+          --putStrLn $ ppShow t
           return (Right t)
         Left m    -> do
           putStrLn $ "error: " ++ m
