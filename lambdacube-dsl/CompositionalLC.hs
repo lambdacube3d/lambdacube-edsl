@@ -30,8 +30,8 @@ trace = trace_
 data Exp a
   = ELit      a Lit
   | EPrimFun  a PrimFun
-  | EVar      a EName
-  | EApp      a (Exp a) (Exp a)
+  | EVar      a Subst EName
+  | EApp      a Subst (Exp a) (Exp a)
   | ELam      a EName (Exp a)
   | ELet      a EName (Exp a) (Exp a)
   | ETuple    a [Exp a]
@@ -57,8 +57,8 @@ type Subst = Map TName Ty
 getTag :: Show a => Exp a -> a
 getTag (ELit      r _) = r
 getTag (EPrimFun  r _) = r
-getTag (EVar      r _) = r
-getTag (EApp      r _ _) = r
+getTag (EVar      r _ _) = r
+getTag (EApp      r _ _ _) = r
 getTag (ELam      r _ _) = r
 getTag (ELet      r _ _ _) = r
 getTag (ETuple    r _) = r
@@ -146,13 +146,13 @@ joinMonoEnv a b = do
         if l == r then ml else throwErrorUnique $ k ++ " mismatch " ++ show l ++ " with " ++ show r
   T.sequence $ Map.unionWithKey merge (fmap return a) (fmap return b)
 
-instTyping :: Typing -> Unique Typing
+instTyping :: Typing -> Unique (Typing,Subst)
 instTyping (m,i,t) = do
   let fv = freeVarsTy t `mappend` freeVarsMonoEnv m -- `mappend` freeVarsInstEnv i
   newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
   i' <- applyInstEnv s i
-  return (applyMonoEnv s m,i',applyTy s t)
+  return ((applyMonoEnv s m,i',applyTy s t),s)
 
 bindVar :: TName -> Ty -> Unique Subst
 bindVar n t
@@ -254,11 +254,13 @@ infer penv (ETuple r t) = withRanges [r] $ do
   return (ETuple ty te)
 infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
 infer penv (EPrimFun r f) = withRanges [r] $ EPrimFun <$> inferPrimFun f <*> pure f
-infer penv (EVar r n) = withRanges [r] $ case Map.lookup n penv of
+infer penv (EVar r _ n) = withRanges [r] $ case Map.lookup n penv of
   Nothing -> do
     t <- trace "mono var" <$> newVar C
-    return $ EVar (Map.singleton n t,mempty,t) n
-  Just t -> trace "poly var" <$> EVar <$> instTyping t <*> pure n
+    return $ EVar (Map.singleton n t,mempty,t) mempty n
+  Just t -> trace "poly var" <$> do
+    (t',s) <- instTyping t
+    return $ EVar t' s n 
 infer penv (ELam r n f) = withRanges [r] $ do
   tf <- infer penv f
   let (m,i,t) = getTag tf
@@ -267,7 +269,7 @@ infer penv (ELam r n f) = withRanges [r] $ do
       a <- newVar C
       return $ ELam (m,i,a ~> t) n tf
     Just a -> return $ ELam (Map.delete n m,i,a ~> t) n tf
-infer penv (EApp r f a) = withRanges [r] $ do
+infer penv (EApp r _ f a) = withRanges [r] $ do
   tf <- infer penv f
   ta <- infer penv a
   let (m1,i1,t1) = getTag tf
@@ -280,7 +282,7 @@ infer penv (EApp r f a) = withRanges [r] $ do
   let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
       tyFree = freeVarsTy tyF
       (_,_,tyF) = getTag tf
-  return $ trace__ ("app subst:\n    " ++ show tyF ++ "\n    " ++ show tyBind) $ EApp (m3,i3,applyTy s a) tf ta
+  return $ trace__ ("app subst:\n    " ++ show tyF ++ "\n    " ++ show tyBind) $ EApp (m3,i3,applyTy s a) s tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
   tx <- infer penv x
   let d1@(m1,i1,t1) = getTag tx
@@ -313,8 +315,8 @@ inference src e = case scopeChk src e of
 
 -- scope checking
 scopeCheck :: ByteString -> Set EName -> Exp Range -> Either String ()
-scopeCheck src vars (EVar r n) = if Set.member n vars then return () else throwErrorSrc src [r] $ "Variable " ++ n ++ " is not in scope."
-scopeCheck src vars (EApp r f a) = scopeCheck src vars f >> scopeCheck src vars a
+scopeCheck src vars (EVar r _ n) = if Set.member n vars then return () else throwErrorSrc src [r] $ "Variable " ++ n ++ " is not in scope."
+scopeCheck src vars (EApp r _ f a) = scopeCheck src vars f >> scopeCheck src vars a
 scopeCheck src vars (ELam r n f) = if Set.notMember n vars then scopeCheck src (Set.insert n vars) f else throwErrorSrc src [r] $ "Variable name clash: " ++ n
 scopeCheck src vars (ELet r n x e) = do
   let vars' = Set.insert n vars
