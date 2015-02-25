@@ -64,25 +64,31 @@ data NF
 instance Show N where
   show _ = "N"
 
-type NFEnv = Map EName [NF]
+data EnvVar
+  = LetVar (Exp Typing)
+  | LamVar
+
+type NFEnv = Map EName EnvVar
 -- TODO: add let
-toNF :: NFEnv -> Exp Typing -> [NF]
-toNF env (ELit t l) = [Arg l]
-toNF env (EPrimFun t f) = [Fun f]
-toNF env (EApp t a b) = eval $ toNF env a `mappend` toNF env b
-toNF env (ELet t n a b) = case toNF env a of -- TODO
+toNF :: Subst -> NFEnv -> Exp Typing -> [NF]
+toNF sub env (ELit t l) = [Arg l]
+toNF sub env (EPrimFun t f) = [Fun f]
+toNF sub env (EApp t s a b) = let sub' = sub `compose` s in eval $ toNF sub' env a `mappend` toNF sub' env b
+toNF sub env (ELet t n a b) = --case toNF env a of -- TODO
   -- x@(N _:_) -> error $ "let is not fully supported: " ++ show x
-  x -> toNF (Map.insert n x env) b
-toNF env (EVar t n) = case Map.lookup n env of
+  --x -> toNF (Map.insert n x env) b
+  toNF sub (Map.insert n (LetVar a) env) b
+toNF sub env (EVar (m,i,t) s n) = case Map.lookup n env of
   Nothing -> error $ "unknown variable: " ++ n
-  Just x -> x
-toNF env (ELam t n e) =
-  let (tm,ti,TArr ta tb) = t
-  in case toNF (Map.insert n ([N $ var (toTy (tm,ti,ta)) 0 ""]) env) e of
-    [N x] -> [N $ lam (toTy t) $ body x]
+  Just (LetVar x) -> toNF (s `compose` sub) env x
+  Just LamVar     -> [N $ var (toTy (m,i,applyTy (s `compose` sub) t)) 0 ""]
+toNF sub env (ELam t n e) =
+  let (tm,ti,tt@(TArr ta tb)) = t
+  in case toNF sub (Map.insert n LamVar env) e of
+    [N x] -> [N $ lam (toTy (tm,ti,applyTy sub tt)) $ body x]
     x -> error $ "lam is not fully supported: " ++ show x
-toNF env (ETuple t []) = [N $ tup (toTy t) []]
-toNF _ x = error $ "toNF error: " ++ show x
+toNF sub env (ETuple (m,i,t) []) = [N $ tup (toTy (m,i,applyTy sub t)) []]
+toNF _ _ x = error $ "toNF error: " ++ show x
 
 eval :: [NF] -> [NF]
 eval (Fun PV4:Arg (LFloat x):Arg (LFloat y):Arg (LFloat z):Arg (LFloat w):xs) = Val (Single C.V4F) (VV4F (V4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))) : eval xs

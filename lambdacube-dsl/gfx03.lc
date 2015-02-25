@@ -9,5 +9,5 @@ let
   fragmentStream    = Rasterize rasterCtx primitiveStream
   fragmentShader' v = FragmentOut (V4 1.0 0.4 0.0 1.0)
   fragmentShader v  = FragmentOut v
-  frame             = Accumulate fragmentCtx PassAll fragmentShader' fragmentStream emptyFB
+  frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
 in ScreenOut frame

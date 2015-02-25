@@ -112,7 +112,7 @@ myCube = Mesh
 rendererFromDSL :: String -> IO Renderer
 rendererFromDSL fname = do
   Right lcAST <- parseLC fname
-  let lcNet = case toNF mempty lcAST of
+  let lcNet = case toNF mempty mempty lcAST of
         [N a] -> a
         a -> error $ show a
   compileRendererFromCore lcNet
