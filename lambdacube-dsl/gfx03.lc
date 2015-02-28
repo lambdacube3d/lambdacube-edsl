@@ -1,13 +1,16 @@
 let
-  emptyFB           = FrameBuffer (ColorImage #1 (V4 0.0 0.0 0.4 1.0))
-  rasterCtx         = TriangleCtx CullNone PolygonFill NoOffset LastVertex
+  emptyFB           = FrameBuffer (ColorImage #1 (V4F 0.0 0.0 0.4 1.0))
+  polyMode          = PolygonLine 1.0
+  polyMode'         = PolygonFill
+  polyMode''        = PolygonPoint (PointSize 100.0)
+  rasterCtx         = TriangleCtx CullNone polyMode' NoOffset FirstVertex
   fragmentCtx       = AccumulationContext (ColorOp NoBlending)
   modelViewProj     = Uni (IM44F "MVP")
   vertexShader v    = VertexOut (modelViewProj *. v) 1.0 () (Smooth v)
   vertexStream      = Fetch "stream" Triangles (IV4F "position")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
-  fragmentShader' v = FragmentOut (V4 1.0 0.4 0.0 1.0)
+  fragmentShader' v = FragmentOut (V4F 1.0 0.4 0.0 1.0)
   fragmentShader v  = FragmentOut v
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
 in ScreenOut frame

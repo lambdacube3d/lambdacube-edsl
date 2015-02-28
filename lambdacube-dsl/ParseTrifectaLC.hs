@@ -60,39 +60,6 @@ lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
     reservedIdents =
       [ "let"
       , "in"
-      -- temp begin
-      , "upper"
-      , "add"
-      , "show"
-      , "read"
-      -- temp end
-
-      , "Accumulate"
-      , "AccumulationContext"
-      , "ColorImage"
-      , "ColorOp"
-      , "CullNone"
-      , "Fetch"
-      , "FragmentOut"
-      , "FrameBuffer"
-      , "IV4F"
-      , "LastVertex"
-      , "NoBlending"
-      , "NoOffset"
-      , "Nothing"
-      , "PassAll"
-      , "PolygonFill"
-      , "Rasterize"
-      , "Smooth"
-      , "Transform"
-      , "TriangleCtx"
-      , "Triangles"
-      , "V4"
-      , "VertexOut"
-      , "one"
-      , "MulMV"
-      , "Uni"
-      , "IM44F"
       ]
 
 kw w = reserve lcIdents w
@@ -103,7 +70,7 @@ var :: P String
 var = ident lcIdents
 
 lit :: P Lit
-lit = LFloat <$> try double <|>
+lit = LFloat <$> {-try-} double <|>
       LInt <$> integer <|>
       LChar <$> charLiteral <|>
       LString <$> stringLiteral <|>
@@ -126,7 +93,7 @@ expr = buildExpressionParser table expr'
 
 table :: OperatorTable (IndentationParserT Char (LCParser Parser)) (Exp Range)
 table =
-  [ [binary "*." (\a b -> let r = mergeRange a b in EApp r mempty (EApp r mempty (EPrimFun r PMulMV) a) b) AssocLeft]
+  [ [binary "*." (\a b -> let r = mergeRange a b in EApp r mempty (EApp r mempty (EVar r mempty "MulMV") a) b) AssocLeft]
    --[Prefix $ do op "*."; return id]
   ]
  where
@@ -141,43 +108,10 @@ expr' = lam <|> letin <|> formula
 formula = (\p1 l p2 -> foldl1 (EApp (p1,p2) mempty) l) <$> position <*> some atom <*> position
 
 atom =
-  (\p1 f p2 -> EPrimFun (p1,p2) f) <$> position <*> primFun <*> position <|> 
   (\p1 l p2 -> ELit (p1,p2) l) <$> position <*> lit <*> position <|>
   (\p1 v p2 -> EVar (p1,p2) mempty v) <$> position <*> var <*> position <|>
   (\p1 v p2 -> if length v == 1 then head v else ETuple (p1,p2) v) <$> position <*> parens (commaSep expr) <*> position <|>
   parens expr
-
-primFun = PUpper <$ kw "upper" <|>
-          PAddI <$ kw "add" <|>
-          PShow <$ kw "show" <|>
-          PRead <$ kw "read" <|>
-
-          PAccumulate <$ kw "Accumulate" <|>
-          PAccumulationContext <$ kw "AccumulationContext" <|>
-          PColorImage <$ kw "ColorImage" <|>
-          PColorOp <$ kw "ColorOp" <|>
-          PCullNone <$ kw "CullNone" <|>
-          PFetch <$ kw "Fetch" <|>
-          PFragmentOut <$ kw "FragmentOut" <|>
-          PFrameBuffer <$ kw "FrameBuffer" <|>
-          PIV4F <$ kw "IV4F" <|>
-          PLastVertex <$ kw "LastVertex" <|>
-          PNoBlending <$ kw "NoBlending" <|>
-          PNoOffset <$ kw "NoOffset" <|>
-          PPassAll <$ kw "PassAll" <|>
-          PPolygonFill <$ kw "PolygonFill" <|>
-          PRasterize <$ kw "Rasterize" <|>
-          PScreenOut <$ kw "ScreenOut" <|>
-          PSmooth <$ kw "Smooth" <|>
-          PTransform <$ kw "Transform" <|>
-          PTriangleCtx <$ kw "TriangleCtx" <|>
-          PTriangles <$ kw "Triangles" <|>
-          PV4 <$ kw "V4" <|>
-          PVertexOut <$ kw "VertexOut" <|>
-          Pone <$ kw "one" <|>
-          PMulMV <$ kw "MulMV" <|>
-          PIM44F <$ kw "IM44F" <|>
-          PUni <$ kw "Uni"
 
 lam :: P (Exp Range)
 lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position

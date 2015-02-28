@@ -29,7 +29,6 @@ trace = trace_
 
 data Exp a
   = ELit      a Lit
-  | EPrimFun  a PrimFun
   | EVar      a Subst EName
   | EApp      a Subst (Exp a) (Exp a)
   | ELam      a EName (Exp a)
@@ -56,7 +55,6 @@ type Subst = Map TName Ty
 
 getTag :: Show a => Exp a -> a
 getTag (ELit      r _) = r
-getTag (EPrimFun  r _) = r
 getTag (EVar      r _ _) = r
 getTag (EApp      r _ _ _) = r
 getTag (ELam      r _ _) = r
@@ -253,14 +251,15 @@ infer penv (ETuple r t) = withRanges [r] $ do
   let ty = (m,i,TTuple C $ map (applyTy s) tl)
   return (ETuple ty te)
 infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
-infer penv (EPrimFun r f) = withRanges [r] $ EPrimFun <$> inferPrimFun f <*> pure f
-infer penv (EVar r _ n) = withRanges [r] $ case Map.lookup n penv of
-  Nothing -> do
-    t <- trace "mono var" <$> newVar C
-    return $ EVar (Map.singleton n t,mempty,t) mempty n
-  Just t -> trace "poly var" <$> do
-    (t',s) <- instTyping t
-    return $ EVar t' s n 
+infer penv (EVar r _ n)
+  | isPrimFun n = withRanges [r] $ EVar <$> inferPrimFun n <*> pure mempty <*> pure n
+  | otherwise = withRanges [r] $ case Map.lookup n penv of
+      Nothing -> do
+        t <- trace "mono var" <$> newVar C
+        return $ EVar (Map.singleton n t,mempty,t) mempty n
+      Just t -> trace "poly var" <$> do
+        (t',s) <- instTyping t
+        return $ EVar t' s n 
 infer penv (ELam r n f) = withRanges [r] $ do
   tf <- infer penv f
   let (m,i,t) = getTag tf
@@ -324,4 +323,4 @@ scopeCheck src vars (ELet r n x e) = do
 scopeCheck src vars _ = return ()
 
 scopeChk :: ByteString -> Exp Range -> Either String ()
-scopeChk src e = scopeCheck src mempty e
+scopeChk src e = scopeCheck src primFunSet e

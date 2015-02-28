@@ -1,5 +1,6 @@
 module Core where
 
+import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -25,7 +26,6 @@ data Var
 
 data Exp
   = ELit     Lit      -- done
-  | EPrimFun PrimFun  -- done
   | EVar     Var      -- done insert from Core Env or use mangling for type var names
   | EApp     Exp Exp  -- TODO: insert EType if necessary
   | ELam     Var Exp  -- done
@@ -40,9 +40,8 @@ toType (m,i,t) = ForAll [(n,Star) | n <- Set.toList $ freeVarsTy t] t
 toCore :: AST.Exp Typing -> Exp
 toCore e = case e of
   AST.ELit t a      -> ELit a
-  AST.EPrimFun t a  -> EPrimFun a
   AST.ETuple t a    -> ETuple $ fmap toCore a
-  AST.EVar (_,_,t) n-> EVar $ VarE n $ ForAll [] t
+  AST.EVar (_,_,t) _ n -> EVar $ VarE n $ ForAll [] t
   AST.ELet t n a b  -> ELet (VarE n $ toType $ getTag a) (toCore a) (toCore b)
   AST.ELam t n a    -> let ForAll tv _ = toType t
                            lam = ELam (VarE n $ ForAll [] (TVar C "TODO"){-TODO-}) (toCore a)
@@ -67,8 +66,8 @@ in id 1
 -}
 idAST = AST.ELet (Map.fromList [],[],TInt C) "id" (
         AST.ELam (Map.fromList [],[],TArr (TVar C "t0") (TVar C "t0")) "x"
-          (AST.EVar (Map.fromList [("x",TVar C "t0")],[],TVar C "t0") "x"))
-        (AST.EApp (Map.fromList [],[],TInt C) Map.empty (AST.EVar (Map.fromList [],[],TArr (TVar C "t2") (TVar C "t2")) "id") (AST.ELit (Map.fromList [],[],TInt C) (LInt 1)))
+          (AST.EVar (Map.fromList [("x",TVar C "t0")],[],TVar C "t0") mempty "x"))
+        (AST.EApp (Map.fromList [],[],TInt C) Map.empty (AST.EVar (Map.fromList [],[],TArr (TVar C "t2") (TVar C "t2")) mempty "id") (AST.ELit (Map.fromList [],[],TInt C) (LInt 1)))
 {-
 idCore = Let "id" (
           Lam "a" (Lam "x" (Var $ Id "x" (TyVarTy $ TyVar "a" Star))))
