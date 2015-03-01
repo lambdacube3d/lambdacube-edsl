@@ -469,9 +469,9 @@ inferPrimFun a = case a of
   -- Blending
   "NoBlending"   -> do t <- newVar C ; ty $ TBlending C t
   "BlendLogicOp" -> do t <- newVar C ; ty $ TLogicOperation C ~> TBlending C t
-  "Blend"        -> ty $ TTuple C [TBlendEquation C,TBlendEquation C]
-                     ~> TTuple C [TTuple C [TBlendingFactor C,TBlendingFactor C],TTuple C [TBlendingFactor C,TBlendingFactor C]]
-                     ~> TV4F C ~> TBlending C (TFloat C)
+  "Blend"        -> do t <- newVar C ; ty $ TTuple C [TBlendEquation C,TBlendEquation C]
+                         ~> TTuple C [TTuple C [TBlendingFactor C,TBlendingFactor C],TTuple C [TBlendingFactor C,TBlendingFactor C]]
+                         ~> TV4F C ~> TBlending C t --(TFloat C)
   -- Fragment Filter
   "PassAll"  -> do t <- newVar C ; ty $ TFragmentFilter C t
   "Filter"   -> do t <- newVar C ; ty $ (t ~> TBool C) ~> TFragmentFilter C t

@@ -58,8 +58,7 @@ data NF
   | FetchPrimitive FetchPrimitive
   | FragmentOperation FragmentOperation
   | RasterContext RasterContext
-  | IV4F ByteString
-  | IM44F ByteString
+  | Input ByteString C.Ty
   | BlendingFactor BlendingFactor
   | BlendEquation BlendEquation
   | LogicOperation LogicOperation
@@ -68,6 +67,7 @@ data NF
   | FrontFace FrontFace
   | PointSpriteCoordOrigin PointSpriteCoordOrigin
   | Bool' Bool
+  | Tuple' C.Ty [[NF]]
   deriving (Show)
 
 instance Show N where
@@ -99,17 +99,52 @@ toNF sub env (ELam t n e) =
     [N x] -> [N $ lam (toTy (tm,ti,applyTy sub tt)) $ body x]
     x -> error $ "lam is not fully supported: " ++ show x
 toNF sub env (ETuple (m,i,t) []) = [N $ tup (toTy (m,i,applyTy sub t)) []]
+toNF sub env (ETuple (m,i,t) a) = [Tuple' (toTy (m,i,applyTy sub t)) (fmap (eval . toNF sub env) a)]
 toNF _ _ x = error $ "toNF error: " ++ show x
 
 eval :: [NF] -> [NF]
 -- Vector/Matrix
 eval (Fun "True":xs) = Bool' True: eval xs
 eval (Fun "False":xs) = Bool' False: eval xs
+eval (Fun "V2B":Bool' x:Bool' y:xs) = Val (Single C.V2B) (VV2B (V2 x y)) : eval xs
+eval (Fun "V3B":Bool' x:Bool' y:Bool' z:xs) = Val (Single C.V3B) (VV3B (V3 x y z)) : eval xs
+eval (Fun "V4B":Bool' x:Bool' y:Bool' z:Bool' w:xs) = Val (Single C.V4B) (VV4B (V4 x y z w)) : eval xs
+eval (Fun "V2F":Arg (LFloat x):Arg (LFloat y):xs) = Val (Single C.V2F) (VV2F (V2 (realToFrac x) (realToFrac y))) : eval xs
+eval (Fun "V3F":Arg (LFloat x):Arg (LFloat y):Arg (LFloat z):xs) = Val (Single C.V3F) (VV3F (V3 (realToFrac x) (realToFrac y) (realToFrac z))) : eval xs
 eval (Fun "V4F":Arg (LFloat x):Arg (LFloat y):Arg (LFloat z):Arg (LFloat w):xs) = Val (Single C.V4F) (VV4F (V4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))) : eval xs
+eval (Fun "V2I":Arg (LInt x):Arg (LInt y):xs) = Val (Single C.V2I) (VV2I (V2 (fromIntegral x) (fromIntegral y))) : eval xs
+eval (Fun "V3I":Arg (LInt x):Arg (LInt y):Arg (LInt z):xs) = Val (Single C.V3I) (VV3I (V3 (fromIntegral x) (fromIntegral y) (fromIntegral z))) : eval xs
+eval (Fun "V4I":Arg (LInt x):Arg (LInt y):Arg (LInt z):Arg (LInt w):xs) = Val (Single C.V4I) (VV4I (V4 (fromIntegral x) (fromIntegral y) (fromIntegral z) (fromIntegral w))) : eval xs
+eval (Fun "V2U":Arg (LInt x):Arg (LInt y):xs) = Val (Single C.V2U) (VV2U (V2 (fromIntegral x) (fromIntegral y))) : eval xs
+eval (Fun "V3U":Arg (LInt x):Arg (LInt y):Arg (LInt z):xs) = Val (Single C.V3U) (VV3U (V3 (fromIntegral x) (fromIntegral y) (fromIntegral z))) : eval xs
+eval (Fun "V4U":Arg (LInt x):Arg (LInt y):Arg (LInt z):Arg (LInt w):xs) = Val (Single C.V4U) (VV4U (V4 (fromIntegral x) (fromIntegral y) (fromIntegral z) (fromIntegral w))) : eval xs
 -- Input declaration
-eval (Fun "Uni":IM44F a:xs) = N (uni (Single M44F) a) : eval xs
-eval (Fun "IV4F":Arg (LString s):xs) = IV4F (pack s) : eval xs
-eval (Fun "IM44F":Arg (LString s):xs) = IM44F (pack s) : eval xs
+eval (Fun "Uni":Input n t:xs) = N (uni t n) : eval xs
+eval (Fun "IWord":Arg (LString s):xs) = Input (pack s) (Single C.Word) : eval xs
+eval (Fun "IV2U":Arg (LString s):xs) = Input (pack s) (Single C.V2U) : eval xs
+eval (Fun "IV3U":Arg (LString s):xs) = Input (pack s) (Single C.V3U) : eval xs
+eval (Fun "IV4U":Arg (LString s):xs) = Input (pack s) (Single C.V4U) : eval xs
+eval (Fun "IInt":Arg (LString s):xs) = Input (pack s) (Single C.Int) : eval xs
+eval (Fun "IV2I":Arg (LString s):xs) = Input (pack s) (Single C.V2I) : eval xs
+eval (Fun "IV3I":Arg (LString s):xs) = Input (pack s) (Single C.V3I) : eval xs
+eval (Fun "IV4I":Arg (LString s):xs) = Input (pack s) (Single C.V4I) : eval xs
+eval (Fun "IBool":Arg (LString s):xs) = Input (pack s) (Single C.Bool) : eval xs
+eval (Fun "IV2B":Arg (LString s):xs) = Input (pack s) (Single C.V2B) : eval xs
+eval (Fun "IV3B":Arg (LString s):xs) = Input (pack s) (Single C.V3B) : eval xs
+eval (Fun "IV4B":Arg (LString s):xs) = Input (pack s) (Single C.V4B) : eval xs
+eval (Fun "IFloat":Arg (LString s):xs) = Input (pack s) (Single C.Float) : eval xs
+eval (Fun "IV2F":Arg (LString s):xs) = Input (pack s) (Single C.V2F) : eval xs
+eval (Fun "IV3F":Arg (LString s):xs) = Input (pack s) (Single C.V3F) : eval xs
+eval (Fun "IV4F":Arg (LString s):xs) = Input (pack s) (Single C.V4F) : eval xs
+eval (Fun "IM22F":Arg (LString s):xs) = Input (pack s) (Single C.M22F) : eval xs
+eval (Fun "IM23F":Arg (LString s):xs) = Input (pack s) (Single C.M23F) : eval xs
+eval (Fun "IM24F":Arg (LString s):xs) = Input (pack s) (Single C.M44F) : eval xs
+eval (Fun "IM32F":Arg (LString s):xs) = Input (pack s) (Single C.M32F) : eval xs
+eval (Fun "IM33F":Arg (LString s):xs) = Input (pack s) (Single C.M33F) : eval xs
+eval (Fun "IM34F":Arg (LString s):xs) = Input (pack s) (Single C.M34F) : eval xs
+eval (Fun "IM42F":Arg (LString s):xs) = Input (pack s) (Single C.M42F) : eval xs
+eval (Fun "IM43F":Arg (LString s):xs) = Input (pack s) (Single C.M43F) : eval xs
+eval (Fun "IM44F":Arg (LString s):xs) = Input (pack s) (Single C.M44F) : eval xs
 -- BlendingFactor
 eval (Fun "Zero":xs) = BlendingFactor Zero: eval xs
 eval (Fun "One":xs) = BlendingFactor One: eval xs
@@ -209,8 +244,8 @@ eval (Fun "TrianglesAdjacency":xs) = FetchPrimitive TrianglesAdjacency: eval xs
 eval (Fun "AccumulationContext":FragmentOperation a:xs) = N (accumulationContext Nothing [a]) : eval xs
 -- Image
 eval (Fun "ColorImage":Arg (LNat i):Val _ v:xs) = Img (ColorImage i v) : eval xs
---TODO  "DepthImage"   -> do [a] <- newVars 1 C ; ty $ a ~> TFloat C ~> TImage C a (TFloat C)
---TODO  "StencilImage" -> do [a] <- newVars 1 C ; ty $ a ~> TInt C ~> TImage C a (TInt C)
+eval (Fun "DepthImage":Arg (LNat i):Arg (LFloat a):xs) = Img (DepthImage i (realToFrac a)) : eval xs
+eval (Fun "StencilImage":Arg (LNat i):Arg (LInt a):xs) = Img (StencilImage i (fromIntegral a)) : eval xs
 -- Interpolation
 eval (Fun "Smooth":N a:xs) = N (smooth a) : eval xs
 eval (Fun "NoPerspective":N a:xs) = N (noPerspective a) : eval xs
@@ -220,15 +255,16 @@ eval (Fun "ColorOp":Blending b:xs) = FragmentOperation (ColorOp b (VV4B $ V4 Tru
 eval (Fun "DepthOp":ComparisonFunction a:Bool' b:xs) = FragmentOperation (DepthOp a b) : eval xs
 -- Blending
 eval (Fun "NoBlending":xs) = Blending NoBlending : eval xs
---TODO  "BlendLogicOp" -> do t <- newVar C ; ty $ TLogicOperation C ~> TBlending C t
---TODO  "Blend"        -> ty $ TTuple C [TBlendEquation C,TBlendEquation C]
---                     ~> TTuple C [TTuple C [TBlendingFactor C,TBlendingFactor C],TTuple C [TBlendingFactor C,TBlendingFactor C]]
---                     ~> TV4F C ~> TBlending C (TFloat C)
+eval (Fun "BlendLogicOp":LogicOperation a:xs) = Blending (BlendLogicOp a) : eval xs
+eval (Fun "Blend":
+  Tuple' _ [[BlendEquation a],[BlendEquation b]]:
+  Tuple' _ [[Tuple' _ [[BlendingFactor c],[BlendingFactor d]]],[Tuple' _ [[BlendingFactor e],[BlendingFactor f]]]]:Val (Single C.V4F) (VV4F g):xs) =
+    Blending (Blend (a,b) ((c,d),(e,f)) g) : eval xs
 -- Fragment Filter
 eval (Fun "PassAll":xs) = N passAll : eval xs
 eval (Fun "Filter":N f:xs) = N (filter_ f) : eval xs
 -- Render Operations
-eval (Fun "Fetch":Arg (LString a):FetchPrimitive b:IV4F c:xs) = N (fetch (pack a) b [(c,V4F)]) : eval xs
+eval (Fun "Fetch":Arg (LString a):FetchPrimitive b:Input c (Single C.V4F):xs) = N (fetch (pack a) b [(c,V4F)]) : eval xs
 eval (Fun "Transform":N a:N b:xs) = N (transform a b) : eval xs
 eval (Fun "Rasterize":RasterContext a:N b:xs) = N (rasterize a b) : eval xs
 eval (Fun "Accumulate":N a:N b:N c:N d:N e:xs) = N (accumulate a b c d e) : eval xs
