@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, PackageImports #-}
 
-import Graphics.Rendering.OpenGL.Raw.Core32 (glViewport)
+import Graphics.Rendering.OpenGL.Raw.Core32 (glViewport,gl_LINE_SMOOTH,glEnable)
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Data.Monoid
 import Control.Monad
@@ -128,11 +128,12 @@ main = do
     n <- getArgs
 
     gpuCube <- compileMesh myCube
+    glEnable gl_LINE_SMOOTH
 
     let setup = do
           renderer <- rendererFromDSL $ case n of
             [fn]  -> fn
-            _     -> "gfx01.lc"
+            _     -> "gfx03.lc"
           case renderer of
             Nothing -> return ()
             Just r  -> do

@@ -75,8 +75,10 @@ applyTy :: Subst -> Ty -> Ty
 applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
+applyTy st (TFun n l) = TFun n (map (applyTy st) l)
+applyTy st (TTuple f l) = TTuple f (map (applyTy st) l)
 applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
-applyTy st (TImage f a b) = TImage f (applyTy st a) (applyTy st b)
+applyTy st (TImage f a {-b-}) = TImage f (applyTy st a) --(applyTy st b)
 applyTy st (TVertexStream f a b) = TVertexStream f (applyTy st a) (applyTy st b)
 applyTy st (TFragmentStream f a b) = TFragmentStream f (applyTy st a) (applyTy st b)
 applyTy st (TPrimitiveStream f a b f' c) = TPrimitiveStream f (applyTy st a) (applyTy st b) f' (applyTy st c)
@@ -100,9 +102,7 @@ applyInstEnv s e = filterM tyInst $ (trace_ (show (s,e,"->",e'))) e'
  where
   e' = fmap (\(c,t) -> (c,applyTy s t)) e
   tyInst (c,TVar{}) = return True
-  tyInst (c,t) = case Map.lookup c instances of
-    Nothing -> err
-    Just ts -> if Set.member t ts then return False else err
+  tyInst (c,t) = if isInstance c t then return False else err
    where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
 
 joinInstEnv :: [InstEnv] -> InstEnv
@@ -111,10 +111,11 @@ joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
 freeVarsTy :: Ty -> Set TName
 freeVarsTy (TVar _ a) = Set.singleton a
 freeVarsTy (TArr a b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy (TFun _ l) = foldl mappend mempty $ map freeVarsTy l
 freeVarsTy (TVertexStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TFragmentStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TPrimitiveStream _ a b _ c) = freeVarsTy a `mappend` freeVarsTy b `mappend` freeVarsTy c
-freeVarsTy (TImage _ a b) = freeVarsTy a `mappend` freeVarsTy b
+freeVarsTy (TImage _ a {-b-}) = freeVarsTy a-- `mappend` freeVarsTy b
 freeVarsTy (TTuple _ a) = foldl mappend mempty $ map freeVarsTy a
 freeVarsTy (TArray _ a) = freeVarsTy a
 freeVarsTy (TBlending _ a) = freeVarsTy a
@@ -167,14 +168,21 @@ compose b a = mappend a $ applyTy a <$> b
 unifyTy :: Ty -> Ty -> Unique Subst
 unifyTy (TVar _ u) t = bindVar u t
 unifyTy t (TVar _ u) = bindVar u t
+unifyTy a@(TTuple f1 t1) b@(TTuple f2 t2) = do
+  let go s [] [] = return s
+      go s (a1:xs1) (a2:xs2) = do
+        s1 <- unifyTy a1 a2
+        return $ s `compose` s1
+      go _ _ _ = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
+  go mempty t1 t2
 unifyTy (TArr a1 b1) (TArr a2 b2) = do
   s1 <- unifyTy a1 a2
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
   return $ s1 `compose` s2
-unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = do
+unifyTy (TImage f1 a1 {-b1-}) (TImage f2 a2 {-b2-}) = do
   s1 <- unifyTy a1 a2
-  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
-  return $ s1 `compose` s2
+  --s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
+  return $ s1 -- `compose` s2
 unifyTy (TVertexStream f1 a1 b1) (TVertexStream f2 a2 b2) = do
   s1 <- unifyTy a1 a2
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)

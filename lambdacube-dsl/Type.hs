@@ -95,7 +95,6 @@ primFunSet = Set.fromList
   , "FragmentOut"
   , "FragmentOutDepth"
   , "FragmentOutRastDepth"
-  , "MulMV"
   , "True"
   , "False"
   , "V2B"
@@ -187,7 +186,150 @@ primFunSet = Set.fromList
   , "SrcAlphaSaturate"
   , "LowerLeft"
   , "UpperLeft"
+  , "MulMV"
   ]
+
+{-
+    -- Vec/Mat (de)construction
+    PrimTupToV2             :: IsComponent a                            => PrimFun stage ((a,a)     -> V2 a)
+    PrimTupToV3             :: IsComponent a                            => PrimFun stage ((a,a,a)   -> V3 a)
+    PrimTupToV4             :: IsComponent a                            => PrimFun stage ((a,a,a,a) -> V4 a)
+    PrimV2ToTup             :: IsComponent a                            => PrimFun stage (V2 a     -> (a,a))
+    PrimV3ToTup             :: IsComponent a                            => PrimFun stage (V3 a   -> (a,a,a))
+    PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
+
+    -- Arithmetic Functions (componentwise)
+    PrimAdd                 :: (IsNum t, IsMatVec a t)                              => PrimFun stage ((a,a)   -> a)
+    PrimAddS                :: (IsNum t, IsMatVecScalar a t)                        => PrimFun stage ((a,t)   -> a)
+    PrimSub                 :: (IsNum t, IsMatVec a t)                              => PrimFun stage ((a,a)   -> a)
+    PrimSubS                :: (IsNum t, IsMatVecScalar a t)                        => PrimFun stage ((a,t)   -> a)
+    PrimMul                 :: (IsNum t, IsMatVec a t)                              => PrimFun stage ((a,a)   -> a)
+    PrimMulS                :: (IsNum t, IsMatVecScalar a t)                        => PrimFun stage ((a,t)   -> a)
+    PrimDiv                 :: (IsNum t, IsVecScalar d a t)                         => PrimFun stage ((a,a)   -> a)
+    PrimDivS                :: (IsNum t, IsVecScalar d a t)                         => PrimFun stage ((a,t)   -> a)
+    PrimNeg                 :: (IsSigned t, IsMatVecScalar a t)                     => PrimFun stage (a       -> a)
+    PrimMod                 :: (IsNum t, IsVecScalar d a t)                         => PrimFun stage ((a,a)   -> a)
+    PrimModS                :: (IsNum t, IsVecScalar d a t)                         => PrimFun stage ((a,t)   -> a)
+
+    -- Bit-wise Functions
+    PrimBAnd        :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage ((a,a)   -> a)
+    PrimBAndS       :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage ((a,t)   -> a)
+    PrimBOr         :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage ((a,a)   -> a)
+    PrimBOrS        :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage ((a,t)   -> a)
+    PrimBXor        :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage ((a,a)   -> a)
+    PrimBXorS       :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage ((a,t)   -> a)
+    PrimBNot        :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage (a       -> a)
+    PrimBShiftL     :: (IsIntegral t, IsVecScalar d a t, IsVecScalar d b Word32)    => PrimFun stage ((a, b)      -> a)
+    PrimBShiftLS    :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage ((a, Word32) -> a)
+    PrimBShiftR     :: (IsIntegral t, IsVecScalar d a t, IsVecScalar d b Word32)    => PrimFun stage ((a, b)      -> a)
+    PrimBShiftRS    :: (IsIntegral t, IsVecScalar d a t)                            => PrimFun stage ((a, Word32) -> a)
+
+    -- Logic Functions
+    PrimAnd                 ::                                             PrimFun stage ((Bool,Bool) -> Bool)
+    PrimOr                  ::                                             PrimFun stage ((Bool,Bool) -> Bool)
+    PrimXor                 ::                                             PrimFun stage ((Bool,Bool) -> Bool)
+    PrimNot                 :: IsVecScalar d a Bool                           => PrimFun stage (a           -> a)
+    PrimAny                 :: IsVecScalar d a Bool                           => PrimFun stage (a           -> Bool)
+    PrimAll                 :: IsVecScalar d a Bool                           => PrimFun stage (a           -> Bool)
+
+    -- Angle and Trigonometry Functions
+    PrimACos                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimACosH               :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimASin                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimASinH               :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimATan                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimATan2               :: IsVecScalar d a Float                          => PrimFun stage ((a,a) -> a)
+    PrimATanH               :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimCos                 :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimCosH                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimDegrees             :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimRadians             :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimSin                 :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimSinH                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimTan                 :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimTanH                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+
+    -- Exponential Functions
+    PrimPow                 :: IsVecScalar d a Float                          => PrimFun stage ((a,a) -> a)
+    PrimExp                 :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimLog                 :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimExp2                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimLog2                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimSqrt                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimInvSqrt             :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+
+    -- Common Functions
+    PrimIsNan               :: (IsVecScalar d a Float, IsVecScalar d b Bool)        => PrimFun stage (a -> b)
+    PrimIsInf               :: (IsVecScalar d a Float, IsVecScalar d b Bool)        => PrimFun stage (a -> b)
+    PrimAbs                 :: (IsSigned t, IsVecScalar d a t)                => PrimFun stage (a -> a)
+    PrimSign                :: (IsSigned t, IsVecScalar d a t)                => PrimFun stage (a -> a)
+    PrimFloor               :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimTrunc               :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimRound               :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimRoundEven           :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimCeil                :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimFract               :: IsVecScalar d a Float                          => PrimFun stage (a -> a)
+    PrimModF                :: IsVecScalar d a Float                          => PrimFun stage (a               -> (a,a))
+    PrimMin                 :: (IsNum t, IsVecScalar d a t)                   => PrimFun stage ((a,a)           -> a)
+    PrimMinS                :: (IsNum t, IsVecScalar d a t)                   => PrimFun stage ((a,t)           -> a)
+    PrimMax                 :: (IsNum t, IsVecScalar d a t)                   => PrimFun stage ((a,a)           -> a)
+    PrimMaxS                :: (IsNum t, IsVecScalar d a t)                   => PrimFun stage ((a,t)           -> a)
+    PrimClamp               :: (IsNum t, IsVecScalar d a t)                   => PrimFun stage ((a,a,a)         -> a)
+    PrimClampS              :: (IsNum t, IsVecScalar d a t)                   => PrimFun stage ((a,t,t)         -> a)
+    PrimMix                 :: IsVecScalar d a Float                          => PrimFun stage ((a,a,a)         -> a)
+    PrimMixS                :: IsVecScalar d a Float                          => PrimFun stage ((a,a,Float)     -> a)
+    PrimMixB                :: (IsVecScalar d a Float, IsVecScalar d b Bool)        => PrimFun stage ((a,a,b)         -> a)
+    PrimStep                :: IsVec d a Float                                => PrimFun stage ((a,a)           -> a)
+    PrimStepS               :: IsVecScalar d a Float                          => PrimFun stage ((Float,a)       -> a)
+    PrimSmoothStep          :: IsVec d a Float                                => PrimFun stage ((a,a,a)         -> a)
+    PrimSmoothStepS         :: IsVecScalar d a Float                          => PrimFun stage ((Float,Float,a) -> a)
+
+    -- Integer/Float Conversion Functions
+    PrimFloatBitsToInt      :: (IsVecScalar d fv Float, IsVecScalar d iv Int32)     => PrimFun stage (fv -> iv)
+    PrimFloatBitsToUInt     :: (IsVecScalar d fv Float, IsVecScalar d uv Word32)    => PrimFun stage (fv -> uv)
+    PrimIntBitsToFloat      :: (IsVecScalar d fv Float, IsVecScalar d iv Int32)     => PrimFun stage (iv -> fv)
+    PrimUIntBitsToFloat     :: (IsVecScalar d fv Float, IsVecScalar d uv Word32)    => PrimFun stage (uv -> fv)
+
+    -- Geometric Functions
+    PrimLength              :: IsVecScalar d a Float                          => PrimFun stage (a       -> Float)
+    PrimDistance            :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> Float)
+    PrimDot                 :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> Float)
+    PrimCross               :: IsVecScalar 3 a Float                          => PrimFun stage ((a,a)   -> a)
+    PrimNormalize           :: IsVecScalar d a Float                          => PrimFun stage (a       -> a)
+    PrimFaceForward         :: IsVecScalar d a Float                          => PrimFun stage ((a,a,a) -> a)
+    PrimReflect             :: IsVecScalar d a Float                          => PrimFun stage ((a,a)   -> a)
+    PrimRefract             :: IsVecScalar d a Float                          => PrimFun stage ((a,a,a) -> a)
+
+    -- Matrix Functions
+    PrimTranspose           :: (IsMat a h w, IsMat b w h)               => PrimFun stage (a       -> b)
+    PrimDeterminant         :: IsMat m s s                              => PrimFun stage (m       -> Float)
+    PrimInverse             :: IsMat m h w                              => PrimFun stage (m       -> m)
+    PrimOuterProduct        :: IsMat m h w                              => PrimFun stage ((w,h)   -> m)
+    PrimMulMatVec           :: IsMat m h w                              => PrimFun stage ((m,w)   -> h)
+    PrimMulVecMat           :: IsMat m h w                              => PrimFun stage ((h,m)   -> w)
+    PrimMulMatMat           :: (IsMat a i j, IsMat b j k, IsMat c i k)  => PrimFun stage ((a,b)   -> c)
+
+    -- Vector and Scalar Relational Functions
+    PrimLessThan            :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
+    PrimLessThanEqual       :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
+    PrimGreaterThan         :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
+    PrimGreaterThanEqual    :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
+    PrimEqualV              :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
+    PrimEqual               :: IsMatVecScalar a t                                   => PrimFun stage ((a,a) -> Bool)
+    PrimNotEqualV           :: (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
+    PrimNotEqual            :: IsMatVecScalar a t                                   => PrimFun stage ((a,a) -> Bool)
+
+    -- Fragment Processing Functions
+    PrimDFdx                :: IsVecScalar d a Float                          => PrimFun F (a -> a)
+    PrimDFdy                :: IsVecScalar d a Float                          => PrimFun F (a -> a)
+    PrimFWidth              :: IsVecScalar d a Float                          => PrimFun F (a -> a)
+
+    -- Noise Functions
+    PrimNoise1              :: IsVecScalar d a Float                             => PrimFun stage (a -> Float)
+    PrimNoise2              :: (IsVecScalar d a Float, IsVecScalar 2 b Float)    => PrimFun stage (a -> b)
+    PrimNoise3              :: (IsVecScalar d a Float, IsVecScalar 3 b Float)    => PrimFun stage (a -> b)
+    PrimNoise4              :: (IsVecScalar d a Float, IsVecScalar 4 b Float)    => PrimFun stage (a -> b)
+-}
 
 data Frequency -- frequency kind
   -- frequency values
@@ -213,6 +355,8 @@ data Ty -- star kind
   -- composit
   | TTuple  Frequency [Ty]
   | TArray  Frequency Ty
+  -- type family
+  | TFun    TName [Ty]
   -- primitive types
   | TChar   Frequency
   | TString Frequency
@@ -282,7 +426,7 @@ data Ty -- star kind
   | TFragmentOut          Frequency Semantic
   | TFragmentStream       Frequency Nat Ty
   | TFrameBuffer          Frequency -- ???
-  | TImage                Frequency Nat Semantic
+  | TImage                Frequency Nat -- Semantic -- TODO: ignore semantic temporarly
   | TInput                Frequency Ty
   | TInterpolated         Frequency Ty -- ???
   | TOutput               Frequency
@@ -295,7 +439,193 @@ data Ty -- star kind
 data Constraint
   = CNum
   | CTextual
+  -- lc constraints
+  | IsComponent
+  | IsFloating
+  | IsIntegral
+  | IsNum
+  | IsNumComponent
+  | IsSigned
   deriving (Show,Eq,Ord)
+{-
+simple:
+  done - IsComponent
+  done - IsFloating
+  done - IsIntegral
+  done - IsNum
+  done - IsNumComponent
+  done - IsSigned
+fundep:
+  [injective] class IsMat mat -- h w | mat -> h w
+    type H mat :: *
+    type W mat :: *
+    instance IsMat M22F V2F V2F
+    instance IsMat M23F V2F V3F
+    instance IsMat M24F V2F V4F
+    instance IsMat M32F V3F V2F
+    instance IsMat M33F V3F V3F
+    instance IsMat M34F V3F V4F
+    instance IsMat M42F V4F V2F
+    instance IsMat M43F V4F V3F
+    instance IsMat M44F V4F V4F
+
+  class IsMatVec a -- t | a -> t
+    type T a :: *
+    instance IsMatVec (V2 Float) Float
+    instance IsMatVec (V3 Float) Float
+    instance IsMatVec (V4 Float) Float
+    instance IsMatVec (V2 Int32) Int32
+    instance IsMatVec (V3 Int32) Int32
+    instance IsMatVec (V4 Int32) Int32
+    instance IsMatVec (V2 Word32) Word32
+    instance IsMatVec (V3 Word32) Word32
+    instance IsMatVec (V4 Word32) Word32
+    instance IsMatVec (V2 Bool) Bool
+    instance IsMatVec (V3 Bool) Bool
+    instance IsMatVec (V4 Bool) Bool
+    instance IsMatVec M22F Float
+    instance IsMatVec M23F Float
+    instance IsMatVec M24F Float
+    instance IsMatVec M32F Float
+    instance IsMatVec M33F Float
+    instance IsMatVec M34F Float
+    instance IsMatVec M42F Float
+    instance IsMatVec M43F Float
+    instance IsMatVec M44F Float
+
+  class IsMatVecScalar a -- t | a -> t
+    type T a :: *
+
+  [injective] class IsVec (dim :: Nat) vec component | vec -> dim component, dim component -> vec
+    type VecDim vec :: Nat
+    type VecComp vec :: *
+    type VecDimComp d c :: *
+    instance IsVec 2 (V2 Float) Float
+    instance IsVec 3 (V3 Float) Float
+    instance IsVec 4 (V4 Float) Float
+    instance IsVec 2 (V2 Int32) Int32
+    instance IsVec 3 (V3 Int32) Int32
+    instance IsVec 4 (V4 Int32) Int32
+    instance IsVec 2 (V2 Word32) Word32
+    instance IsVec 3 (V3 Word32) Word32
+    instance IsVec 4 (V4 Word32) Word32
+    instance IsVec 2 (V2 Bool) Bool
+    instance IsVec 3 (V3 Bool) Bool
+    instance IsVec 4 (V4 Bool) Bool
+
+  class IsVecScalar (dim :: Nat) vec component | vec -> dim component, dim component -> vec
+    type VecSDim vec :: Nat
+    type VecSComp vec :: *
+    type VecSDimComp d c :: *
+-}
+{-
+type families:
+  type family FTRepr' a :: *
+    type instance FTRepr' (i1 a :+: ZZ) = a
+    type instance FTRepr' (i1 a :+: i2 b :+: ZZ) = (a, b)
+    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: ZZ) = (a, b, c)
+    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: ZZ) = (a, b, c, d)
+    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: ZZ) = (a, b, c, d, e)
+    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: ZZ) = (a, b, c, d, e, f)
+    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: ZZ) = (a, b, c, d, e, f, g)
+    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
+    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
+
+  [injective] type family PrimitiveVertices (primitive :: PrimitiveType) a
+    type instance PrimitiveVertices Point a             = a
+    type instance PrimitiveVertices Line a              = (a,a)
+    type instance PrimitiveVertices LineAdjacency a     = (a,a,a,a)
+    type instance PrimitiveVertices Triangle a          = (a,a,a)
+    type instance PrimitiveVertices TriangleAdjacency a = (a,a,a,a,a,a)
+
+  type family ColorRepr a :: *
+    type instance ColorRepr ZZ = ZZ
+    type instance ColorRepr (a :+: b) = Color a :+: (ColorRepr b)
+
+  type family NoStencilRepr a :: *
+    type instance NoStencilRepr ZZ = ZZ
+    type instance NoStencilRepr (Stencil a :+: b) = NoStencilRepr b
+    type instance NoStencilRepr (Color a :+: b) = Color a :+: (NoStencilRepr b)
+    type instance NoStencilRepr (Depth a :+: b) = Depth a :+: (NoStencilRepr b)
+
+  - texturing -
+  [injective] type family TexDataRepr arity (t :: TextureSemantics *)
+    type instance TexDataRepr Red  (v a) = a
+    type instance TexDataRepr RG   (v a) = V2 a
+    type instance TexDataRepr RGB  (v a) = V3 a
+    type instance TexDataRepr RGBA (v a) = V4 a
+
+  type family TexArrRepr (a :: Nat) :: TextureArray
+    --type instance TexArrRepr 1 = SingleTex
+    --type instance TexArrRepr ((2 <= t) => t) = ArrayTex
+    -- FIXME: implement properly
+    type instance TexArrRepr 1 = SingleTex
+    type instance TexArrRepr 2 = ArrayTex
+    type instance TexArrRepr 3 = ArrayTex
+    type instance TexArrRepr 4 = ArrayTex
+    type instance TexArrRepr 5 = ArrayTex
+    type instance TexArrRepr 6 = ArrayTex
+    type instance TexArrRepr 7 = ArrayTex
+    type instance TexArrRepr 8 = ArrayTex
+    type instance TexArrRepr 9 = ArrayTex
+
+  [injective] type family TexSizeRepr (a :: TextureShape)
+    type instance TexSizeRepr (Tex1D)   = Word32
+    type instance TexSizeRepr (Tex2D)   = V2U
+    type instance TexSizeRepr (TexRect) = V2U
+    type instance TexSizeRepr (Tex3D)   = V3U
+
+  [injective] type family TexelRepr sampler
+    type instance TexelRepr (Sampler dim arr (v t) Red)     = t
+    type instance TexelRepr (Sampler dim arr (v t) RG)      = V2 t
+    type instance TexelRepr (Sampler dim arr (v t) RGB)     = V3 t
+    type instance TexelRepr (Sampler dim arr (v t) RGBA)    = V4 t
+-}
+reduceTF :: TName -> [Ty] -> Ty
+reduceTF n l = TFun n l
+
+isInstance :: Constraint -> Ty -> Bool
+isInstance IsNumComponent (TFloat _) = True
+isInstance IsNumComponent (TInt _) = True
+isInstance IsNumComponent (TWord _) = True
+isInstance IsNumComponent (TV2F _) = True
+isInstance IsNumComponent (TV3F _) = True
+isInstance IsNumComponent (TV4F _) = True
+
+isInstance IsSigned (TFloat _) = True
+isInstance IsSigned (TInt _) = True
+
+isInstance IsNum (TFloat _) = True
+isInstance IsNum (TInt _) = True
+isInstance IsNum (TWord _) = True
+
+isInstance IsIntegral (TInt _) = True
+isInstance IsIntegral (TWord _) = True
+
+isInstance IsFloating (TFloat _) = True
+isInstance IsFloating (TV2F   _) = True
+isInstance IsFloating (TV3F   _) = True
+isInstance IsFloating (TV4F   _) = True
+isInstance IsFloating (TM22F  _) = True
+isInstance IsFloating (TM23F  _) = True
+isInstance IsFloating (TM24F  _) = True
+isInstance IsFloating (TM32F  _) = True
+isInstance IsFloating (TM33F  _) = True
+isInstance IsFloating (TM34F  _) = True
+isInstance IsFloating (TM42F  _) = True
+isInstance IsFloating (TM43F  _) = True
+isInstance IsFloating (TM44F  _) = True
+
+isInstance IsComponent (TFloat _) = True
+isInstance IsComponent (TInt _) = True
+isInstance IsComponent (TWord _) = True
+isInstance IsComponent (TBool _) = True
+isInstance IsComponent (TV2F _) = True
+isInstance IsComponent (TV3F _) = True
+isInstance IsComponent (TV4F _) = True
+isInstance c t = case Map.lookup c instances of
+    Nothing -> False
+    Just ts -> Set.member t ts
 
 instances :: Map Constraint (Set Ty)
 instances = Map.fromList [(CNum,Set.fromList [TInt C,TFloat C])]
@@ -434,9 +764,14 @@ inferPrimFun a = case a of
   "PointSize"        -> ty $ TFloat C ~> TPointSize C
   "ProgramPointSize" -> ty $ TPointSize C
   -- Fragment Out
-  "FragmentOut"  -> do t <- newVar C ; ty $ (TV4F C) ~> TFragmentOut C (TV4F C) --t
-    --PFragmentOutDepth
-    --PFragmentOutRastDepth
+  {-
+    FragmentOut             ::                  FlatExp F a -> FragmentOut (ColorRepr a)
+    FragmentOutDepth        :: Exp F Float  ->  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
+    FragmentOutRastDepth    ::                  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
+  -}
+  "FragmentOut"           -> do t <- newVar C ; ty $ t ~> TFragmentOut C t
+  "FragmentOutDepth"      -> do t <- newVar C ; ty $ TFloat C ~> t ~> TFragmentOut C t
+  "FragmentOutRastDepth"  -> do t <- newVar C ; ty $ t ~> TFragmentOut C t
   -- Vertex Out
   "VertexOut"    -> do a <- newVar C ; ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> TInterpolated C a ~> TVertexOut C a
   -- PointSpriteCoordOrigin
@@ -453,18 +788,18 @@ inferPrimFun a = case a of
   "LinesAdjacency"     -> ty $ TFetchPrimitive C TLineAdjacency
   "TrianglesAdjacency" -> ty $ TFetchPrimitive C TTriangleAdjacency
   -- Accumulation Context
-  "AccumulationContext"  -> do t <- newVar C ; ty $ TFragmentOperation C t ~> TAccumulationContext C t
+  "AccumulationContext"  -> do [t,t'] <- newVars 2 C ; ty $ {-TFragmentOperation C-} t ~> TAccumulationContext C t'
   -- Image
-  "ColorImage"   -> do [a,b] <- newVars 2 C ; ty $ a ~> b ~> TImage C a b
-  "DepthImage"   -> do [a] <- newVars 1 C ; ty $ a ~> TFloat C ~> TImage C a (TFloat C)
-  "StencilImage" -> do [a] <- newVars 1 C ; ty $ a ~> TInt C ~> TImage C a (TInt C)
+  "ColorImage"   -> do [a,b] <- newVars 2 C ; ty $ a ~> b ~> TImage C a -- b
+  "DepthImage"   -> do [a] <- newVars 1 C ; ty $ a ~> TFloat C ~> TImage C a -- (TFloat C)
+  "StencilImage" -> do [a] <- newVars 1 C ; ty $ a ~> TInt C ~> TImage C a -- (TInt C)
   -- Interpolation
   "Smooth"         -> do t <- newVar C ; ty $ t ~> TInterpolated C t
   "Flat"           -> do t <- newVar C ; ty $ t ~> TInterpolated C t
   "NoPerspective"  -> do t <- newVar C ; ty $ t ~> TInterpolated C t
   -- Fragment Operation
-  "ColorOp"    -> do a <- newVar C ; ty $ TBlending C a ~> TFragmentOperation C ({-Color-} a) -- TODO: type family needed
-  "DepthOp"    -> ty $ TComparisonFunction C ~> TBool C ~> TFragmentOperation C (TFloat C)
+  "ColorOp"    -> do [a,a'] <- newVars 2 C ; ty $ TBlending C a ~> TFragmentOperation C ({-Color-} a') -- TODO: type family needed
+  "DepthOp"    -> do a <- newVar C ; ty $ TComparisonFunction C ~> TBool C ~> TFragmentOperation C a -- (TFloat C)
     -- "StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
   -- Blending
   "NoBlending"   -> do t <- newVar C ; ty $ TBlending C t
@@ -479,8 +814,17 @@ inferPrimFun a = case a of
   "Fetch"        -> do [a,b] <- newVars 2 C ; ty $ TString C ~> TFetchPrimitive C a ~> TInput C b ~> TVertexStream C a b
   "Transform"    -> do [a,b,p] <- newVars 3 C ; ty $ (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
   "Rasterize"    -> do [a,b,c] <- newVars 3 C ; ty $ TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
+  {-
+    Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
+                    => AccumulationContext b
+                    -> FragmentFilter a
+                    -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
+                    -> Exp Obj (FragmentStream layerCount a)
+                    -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
+                    -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
+  -}
   "Accumulate"   -> do [a,b,n] <- newVars 3 C ; ty $ TAccumulationContext C b ~> TFragmentFilter C a ~> (a ~> TFragmentOut C b) ~> TFragmentStream C n a ~> TFrameBuffer C ~> TFrameBuffer C
-  "FrameBuffer"  -> do [a,b] <- newVars 2 C ; ty $ TImage C a b ~> TFrameBuffer C
+  "FrameBuffer"  -> do [a,b] <- newVars 2 C ; ty $ a {-TImage C a b-} ~> TFrameBuffer C
   "ScreenOut"    -> ty $ TFrameBuffer C ~> TOutput C
   -- Primitive Functions
   "MulMV"        -> ty $ TM44F C ~> TV4F C ~> TV4F C

@@ -225,6 +225,8 @@ eval (Fun "ProgramPointSize":xs) = PointSize' ProgramPointSize : eval xs
 -- Fragment Out
 eval (Fun "FragmentOut":Val t v:xs) = N (fragmentOut [const_ t v]) : eval xs
 eval (Fun "FragmentOut":N a:xs) = N (fragmentOut [a]) : eval xs
+eval (Fun "FragmentOutDepth":N a:N b:xs) = N (fragmentOutDepth a [b]) : eval xs
+eval (Fun "FragmentOutRastDepth":N a:xs) = N (fragmentOutRastDepth [a]) : eval xs
 -- Vertex Out
 eval (Fun "VertexOut":N a:Arg (LFloat b):N c:N d:xs) = N (vertexOut a (const_ (Single C.Float) (VFloat $ realToFrac b)) [c] [d]) : eval xs
 -- PointSpriteCoordOrigin
@@ -242,6 +244,7 @@ eval (Fun "LinesAdjacency":xs) = FetchPrimitive LinesAdjacency: eval xs
 eval (Fun "TrianglesAdjacency":xs) = FetchPrimitive TrianglesAdjacency: eval xs
 -- Accumulation Context
 eval (Fun "AccumulationContext":FragmentOperation a:xs) = N (accumulationContext Nothing [a]) : eval xs
+eval (Fun "AccumulationContext":Tuple' _ a:xs) = N (accumulationContext Nothing [o | [FragmentOperation o] <- a]) : eval xs
 -- Image
 eval (Fun "ColorImage":Arg (LNat i):Val _ v:xs) = Img (ColorImage i v) : eval xs
 eval (Fun "DepthImage":Arg (LNat i):Arg (LFloat a):xs) = Img (DepthImage i (realToFrac a)) : eval xs
@@ -269,6 +272,7 @@ eval (Fun "Transform":N a:N b:xs) = N (transform a b) : eval xs
 eval (Fun "Rasterize":RasterContext a:N b:xs) = N (rasterize a b) : eval xs
 eval (Fun "Accumulate":N a:N b:N c:N d:N e:xs) = N (accumulate a b c d e) : eval xs
 eval (Fun "FrameBuffer":Img i:xs) = N (frameBuffer [i]) : eval xs
+eval (Fun "FrameBuffer":Tuple' _ i:xs) = N (frameBuffer [a | [Img a] <- i]) : eval xs
 eval (Fun "ScreenOut":N n:xs) = N (screenOut $ prjFrameBuffer mempty 0 n) : eval xs
 -- Primitive Functions
 eval (Fun "MulMV":N a:N b:xs) = N (primApp (Single V4F) C.PrimMulMatVec $ tup (Unknown "") [a,b]) : eval xs
