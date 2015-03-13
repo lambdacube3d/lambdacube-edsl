@@ -93,7 +93,7 @@ expr = buildExpressionParser table expr'
 
 table :: OperatorTable (IndentationParserT Char (LCParser Parser)) (Exp Range)
 table =
-  [ [binary "*." (\a b -> let r = mergeRange a b in EApp r mempty (EApp r mempty (EVar r mempty "MulMV") a) b) AssocLeft]
+  [ [binary "*." (\a b -> let r = mergeRange a b in EApp r mempty (EApp r mempty (EVar r mempty "PrimMulMatVec") a) b) AssocLeft]
    --[Prefix $ do op "*."; return id]
   ]
  where

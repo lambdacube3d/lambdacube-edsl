@@ -275,7 +275,7 @@ eval (Fun "FrameBuffer":Img i:xs) = N (frameBuffer [i]) : eval xs
 eval (Fun "FrameBuffer":Tuple' _ i:xs) = N (frameBuffer [a | [Img a] <- i]) : eval xs
 eval (Fun "ScreenOut":N n:xs) = N (screenOut $ prjFrameBuffer mempty 0 n) : eval xs
 -- Primitive Functions
-eval (Fun "MulMV":N a:N b:xs) = N (primApp (Single V4F) C.PrimMulMatVec $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimMulMatVec":N a:N b:xs) = N (primApp (Single V4F) C.PrimMulMatVec $ tup (Unknown "") [a,b]) : eval xs
 eval (a:xs) = a : eval xs
 eval l = l
 
