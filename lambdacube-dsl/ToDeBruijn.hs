@@ -104,7 +104,9 @@ toNF sub env (ETuple (m,i,t) a) = [Tuple' (toTy (m,i,applyTy sub t)) (fmap (eval
 toNF _ _ x = error $ "toNF error: " ++ show x
 
 eval :: [NF] -> [NF]
--- Const
+-- Const and other temp construction
+eval (Fun "Tup":N t v:xs) = N t v : eval xs
+eval (Fun "Tup":Tuple' t v:xs) = N (Unknown $ "Tup " ++ show t) (tup t [o | [N _ o] <- v]) : eval xs
 eval (Fun "Const":Val t v:xs) = N (Unknown $ "Const " ++ show t) (const_ t v) : eval xs
 -- Vector/Matrix
 eval (Fun "True":xs) = Bool' True: eval xs
@@ -279,7 +281,6 @@ eval (Fun "FrameBuffer":Img i:xs) = N noType (frameBuffer [i]) : eval xs
 eval (Fun "FrameBuffer":Tuple' _ i:xs) = N noType (frameBuffer [a | [Img a] <- i]) : eval xs
 eval (Fun "ScreenOut":N _ n:xs) = N noType (screenOut $ prjFrameBuffer mempty 0 n) : eval xs
 -- * Primitive Functions *
-eval (Fun "PrimMulMatVec":N _ a:N t b:xs) = N noType (primApp t C.PrimMulMatVec $ tup (Unknown "") [a,b]) : eval xs
 -- Arithmetic Functions (componentwise)
 eval (Fun "PrimAdd"   :N t a:N _ b:xs) = N t (primApp t C.PrimAdd  $ tup (Unknown "") [a,b]) : eval xs
 eval (Fun "PrimAddS"  :N t a:N _ b:xs) = N t (primApp t C.PrimAddS $ tup (Unknown "") [a,b]) : eval xs
@@ -379,7 +380,7 @@ eval (Fun "PrimTranspose"     :N _ a:xs) = N noType (primApp noType C.PrimTransp
 eval (Fun "PrimDeterminant"   :N _ a:xs) = N noType (primApp noType C.PrimDeterminant a) : eval xs
 eval (Fun "PrimInverse"       :N _ a:xs) = N noType (primApp noType C.PrimInverse a) : eval xs
 eval (Fun "PrimOuterProduct"  :N _ a:N _ b:xs) = N noType (primApp noType C.PrimOuterProduct $ tup noType [a,b]) : eval xs
-eval (Fun "PrimMulMatVec"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMulMatVec $ tup noType [a,b]) : eval xs
+eval (Fun "PrimMulMatVec"     :N _ a:N t b:xs) = N t (primApp t C.PrimMulMatVec $ tup noType [a,b]) : eval xs
 eval (Fun "PrimMulVecMat"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMulVecMat $ tup noType [a,b]) : eval xs
 eval (Fun "PrimMulMatMat"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMulMatMat $ tup noType [a,b]) : eval xs
 -- Vector and Scalar Relational Functions
@@ -431,6 +432,7 @@ toTy (_,_,TM34F  _) = Single C.M34F
 toTy (_,_,TM42F  _) = Single C.M42F 
 toTy (_,_,TM43F  _) = Single C.M43F 
 toTy (_,_,TM44F  _) = Single C.M44F 
+toTy (m,i,TInterpolated _ t) = toTy (m,i,t)
 toTy t = Unknown (show t)
 {-
 data InputType

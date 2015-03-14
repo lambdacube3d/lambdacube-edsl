@@ -37,6 +37,7 @@ data Lit
 isPrimFun n = Set.member n primFunSet
 primFunSet = Set.fromList
   [ "Const"
+  , "Tup"
   , "Fetch"
   , "Transform"
   , "Rasterize"
@@ -631,6 +632,7 @@ ty t = return (mempty,mempty,t)
 inferPrimFun :: EName -> Unique Typing
 inferPrimFun a = case a of
   -- temporary const constructor
+  "Tup"          -> do [a] <- newVars 1 C ; ty $ a ~> a
   "Const"        -> do [a] <- newVars 1 C ; ty $ a ~> a
   -- Vector/Matrix
   "True"         -> ty $ TBool C
@@ -770,7 +772,7 @@ inferPrimFun a = case a of
   "FragmentOutDepth"      -> do t <- newVar C ; ty $ TFloat C ~> t ~> TFragmentOut C t
   "FragmentOutRastDepth"  -> do t <- newVar C ; ty $ t ~> TFragmentOut C t
   -- Vertex Out
-  "VertexOut"    -> do a <- newVar C ; ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> TInterpolated C a ~> TVertexOut C a
+  "VertexOut"    -> do a <- newVar C ; ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C a
   -- PointSpriteCoordOrigin
   "LowerLeft"  -> ty $ TPointSpriteCoordOrigin C
   "UpperLeft"  -> ty $ TPointSpriteCoordOrigin C

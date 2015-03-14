@@ -32,6 +32,7 @@ class IndentationParsing m where
   ignoreAbsoluteIndentation :: m a -> m a
   localAbsoluteIndentation :: m a -> m a
 -}
+
 type P a = IndentationParserT Char (LCParser Parser) a
 
 newtype LCParser p a = LCParser { runLCParser :: p a }
@@ -43,11 +44,6 @@ instance TokenParsing p => TokenParsing (LCParser p) where
   highlight h = LCParser . highlight h . runLCParser
   semi = token $ char ';' <?> ";"
   token p = p <* whiteSpace
-
---buildSomeSpaceParser :: CharParsing m => m () -> CommentStyle -> m ()
---haskellIdents :: TokenParsing m => IdentifierStyle m
-
---lcSpace = buildSomeSpaceParser _ haskellCommentStyle
 
 lcCommentStyle = haskellCommentStyle
 
@@ -117,22 +113,6 @@ lam :: P (Exp Range)
 lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
 
 indentState = mkIndentationState 0 infIndentation True Ge
-
-test' = test "example01.lc"
-
-test :: String -> IO ()
-test fname = do
-  src <- BS.readFile fname
-  case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
-    Failure m -> print m
-    Success e -> do
-      --let r = render s
-      --print $ pretty $ delta r
-      --print $ pretty r
-      putStrLn $ ppShow e
-      case inference src e of
-        Right t   -> putStrLn $ ppShow t
-        Left m    -> putStrLn $ "error: " ++ m
 
 parseLC :: String -> IO (Either String (Exp Typing))
 parseLC fname = do
