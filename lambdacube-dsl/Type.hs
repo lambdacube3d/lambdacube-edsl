@@ -36,7 +36,8 @@ data Lit
 
 isPrimFun n = Set.member n primFunSet
 primFunSet = Set.fromList
-  [ "Fetch"
+  [ "Const"
+  , "Fetch"
   , "Transform"
   , "Rasterize"
   , "Accumulate"
@@ -629,6 +630,8 @@ ty t = return (mempty,mempty,t)
 
 inferPrimFun :: EName -> Unique Typing
 inferPrimFun a = case a of
+  -- temporary const constructor
+  "Const"        -> do [a] <- newVars 1 C ; ty $ a ~> a
   -- Vector/Matrix
   "True"         -> ty $ TBool C
   "False"        -> ty $ TBool C

@@ -46,9 +46,10 @@ expOutput =
 data NF
   = Arg Lit
   | Fun EName
+  | App C.Ty
   | Val C.Ty Value
   | Img Image
-  | N   N
+  | N   C.Ty N
   | Blending Blending
   | PolygonOffset PolygonOffset
   | CullMode CullMode
@@ -81,7 +82,7 @@ type NFEnv = Map EName EnvVar
 -- TODO: add let
 toNF :: Subst -> NFEnv -> Exp Typing -> [NF]
 toNF sub env (ELit t l) = [Arg l]
-toNF sub env (EApp t s a b) = let sub' = sub `compose` s in eval $ toNF sub' env a `mappend` toNF sub' env b
+toNF sub env (EApp (m,i,t) s a b) = let sub' = s `compose` sub in eval $ {-[App $ toTy (m,i,applyTy (s `compose` sub) t)] `mappend` -} toNF sub' env a `mappend` toNF sub' env b
 toNF sub env (ELet t n a b) = --case toNF env a of -- TODO
   -- x@(N _:_) -> error $ "let is not fully supported: " ++ show x
   --x -> toNF (Map.insert n x env) b
@@ -91,18 +92,20 @@ toNF sub env (EVar (m,i,t) s n)
   | isPrimFun n = [Fun n]
   | otherwise = case Map.lookup n env of
       Nothing -> error $ "unknown variable: " ++ n
-      Just (LetVar x) -> toNF (s `compose` sub) env x
-      Just LamVar     -> [N $ var (toTy (m,i,applyTy (s `compose` sub) t)) 0 ""]
+      Just (LetVar x) -> eval $ toNF (s `compose` sub) env x
+      Just LamVar     -> let ty = toTy (m,i,applyTy (s `compose` sub) t) in eval [N ty $ var ty 0 ""]
 toNF sub env (ELam t n e) =
   let (tm,ti,tt@(TArr ta tb)) = t
-  in case toNF sub (Map.insert n LamVar env) e of
-    [N x] -> [N $ lam (toTy (tm,ti,applyTy sub tt)) $ body x]
+  in case eval $ toNF sub (Map.insert n LamVar env) e of
+    [N _ x] -> let ty = toTy (tm,ti,applyTy sub tt) in [N ty $ lam ty $ body x]
     x -> error $ "lam is not fully supported: " ++ show x
-toNF sub env (ETuple (m,i,t) []) = [N $ tup (toTy (m,i,applyTy sub t)) []]
+toNF sub env (ETuple (m,i,t) []) = let ty = toTy (m,i,applyTy sub t) in [N ty $ tup ty []]
 toNF sub env (ETuple (m,i,t) a) = [Tuple' (toTy (m,i,applyTy sub t)) (fmap (eval . toNF sub env) a)]
 toNF _ _ x = error $ "toNF error: " ++ show x
 
 eval :: [NF] -> [NF]
+-- Const
+eval (Fun "Const":Val t v:xs) = N (Unknown $ "Const " ++ show t) (const_ t v) : eval xs
 -- Vector/Matrix
 eval (Fun "True":xs) = Bool' True: eval xs
 eval (Fun "False":xs) = Bool' False: eval xs
@@ -119,7 +122,7 @@ eval (Fun "V2U":Arg (LInt x):Arg (LInt y):xs) = Val (Single C.V2U) (VV2U (V2 (fr
 eval (Fun "V3U":Arg (LInt x):Arg (LInt y):Arg (LInt z):xs) = Val (Single C.V3U) (VV3U (V3 (fromIntegral x) (fromIntegral y) (fromIntegral z))) : eval xs
 eval (Fun "V4U":Arg (LInt x):Arg (LInt y):Arg (LInt z):Arg (LInt w):xs) = Val (Single C.V4U) (VV4U (V4 (fromIntegral x) (fromIntegral y) (fromIntegral z) (fromIntegral w))) : eval xs
 -- Input declaration
-eval (Fun "Uni":Input n t:xs) = N (uni t n) : eval xs
+eval (Fun "Uni":Input n t:xs) = N t (uni t n) : eval xs
 eval (Fun "IWord":Arg (LString s):xs) = Input (pack s) (Single C.Word) : eval xs
 eval (Fun "IV2U":Arg (LString s):xs) = Input (pack s) (Single C.V2U) : eval xs
 eval (Fun "IV3U":Arg (LString s):xs) = Input (pack s) (Single C.V3U) : eval xs
@@ -223,12 +226,13 @@ eval (Fun "Offset":Arg (LFloat a):Arg (LFloat b):xs) = PolygonOffset (Offset (re
 eval (Fun "PointSize":Arg (LFloat s):xs) = PointSize' (PointSize $ realToFrac s) : eval xs
 eval (Fun "ProgramPointSize":xs) = PointSize' ProgramPointSize : eval xs
 -- Fragment Out
-eval (Fun "FragmentOut":Val t v:xs) = N (fragmentOut [const_ t v]) : eval xs
-eval (Fun "FragmentOut":N a:xs) = N (fragmentOut [a]) : eval xs
-eval (Fun "FragmentOutDepth":N a:N b:xs) = N (fragmentOutDepth a [b]) : eval xs
-eval (Fun "FragmentOutRastDepth":N a:xs) = N (fragmentOutRastDepth [a]) : eval xs
+eval (Fun "FragmentOut":Val t v:xs) = N (Unknown $ "fragmentOut" ++ show t) (fragmentOut [const_ t v]) : eval xs
+eval (Fun "FragmentOut":N t a:xs) = N (Unknown $ "fragmentOut" ++ show t) (fragmentOut [a]) : eval xs
+eval (Fun "FragmentOutDepth":N _ a:N t b:xs) = N (Unknown $ "fragmentOutDepth" ++ show t) (fragmentOutDepth a [b]) : eval xs
+eval (Fun "FragmentOutRastDepth":N t a:xs) = N (Unknown $ "fragmentOutRastDepth" ++ show t) (fragmentOutRastDepth [a]) : eval xs
+eval (Fun "FragmentOutRastDepth":Val t v:xs) = N (Unknown $ "fragmentOutRastDepth" ++ show t) (fragmentOutRastDepth [const_ t v]) : eval xs
 -- Vertex Out
-eval (Fun "VertexOut":N a:Arg (LFloat b):N c:N d:xs) = N (vertexOut a (const_ (Single C.Float) (VFloat $ realToFrac b)) [c] [d]) : eval xs
+eval (Fun "VertexOut":N _ a:Arg (LFloat b):N _ c:N t d:xs) = N (Unknown $ "vertexOut" ++ show t) (vertexOut a (const_ (Single C.Float) (VFloat $ realToFrac b)) [c] [d]) : eval xs
 -- PointSpriteCoordOrigin
 eval (Fun "LowerLeft":xs) = PointSpriteCoordOrigin LowerLeft: eval xs
 eval (Fun "UpperLeft":xs) = PointSpriteCoordOrigin UpperLeft: eval xs
@@ -243,16 +247,16 @@ eval (Fun "Triangles":xs) = FetchPrimitive Triangles : eval xs
 eval (Fun "LinesAdjacency":xs) = FetchPrimitive LinesAdjacency: eval xs
 eval (Fun "TrianglesAdjacency":xs) = FetchPrimitive TrianglesAdjacency: eval xs
 -- Accumulation Context
-eval (Fun "AccumulationContext":FragmentOperation a:xs) = N (accumulationContext Nothing [a]) : eval xs
-eval (Fun "AccumulationContext":Tuple' _ a:xs) = N (accumulationContext Nothing [o | [FragmentOperation o] <- a]) : eval xs
+eval (Fun "AccumulationContext":FragmentOperation a:xs) = N noType (accumulationContext Nothing [a]) : eval xs
+eval (Fun "AccumulationContext":Tuple' _ a:xs) = N noType (accumulationContext Nothing [o | [FragmentOperation o] <- a]) : eval xs
 -- Image
 eval (Fun "ColorImage":Arg (LNat i):Val _ v:xs) = Img (ColorImage i v) : eval xs
 eval (Fun "DepthImage":Arg (LNat i):Arg (LFloat a):xs) = Img (DepthImage i (realToFrac a)) : eval xs
 eval (Fun "StencilImage":Arg (LNat i):Arg (LInt a):xs) = Img (StencilImage i (fromIntegral a)) : eval xs
 -- Interpolation
-eval (Fun "Smooth":N a:xs) = N (smooth a) : eval xs
-eval (Fun "NoPerspective":N a:xs) = N (noPerspective a) : eval xs
-eval (Fun "Flat":N a:xs) = N (flat a) : eval xs
+eval (Fun "Smooth":N _ a:xs) = N noType (smooth a) : eval xs
+eval (Fun "NoPerspective":N _ a:xs) = N noType (noPerspective a) : eval xs
+eval (Fun "Flat":N _ a:xs) = N noType (flat a) : eval xs
 -- Fragment Operation
 eval (Fun "ColorOp":Blending b:xs) = FragmentOperation (ColorOp b (VV4B $ V4 True True True True)) : eval xs
 eval (Fun "DepthOp":ComparisonFunction a:Bool' b:xs) = FragmentOperation (DepthOp a b) : eval xs
@@ -264,20 +268,142 @@ eval (Fun "Blend":
   Tuple' _ [[Tuple' _ [[BlendingFactor c],[BlendingFactor d]]],[Tuple' _ [[BlendingFactor e],[BlendingFactor f]]]]:Val (Single C.V4F) (VV4F g):xs) =
     Blending (Blend (a,b) ((c,d),(e,f)) g) : eval xs
 -- Fragment Filter
-eval (Fun "PassAll":xs) = N passAll : eval xs
-eval (Fun "Filter":N f:xs) = N (filter_ f) : eval xs
+eval (Fun "PassAll":xs) = N noType passAll : eval xs
+eval (Fun "Filter":N _ f:xs) = N noType (filter_ f) : eval xs
 -- Render Operations
-eval (Fun "Fetch":Arg (LString a):FetchPrimitive b:Input c (Single C.V4F):xs) = N (fetch (pack a) b [(c,V4F)]) : eval xs
-eval (Fun "Transform":N a:N b:xs) = N (transform a b) : eval xs
-eval (Fun "Rasterize":RasterContext a:N b:xs) = N (rasterize a b) : eval xs
-eval (Fun "Accumulate":N a:N b:N c:N d:N e:xs) = N (accumulate a b c d e) : eval xs
-eval (Fun "FrameBuffer":Img i:xs) = N (frameBuffer [i]) : eval xs
-eval (Fun "FrameBuffer":Tuple' _ i:xs) = N (frameBuffer [a | [Img a] <- i]) : eval xs
-eval (Fun "ScreenOut":N n:xs) = N (screenOut $ prjFrameBuffer mempty 0 n) : eval xs
--- Primitive Functions
-eval (Fun "PrimMulMatVec":N a:N b:xs) = N (primApp (Single V4F) C.PrimMulMatVec $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "Fetch":Arg (LString a):FetchPrimitive b:Input c (Single C.V4F):xs) = N noType (fetch (pack a) b [(c,V4F)]) : eval xs
+eval (Fun "Transform":N _ a:N _ b:xs) = N noType (transform a b) : eval xs
+eval (Fun "Rasterize":RasterContext a:N _ b:xs) = N noType (rasterize a b) : eval xs
+eval (Fun "Accumulate":N _ a:N _ b:N _ c:N _ d:N _ e:xs) = N noType (accumulate a b c d e) : eval xs
+eval (Fun "FrameBuffer":Img i:xs) = N noType (frameBuffer [i]) : eval xs
+eval (Fun "FrameBuffer":Tuple' _ i:xs) = N noType (frameBuffer [a | [Img a] <- i]) : eval xs
+eval (Fun "ScreenOut":N _ n:xs) = N noType (screenOut $ prjFrameBuffer mempty 0 n) : eval xs
+-- * Primitive Functions *
+eval (Fun "PrimMulMatVec":N _ a:N t b:xs) = N noType (primApp t C.PrimMulMatVec $ tup (Unknown "") [a,b]) : eval xs
+-- Arithmetic Functions (componentwise)
+eval (Fun "PrimAdd"   :N t a:N _ b:xs) = N t (primApp t C.PrimAdd  $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimAddS"  :N t a:N _ b:xs) = N t (primApp t C.PrimAddS $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimSub"   :N t a:N _ b:xs) = N t (primApp t C.PrimSub  $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimSubS"  :N t a:N _ b:xs) = N t (primApp t C.PrimSubS $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimMul"   :N t a:N _ b:xs) = N t (primApp t C.PrimMul  $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimMulS"  :N t a:N _ b:xs) = N t (primApp t C.PrimMulS $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimDiv"   :N t a:N _ b:xs) = N t (primApp t C.PrimDiv  $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimDivS"  :N t a:N _ b:xs) = N t (primApp t C.PrimDivS $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimNeg"   :N t a:xs) = N t (primApp t C.PrimNeg a) : eval xs
+eval (Fun "PrimMod"   :N t a:N _ b:xs) = N t (primApp t C.PrimMod  $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimModS"  :N t a:N _ b:xs) = N t (primApp t C.PrimModS $ tup (Unknown "") [a,b]) : eval xs
+-- Bit-wise Functions
+eval (Fun "PrimBAnd"      :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBAnd      $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBAndS"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBAndS     $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBOr"       :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBOr       $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBOrS"      :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBOrS      $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBXor"      :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBXor      $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBXorS"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBXorS     $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBNot"      :N _ a:xs) = N noType (primApp noType C.PrimBNot a) : eval xs
+eval (Fun "PrimBShiftL"   :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBShiftL   $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBShiftLS"  :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBShiftLS  $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBShiftR"   :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBShiftR   $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimBShiftRS"  :N _ a:N _ b:xs) = N noType (primApp noType C.PrimBShiftRS  $ tup (Unknown "") [a,b]) : eval xs
+-- Logic Functions
+eval (Fun "PrimAnd" :N _ a:N _ b:xs) = N noType (primApp noType C.PrimAnd  $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimOr"  :N _ a:N _ b:xs) = N noType (primApp noType C.PrimOr   $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimXor" :N _ a:N _ b:xs) = N noType (primApp noType C.PrimXor  $ tup (Unknown "") [a,b]) : eval xs
+eval (Fun "PrimNot" :N _ a:xs) = N noType (primApp noType C.PrimNot  a) : eval xs
+eval (Fun "PrimAny" :N _ a:xs) = N noType (primApp noType C.PrimAny  a) : eval xs
+eval (Fun "PrimAll" :N _ a:xs) = N noType (primApp noType C.PrimAll  a) : eval xs
+-- Angle and Trigonometry Functions
+eval (Fun "PrimACos"    :N _ a:xs) = N noType (primApp noType C.PrimACos    a) : eval xs
+eval (Fun "PrimACosH"   :N _ a:xs) = N noType (primApp noType C.PrimACosH   a) : eval xs
+eval (Fun "PrimASin"    :N _ a:xs) = N noType (primApp noType C.PrimASin    a) : eval xs
+eval (Fun "PrimASinH"   :N _ a:xs) = N noType (primApp noType C.PrimASinH   a) : eval xs
+eval (Fun "PrimATan"    :N _ a:xs) = N noType (primApp noType C.PrimATan    a) : eval xs
+eval (Fun "PrimATan2"   :N _ a:N _ b:xs) = N noType (primApp noType C.PrimATan2   $ tup noType [a,b]) : eval xs
+eval (Fun "PrimATanH"   :N _ a:xs) = N noType (primApp noType C.PrimATanH   a) : eval xs
+eval (Fun "PrimCos"     :N _ a:xs) = N noType (primApp noType C.PrimCos     a) : eval xs
+eval (Fun "PrimCosH"    :N _ a:xs) = N noType (primApp noType C.PrimCosH    a) : eval xs
+eval (Fun "PrimDegrees" :N _ a:xs) = N noType (primApp noType C.PrimDegrees a) : eval xs
+eval (Fun "PrimRadians" :N _ a:xs) = N noType (primApp noType C.PrimRadians a) : eval xs
+eval (Fun "PrimSin"     :N _ a:xs) = N noType (primApp noType C.PrimSin     a) : eval xs
+eval (Fun "PrimSinH"    :N _ a:xs) = N noType (primApp noType C.PrimSinH    a) : eval xs
+eval (Fun "PrimTan"     :N _ a:xs) = N noType (primApp noType C.PrimTan     a) : eval xs
+eval (Fun "PrimTanH"    :N _ a:xs) = N noType (primApp noType C.PrimTanH    a) : eval xs
+-- Exponential Functions
+eval (Fun "PrimPow"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimPow   $ tup noType [a,b]) : eval xs
+eval (Fun "PrimExp"     :N _ a:xs) = N noType (primApp noType C.PrimExp     a) : eval xs
+eval (Fun "PrimLog"     :N _ a:xs) = N noType (primApp noType C.PrimLog     a) : eval xs
+eval (Fun "PrimExp2"    :N _ a:xs) = N noType (primApp noType C.PrimExp2    a) : eval xs
+eval (Fun "PrimLog2"    :N _ a:xs) = N noType (primApp noType C.PrimLog2    a) : eval xs
+eval (Fun "PrimSqrt"    :N _ a:xs) = N noType (primApp noType C.PrimSqrt    a) : eval xs
+eval (Fun "PrimInvSqrt" :N _ a:xs) = N noType (primApp noType C.PrimInvSqrt a) : eval xs
+-- Common Functions
+eval (Fun "PrimIsNan"       :N _ a:xs) = N noType (primApp noType C.PrimIsNan     a) : eval xs
+eval (Fun "PrimIsInf"       :N _ a:xs) = N noType (primApp noType C.PrimIsInf     a) : eval xs
+eval (Fun "PrimAbs"         :N _ a:xs) = N noType (primApp noType C.PrimAbs       a) : eval xs
+eval (Fun "PrimSign"        :N _ a:xs) = N noType (primApp noType C.PrimSign      a) : eval xs
+eval (Fun "PrimFloor"       :N _ a:xs) = N noType (primApp noType C.PrimFloor     a) : eval xs
+eval (Fun "PrimTrunc"       :N _ a:xs) = N noType (primApp noType C.PrimTrunc     a) : eval xs
+eval (Fun "PrimRound"       :N _ a:xs) = N noType (primApp noType C.PrimRound     a) : eval xs
+eval (Fun "PrimRoundEven"   :N _ a:xs) = N noType (primApp noType C.PrimRoundEven a) : eval xs
+eval (Fun "PrimCeil"        :N _ a:xs) = N noType (primApp noType C.PrimCeil      a) : eval xs
+eval (Fun "PrimFract"       :N _ a:xs) = N noType (primApp noType C.PrimFract     a) : eval xs
+eval (Fun "PrimModF"        :N _ a:xs) = N noType (primApp noType C.PrimModF      a) : eval xs
+eval (Fun "PrimMin"         :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMin   $ tup noType [a,b]) : eval xs
+eval (Fun "PrimMinS"        :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMinS  $ tup noType [a,b]) : eval xs
+eval (Fun "PrimMax"         :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMax   $ tup noType [a,b]) : eval xs
+eval (Fun "PrimMaxS"        :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMaxS  $ tup noType [a,b]) : eval xs
+eval (Fun "PrimClamp"       :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimClamp  $ tup noType [a,b,c]) : eval xs
+eval (Fun "PrimClampS"      :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimClampS  $ tup noType [a,b,c]) : eval xs
+eval (Fun "PrimMix"         :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimMix  $ tup noType [a,b,c]) : eval xs
+eval (Fun "PrimMixS"        :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimMixS  $ tup noType [a,b,c]) : eval xs
+eval (Fun "PrimMixB"        :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimMixB  $ tup noType [a,b,c]) : eval xs
+eval (Fun "PrimStep"        :N _ a:N _ b:xs) = N noType (primApp noType C.PrimStep   $ tup noType [a,b]) : eval xs
+eval (Fun "PrimStepS"       :N _ a:N _ b:xs) = N noType (primApp noType C.PrimStepS  $ tup noType [a,b]) : eval xs
+eval (Fun "PrimSmoothStep"  :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimSmoothStep  $ tup noType [a,b,c]) : eval xs
+eval (Fun "PrimSmoothStepS" :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimSmoothStepS  $ tup noType [a,b,c]) : eval xs
+-- Integer/Float Conversion Functions
+eval (Fun "PrimFloatBitsToInt"  :N _ a:xs) = N noType (primApp noType C.PrimFloatBitsToInt  a) : eval xs
+eval (Fun "PrimFloatBitsToUInt" :N _ a:xs) = N noType (primApp noType C.PrimFloatBitsToUInt a) : eval xs
+eval (Fun "PrimIntBitsToFloat"  :N _ a:xs) = N noType (primApp noType C.PrimIntBitsToFloat  a) : eval xs
+eval (Fun "PrimUIntBitsToFloat" :N _ a:xs) = N noType (primApp noType C.PrimUIntBitsToFloat a) : eval xs
+-- Geometric Functions
+eval (Fun "PrimLength"      :N _ a:xs) = N noType (primApp noType C.PrimLength  a) : eval xs
+eval (Fun "PrimDistance"    :N _ a:N _ b:xs) = N noType (primApp noType C.PrimDistance $ tup noType [a,b]) : eval xs
+eval (Fun "PrimDot"         :N _ a:N _ b:xs) = N noType (primApp noType C.PrimDot   $ tup noType [a,b]) : eval xs
+eval (Fun "PrimCross"       :N _ a:N _ b:xs) = N noType (primApp noType C.PrimCross   $ tup noType [a,b]) : eval xs
+eval (Fun "PrimNormalize"   :N _ a:xs) = N noType (primApp noType C.PrimNormalize  a) : eval xs
+eval (Fun "PrimFaceForward" :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimFaceForward  $ tup noType [a,b,c]) : eval xs
+eval (Fun "PrimReflect"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimReflect   $ tup noType [a,b]) : eval xs
+eval (Fun "PrimRefract"     :N _ a:N _ b:N _ c:xs) = N noType (primApp noType C.PrimRefract  $ tup noType [a,b,c]) : eval xs
+-- Matrix Functions
+eval (Fun "PrimTranspose"     :N _ a:xs) = N noType (primApp noType C.PrimTranspose a) : eval xs
+eval (Fun "PrimDeterminant"   :N _ a:xs) = N noType (primApp noType C.PrimDeterminant a) : eval xs
+eval (Fun "PrimInverse"       :N _ a:xs) = N noType (primApp noType C.PrimInverse a) : eval xs
+eval (Fun "PrimOuterProduct"  :N _ a:N _ b:xs) = N noType (primApp noType C.PrimOuterProduct $ tup noType [a,b]) : eval xs
+eval (Fun "PrimMulMatVec"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMulMatVec $ tup noType [a,b]) : eval xs
+eval (Fun "PrimMulVecMat"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMulVecMat $ tup noType [a,b]) : eval xs
+eval (Fun "PrimMulMatMat"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimMulMatMat $ tup noType [a,b]) : eval xs
+-- Vector and Scalar Relational Functions
+eval (Fun "PrimLessThan"          :N _ a:N _ b:xs) = N noType (primApp noType C.PrimLessThan $ tup noType [a,b]) : eval xs
+eval (Fun "PrimLessThanEqual"     :N _ a:N _ b:xs) = N noType (primApp noType C.PrimLessThanEqual $ tup noType [a,b]) : eval xs
+eval (Fun "PrimGreaterThan"       :N _ a:N _ b:xs) = N noType (primApp noType C.PrimGreaterThan $ tup noType [a,b]) : eval xs
+eval (Fun "PrimGreaterThanEqual"  :N _ a:N _ b:xs) = N noType (primApp noType C.PrimGreaterThanEqual $ tup noType [a,b]) : eval xs
+eval (Fun "PrimEqualV"            :N _ a:N _ b:xs) = N noType (primApp noType C.PrimEqualV $ tup noType [a,b]) : eval xs
+eval (Fun "PrimEqual"             :N _ a:N _ b:xs) = N noType (primApp noType C.PrimEqual $ tup noType [a,b]) : eval xs
+eval (Fun "PrimNotEqualV"         :N _ a:N _ b:xs) = N noType (primApp noType C.PrimNotEqualV $ tup noType [a,b]) : eval xs
+eval (Fun "PrimNotEqual"          :N _ a:N _ b:xs) = N noType (primApp noType C.PrimNotEqual $ tup noType [a,b]) : eval xs
+-- Fragment Processing Functions
+eval (Fun "PrimDFdx"    :N _ a:xs) = N noType (primApp noType C.PrimDFdx a) : eval xs
+eval (Fun "PrimDFdy"    :N _ a:xs) = N noType (primApp noType C.PrimDFdy a) : eval xs
+eval (Fun "PrimFWidth"  :N _ a:xs) = N noType (primApp noType C.PrimFWidth a) : eval xs
+-- Noise Functions
+eval (Fun "PrimNoise1"  :N _ a:xs) = N noType (primApp noType C.PrimNoise1 a) : eval xs
+eval (Fun "PrimNoise2"  :N _ a:xs) = N noType (primApp noType C.PrimNoise2 a) : eval xs
+eval (Fun "PrimNoise3"  :N _ a:xs) = N noType (primApp noType C.PrimNoise3 a) : eval xs
+eval (Fun "PrimNoise4"  :N _ a:xs) = N noType (primApp noType C.PrimNoise4 a) : eval xs
 eval (a:xs) = a : eval xs
 eval l = l
+
+noType = Unknown ""
 
 toTy :: Typing -> C.Ty
 toTy (_,_,TBool  _) = Single C.Bool 

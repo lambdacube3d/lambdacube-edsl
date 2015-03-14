@@ -83,6 +83,6 @@ idCore = Let "id" (
          (App (App (Var $ Id "id" (ForAllTy (TyVar "a" Star) $ Arr (TyVarTy (TyVar "a" Star)) (TyVarTy $ TyVar "a" Star))) (Type Int)) (Lit $ LInt 1))
 -}
 test = do
-  Right e <- parseLC "gfx02.lc" -- "example01.lc"
+  Right e <- parseLC "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
   putStrLn $ ppShow $ toCore e

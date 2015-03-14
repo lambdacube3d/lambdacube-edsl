@@ -115,7 +115,7 @@ rendererFromDSL fname = do
   lcAST' <- parseLC fname
   case lcAST' of
     Right lcAST -> case toNF mempty mempty lcAST of
-        [N lcNet] -> Just <$> compileRendererFromCore lcNet
+        [N _ lcNet] -> Just <$> compileRendererFromCore lcNet
         a -> do
           putStrLn $ "rendererFromDSL error: " ++ show a
           return Nothing
