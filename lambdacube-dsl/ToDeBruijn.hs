@@ -3,13 +3,15 @@ module ToDeBruijn where
 import Data.ByteString.Char8
 import Data.Map as Map
 import Data.Monoid
-import CompositionalLC
-import Type
 import LambdaCube.Core.DeBruijn hiding (Exp,N)
 import LambdaCube.Core.DeBruijn (N())
 import LambdaCube.Core.Type hiding (Ty)
 import qualified LambdaCube.Core.PrimFun as C
 import qualified LambdaCube.Core.Type as C
+
+import CompositionalLC
+import Type
+
 {-
 expV4F :: Exp Typing
 expV4F =
@@ -101,7 +103,7 @@ toNF sub env (ELam t n e) =
     x -> error $ "lam is not fully supported: " ++ show x
 toNF sub env (ETuple (m,i,t) []) = let ty = toTy (m,i,applyTy sub t) in [N ty $ tup ty []]
 toNF sub env (ETuple (m,i,t) a) = [Tuple' (toTy (m,i,applyTy sub t)) (fmap (eval . toNF sub env) a)]
-toNF _ _ x = error $ "toNF error: " ++ show x
+--toNF _ _ x = error $ "toNF error: " ++ show x
 
 eval :: [NF] -> [NF]
 -- Const and other temp construction

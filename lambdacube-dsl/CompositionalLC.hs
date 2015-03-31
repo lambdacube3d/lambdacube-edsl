@@ -27,18 +27,6 @@ trace__ = D.trace
 trace_ _ = id
 trace = trace_
 
-data Exp a
-  = ELit      a Lit
-  | EVar      a Subst EName
-  | EApp      a Subst (Exp a) (Exp a)
-  | ELam      a EName (Exp a)
-  | ELet      a EName (Exp a) (Exp a)
-  | ETuple    a [Exp a]
---  | EFix EName Exp
-  deriving (Show,Eq,Ord)
-
-type Subst = Map TName Ty
-
 {-
   ->>
   perdicate resolution operator
@@ -52,15 +40,6 @@ type Subst = Map TName Ty
 
   typing = type + mono env + instance env
 -}
-
-getTag :: Show a => Exp a -> a
-getTag (ELit      r _) = r
-getTag (EVar      r _ _) = r
-getTag (EApp      r _ _ _) = r
-getTag (ELam      r _ _) = r
-getTag (ELet      r _ _ _) = r
-getTag (ETuple    r _) = r
-getTag x = error $ "getTag error: " ++ show x
 
 withRanges :: [Range] -> Unique a -> Unique a
 withRanges rl a = do

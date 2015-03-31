@@ -34,6 +34,27 @@ data Lit
   | LNat    Int
   deriving (Show,Eq,Ord)
 
+data Exp a
+  = ELit      a Lit
+  | EVar      a Subst EName
+  | EApp      a Subst (Exp a) (Exp a)
+  | ELam      a EName (Exp a)
+  | ELet      a EName (Exp a) (Exp a)
+  | ETuple    a [Exp a]
+--  | EFix EName Exp
+  deriving (Show,Eq,Ord)
+
+type Subst = Map TName Ty
+
+getTag :: Show a => Exp a -> a
+getTag (ELit      r _) = r
+getTag (EVar      r _ _) = r
+getTag (EApp      r _ _ _) = r
+getTag (ELam      r _ _) = r
+getTag (ELet      r _ _ _) = r
+getTag (ETuple    r _) = r
+--getTag x = error $ "getTag error: " ++ show x
+
 isPrimFun n = Set.member n primFunSet
 primFunSet = Set.fromList
   [ "Const"
@@ -923,7 +944,7 @@ inferPrimFun a = case a of
   -- Matrix Functions
   "PrimTranspose"     -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsMat a h w, IsMat b w h)               => PrimFun stage (a       -> b)
   "PrimDeterminant"   -> do [a,t] <- newVars 2 C ; ty $ a ~> TFloat C -- IsMat m s s                              => PrimFun stage (m       -> Float)
-  "PrimInverse"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsMat m h w                              => PrimFun stage (m       -> m)
+  "PrimInverse"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsMat m s s                              => PrimFun stage (m       -> m)
   "PrimOuterProduct"  -> do [a,b,t] <- newVars 3 C ; ty $ a ~> b ~> t -- IsMat m h w                              => PrimFun stage ((w,h)   -> m)
   "PrimMulMatVec"     -> do [a,b,t] <- newVars 3 C ; ty $ a ~> b ~> t -- IsMat m h w                              => PrimFun stage ((m,w)   -> h)
   "PrimMulVecMat"     -> do [a,b,t] <- newVars 3 C ; ty $ a ~> b ~> t -- IsMat m h w                              => PrimFun stage ((h,m)   -> w)

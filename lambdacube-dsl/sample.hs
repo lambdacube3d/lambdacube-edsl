@@ -4,20 +4,24 @@ import Graphics.Rendering.OpenGL.Raw.Core32 (glViewport,gl_LINE_SMOOTH,glEnable)
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Data.Monoid
 import Control.Monad
+import Control.Applicative
 import Data.Vect
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 
-import LambdaCube.GL
+import Text.Trifecta (Result (..))
+
+import LambdaCube.GL hiding (Exp)
 import LambdaCube.GL.Mesh
 
 import System.Environment
 
 import Codec.Image.STB hiding (Image)
 
+import Type
+import CompositionalLC hiding (test)
 import ToDeBruijn
 import ParseTrifectaLC
-import Control.Applicative
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
 --  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
@@ -234,3 +238,23 @@ lookat pos target up = translateBefore4 (neg pos) (orthogonal $ toOrthoUnsafe r)
     u = normalize $ up &^ w
     v = w &^ u
     r = transpose $ Mat3 u v w
+
+parseLC :: String -> IO (Either String (Exp Typing))
+parseLC fname = do
+  (src, res) <- parseLC_ fname
+  case res of
+    Failure m -> do
+      print m
+      return (Left $ show m)
+    Success e -> do
+      --let r = render s
+      --print $ pretty $ delta r
+      --print $ pretty r
+      --putStrLn $ ppShow e
+      case inference src e of
+        Right t   -> do
+          --putStrLn $ ppShow t
+          return (Right t)
+        Left m    -> do
+          putStrLn $ "error: " ++ m
+          return (Left m)

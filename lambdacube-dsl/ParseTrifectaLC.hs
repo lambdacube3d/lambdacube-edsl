@@ -18,7 +18,7 @@ import Text.Show.Pretty
 import Control.Monad
 import Text.Parser.LookAhead
 
-import CompositionalLC hiding (test)
+--import CompositionalLC hiding (test)
 import Type
 
 {-
@@ -114,22 +114,7 @@ lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->
 
 indentState = mkIndentationState 0 infIndentation True Ge
 
-parseLC :: String -> IO (Either String (Exp Typing))
-parseLC fname = do
+parseLC_ :: String -> IO (BS.ByteString, Result (Exp Range))
+parseLC_ fname = do
   src <- BS.readFile fname
-  case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
-    Failure m -> do
-      print m
-      return (Left $ show m)
-    Success e -> do
-      --let r = render s
-      --print $ pretty $ delta r
-      --print $ pretty r
-      --putStrLn $ ppShow e
-      case inference src e of
-        Right t   -> do
-          --putStrLn $ ppShow t
-          return (Right t)
-        Left m    -> do
-          putStrLn $ "error: " ++ m
-          return (Left m)
+  return (src, parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expr <* eof) indentState) (Directed (pack fname) 0 0 0 0) src)
