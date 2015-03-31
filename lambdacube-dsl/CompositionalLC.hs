@@ -21,6 +21,7 @@ import Text.Trifecta hiding (err)
 import Text.Trifecta.Delta
 
 import Type
+import Typing
 
 trace__ = D.trace
 

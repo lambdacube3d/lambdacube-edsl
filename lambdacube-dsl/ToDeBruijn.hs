@@ -11,6 +11,7 @@ import qualified LambdaCube.Core.Type as C
 
 import CompositionalLC
 import Type
+import Typing (isPrimFun)
 
 {-
 expV4F :: Exp Typing
