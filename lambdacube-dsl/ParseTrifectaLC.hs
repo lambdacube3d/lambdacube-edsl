@@ -48,7 +48,7 @@ instance TokenParsing p => TokenParsing (LCParser p) where
 lcCommentStyle = haskellCommentStyle
 
 lcOps = emptyOps
-  { _styleReserved = HashSet.fromList ["=","\\","*.","#"]
+  { _styleReserved = HashSet.fromList ["=","\\","#"]
   }
 
 lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
