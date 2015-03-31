@@ -1,0 +1,52 @@
+--module Game.Stunts() where {--}
+import Hello.World (main1) -- hello {- nested -- comment -}
+import LambdaCube({- hello --  nested  comment -}A)
+--import {-hello sd - - - -} Hello ({-  asd sdas - - asd -sd-asd  { - - } -})
+import LambdaCube((*),(<$$>),hello) -- helo
+
+main :: forall a b. (a -> b) -> a -> b -> Screen ;
+main = screen A a B (a B (q)) #
+
+($) :: forall a b. (a -> b) -> a -> b ;
+($) f x = f x # 
+
+infix 5 ..
+
+foldStream :: forall l e m. (Stream l e, Monoid m) => (e -> m) -> l -> m ;
+foldStream :: forall l e m. (e -> m) -> l -> m ;
+
+-- hello ()
+-- hello
+{-
+{ -- }
+-- comment
+
+
+
+-}
+showPerson :: forall r. { first :: String;, last :: String; | r} -> String ;
+
+type Entry = { firstName :: String;, lastName :: String;, phone :: String; };
+
+type PhoneBook = List Entry;
+
+class Functor f where
+  (<$>) :: forall a b. (a -> b) -> f a -> f b;
+  ;;
+
+instance Functor state where
+  (<$>) f a = a #
+  ;;
+
+class Foldable f where
+  foldr :: forall a b. (a -> b -> b) -> b -> f a -> b;
+  foldl :: forall a b. (b -> a -> b) -> b -> f a -> b;
+  foldMap :: forall a m. (Monoid m) => (a -> m) -> f a -> m;
+  ;;
+class Partial a;;
+
+head :: forall a. (Partial) => [a] -> a;
+
+class (Monoid m) => Action m where
+   act :: m -> a -> a;
+  ;;
