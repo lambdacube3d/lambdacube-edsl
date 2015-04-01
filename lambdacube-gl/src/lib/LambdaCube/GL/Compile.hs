@@ -219,8 +219,6 @@ setupAccumulationContext rendState uniformGetterTrie dag aCtx = cvt ops
                 glDepthMask (cvtBool dm)
         cvtC 0 xs
     cvt xs = do
-        glDepthMask (cvtBool True) -- ??? wtf probably gl bug
-
         glDisable gl_DEPTH_TEST
         glDisable gl_STENCIL_TEST
         cvtC 0 xs
@@ -400,6 +398,7 @@ compileClearFrameBuffer (FrameBuffer fb) = putStrLn_ ("CMD: clearFrameBuffer " +
         cvtC 0 xs
     cvt (DepthImage sh d : xs) = do
         let --renderGL3   = with d $ \pd -> glClearBufferfv gl_DEPTH 0 $ castPtr pd
+        glDepthMask 1
         glClearDepth $ realToFrac d
         glClear $ fromIntegral gl_DEPTH_BUFFER_BIT
         --print "     * glClear gl_DEPTH_BUFFER_BIT"
