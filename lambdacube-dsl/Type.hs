@@ -7,7 +7,7 @@ type TName = String
 type EName = String
 type MonoEnv = Map EName Ty
 type PolyEnv = Map EName Typing
-type InstEnv = [(Constraint,Ty)]
+type InstEnv = [Constraint]
 type Typing = (MonoEnv,InstEnv,Ty)
 type Env = (PolyEnv,MonoEnv,InstEnv)
 
@@ -145,6 +145,10 @@ data Ty -- star kind
   deriving (Show,Eq,Ord)
 
 data Constraint
+  = CClass Class Ty
+  deriving (Show,Eq,Ord)
+
+data Class
   = CNum
   | CTextual
   -- lc constraints

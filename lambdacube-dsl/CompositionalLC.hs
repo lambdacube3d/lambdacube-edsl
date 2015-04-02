@@ -81,9 +81,9 @@ applyMonoEnv s e = fmap (applyTy s) e
 applyInstEnv :: Subst -> InstEnv -> Unique InstEnv
 applyInstEnv s e = filterM tyInst $ (trace_ (show (s,e,"->",e'))) e'
  where
-  e' = fmap (\(c,t) -> (c,applyTy s t)) e
-  tyInst (c,TVar{}) = return True
-  tyInst (c,t) = if isInstance c t then return False else err
+  e' = fmap (\(CClass c t) -> (CClass c $ applyTy s t)) e
+  tyInst (CClass c TVar{}) = return True
+  tyInst (CClass c t) = if isInstance c t then return False else err
    where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
 
 joinInstEnv :: [InstEnv] -> InstEnv
@@ -115,7 +115,7 @@ freeVarsMonoEnv :: MonoEnv -> Set TName
 freeVarsMonoEnv m = F.foldMap freeVarsTy m
 
 freeVarsInstEnv :: InstEnv -> Set TName
-freeVarsInstEnv i = F.foldMap (freeVarsTy . snd) i
+freeVarsInstEnv i = F.foldMap (freeVarsTy . (\(CClass _ ty) -> ty)) i
 
 -- union mono envs matching on intersection
 joinMonoEnv :: MonoEnv -> MonoEnv -> Unique MonoEnv
@@ -222,13 +222,13 @@ prune :: Typing -> Typing
 prune (m,i,t) = (m,i',t)
  where
   v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
-  i' = filter (\(_,a) -> Set.member a v) i
+  i' = filter (\(CClass _ a) -> Set.member a v) i
 
 unamb :: PolyEnv -> Typing -> Unique ()
 unamb env (m,i,t) = do
   let v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
   return ()
-  forM_ i $ \(_,a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
+  forM_ i $ \(CClass _ a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
 infer penv (ETuple r t) = withRanges [r] $ do

@@ -451,7 +451,7 @@ type families:
 reduceTF :: TName -> [Ty] -> Ty
 reduceTF n l = TFun n l
 
-isInstance :: Constraint -> Ty -> Bool
+isInstance :: Class -> Ty -> Bool
 isInstance IsNumComponent (TFloat _) = True
 isInstance IsNumComponent (TInt _) = True
 isInstance IsNumComponent (TWord _) = True
@@ -494,7 +494,7 @@ isInstance c t = case Map.lookup c instances of
     Nothing -> False
     Just ts -> Set.member t ts
 
-instances :: Map Constraint (Set Ty)
+instances :: Map Class (Set Ty)
 instances = Map.fromList [(CNum,Set.fromList [TInt C,TFloat C])]
 
 ty :: Ty -> Unique Typing
