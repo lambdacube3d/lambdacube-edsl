@@ -409,6 +409,7 @@ eval l = l
 
 noType = Unknown ""
 
+-- TODO: use constraints
 toTy :: Typing -> C.Ty
 toTy (_,_,TBool  _) = Single C.Bool 
 toTy (_,_,TV2B   _) = Single C.V2B  

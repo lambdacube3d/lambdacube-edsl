@@ -315,6 +315,9 @@ primFunSet = Set.fromList
     PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
 
+isNum = CClass CNum
+isSigned = CClass IsSigned
+isIntegral = CClass IsIntegral
 
 {-
 simple:
@@ -337,7 +340,8 @@ fundep:
     instance IsMat M43F V4F V3F
     instance IsMat M44F V4F V4F
 -}
-isMat m h w = CEq m $ TFun "Mat" [h, w]
+mat h w = TFun "Mat" [h, w]
+isMat m h w = m ~~ mat h w
 {-
   class IsMatVec a -- t | a -> t
     type T a :: *
@@ -362,10 +366,14 @@ isMat m h w = CEq m $ TFun "Mat" [h, w]
     instance IsMatVec M42F Float
     instance IsMatVec M43F Float
     instance IsMatVec M44F Float
-
+-}
+matVecElem a = TFun "MatVecElem" [a]
+{-
   class IsMatVecScalar a -- t | a -> t
     type T a :: *
-
+-}
+matVecScalarElem a = TFun "MatVecScalarElem" [a]
+{-
   class IsVec (dim :: Nat) component
     data Vec dim component :: *
     instance IsVec 2 (V2 Float) Float
@@ -380,12 +388,18 @@ isMat m h w = CEq m $ TFun "Mat" [h, w]
     instance IsVec 2 (V2 Bool) Bool
     instance IsVec 3 (V3 Bool) Bool
     instance IsVec 4 (V4 Bool) Bool
-
+-}
+vec d c = TFun "Vec" [d, c]
+isVec d v c = v ~~ vec d c
+{-
   [injective in both params] class IsVecScalar (dim :: Nat) component
     type VecS dim component :: *
     instance VecS 1 c = c
     instance VecS n c | n > 1 = Vec n c
 -}
+vecScalar d c = TFun "VecScalar" [d, c]
+isVecScalar d v c = v ~~ vecScalar d c
+
 {-
 type families:
   type family FTRepr' a :: *
@@ -504,6 +518,9 @@ ty t = return (mempty,mempty,t)
 
 infix 6 ==>
 cs ==> t = return (mempty, cs, t)
+
+infix 4 ~~
+a ~~ b = CEq a b
 
 inferPrimFun :: EName -> Unique Typing
 inferPrimFun a = case a of
@@ -703,99 +720,99 @@ inferPrimFun a = case a of
   "ScreenOut"    -> ty $ TFrameBuffer C ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
-  "PrimAdd"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsNum t, IsMatVec a t) => PrimFun stage ((a,a) -> a)
-  "PrimAddS"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsNum t, IsMatVecScalar a t) => PrimFun stage ((a,t) -> a)
-  "PrimSub"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsNum t, IsMatVec a t) => PrimFun stage ((a,a) -> a)
-  "PrimSubS"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsNum t, IsMatVecScalar a t) => PrimFun stage ((a,t) -> a)
-  "PrimMul"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsNum t, IsMatVec a t) => PrimFun stage ((a,a) -> a)
-  "PrimMulS"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsNum t, IsMatVecScalar a t) => PrimFun stage ((a,t) -> a)
-  "PrimDiv"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,a) -> a)
-  "PrimDivS"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,t) -> a)
-  "PrimNeg"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- (IsSigned t, IsMatVecScalar a t) => PrimFun stage (a -> a)
-  "PrimMod"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,a) -> a)
-  "PrimModS"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,t) -> a)
+  "PrimAdd"   -> do [a]   <- newVars 1 C ; [isNum (matVecElem a)] ==> a ~> a ~> a
+  "PrimAddS"  -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a, isNum t] ==> a ~> t ~> a
+  "PrimSub"   -> do [a]   <- newVars 1 C ; [isNum (matVecElem a)] ==> a ~> a ~> a
+  "PrimSubS"  -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a, isNum t] ==> a ~> t ~> a
+  "PrimMul"   -> do [a]   <- newVars 1 C ; [isNum (matVecElem a)] ==> a ~> a ~> a
+  "PrimMulS"  -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a, isNum t] ==> a ~> t ~> a
+  "PrimDiv"   -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimDivS"  -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimNeg"   -> do [a]     <- newVars 1 C ; [isSigned (matVecScalarElem a)] ==> a ~> a
+  "PrimMod"   -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimModS"  -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
   -- Bit-wise Functions
-  "PrimBAnd"      -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage ((a,a) -> a)
-  "PrimBAndS"     -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage ((a,t) -> a)
-  "PrimBOr"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage ((a,a) -> a)
-  "PrimBOrS"      -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage ((a,t) -> a)
-  "PrimBXor"      -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage ((a,a) -> a)
-  "PrimBXorS"     -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage ((a,t) -> a)
-  "PrimBNot"      -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage (a -> a)
-  "PrimBShiftL"   -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsIntegral t, IsVecScalar d a t, IsVecScalar d b Word32) => PrimFun stage ((a, b) -> a)
-  "PrimBShiftLS"  -> do [a,t] <- newVars 2 C ; ty $ a ~> TWord C ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage ((a, Word32) -> a)
-  "PrimBShiftR"   -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsIntegral t, IsVecScalar d a t, IsVecScalar d b Word32) => PrimFun stage ((a, b) -> a)
-  "PrimBShiftRS"  -> do [a,t] <- newVars 2 C ; ty $ a ~> TWord C ~> a -- (IsIntegral t, IsVecScalar d a t) => PrimFun stage ((a, Word32) -> a)
+  "PrimBAnd"      -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimBAndS"     -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimBOr"       -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimBOrS"      -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimBXor"      -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimBXorS"     -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimBNot"      -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> a
+  "PrimBShiftL"   -> do [d,a,b,t] <- newVars 4 C ; [isIntegral t, isVecScalar d a t, isVecScalar d b (TWord C)] ==> a ~> b ~> a
+  "PrimBShiftLS"  -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> TWord C ~> a
+  "PrimBShiftR"   -> do [d,a,b,t] <- newVars 4 C ; [isIntegral t, isVecScalar d a t, isVecScalar d b (TWord C)] ==> a ~> b ~> a
+  "PrimBShiftRS"  -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> TWord C ~> a
   -- Logic Functions
-  "PrimAnd" -> do [a,t] <- newVars 2 C ; ty $ TBool C ~> TBool C ~> TBool C -- PrimFun stage ((Bool,Bool) -> Bool)
-  "PrimOr"  -> do [a,t] <- newVars 2 C ; ty $ TBool C ~> TBool C ~> TBool C -- PrimFun stage ((Bool,Bool) -> Bool)
-  "PrimXor" -> do [a,t] <- newVars 2 C ; ty $ TBool C ~> TBool C ~> TBool C -- PrimFun stage ((Bool,Bool) -> Bool)
-  "PrimNot" -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Bool => PrimFun stage (a -> a)
-  "PrimAny" -> do [a,t] <- newVars 2 C ; ty $ a ~> TBool C -- IsVecScalar d a Bool => PrimFun stage (a -> Bool)
-  "PrimAll" -> do [a,t] <- newVars 2 C ; ty $ a ~> TBool C -- IsVecScalar d a Bool => PrimFun stage (a -> Bool)
+  "PrimAnd" -> do ty $ TBool C ~> TBool C ~> TBool C
+  "PrimOr"  -> do ty $ TBool C ~> TBool C ~> TBool C
+  "PrimXor" -> do ty $ TBool C ~> TBool C ~> TBool C
+  "PrimNot" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TBool C)] ==> a ~> a
+  "PrimAny" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TBool C)] ==> a ~> TBool C
+  "PrimAll" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TBool C)] ==> a ~> TBool C
   -- Angle and Trigonometry Functions
-  "PrimACos"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimACosH"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimASin"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimASinH"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimATan"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimATan2"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a) -> a)
-  "PrimATanH"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimCos"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimCosH"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimDegrees" -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimRadians" -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimSin"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimSinH"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimTan"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimTanH"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
+  "PrimACos"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimACosH"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimASin"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimASinH"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimATan"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimATan2"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
+  "PrimATanH"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimCos"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimCosH"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimDegrees" -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimRadians" -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimSin"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimSinH"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimTan"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimTanH"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
   -- Exponential Functions
-  "PrimPow"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a) -> a)
-  "PrimExp"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimLog"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimExp2"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimLog2"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimSqrt"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimInvSqrt" -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
+  "PrimPow"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
+  "PrimExp"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimLog"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimExp2"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimLog2"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimSqrt"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimInvSqrt" -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
   -- Common Functions
-  "PrimIsNan"       -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d a Float, IsVecScalar d b Bool) => PrimFun stage (a -> b)
-  "PrimIsInf"       -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d a Float, IsVecScalar d b Bool) => PrimFun stage (a -> b)
-  "PrimAbs"         -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- (IsSigned t, IsVecScalar d a t) => PrimFun stage (a -> a)
-  "PrimSign"        -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- (IsSigned t, IsVecScalar d a t) => PrimFun stage (a -> a)
-  "PrimFloor"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimTrunc"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimRound"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimRoundEven"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimCeil"        -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimFract"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a -> a)
-  "PrimModF"        -> do [a,t] <- newVars 2 C ; ty $ a ~> TTuple C [a,a] -- IsVecScalar d a Float => PrimFun stage (a -> (a,a))
-  "PrimMin"         -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,a) -> a)
-  "PrimMinS"        -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,t) -> a)
-  "PrimMax"         -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,a) -> a)
-  "PrimMaxS"        -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,t) -> a)
-  "PrimClamp"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,a,a) -> a)
-  "PrimClampS"      -> do [a,t] <- newVars 2 C ; ty $ a ~> t ~> t ~> a -- (IsNum t, IsVecScalar d a t) => PrimFun stage ((a,t,t) -> a)
-  "PrimMix"         -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a,a) -> a)
-  "PrimMixS"        -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> TFloat C ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a,Float) -> a)
-  "PrimMixB"        -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t ~> a -- (IsVecScalar d a Float, IsVecScalar d b Bool) => PrimFun stage ((a,a,b) -> a)
-  "PrimStep"        -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- IsVec d a Float => PrimFun stage ((a,a) -> a)
-  "PrimStepS"       -> do [a,t] <- newVars 2 C ; ty $ TFloat C ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((Float,a) -> a)
-  "PrimSmoothStep"  -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a ~> a -- IsVec d a Float => PrimFun stage ((a,a,a) -> a)
-  "PrimSmoothStepS" -> do [a,t] <- newVars 2 C ; ty $ TFloat C ~> TFloat C ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((Float,Float,a) -> a)
+  "PrimIsNan"       -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> b
+  "PrimIsInf"       -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> b
+  "PrimAbs"         -> do [d,a,t] <- newVars 3 C ; [isSigned t, isVecScalar d a t] ==> a ~> a
+  "PrimSign"        -> do [d,a,t] <- newVars 3 C ; [isSigned t, isVecScalar d a t] ==> a ~> a
+  "PrimFloor"       -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimTrunc"       -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimRound"       -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimRoundEven"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimCeil"        -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimFract"       -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimModF"        -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> TTuple C [a,a]
+  "PrimMin"         -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimMinS"        -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimMax"         -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimMaxS"        -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimClamp"       -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a ~> a
+  "PrimClampS"      -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> t ~> a
+  "PrimMix"         -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimMixS"        -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C ~> a
+  "PrimMixB"        -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> a ~> b ~> a
+  "PrimStep"        -> do [a,d] <- newVars 2 C ; [isVec d a (TFloat C)] ==> a ~> a ~> a
+  "PrimStepS"       -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> TFloat C ~> a ~> a
+  "PrimSmoothStep"  -> do [a,d] <- newVars 2 C ; [isVec d a (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimSmoothStepS" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> TFloat C ~> TFloat C ~> a ~> a
   -- Integer/Float Conversion Functions
-  "PrimFloatBitsToInt"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d fv Float, IsVecScalar d iv Int32) => PrimFun stage (fv -> iv)
-  "PrimFloatBitsToUInt" -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d fv Float, IsVecScalar d uv Word32) => PrimFun stage (fv -> uv)
-  "PrimIntBitsToFloat"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d fv Float, IsVecScalar d iv Int32) => PrimFun stage (iv -> fv)
-  "PrimUIntBitsToFloat" -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d fv Float, IsVecScalar d uv Word32) => PrimFun stage (uv -> fv)
+  "PrimFloatBitsToInt"  -> do [d,fv,iv] <- newVars 3 C ; [isVecScalar d fv (TFloat C), isVecScalar d iv (TInt C)] ==> fv ~> iv
+  "PrimFloatBitsToUInt" -> do [d,fv,uv] <- newVars 3 C ; [isVecScalar d fv (TFloat C), isVecScalar d uv (TWord C)] ==> fv ~> uv
+  "PrimIntBitsToFloat"  -> do [d,fv,iv] <- newVars 3 C ; [isVecScalar d fv (TFloat C), isVecScalar d iv (TInt C)] ==> iv ~> fv
+  "PrimUIntBitsToFloat" -> do [d,fv,uv] <- newVars 3 C ; [isVecScalar d fv (TFloat C), isVecScalar d uv (TWord C)] ==> uv ~> fv
   -- Geometric Functions
-  "PrimLength"      -> do [a,t] <- newVars 2 C ; ty $ a ~> TFloat C -- IsVecScalar d a Float => PrimFun stage (a       -> Float)
-  "PrimDistance"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> TFloat C -- IsVecScalar d a Float => PrimFun stage ((a,a)   -> Float)
-  "PrimDot"         -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> TFloat C -- IsVecScalar d a Float => PrimFun stage ((a,a)   -> Float)
-  "PrimCross"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- IsVecScalar 3 a Float => PrimFun stage ((a,a)   -> a)
-  "PrimNormalize"   -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun stage (a       -> a)
-  "PrimFaceForward" -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a,a) -> a)
-  "PrimReflect"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a)   -> a)
-  "PrimRefract"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a,a) -> a)
+  "PrimLength"      -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> TFloat C
+  "PrimDistance"    -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C
+  "PrimDot"         -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C
+  "PrimCross"       -> do [a]   <- newVars 1 C ; [isVecScalar (TNat 3) a (TFloat C)] ==> a ~> a ~> a
+  "PrimNormalize"   -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimFaceForward" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimReflect"     -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
+  "PrimRefract"     -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
   -- Matrix Functions
   "PrimTranspose"     -> do [a,b,h,w] <- newVars 4 C ; [isMat a h w, isMat b w h] ==> a ~> b
   "PrimDeterminant"   -> do [m,s] <- newVars 2 C ; [isMat m s s] ==> m ~> TFloat C
@@ -805,23 +822,23 @@ inferPrimFun a = case a of
   "PrimMulVecMat"     -> do [m,h,w] <- newVars 3 C ; [isMat m h w] ==> h ~> m ~> w
   "PrimMulMatMat"     -> do [a,b,c,i,j,k] <- newVars 6 C ; [isMat a i j, isMat b j k, isMat c i k] ==> a ~> b ~> c
   -- Vector and Scalar Relational Functions
-  "PrimLessThan"          -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t  -- (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
-  "PrimLessThanEqual"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t  -- (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
-  "PrimGreaterThan"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t  -- (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
-  "PrimGreaterThanEqual"  -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t  -- (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
-  "PrimEqualV"            -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t  -- (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
-  "PrimEqual"             -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> TBool C  -- IsMatVecScalar a t                                   => PrimFun stage ((a,a) -> Bool)
-  "PrimNotEqualV"         -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t  -- (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
-  "PrimNotEqual"          -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> TBool C  -- IsMatVecScalar a t                                   => PrimFun stage ((a,a) -> Bool)
+  "PrimLessThan"          -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimLessThanEqual"     -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimGreaterThan"       -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimGreaterThanEqual"  -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimEqualV"            -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimEqual"             -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a] ==> a ~> a ~> TBool C
+  "PrimNotEqualV"         -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimNotEqual"          -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a] ==> a ~> a ~> TBool C
   -- Fragment Processing Functions
-  "PrimDFdx"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun F (a -> a)
-  "PrimDFdy"    -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun F (a -> a)
-  "PrimFWidth"  -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsVecScalar d a Float => PrimFun F (a -> a)
+  "PrimDFdx"    -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimDFdy"    -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimFWidth"  -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
   -- Noise Functions
-  "PrimNoise1"  -> do [a,t] <- newVars 2 C ; ty $ a ~> TFloat C -- IsVecScalar d a Float                             => PrimFun stage (a -> Float)
-  "PrimNoise2"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d a Float, IsVecScalar 2 b Float)    => PrimFun stage (a -> b)
-  "PrimNoise3"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d a Float, IsVecScalar 3 b Float)    => PrimFun stage (a -> b)
-  "PrimNoise4"  -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsVecScalar d a Float, IsVecScalar 4 b Float)    => PrimFun stage (a -> b)
+  "PrimNoise1"  -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> TFloat C
+  "PrimNoise2"  -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar (TNat 2) b (TFloat C)] ==> a ~> b
+  "PrimNoise3"  -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar (TNat 3) b (TFloat C)] ==> a ~> b
+  "PrimNoise4"  -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar (TNat 4) b (TFloat C)] ==> a ~> b
 
   a -> throwErrorUnique $ "unknown primitive: " ++ show a
 

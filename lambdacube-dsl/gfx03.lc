@@ -19,6 +19,6 @@ let
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
   fragmentShader' v = FragmentOut (Const (V4F 1.0 0.4 0.0 0.2))
-  fragmentShader v  = FragmentOut (PrimMulS v (Const (V4F 1.0 0.4 0.0 0.2)))
+  fragmentShader v  = FragmentOut v -- (PrimMulS v (Const (V4F 1.0 0.4 0.0 0.2)))
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
 in ScreenOut frame
