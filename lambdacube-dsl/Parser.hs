@@ -19,7 +19,7 @@ import Text.Show.Pretty
 import Control.Monad
 import Text.Parser.LookAhead
 
-type P a = IndentationParserT Char (LCParser Parser) a
+type P a = IndentationParserT Token (LCParser Parser) a
 
 newtype LCParser p a = LCParser { runLCParser :: p a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, LookAheadParsing, DeltaParsing)
@@ -92,11 +92,12 @@ moduleName = void_ $ do
   when (any (isLower . head) l) $ fail "module name must start with capital letter"
 
 moduleDef :: P ()
-moduleDef = void_ $ optional $ do
-  keyword "module"
-  moduleName
-  optional $ parens (commaSep varId)
-  keyword "where"
+moduleDef = void_ $ do
+  optional $ do
+    keyword "module"
+    moduleName
+    optional $ parens (commaSep varId)
+    keyword "where"
   localAbsoluteIndentation $ do
     many importDef
     -- TODO: unordered definitions
@@ -207,30 +208,60 @@ valueDef = try $ do
     localIndentation Gt $ localAbsoluteIndentation $ some valueDef
   return ()
 
-recordExp :: P ()
-recordExp = void_ $ braces (sepBy (varId <* colon <* expression) comma)
-
-literalExp :: P ()
-literalExp = choice [void_ (stringLiteral :: P String),void_ double,void_ integer]
-
-listExp :: P ()
-listExp = void_ $ brackets $ commaSep expression
-
 expression :: P ()
-expression = void_ $ some (try listExp <|> try literalExp <|> try recordExp <|> try ifthenelse <|> try caseof <|> try letin <|> try var <|> try dataConstructor <|> (try $ parens expression) <|> (try $ parens (pure ())) <|> (parens (expression <* some (comma *> expression))))
+expression = void_ $ some (
+  exp listExp <|>
+  exp literalExp <|>
+  exp recordExp <|>
+  exp lambda <|>
+  exp ifthenelse <|>
+  exp caseof <|>
+  exp letin <|>
+  exp var <|>
+  exp dataConstructor <|> 
+  exp unit <|>
+  exp tuple <|>
+  parens expression)
  where
   gt = localIndentation Gt
+
+  exp :: P () -> P ()
+  exp p = try (p <* optional (operator "::" *> typeExp))
+
+  tuple :: P ()
+  tuple = parens (expression <* some (comma *> expression))
+
+  unit :: P ()
+  unit = parens (pure ())
+
+  lambda :: P ()
+  lambda = operator "\\" *> many valuePattern *> operator "->" *> expression
+
+  ifthenelse :: P ()
   ifthenelse = keyword "if" *> (gt $ expression *> keyword "then" *> gt expression *> keyword "else" *> gt expression)
+
+  caseof :: P ()
   caseof = do
     let casePat = valuePattern *> operator "->" *> (localIndentation Gt $ expression)
     localIndentation Ge $ do
       l <- keyword "case" *> expression *> keyword "of" <* (localIndentation Gt $ localAbsoluteIndentation $ some casePat) -- WORKS
       return ()
+
+  letin :: P ()
   letin = do
     localIndentation Ge $ do
       l <- keyword "let" *> (localIndentation Gt $ localAbsoluteIndentation $ some valueDef) -- WORKS
       a <- keyword "in" *> (localIndentation Gt expression)
       return ()
+
+  recordExp :: P ()
+  recordExp = void_ $ braces (sepBy (varId <* colon <* expression) comma)
+
+  literalExp :: P ()
+  literalExp = choice [void_ (stringLiteral :: P String),void_ double,void_ integer]
+
+  listExp :: P ()
+  listExp = void_ $ brackets $ commaSep expression
 
 indentState = mkIndentationState 0 infIndentation True Ge
 
@@ -246,3 +277,29 @@ parseLC fname = do
     Success e -> print "Parsed" >> (return $ Right ())
 
 main = test
+
+-- AST
+data Module
+  = Module
+  { moduleImports :: ()
+  , moduleExports :: ()
+  , typeAliases   :: ()
+  , definitions   :: ()
+  , typeClasses   :: ()
+  , instances     :: ()
+  }
+
+data Definition
+  = Definition -- name, maybe type, maybe fixity, expression
+
+data Expression -- record, list, tuple, literal, var, application, lambda, ifthenelse, letin, caseof, dataconstructor
+  = Expression
+
+data Type
+  = Type
+
+data TypeClassDefinition
+  = TypeClassDefinition -- name, [base class], [type signature (declaration)]
+
+data TypeClassInstance -- name, type, [definition]
+  = TypeClassInstance

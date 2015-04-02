@@ -27,14 +27,16 @@ author =
   , interests: ["Functional Programming", "JavaScript"]
   }
 
+lambdaFun = \_ a b (Just _) _ -> a ()
+
 r = case (a (A c a) q) of
-      _ -> if c then () else ()
+      _ -> if c :: Bool then () else ()
       _ -> ()
 
 (*) :: Screen
 
 one :: Int
-one = n1
+one = n1 :: Int
 
 infix 5 ..
 
