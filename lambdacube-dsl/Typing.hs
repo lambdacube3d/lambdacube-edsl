@@ -340,7 +340,7 @@ fundep:
     instance IsMat M43F V4F V3F
     instance IsMat M44F V4F V4F
 -}
-mat h w = TFun "Mat" [h, w]
+mat h w = TFun $ TFMat h w
 isMat m h w = m ~~ mat h w
 {-
   class IsMatVec a -- t | a -> t
@@ -367,12 +367,12 @@ isMat m h w = m ~~ mat h w
     instance IsMatVec M43F Float
     instance IsMatVec M44F Float
 -}
-matVecElem a = TFun "MatVecElem" [a]
+matVecElem a = TFun $ TFMatVecElem a
 {-
   class IsMatVecScalar a -- t | a -> t
     type T a :: *
 -}
-matVecScalarElem a = TFun "MatVecScalarElem" [a]
+matVecScalarElem a = TFun $ TFMatVecScalarElem a
 {-
   class IsVec (dim :: Nat) component
     data Vec dim component :: *
@@ -389,7 +389,7 @@ matVecScalarElem a = TFun "MatVecScalarElem" [a]
     instance IsVec 3 (V3 Bool) Bool
     instance IsVec 4 (V4 Bool) Bool
 -}
-vec d c = TFun "Vec" [d, c]
+vec d c = TFun $ TFVec d c
 isVec d v c = v ~~ vec d c
 {-
   [injective in both params] class IsVecScalar (dim :: Nat) component
@@ -397,7 +397,7 @@ isVec d v c = v ~~ vec d c
     instance VecS 1 c = c
     instance VecS n c | n > 1 = Vec n c
 -}
-vecScalar d c = TFun "VecScalar" [d, c]
+vecScalar d c = TFun $ TFVecScalar d c
 isVecScalar d v c = v ~~ vecScalar d c
 
 {-
@@ -412,14 +412,14 @@ type families:
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: ZZ) = (a, b, c, d, e, f, g)
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
-
+{-
   [injective] type family PrimitiveVertices (primitive :: PrimitiveType) a
     type instance PrimitiveVertices Point a             = a
     type instance PrimitiveVertices Line a              = (a,a)
     type instance PrimitiveVertices LineAdjacency a     = (a,a,a,a)
     type instance PrimitiveVertices Triangle a          = (a,a,a)
     type instance PrimitiveVertices TriangleAdjacency a = (a,a,a,a,a,a)
-
+-}
   type family ColorRepr a :: *
     type instance ColorRepr ZZ = ZZ
     type instance ColorRepr (a :+: b) = Color a :+: (ColorRepr b)
@@ -429,7 +429,8 @@ type families:
     type instance NoStencilRepr (Stencil a :+: b) = NoStencilRepr b
     type instance NoStencilRepr (Color a :+: b) = Color a :+: NoStencilRepr b
     type instance NoStencilRepr (Depth a :+: b) = Depth a :+: NoStencilRepr b
-
+-}
+{-
   - texturing -
   [semiinjective] type family TexDataRepr arity (t :: TextureSemantics *)
     type instance TexDataRepr Red  (v a) = a
@@ -464,8 +465,8 @@ type families:
     type instance TexelRepr (Sampler dim arr (v t) RGBA)    = V4 t
 -}
 
-reduceTF :: TName -> [Ty] -> Ty
-reduceTF n l = TFun n l
+--reduceTF :: TName -> [Ty] -> Ty
+--reduceTF n l = TFun n l
 
 isInstance :: Class -> Ty -> Bool
 isInstance IsNumComponent (TFloat _) = True

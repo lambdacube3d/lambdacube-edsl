@@ -8,6 +8,7 @@ module CompositionalLC
 import qualified Debug.Trace as D
 import Data.Maybe
 import Data.ByteString.Char8 (ByteString)
+import Data.Foldable (foldMap)
 import Data.Functor.Identity
 import Control.Applicative
 import Control.Monad.Except
@@ -57,7 +58,7 @@ applyTy :: Subst -> Ty -> Ty
 applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
-applyTy st (TFun n l) = TFun n (map (applyTy st) l)
+applyTy st (TFun f) = TFun (fmap (applyTy st) f)
 applyTy st (TTuple f l) = TTuple f (map (applyTy st) l)
 applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
 applyTy st (TImage f a {-b-}) = TImage f (applyTy st a) --(applyTy st b)
@@ -97,7 +98,7 @@ joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
 freeVarsTy :: Ty -> Set TName
 freeVarsTy (TVar _ a) = Set.singleton a
 freeVarsTy (TArr a b) = freeVarsTy a `mappend` freeVarsTy b
-freeVarsTy (TFun _ l) = foldl mappend mempty $ map freeVarsTy l
+freeVarsTy (TFun f) = foldMap freeVarsTy f
 freeVarsTy (TVertexStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TFragmentStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TPrimitiveStream _ a b _ c) = freeVarsTy a `mappend` freeVarsTy b `mappend` freeVarsTy c

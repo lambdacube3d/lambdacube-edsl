@@ -1,7 +1,10 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
 module Type where
 
 import Data.Map (Map)
+import Data.Foldable
 
 type TName = String
 type EName = String
@@ -64,7 +67,7 @@ data Ty -- star kind
   | TTuple  Frequency [Ty]
   | TArray  Frequency Ty
   -- type family
-  | TFun    TName [Ty]
+  | TFun    (TypeFun Ty)
   -- primitive types
   | TChar   Frequency
   | TString Frequency
@@ -160,4 +163,12 @@ data Class
   | IsNumComponent
   | IsSigned
   deriving (Show,Eq,Ord)
+
+data TypeFun a
+  = TFMat a a
+  | TFMatVecElem a
+  | TFMatVecScalarElem a
+  | TFVec a a
+  | TFVecScalar a a
+  deriving (Show,Eq,Ord,Functor,Foldable)
 
