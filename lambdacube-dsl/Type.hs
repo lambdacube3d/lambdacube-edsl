@@ -136,10 +136,10 @@ data Ty -- star kind
   | TFragmentOperation    Frequency Semantic
   | TFragmentOut          Frequency Semantic
   | TFragmentStream       Frequency Nat Ty
-  | TFrameBuffer          Frequency -- ???
-  | TImage                Frequency Nat -- Semantic -- TODO: ignore semantic temporarly
+  | TFrameBuffer          Frequency Nat Ty
+  | TImage                Frequency Nat Semantic
   | TInput                Frequency Ty
-  | TInterpolated         Frequency Ty -- ???
+  | TInterpolated         Frequency Ty
   | TOutput               Frequency
   | TPrimitiveStream      Frequency PrimitiveType Nat Frequency Ty -- ???
   | TRasterContext        Frequency PrimitiveType
@@ -162,6 +162,8 @@ data Class
   | IsNum
   | IsNumComponent
   | IsSigned
+  | IsValidOutput
+  | IsTypeLevelNatural
   deriving (Show,Eq,Ord)
 
 data TypeFun a
@@ -171,5 +173,7 @@ data TypeFun a
   | TFVec a a
   | TFVecScalar a a
   | TFFTRepr' a
+  | TFColorRepr a
+  | TFFrameBuffer a
   deriving (Show,Eq,Ord,Functor,Foldable)
 

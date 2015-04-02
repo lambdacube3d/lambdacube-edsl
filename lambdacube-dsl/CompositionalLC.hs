@@ -62,7 +62,7 @@ applyTy st (TFun (TFFTRepr' (TInterpolated C (TV4F C)))) = TV4F C        -- hack
 applyTy st (TFun f) = TFun (fmap (applyTy st) f)
 applyTy st (TTuple f l) = TTuple f (map (applyTy st) l)
 applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
-applyTy st (TImage f a {-b-}) = TImage f (applyTy st a) --(applyTy st b)
+applyTy st (TImage f a b) = TImage f (applyTy st a) (applyTy st b)
 applyTy st (TVertexStream f a b) = TVertexStream f (applyTy st a) (applyTy st b)
 applyTy st (TFragmentStream f a b) = TFragmentStream f (applyTy st a) (applyTy st b)
 applyTy st (TPrimitiveStream f a b f' c) = TPrimitiveStream f (applyTy st a) (applyTy st b) f' (applyTy st c)
@@ -107,7 +107,7 @@ freeVarsTy (TFun f) = foldMap freeVarsTy f
 freeVarsTy (TVertexStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TFragmentStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TPrimitiveStream _ a b _ c) = freeVarsTy a `mappend` freeVarsTy b `mappend` freeVarsTy c
-freeVarsTy (TImage _ a {-b-}) = freeVarsTy a-- `mappend` freeVarsTy b
+freeVarsTy (TImage _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TTuple _ a) = foldl mappend mempty $ map freeVarsTy a
 freeVarsTy (TArray _ a) = freeVarsTy a
 freeVarsTy (TBlending _ a) = freeVarsTy a
@@ -171,10 +171,10 @@ unifyTy (TArr a1 b1) (TArr a2 b2) = do
   s1 <- unifyTy a1 a2
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
   return $ s1 `compose` s2
-unifyTy (TImage f1 a1 {-b1-}) (TImage f2 a2 {-b2-}) = do
+unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = do
   s1 <- unifyTy a1 a2
-  --s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
-  return $ s1 -- `compose` s2
+  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
+  return $ s1 `compose` s2
 unifyTy (TVertexStream f1 a1 b1) (TVertexStream f2 a2 b2) = do
   s1 <- unifyTy a1 a2
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
@@ -230,7 +230,7 @@ unify ml tl = do
   unifyEqs $ tyEqs ++ varEqs
 
 prune :: Typing -> Typing
-prune (m,i,t) = (m,i',t)
+prune (m,i,t) = (m,i,t) --(m,i',t)
  where
   v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
   i' = flip filter i $ \case
@@ -242,7 +242,7 @@ unamb env (m,i,t) = do
   let v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
   return ()
   forM_ i $ \case
-        CClass _ a -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
+        --CClass _ a -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
         _ -> return ()
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)

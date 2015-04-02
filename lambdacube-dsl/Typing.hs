@@ -314,11 +314,11 @@ primFunSet = Set.fromList
     PrimV3ToTup             :: IsComponent a                            => PrimFun stage (V3 a   -> (a,a,a))
     PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
-
+isValidOutput = CClass IsValidOutput
 isNum = CClass CNum
 isSigned = CClass IsSigned
 isIntegral = CClass IsIntegral
-
+isTypeLevelNatural = CClass IsTypeLevelNatural
 {-
 simple:
   done - IsComponent
@@ -422,6 +422,7 @@ fTRepr' a = TFun $ TFFTRepr' a
     type instance PrimitiveVertices Triangle a          = (a,a,a)
     type instance PrimitiveVertices TriangleAdjacency a = (a,a,a,a,a,a)
 -}
+colorRepr a = TFun $ TFColorRepr a
 {-
   type family ColorRepr a :: *
     type instance ColorRepr ZZ = ZZ
@@ -468,10 +469,14 @@ fTRepr' a = TFun $ TFFTRepr' a
     type instance TexelRepr (Sampler dim arr (v t) RGBA)    = V4 t
 -}
 
+frameBuffer a = TFun $ TFFrameBuffer a
+
 --reduceTF :: TName -> [Ty] -> Ty
 --reduceTF n l = TFun n l
 
 isInstance :: Class -> Ty -> Bool
+isInstance IsTypeLevelNatural (TNat _) = True
+isInstance IsValidOutput _ = True -- TODO
 isInstance IsNumComponent (TFloat _) = True
 isInstance IsNumComponent (TInt _) = True
 isInstance IsNumComponent (TWord _) = True
@@ -516,6 +521,11 @@ isInstance c t = case Map.lookup c instances of
 
 instances :: Map Class (Set Ty)
 instances = Map.fromList [(CNum,Set.fromList [TInt C,TFloat C])]
+
+joinTupleType :: Ty -> Ty -> Ty
+joinTupleType (TTuple f l) (TTuple _ r) = TTuple f (l ++ r)
+joinTupleType l (TTuple f r) = TTuple f (l : r)
+joinTupleType (TTuple f l) r = TTuple f (l ++ [r])
 
 ty :: Ty -> Unique Typing
 ty t = return (mempty,mempty,t)
@@ -665,9 +675,9 @@ inferPrimFun a = case a of
     FragmentOutDepth        :: Exp F Float  ->  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
     FragmentOutRastDepth    ::                  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
   -}
-  "FragmentOut"           -> do t <- newVar C ; ty $ t ~> TFragmentOut C t
-  "FragmentOutDepth"      -> do t <- newVar C ; ty $ TFloat C ~> t ~> TFragmentOut C t
-  "FragmentOutRastDepth"  -> do t <- newVar C ; ty $ t ~> TFragmentOut C t
+  "FragmentOut"           -> do t <- newVar C ; ty $ t ~> TFragmentOut C (colorRepr t)
+  "FragmentOutDepth"      -> do t <- newVar C ; ty $ TFloat C ~> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) (colorRepr t))
+  "FragmentOutRastDepth"  -> do t <- newVar C ; ty $ t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) (colorRepr t))
   -- Vertex Out
   "VertexOut"    -> do a <- newVar C ; ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C (fTRepr' a)
   -- PointSpriteCoordOrigin
@@ -686,16 +696,24 @@ inferPrimFun a = case a of
   -- Accumulation Context
   "AccumulationContext"  -> do [t,t'] <- newVars 2 C ; ty $ {-TFragmentOperation C-} t ~> TAccumulationContext C t'
   -- Image
-  "ColorImage"   -> do [a,b] <- newVars 2 C ; ty $ a ~> b ~> TImage C a -- b
-  "DepthImage"   -> do [a] <- newVars 1 C ; ty $ a ~> TFloat C ~> TImage C a -- (TFloat C)
-  "StencilImage" -> do [a] <- newVars 1 C ; ty $ a ~> TInt C ~> TImage C a -- (TInt C)
+  "ColorImage"   -> do
+    [a,d,color,t] <- newVars 4 C
+    [isTypeLevelNatural a, isNum t, isVecScalar d color t] ==> a ~> color ~> TImage C a (Color color)
+  "DepthImage"   -> do
+    [a] <- newVars 1 C
+    [isTypeLevelNatural a] ==> a ~> TFloat C ~> TImage C a (Depth $ TFloat C)
+  "StencilImage" -> do
+    [a] <- newVars 1 C
+    [isTypeLevelNatural a] ==> a ~> TInt C ~> TImage C a (Stencil $ TInt C)
   -- Interpolation
   "Smooth"         -> do t <- newVar C ; ty $ t ~> TInterpolated C t
   "Flat"           -> do t <- newVar C ; ty $ t ~> TInterpolated C t
   "NoPerspective"  -> do t <- newVar C ; ty $ t ~> TInterpolated C t
   -- Fragment Operation
-  "ColorOp"    -> do [a,a'] <- newVars 2 C ; ty $ TBlending C a ~> TFragmentOperation C ({-Color-} a') -- TODO: type family needed
-  "DepthOp"    -> do a <- newVar C ; ty $ TComparisonFunction C ~> TBool C ~> TFragmentOperation C a -- (TFloat C)
+  "ColorOp"    -> do
+    [d,mask,c,color] <- newVars 4 C
+    [isVecScalar d mask (TBool C), isVecScalar d color c, isNum c] ==> TBlending C c ~> mask ~> TFragmentOperation C (Color color)
+  "DepthOp"    -> ty $ TComparisonFunction C ~> TBool C ~> TFragmentOperation C (Depth $ TFloat C)
     -- "StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
   -- Blending
   "NoBlending"   -> do t <- newVar C ; ty $ TBlending C t
@@ -721,15 +739,15 @@ inferPrimFun a = case a of
   -}
   "Accumulate"   -> do
     [a,b,n] <- newVars 3 C
-    [] ==>
+    [isValidOutput b] ==>
            TAccumulationContext C b
         ~> TFragmentFilter C a
         ~> (a ~> TFragmentOut C b)
         ~> TFragmentStream C n a
-        ~> TFrameBuffer C-- (fTRepr b)
-        ~> TFrameBuffer C-- (fTRepr b)
-  "FrameBuffer"  -> do [a,b] <- newVars 2 C ; ty $ a {-TImage C a b-} ~> TFrameBuffer C
-  "ScreenOut"    -> ty $ TFrameBuffer C ~> TOutput C
+        ~> TFrameBuffer C n (fTRepr' b)
+        ~> TFrameBuffer C n (fTRepr' b)
+  "FrameBuffer"  -> do [a] <- newVars 1 C ; ty $ a ~> frameBuffer a
+  "ScreenOut"    -> do [a,b] <- newVars 2 C ; ty $ TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
   "PrimAdd"   -> do [a]   <- newVars 1 C ; [isNum (matVecElem a)] ==> a ~> a ~> a
