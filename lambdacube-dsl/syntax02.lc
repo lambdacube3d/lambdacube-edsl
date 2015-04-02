@@ -50,6 +50,14 @@ showPerson :: forall r. { first :: String, last :: String | r} -> String
 
 type Entry = { firstName :: String, lastName :: String, phone :: String }
 
+getPhone :: Entry -> String
+--TODO:
+{-
+getPhone e = e.phone
+
+setX :: Number -> Point -> Point
+setX val point = point { x = val }
+-}
 type PhoneBook = List Entry
 
 class Functor f where
