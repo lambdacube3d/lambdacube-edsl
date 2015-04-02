@@ -1,10 +1,12 @@
-module CompositionalLC where
+module CompositionalLC
+    ( inference
+    , compose
+    , applyTy
+    ) where
 
 import qualified Debug.Trace as D
 import Data.Maybe
-import Text.PrettyPrint.ANSI.Leijen (pretty)
 import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BS
 import Data.Functor.Identity
 import Control.Applicative
 import Control.Monad.Except
@@ -17,8 +19,6 @@ import Data.Monoid
 import Data.Functor
 import qualified Data.Traversable as T
 import qualified Data.Foldable as F
-import Text.Trifecta hiding (err)
-import Text.Trifecta.Delta
 
 import Type
 import Typing
@@ -51,6 +51,7 @@ withRanges rl a = do
   put (z,q,rl0)
   return res
 
+-- substitution
 applyTy :: Subst -> Ty -> Ty
 applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv

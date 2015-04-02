@@ -16,7 +16,9 @@ import Text.Trifecta hiding (err)
 
 import Type
 
-type Unique a = StateT (Int,ByteString,[Range]) (Except String) a
+type Unique = StateT
+    (Int,ByteString,[Range])        -- (counter, complete source{-constant-}, stack of ranges)
+    (Except String)
 
 type Range = (Delta,Delta)
 
@@ -323,10 +325,9 @@ simple:
   done - IsNumComponent
   done - IsSigned
 fundep:
-  [injective] class IsMat mat -- h w | mat -> h w
-    type H mat :: *
-    type W mat :: *
-    instance IsMat M22F V2F V2F
+  class IsMat h w
+    data Mat h w :: *
+    instance IsMat M22F V2F V2F             M22F ~ Mat V2F V2F
     instance IsMat M23F V2F V3F
     instance IsMat M24F V2F V4F
     instance IsMat M32F V3F V2F
@@ -363,10 +364,8 @@ fundep:
   class IsMatVecScalar a -- t | a -> t
     type T a :: *
 
-  [injective] class IsVec (dim :: Nat) vec component | vec -> dim component, dim component -> vec
-    type VecDim vec :: Nat
-    type VecComp vec :: *
-    type VecDimComp d c :: *
+  class IsVec (dim :: Nat) component
+    data Vec dim component :: *
     instance IsVec 2 (V2 Float) Float
     instance IsVec 3 (V3 Float) Float
     instance IsVec 4 (V4 Float) Float
@@ -380,10 +379,10 @@ fundep:
     instance IsVec 3 (V3 Bool) Bool
     instance IsVec 4 (V4 Bool) Bool
 
-  class IsVecScalar (dim :: Nat) vec component | vec -> dim component, dim component -> vec
-    type VecSDim vec :: Nat
-    type VecSComp vec :: *
-    type VecSDimComp d c :: *
+  [injective in both params] class IsVecScalar (dim :: Nat) component
+    type VecS dim component :: *
+    instance VecS 1 c = c
+    instance VecS n c | n > 1 = Vec n c
 -}
 {-
 type families:
@@ -412,17 +411,17 @@ type families:
   type family NoStencilRepr a :: *
     type instance NoStencilRepr ZZ = ZZ
     type instance NoStencilRepr (Stencil a :+: b) = NoStencilRepr b
-    type instance NoStencilRepr (Color a :+: b) = Color a :+: (NoStencilRepr b)
-    type instance NoStencilRepr (Depth a :+: b) = Depth a :+: (NoStencilRepr b)
+    type instance NoStencilRepr (Color a :+: b) = Color a :+: NoStencilRepr b
+    type instance NoStencilRepr (Depth a :+: b) = Depth a :+: NoStencilRepr b
 
   - texturing -
-  [injective] type family TexDataRepr arity (t :: TextureSemantics *)
+  [semiinjective] type family TexDataRepr arity (t :: TextureSemantics *)
     type instance TexDataRepr Red  (v a) = a
     type instance TexDataRepr RG   (v a) = V2 a
     type instance TexDataRepr RGB  (v a) = V3 a
     type instance TexDataRepr RGBA (v a) = V4 a
 
-  type family TexArrRepr (a :: Nat) :: TextureArray
+  [injective if (= SigleTex)] type family TexArrRepr (a :: Nat) :: TextureArray
     --type instance TexArrRepr 1 = SingleTex
     --type instance TexArrRepr ((2 <= t) => t) = ArrayTex
     -- FIXME: implement properly
@@ -436,13 +435,13 @@ type families:
     type instance TexArrRepr 8 = ArrayTex
     type instance TexArrRepr 9 = ArrayTex
 
-  [injective] type family TexSizeRepr (a :: TextureShape)
+  [semiinjective] type family TexSizeRepr (a :: TextureShape)
     type instance TexSizeRepr (Tex1D)   = Word32
     type instance TexSizeRepr (Tex2D)   = V2U
     type instance TexSizeRepr (TexRect) = V2U
     type instance TexSizeRepr (Tex3D)   = V3U
 
-  [injective] type family TexelRepr sampler
+  [injective in 4th param, semiinjective in 3rd param] type family TexelRepr sampler
     type instance TexelRepr (Sampler dim arr (v t) Red)     = t
     type instance TexelRepr (Sampler dim arr (v t) RG)      = V2 t
     type instance TexelRepr (Sampler dim arr (v t) RGB)     = V3 t
