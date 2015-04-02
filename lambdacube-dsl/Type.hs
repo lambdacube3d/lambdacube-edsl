@@ -170,5 +170,6 @@ data TypeFun a
   | TFMatVecScalarElem a
   | TFVec a a
   | TFVecScalar a a
+  | TFFTRepr' a
   deriving (Show,Eq,Ord,Functor,Foldable)
 

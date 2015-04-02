@@ -58,6 +58,7 @@ applyTy :: Subst -> Ty -> Ty
 applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
+applyTy st (TFun (TFFTRepr' (TInterpolated C (TV4F C)))) = TV4F C        -- hack
 applyTy st (TFun f) = TFun (fmap (applyTy st) f)
 applyTy st (TTuple f l) = TTuple f (map (applyTy st) l)
 applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
@@ -86,9 +87,13 @@ applyInstEnv s e = concat <$> mapM tyInst ((trace_ (show (s,e,"->",e'))) e')
   e' = flip fmap e $ \case
             CClass c t -> CClass c $ applyTy s t
             CEq a b -> CEq (applyTy s a) (applyTy s b)
+  tyInst (CClass CNum (TFun (TFMatVecElem (TVar C _)))) = return []     -- hack
   tyInst x@(CClass c TVar{}) = return [x]
   tyInst (CClass c t) = if isInstance c t then return [] else err
    where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
+
+--  tyInst (TEq v (TFun (TFFTRepr' (TInterpolated C (TV4F C))))) = return []
+
   tyInst x = return [x] -- TODO: reduction of type families
 
 joinInstEnv :: [InstEnv] -> InstEnv

@@ -412,7 +412,9 @@ type families:
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: ZZ) = (a, b, c, d, e, f, g)
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
-{-
+-}
+fTRepr' a = TFun $ TFFTRepr' a
+{- currently not used
   [injective] type family PrimitiveVertices (primitive :: PrimitiveType) a
     type instance PrimitiveVertices Point a             = a
     type instance PrimitiveVertices Line a              = (a,a)
@@ -420,6 +422,7 @@ type families:
     type instance PrimitiveVertices Triangle a          = (a,a,a)
     type instance PrimitiveVertices TriangleAdjacency a = (a,a,a,a,a,a)
 -}
+{-
   type family ColorRepr a :: *
     type instance ColorRepr ZZ = ZZ
     type instance ColorRepr (a :+: b) = Color a :+: (ColorRepr b)
@@ -430,7 +433,7 @@ type families:
     type instance NoStencilRepr (Color a :+: b) = Color a :+: NoStencilRepr b
     type instance NoStencilRepr (Depth a :+: b) = Depth a :+: NoStencilRepr b
 -}
-{-
+{- currently not used
   - texturing -
   [semiinjective] type family TexDataRepr arity (t :: TextureSemantics *)
     type instance TexDataRepr Red  (v a) = a
@@ -666,7 +669,7 @@ inferPrimFun a = case a of
   "FragmentOutDepth"      -> do t <- newVar C ; ty $ TFloat C ~> t ~> TFragmentOut C t
   "FragmentOutRastDepth"  -> do t <- newVar C ; ty $ t ~> TFragmentOut C t
   -- Vertex Out
-  "VertexOut"    -> do a <- newVar C ; ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C a
+  "VertexOut"    -> do a <- newVar C ; ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C (fTRepr' a)
   -- PointSpriteCoordOrigin
   "LowerLeft"  -> ty $ TPointSpriteCoordOrigin C
   "UpperLeft"  -> ty $ TPointSpriteCoordOrigin C
@@ -716,7 +719,15 @@ inferPrimFun a = case a of
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
   -}
-  "Accumulate"   -> do [a,b,n] <- newVars 3 C ; ty $ TAccumulationContext C b ~> TFragmentFilter C a ~> (a ~> TFragmentOut C b) ~> TFragmentStream C n a ~> TFrameBuffer C ~> TFrameBuffer C
+  "Accumulate"   -> do
+    [a,b,n] <- newVars 3 C
+    [] ==>
+           TAccumulationContext C b
+        ~> TFragmentFilter C a
+        ~> (a ~> TFragmentOut C b)
+        ~> TFragmentStream C n a
+        ~> TFrameBuffer C-- (fTRepr b)
+        ~> TFrameBuffer C-- (fTRepr b)
   "FrameBuffer"  -> do [a,b] <- newVars 2 C ; ty $ a {-TImage C a b-} ~> TFrameBuffer C
   "ScreenOut"    -> ty $ TFrameBuffer C ~> TOutput C
   -- * Primitive Functions *
