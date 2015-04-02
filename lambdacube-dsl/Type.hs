@@ -1,6 +1,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE LambdaCase #-}
 module Type where
 
 import Data.Map (Map)
@@ -59,6 +60,8 @@ a ~> b = TArr a b
 type Semantic = Ty
 type PrimitiveType = Ty
 type Nat = Ty
+
+--newtype Ty' = Ty' (Ty Ty')
 
 data Ty -- star kind
   = TVar    Frequency TName
@@ -176,4 +179,13 @@ data TypeFun a
   | TFColorRepr a
   | TFFrameBuffer a
   deriving (Show,Eq,Ord,Functor,Foldable)
+
+tFun = \case
+    TFFTRepr' (TInterpolated C (TV4F C)) -> TV4F C
+    TFFrameBuffer (TTuple C [TImage C (TNat 1) (Depth (TFloat C)), TImage C (TNat 1) (Color (TV4F C))])
+        -> TFrameBuffer C (TNat 1) (TTuple C [TFloat C, TV4F C])
+    TFFTRepr' (TVar C "t217")   -- hack
+        -> TTuple C [TFloat C, TV4F C]
+
+    f -> TFun f
 

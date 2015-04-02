@@ -340,7 +340,7 @@ fundep:
     instance IsMat M43F V4F V3F
     instance IsMat M44F V4F V4F
 -}
-mat h w = TFun $ TFMat h w
+mat h w = tFun $ TFMat h w
 isMat m h w = m ~~ mat h w
 {-
   class IsMatVec a -- t | a -> t
@@ -367,12 +367,12 @@ isMat m h w = m ~~ mat h w
     instance IsMatVec M43F Float
     instance IsMatVec M44F Float
 -}
-matVecElem a = TFun $ TFMatVecElem a
+matVecElem a = tFun $ TFMatVecElem a
 {-
   class IsMatVecScalar a -- t | a -> t
     type T a :: *
 -}
-matVecScalarElem a = TFun $ TFMatVecScalarElem a
+matVecScalarElem a = tFun $ TFMatVecScalarElem a
 {-
   class IsVec (dim :: Nat) component
     data Vec dim component :: *
@@ -389,7 +389,7 @@ matVecScalarElem a = TFun $ TFMatVecScalarElem a
     instance IsVec 3 (V3 Bool) Bool
     instance IsVec 4 (V4 Bool) Bool
 -}
-vec d c = TFun $ TFVec d c
+vec d c = tFun $ TFVec d c
 isVec d v c = v ~~ vec d c
 {-
   [injective in both params] class IsVecScalar (dim :: Nat) component
@@ -397,7 +397,7 @@ isVec d v c = v ~~ vec d c
     instance VecS 1 c = c
     instance VecS n c | n > 1 = Vec n c
 -}
-vecScalar d c = TFun $ TFVecScalar d c
+vecScalar d c = tFun $ TFVecScalar d c
 isVecScalar d v c = v ~~ vecScalar d c
 
 {-
@@ -413,7 +413,7 @@ type families:
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
 -}
-fTRepr' a = TFun $ TFFTRepr' a
+fTRepr' a = tFun $ TFFTRepr' a
 {- currently not used
   [injective] type family PrimitiveVertices (primitive :: PrimitiveType) a
     type instance PrimitiveVertices Point a             = a
@@ -422,7 +422,7 @@ fTRepr' a = TFun $ TFFTRepr' a
     type instance PrimitiveVertices Triangle a          = (a,a,a)
     type instance PrimitiveVertices TriangleAdjacency a = (a,a,a,a,a,a)
 -}
-colorRepr a = TFun $ TFColorRepr a
+colorRepr a = tFun $ TFColorRepr a
 {-
   type family ColorRepr a :: *
     type instance ColorRepr ZZ = ZZ
@@ -469,10 +469,10 @@ colorRepr a = TFun $ TFColorRepr a
     type instance TexelRepr (Sampler dim arr (v t) RGBA)    = V4 t
 -}
 
-frameBuffer a = TFun $ TFFrameBuffer a
+frameBuffer a = tFun $ TFFrameBuffer a
 
 --reduceTF :: TName -> [Ty] -> Ty
---reduceTF n l = TFun n l
+--reduceTF n l = tFun n l
 
 isInstance :: Class -> Ty -> Bool
 isInstance IsTypeLevelNatural (TNat _) = True

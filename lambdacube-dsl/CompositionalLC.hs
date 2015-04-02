@@ -58,25 +58,40 @@ applyTy :: Subst -> Ty -> Ty
 applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
-applyTy st (TFun (TFFTRepr' (TInterpolated C (TV4F C)))) = TV4F C        -- hack
-applyTy st (TFun f) = TFun (fmap (applyTy st) f)
+applyTy st (TFun f) = tFun $ fmap (applyTy st) f
 applyTy st (TTuple f l) = TTuple f (map (applyTy st) l)
 applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
 applyTy st (TImage f a b) = TImage f (applyTy st a) (applyTy st b)
 applyTy st (TVertexStream f a b) = TVertexStream f (applyTy st a) (applyTy st b)
 applyTy st (TFragmentStream f a b) = TFragmentStream f (applyTy st a) (applyTy st b)
+applyTy st (TFrameBuffer f a b) = TFrameBuffer f (applyTy st a) (applyTy st b)
 applyTy st (TPrimitiveStream f a b f' c) = TPrimitiveStream f (applyTy st a) (applyTy st b) f' (applyTy st c)
 applyTy st (TBlending f a) = TBlending f (applyTy st a)
 applyTy st (TFragmentOperation f a) = TFragmentOperation f (applyTy st a)
 applyTy st (TInterpolated f a) = TInterpolated f (applyTy st a)
 applyTy st (TFetchPrimitive f a) = TFetchPrimitive f (applyTy st a)
 applyTy st (TVertexOut f a) = TVertexOut f (applyTy st a)
+applyTy st (TInput f a) = TInput f (applyTy st a)
 applyTy st (TRasterContext f a) = TRasterContext f (applyTy st a)
 applyTy st (TAccumulationContext f a) = TAccumulationContext f (applyTy st a)
 applyTy st (TFragmentFilter f a) = TFragmentFilter f (applyTy st a)
 applyTy st (TFragmentOut f a) = TFragmentOut f (applyTy st a)
 applyTy st (Color a) = Color (applyTy st a)
-applyTy _ t = t
+applyTy st (Depth a) = Depth (applyTy st a)
+applyTy st (Stencil a) = Stencil (applyTy st a)
+{-
+applyTy st (TBlendEquation C) = TBlendEquation C
+applyTy st (TBlendingFactor C) = TBlendingFactor C
+applyTy st (TV4F C) = TV4F C
+applyTy st (TFloat C) = TFloat C
+applyTy st (TNat n) = TNat n
+applyTy st (TPolygonMode C) = TPolygonMode C
+applyTy st (TPolygonOffset C) = TPolygonOffset C
+applyTy st (TPointSize C) = TPointSize C
+applyTy st (TCullMode C) = TCullMode C
+applyTy st (TFrontFace C) = TFrontFace C
+-}
+applyTy _ t = t --error $ "applyTy: " ++ show t
 
 applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
@@ -172,6 +187,10 @@ unifyTy (TArr a1 b1) (TArr a2 b2) = do
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
   return $ s1 `compose` s2
 unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = do
+  s1 <- unifyTy a1 a2
+  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
+  return $ s1 `compose` s2
+unifyTy (TFrameBuffer f1 a1 b1) (TFrameBuffer f2 a2 b2) = do
   s1 <- unifyTy a1 a2
   s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
   return $ s1 `compose` s2
