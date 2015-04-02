@@ -336,7 +336,9 @@ fundep:
     instance IsMat M42F V4F V2F
     instance IsMat M43F V4F V3F
     instance IsMat M44F V4F V4F
-
+-}
+isMat m h w = CEq m $ TFun "Mat" [h, w]
+{-
   class IsMatVec a -- t | a -> t
     type T a :: *
     instance IsMatVec (V2 Float) Float
@@ -499,6 +501,9 @@ instances = Map.fromList [(CNum,Set.fromList [TInt C,TFloat C])]
 
 ty :: Ty -> Unique Typing
 ty t = return (mempty,mempty,t)
+
+infix 6 ==>
+cs ==> t = return (mempty, cs, t)
 
 inferPrimFun :: EName -> Unique Typing
 inferPrimFun a = case a of
@@ -792,13 +797,13 @@ inferPrimFun a = case a of
   "PrimReflect"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a)   -> a)
   "PrimRefract"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> a ~> a -- IsVecScalar d a Float => PrimFun stage ((a,a,a) -> a)
   -- Matrix Functions
-  "PrimTranspose"     -> do [a,t] <- newVars 2 C ; ty $ a ~> t -- (IsMat a h w, IsMat b w h)               => PrimFun stage (a       -> b)
-  "PrimDeterminant"   -> do [a,t] <- newVars 2 C ; ty $ a ~> TFloat C -- IsMat m s s                              => PrimFun stage (m       -> Float)
-  "PrimInverse"       -> do [a,t] <- newVars 2 C ; ty $ a ~> a -- IsMat m s s                              => PrimFun stage (m       -> m)
-  "PrimOuterProduct"  -> do [a,b,t] <- newVars 3 C ; ty $ a ~> b ~> t -- IsMat m h w                              => PrimFun stage ((w,h)   -> m)
-  "PrimMulMatVec"     -> do [a,b,t] <- newVars 3 C ; ty $ a ~> b ~> t -- IsMat m h w                              => PrimFun stage ((m,w)   -> h)
-  "PrimMulVecMat"     -> do [a,b,t] <- newVars 3 C ; ty $ a ~> b ~> t -- IsMat m h w                              => PrimFun stage ((h,m)   -> w)
-  "PrimMulMatMat"     -> do [a,b,t] <- newVars 3 C ; ty $ a ~> b ~> t -- (IsMat a i j, IsMat b j k, IsMat c i k)  => PrimFun stage ((a,b)   -> c)
+  "PrimTranspose"     -> do [a,b,h,w] <- newVars 4 C ; [isMat a h w, isMat b w h] ==> a ~> b
+  "PrimDeterminant"   -> do [m,s] <- newVars 2 C ; [isMat m s s] ==> m ~> TFloat C
+  "PrimInverse"       -> do [m,s] <- newVars 2 C ; [isMat m s s] ==> m ~> m
+  "PrimOuterProduct"  -> do [m,h,w] <- newVars 3 C ; [isMat m h w] ==> w ~> h ~> m
+  "PrimMulMatVec"     -> do [m,h,w] <- newVars 3 C ; [isMat m h w] ==> m ~> w ~> h
+  "PrimMulVecMat"     -> do [m,h,w] <- newVars 3 C ; [isMat m h w] ==> h ~> m ~> w
+  "PrimMulMatMat"     -> do [a,b,c,i,j,k] <- newVars 6 C ; [isMat a i j, isMat b j k, isMat c i k] ==> a ~> b ~> c
   -- Vector and Scalar Relational Functions
   "PrimLessThan"          -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t  -- (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)
   "PrimLessThanEqual"     -> do [a,t] <- newVars 2 C ; ty $ a ~> a ~> t  -- (IsNum t, IsVecScalar d a t, IsVecScalar d b Bool)   => PrimFun stage ((a,a) -> b)

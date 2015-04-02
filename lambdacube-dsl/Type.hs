@@ -146,6 +146,7 @@ data Ty -- star kind
 
 data Constraint
   = CClass Class Ty
+  | CEq Ty Ty
   deriving (Show,Eq,Ord)
 
 data Class

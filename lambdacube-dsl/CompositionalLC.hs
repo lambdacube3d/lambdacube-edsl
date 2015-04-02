@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module CompositionalLC
     ( inference
     , compose
@@ -79,15 +80,19 @@ applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
 
 applyInstEnv :: Subst -> InstEnv -> Unique InstEnv
-applyInstEnv s e = filterM tyInst $ (trace_ (show (s,e,"->",e'))) e'
+applyInstEnv s e = concat <$> mapM tyInst ((trace_ (show (s,e,"->",e'))) e')
  where
-  e' = fmap (\(CClass c t) -> (CClass c $ applyTy s t)) e
-  tyInst (CClass c TVar{}) = return True
-  tyInst (CClass c t) = if isInstance c t then return False else err
+  e' = flip fmap e $ \case
+            CClass c t -> CClass c $ applyTy s t
+            CEq a b -> CEq (applyTy s a) (applyTy s b)
+  tyInst x@(CClass c TVar{}) = return [x]
+  tyInst (CClass c t) = if isInstance c t then return [] else err
    where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
+  tyInst x = return [x] -- TODO: reduction of type families
 
 joinInstEnv :: [InstEnv] -> InstEnv
 joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
+    -- TODO: constraint solving
 
 freeVarsTy :: Ty -> Set TName
 freeVarsTy (TVar _ a) = Set.singleton a
@@ -222,13 +227,17 @@ prune :: Typing -> Typing
 prune (m,i,t) = (m,i',t)
  where
   v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
-  i' = filter (\(CClass _ a) -> Set.member a v) i
+  i' = flip filter i $ \case
+        CClass _ a -> Set.member a v
+        _ -> True -- ???
 
 unamb :: PolyEnv -> Typing -> Unique ()
 unamb env (m,i,t) = do
   let v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
   return ()
-  forM_ i $ \(CClass _ a) -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
+  forM_ i $ \case
+        CClass _ a -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
+        _ -> return ()
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
 infer penv (ETuple r t) = withRanges [r] $ do
@@ -265,7 +274,7 @@ infer penv (EApp r _ f a) = withRanges [r] $ do
   a <- newVar C
   s <- unify [m1,m2] [t1,t2 ~> a]
   m3 <- joinMonoEnv (applyMonoEnv s m1) (applyMonoEnv s m2)
-  i3 <- (\a1 a2 -> joinInstEnv [a1,a2]) <$> applyInstEnv s i1 <*> applyInstEnv s i2
+  i3 <- joinInstEnv <$> mapM (applyInstEnv s) [i1, i2]
   unamb penv (m3,i3,applyTy s a)
   let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
       tyFree = freeVarsTy tyF
