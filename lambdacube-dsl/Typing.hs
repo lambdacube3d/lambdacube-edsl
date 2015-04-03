@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE LambdaCase #-}
 module Typing where
 
 import Data.Monoid
@@ -319,89 +320,59 @@ isNum = CClass CNum
 isSigned = CClass IsSigned
 isIntegral = CClass IsIntegral
 isTypeLevelNatural = CClass IsTypeLevelNatural
-{-
-simple:
-  done - IsComponent
-  done - IsFloating
-  done - IsIntegral
-  done - IsNum
-  done - IsNumComponent
-  done - IsSigned
-fundep:
-  class IsMat h w
-    data Mat h w :: *
-    instance IsMat M22F V2F V2F             M22F ~ Mat V2F V2F
-    instance IsMat M23F V2F V3F
-    instance IsMat M24F V2F V4F
-    instance IsMat M32F V3F V2F
-    instance IsMat M33F V3F V3F
-    instance IsMat M34F V3F V4F
-    instance IsMat M42F V4F V2F
-    instance IsMat M43F V4F V3F
-    instance IsMat M44F V4F V4F
--}
-mat h w = tFun $ TFMat h w
-isMat m h w = m ~~ mat h w
-{-
-  class IsMatVec a -- t | a -> t
-    type T a :: *
-    instance IsMatVec (V2 Float) Float
-    instance IsMatVec (V3 Float) Float
-    instance IsMatVec (V4 Float) Float
-    instance IsMatVec (V2 Int32) Int32
-    instance IsMatVec (V3 Int32) Int32
-    instance IsMatVec (V4 Int32) Int32
-    instance IsMatVec (V2 Word32) Word32
-    instance IsMatVec (V3 Word32) Word32
-    instance IsMatVec (V4 Word32) Word32
-    instance IsMatVec (V2 Bool) Bool
-    instance IsMatVec (V3 Bool) Bool
-    instance IsMatVec (V4 Bool) Bool
-    instance IsMatVec M22F Float
-    instance IsMatVec M23F Float
-    instance IsMatVec M24F Float
-    instance IsMatVec M32F Float
-    instance IsMatVec M33F Float
-    instance IsMatVec M34F Float
-    instance IsMatVec M42F Float
-    instance IsMatVec M43F Float
-    instance IsMatVec M44F Float
--}
-matVecElem a = tFun $ TFMatVecElem a
-{-
-  class IsMatVecScalar a -- t | a -> t
-    type T a :: *
--}
-matVecScalarElem a = tFun $ TFMatVecScalarElem a
-{-
-  class IsVec (dim :: Nat) component
-    data Vec dim component :: *
-    instance IsVec 2 (V2 Float) Float
-    instance IsVec 3 (V3 Float) Float
-    instance IsVec 4 (V4 Float) Float
-    instance IsVec 2 (V2 Int32) Int32
-    instance IsVec 3 (V3 Int32) Int32
-    instance IsVec 4 (V4 Int32) Int32
-    instance IsVec 2 (V2 Word32) Word32
-    instance IsVec 3 (V3 Word32) Word32
-    instance IsVec 4 (V4 Word32) Word32
-    instance IsVec 2 (V2 Bool) Bool
-    instance IsVec 3 (V3 Bool) Bool
-    instance IsVec 4 (V4 Bool) Bool
--}
-vec d c = tFun $ TFVec d c
-isVec d v c = v ~~ vec d c
-{-
-  [injective in both params] class IsVecScalar (dim :: Nat) component
-    type VecS dim component :: *
-    instance VecS 1 c = c
-    instance VecS n c | n > 1 = Vec n c
--}
-vecScalar d c = tFun $ TFVecScalar d c
-isVecScalar d v c = v ~~ vecScalar d c
 
-{-
-type families:
+tFun = \case
+    TFMat (TV2F C) (TV2F C) -> TM22F C
+    TFMat (TV2F C) (TV3F C) -> TM23F C
+    TFMat (TV2F C) (TV4F C) -> TM24F C
+    TFMat (TV3F C) (TV2F C) -> TM32F C
+    TFMat (TV3F C) (TV3F C) -> TM33F C
+    TFMat (TV3F C) (TV4F C) -> TM34F C
+    TFMat (TV4F C) (TV2F C) -> TM42F C
+    TFMat (TV4F C) (TV3F C) -> TM43F C
+    TFMat (TV4F C) (TV4F C) -> TM44F C
+
+    TFMatVecElem (TV2F C)  -> TFloat C
+    TFMatVecElem (TV3F C)  -> TFloat C
+    TFMatVecElem (TV4F C)  -> TFloat C
+    TFMatVecElem (TV2I C)  -> TInt C
+    TFMatVecElem (TV3I C)  -> TInt C
+    TFMatVecElem (TV4I C)  -> TInt C
+    TFMatVecElem (TV2U C)  -> TWord C
+    TFMatVecElem (TV3U C)  -> TWord C
+    TFMatVecElem (TV4U C)  -> TWord C
+    TFMatVecElem (TV2B C)  -> TBool C
+    TFMatVecElem (TV3B C)  -> TBool C
+    TFMatVecElem (TV4B C)  -> TBool C
+    TFMatVecElem (TM22F C) -> TFloat C
+    TFMatVecElem (TM23F C) -> TFloat C
+    TFMatVecElem (TM24F C) -> TFloat C
+    TFMatVecElem (TM32F C) -> TFloat C
+    TFMatVecElem (TM33F C) -> TFloat C
+    TFMatVecElem (TM34F C) -> TFloat C
+    TFMatVecElem (TM42F C) -> TFloat C
+    TFMatVecElem (TM43F C) -> TFloat C
+    TFMatVecElem (TM44F C) -> TFloat C
+
+    -- TODO: TFMatVecScalarElem
+
+    TFVec (TNat 2) (TFloat C) -> TV2F C
+    TFVec (TNat 3) (TFloat C) -> TV3F C
+    TFVec (TNat 4) (TFloat C) -> TV4F C
+    TFVec (TNat 2) (TInt C)   -> TV2I C
+    TFVec (TNat 3) (TInt C)   -> TV3I C
+    TFVec (TNat 4) (TInt C)   -> TV4I C
+    TFVec (TNat 2) (TWord C)  -> TV2U C
+    TFVec (TNat 3) (TWord C)  -> TV3U C
+    TFVec (TNat 4) (TWord C)  -> TV4U C
+    TFVec (TNat 2) (TBool C)  -> TV2B C
+    TFVec (TNat 3) (TBool C)  -> TV3B C
+    TFVec (TNat 4) (TBool C)  -> TV4B C
+
+    TFVecScalar (TNat 1) ty | True {-TODO-} -> ty
+    TFVecScalar (TNat n) ty | True {-TODO-} -> error "TODO: TFVecScalar"    -- TFVec (TNat n) ty
+
+{- TODO
   type family FTRepr' a :: *
     type instance FTRepr' (i1 a :+: ZZ) = a
     type instance FTRepr' (i1 a :+: i2 b :+: ZZ) = (a, b)
@@ -413,7 +384,17 @@ type families:
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
 -}
-fTRepr' a = tFun $ TFFTRepr' a
+    TFFTRepr' (TInterpolated C (TV4F C)) -> TV4F C
+    TFFTRepr' (TVar C "t217")   -- hack
+        -> TTuple C [TFloat C, TV4F C]
+
+{- TODO
+  type family ColorRepr a :: *
+    type instance ColorRepr ZZ = ZZ
+    type instance ColorRepr (a :+: b) = Color a :+: (ColorRepr b)
+-}
+    TFFrameBuffer (TTuple C [TImage C (TNat 1) (Depth (TFloat C)), TImage C (TNat 1) (Color (TV4F C))])
+        -> TFrameBuffer C (TNat 1) (TTuple C [TFloat C, TV4F C])
 {- currently not used
   [injective] type family PrimitiveVertices (primitive :: PrimitiveType) a
     type instance PrimitiveVertices Point a             = a
@@ -422,12 +403,7 @@ fTRepr' a = tFun $ TFFTRepr' a
     type instance PrimitiveVertices Triangle a          = (a,a,a)
     type instance PrimitiveVertices TriangleAdjacency a = (a,a,a,a,a,a)
 -}
-colorRepr a = tFun $ TFColorRepr a
-{-
-  type family ColorRepr a :: *
-    type instance ColorRepr ZZ = ZZ
-    type instance ColorRepr (a :+: b) = Color a :+: (ColorRepr b)
-
+{- TODO
   type family NoStencilRepr a :: *
     type instance NoStencilRepr ZZ = ZZ
     type instance NoStencilRepr (Stencil a :+: b) = NoStencilRepr b
@@ -468,11 +444,22 @@ colorRepr a = tFun $ TFColorRepr a
     type instance TexelRepr (Sampler dim arr (v t) RGB)     = V3 t
     type instance TexelRepr (Sampler dim arr (v t) RGBA)    = V4 t
 -}
+    f -> TFun f
 
+mat h w       = tFun $ TFMat h w
+matVecElem a  = tFun $ TFMatVecElem a
+matVecScalarElem a = tFun $ TFMatVecScalarElem a
+vec d c       = tFun $ TFVec d c
+vecScalar d c = tFun $ TFVecScalar d c
+fTRepr' a     = tFun $ TFFTRepr' a
+colorRepr a   = tFun $ TFColorRepr a
 frameBuffer a = tFun $ TFFrameBuffer a
 
---reduceTF :: TName -> [Ty] -> Ty
---reduceTF n l = tFun n l
+isMat m h w = m ~~ mat h w
+isVec d v c = v ~~ vec d c
+isVecScalar d v c = v ~~ vecScalar d c
+
+
 
 isInstance :: Class -> Ty -> Bool
 isInstance IsTypeLevelNatural (TNat _) = True

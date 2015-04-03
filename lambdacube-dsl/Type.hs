@@ -1,7 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE LambdaCase #-}
 module Type where
 
 import Data.Map (Map)
@@ -170,22 +169,13 @@ data Class
   deriving (Show,Eq,Ord)
 
 data TypeFun a
-  = TFMat a a
+  = TFMat a a               -- TODO: data family
   | TFMatVecElem a
   | TFMatVecScalarElem a
-  | TFVec a a
-  | TFVecScalar a a
+  | TFVec a a               -- TODO: data family
+  | TFVecScalar a a         -- injective in both params
   | TFFTRepr' a
   | TFColorRepr a
   | TFFrameBuffer a
   deriving (Show,Eq,Ord,Functor,Foldable)
-
-tFun = \case
-    TFFTRepr' (TInterpolated C (TV4F C)) -> TV4F C
-    TFFrameBuffer (TTuple C [TImage C (TNat 1) (Depth (TFloat C)), TImage C (TNat 1) (Color (TV4F C))])
-        -> TFrameBuffer C (TNat 1) (TTuple C [TFloat C, TV4F C])
-    TFFTRepr' (TVar C "t217")   -- hack
-        -> TTuple C [TFloat C, TV4F C]
-
-    f -> TFun f
 
