@@ -211,23 +211,10 @@ unifyEqs eqs = do
 
 -- unify the types of each distinct variable in the monoenvs and the types in the [Ty] list
 unify :: [MonoEnv] -> [Ty] -> Unique Subst
-unify ml tl = do
-  a <- newVar C
-  let toEqs :: EName -> [(Ty,Ty)]
-      toEqs v = case mapMaybe (Map.lookup v) ml of
-        [] -> []
-        x:xs -> map ((,) x) xs
-
-      vars :: Set EName
-      vars = mconcat . map Map.keysSet $ ml
-
-      varEqs :: [(Ty,Ty)]
-      varEqs = concatMap toEqs . Set.toList $ vars
-
-      tyEqs :: [(Ty,Ty)]
-      tyEqs = map ((,) a) tl
-
-  unifyEqs $ tyEqs ++ varEqs
+unify ml tl = unifyEqs $ concatMap pairs $ tl: Map.elems (Map.unionsWith (++) $ map (Map.map (:[])) ml)
+  where
+    pairs [] = []
+    pairs (x:xs) = map ((,) x) xs
 
 prune :: Typing -> Typing
 prune (m,i,t) = (m,i,t) --(m,i',t)
