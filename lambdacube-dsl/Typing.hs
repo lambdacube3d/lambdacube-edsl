@@ -481,9 +481,6 @@ isTypeLevelNatural = cClass IsTypeLevelNatural
 cClass :: Class -> Ty -> Constraint Ty
 cClass c ty = CClass c ty
 
-infix 6 ==>
-cs ==> t = return (mempty, cs, t)
-
 -- reduce: reduce class constraints:  Eq [a] --> Eq a
 isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> e -> Class -> Ty -> e
 isInstance reduce fail keep ok = f where
@@ -541,11 +538,15 @@ joinTupleType (TTuple f l) (TTuple _ r) = TTuple f (l ++ r)
 joinTupleType l (TTuple f r) = TTuple f (l : r)
 joinTupleType (TTuple f l) r = TTuple f (l ++ [r])
 
-ty :: Ty -> Unique Typing
-ty t = return (mempty,mempty,t)
+inferPrimFun :: (Typing -> Unique e) -> Unique e -> EName -> Unique e
+inferPrimFun ok nothing = f where
 
-inferPrimFun :: EName -> Unique Typing
-inferPrimFun a = case a of
+ ty t = ok (mempty, mempty, t)
+
+ infix 6 ==>
+ cs ==> t = ok (mempty, cs, t)
+
+ f = \case
   -- temporary const constructor
   "Tup"          -> do [a] <- newVars 1 C ; ty $ a ~> a
   "Const"        -> do [a] <- newVars 1 C ; ty $ a ~> a
@@ -878,7 +879,8 @@ inferPrimFun a = case a of
   "PrimNoise3"  -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar (TNat 3) b (TFloat C)] ==> a ~> b
   "PrimNoise4"  -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar (TNat 4) b (TFloat C)] ==> a ~> b
 
-  a -> throwErrorUnique $ "unknown primitive: " ++ show a
+--  a -> throwErrorUnique $ "unknown primitive: " ++ show a
+  a -> nothing
 
 inferLit :: Lit -> Unique Typing
 inferLit a = case a of
@@ -890,6 +892,8 @@ inferLit a = case a of
   LFloat  _ -> ty $ TFloat C
   LString _ -> ty $ TString C
   LNat i    -> ty $ TNat i
+ where
+  ty t = return (mempty, mempty, t)
 
 throwErrorUnique :: String -> Unique a
 throwErrorUnique s = do

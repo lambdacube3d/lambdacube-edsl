@@ -258,9 +258,10 @@ infer penv (ETuple r t) = withRanges [r] $ do
   ETuple <$> (snd <$> unif ml il (TTuple C tl) []) <*> pure te
 infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
 infer penv (EVar r _ n) = withRanges [r] $ do
-  (t, s) <- if isPrimFun n
-    then (,) <$> (inferPrimFun n >>= simplifyTyping) <*> pure mempty
-    else maybe (monoVar n) (fmap (trace "poly var") . instTyping) $ Map.lookup n penv
+  (t, s) <- inferPrimFun
+        (\x -> (,) <$> simplifyTyping x <*> pure mempty)
+        (maybe (monoVar n) (fmap (trace "poly var") . instTyping) $ Map.lookup n penv)
+        n
   return $ EVar t s n 
 infer penv (ELam r n f) = withRanges [r] $ do
   tf@(getTag -> (m, i, t)) <- infer penv f
