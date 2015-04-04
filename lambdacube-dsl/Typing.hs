@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Typing where
 
 import Data.Monoid
@@ -315,14 +316,8 @@ primFunSet = Set.fromList
     PrimV3ToTup             :: IsComponent a                            => PrimFun stage (V3 a   -> (a,a,a))
     PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
-isValidOutput = CClass IsValidOutput
-isNum = CClass CNum
-isSigned = CClass IsSigned
-isIntegral = CClass IsIntegral
-isTypeLevelNatural = CClass IsTypeLevelNatural
 
-tFun f = reduceTF id error{-TODO-} (TFun f) f
-
+reduceTF :: (Ty -> e) -> (String -> e) -> e -> TypeFun Ty -> e
 reduceTF reduced fail nothing = \case
     TFMat (TV2F C) (TV2F C) -> reduced $ TM22F C
     TFMat (TV2F C) (TV3F C) -> reduced $ TM23F C
@@ -448,21 +443,40 @@ reduceTF reduced fail nothing = \case
 -}
     f -> nothing
 
-mat h w       = tFun $ TFMat h w
-matVecElem a  = tFun $ TFMatVecElem a
-matVecScalarElem a = tFun $ TFMatVecScalarElem a
-vec d c       = tFun $ TFVec d c
-vecScalar d c = tFun $ TFVecScalar d c
-fTRepr' a     = tFun $ TFFTRepr' a
-colorRepr a   = tFun $ TFColorRepr a
-frameBuffer a = tFun $ TFFrameBuffer a
+matVecElem t a       = t ~~ TFMatVecElem a
+matVecScalarElem t a = t ~~ TFMatVecScalarElem a
+fTRepr' t a          = t ~~ TFFTRepr' a
+colorRepr t a        = t ~~ TFColorRepr a
+frameBuffer t a      = t ~~ TFFrameBuffer a
+isMat m h w          = m ~~ TFMat h w
+isVec d v c          = v ~~ TFVec d c
+isVecScalar d v c    = v ~~ TFVecScalar d c
 
-isMat m h w = m ~~ mat h w
-isVec d v c = v ~~ vec d c
-isVecScalar d v c = v ~~ vecScalar d c
+infix 4 ~~
+-- Note: first parameter should be a TVar
+(~~) :: Ty -> TypeFun Ty -> ([Constraint], Subst)
+TVar C n ~~ f = reduceTF (\ty -> ([], Map.singleton n ty)) error{-TODO!-} ([CEq C n f], mempty) f
 
+isValidOutput      = cClass IsValidOutput
+isNum              = cClass CNum
+isSigned           = cClass IsSigned
+isIntegral         = cClass IsIntegral
+isTypeLevelNatural = cClass IsTypeLevelNatural
 
+cClass :: Class -> Ty -> ([Constraint], Subst)
+cClass c ty = ([CClass c ty], mempty)
 
+infix 6 ==>
+cs ==> t = return (mempty, concat eqs, substitute (Map.unions{-TODO!!: use unify_compose-} ms) t)
+  where
+    (eqs, ms) = unzip cs
+
+substitute :: Subst -> Ty -> Ty
+substitute = undefined -- TODO!!!
+
+-- TODO: isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> Class -> Ty -> e
+--       isInstance reduced fail nothing
+-- TODO: reduce class constraints:  Eq [a] --> Eq a
 isInstance :: Class -> Ty -> Bool
 isInstance IsTypeLevelNatural (TNat _) = True
 isInstance IsValidOutput _ = True -- TODO
@@ -518,12 +532,6 @@ joinTupleType (TTuple f l) r = TTuple f (l ++ [r])
 
 ty :: Ty -> Unique Typing
 ty t = return (mempty,mempty,t)
-
-infix 6 ==>
-cs ==> t = return (mempty, cs, t)
-
-infix 4 ~~
-a ~~ b = CEq a b
 
 inferPrimFun :: EName -> Unique Typing
 inferPrimFun a = case a of
@@ -664,11 +672,11 @@ inferPrimFun a = case a of
     FragmentOutDepth        :: Exp F Float  ->  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
     FragmentOutRastDepth    ::                  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
   -}
-  "FragmentOut"           -> do t <- newVar C ; ty $ t ~> TFragmentOut C (colorRepr t)
-  "FragmentOutDepth"      -> do t <- newVar C ; ty $ TFloat C ~> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) (colorRepr t))
-  "FragmentOutRastDepth"  -> do t <- newVar C ; ty $ t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) (colorRepr t))
+  "FragmentOut"           -> do [a,t] <- newVars 2 C ; [colorRepr a t] ==> t ~> TFragmentOut C a
+  "FragmentOutDepth"      -> do [a,t] <- newVars 2 C ; [colorRepr a t] ==> TFloat C ~> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
+  "FragmentOutRastDepth"  -> do [a,t] <- newVars 2 C ; [colorRepr a t] ==> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
   -- Vertex Out
-  "VertexOut"    -> do a <- newVar C ; ty $ TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C (fTRepr' a)
+  "VertexOut"    -> do [t,a] <- newVars 2 C ; [fTRepr' t a] ==> TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C t
   -- PointSpriteCoordOrigin
   "LowerLeft"  -> ty $ TPointSpriteCoordOrigin C
   "UpperLeft"  -> ty $ TPointSpriteCoordOrigin C
@@ -727,27 +735,27 @@ inferPrimFun a = case a of
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
   -}
   "Accumulate"   -> do
-    [a,b,n] <- newVars 3 C
-    [isValidOutput b] ==>
+    [a,b,n,t] <- newVars 4 C
+    [isValidOutput b, fTRepr' t b] ==>
            TAccumulationContext C b
         ~> TFragmentFilter C a
         ~> (a ~> TFragmentOut C b)
         ~> TFragmentStream C n a
-        ~> TFrameBuffer C n (fTRepr' b)
-        ~> TFrameBuffer C n (fTRepr' b)
-  "FrameBuffer"  -> do [a] <- newVars 1 C ; ty $ a ~> frameBuffer a
+        ~> TFrameBuffer C n t
+        ~> TFrameBuffer C n t
+  "FrameBuffer"  -> do [a,t] <- newVars 2 C ; [frameBuffer t a] ==> a ~> t
   "ScreenOut"    -> do [a,b] <- newVars 2 C ; ty $ TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
-  "PrimAdd"   -> do [a]   <- newVars 1 C ; [isNum (matVecElem a)] ==> a ~> a ~> a
-  "PrimAddS"  -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a, isNum t] ==> a ~> t ~> a
-  "PrimSub"   -> do [a]   <- newVars 1 C ; [isNum (matVecElem a)] ==> a ~> a ~> a
-  "PrimSubS"  -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a, isNum t] ==> a ~> t ~> a
-  "PrimMul"   -> do [a]   <- newVars 1 C ; [isNum (matVecElem a)] ==> a ~> a ~> a
-  "PrimMulS"  -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a, isNum t] ==> a ~> t ~> a
+  "PrimAdd"   -> do [a,t] <- newVars 1 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimAddS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
+  "PrimSub"   -> do [a,t] <- newVars 1 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimSubS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
+  "PrimMul"   -> do [a,t] <- newVars 1 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimMulS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
   "PrimDiv"   -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
   "PrimDivS"  -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimNeg"   -> do [a]     <- newVars 1 C ; [isSigned (matVecScalarElem a)] ==> a ~> a
+  "PrimNeg"   -> do [a,t]   <- newVars 1 C ; [matVecScalarElem t a, isSigned t] ==> a ~> a
   "PrimMod"   -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
   "PrimModS"  -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
   -- Bit-wise Functions
@@ -846,9 +854,9 @@ inferPrimFun a = case a of
   "PrimGreaterThan"       -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
   "PrimGreaterThanEqual"  -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
   "PrimEqualV"            -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimEqual"             -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a] ==> a ~> a ~> TBool C
+  "PrimEqual"             -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a] ==> a ~> a ~> TBool C
   "PrimNotEqualV"         -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimNotEqual"          -> do [a,t] <- newVars 2 C ; [t ~~ matVecScalarElem a] ==> a ~> a ~> TBool C
+  "PrimNotEqual"          -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a] ==> a ~> a ~> TBool C
   -- Fragment Processing Functions
   "PrimDFdx"    -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
   "PrimDFdy"    -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a

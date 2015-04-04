@@ -58,7 +58,6 @@ applyTy :: Subst -> Ty -> Ty
 applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
-applyTy st (TFun f) = tFun $ fmap (applyTy st) f
 applyTy st (TTuple f l) = TTuple f (map (applyTy st) l)
 applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
 applyTy st (TImage f a b) = TImage f (applyTy st a) (applyTy st b)
@@ -97,28 +96,28 @@ applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
 
 applyInstEnv :: Subst -> InstEnv -> Unique InstEnv
-applyInstEnv s e = concat <$> mapM tyInst ((trace_ (show (s,e,"->",e'))) e')
+applyInstEnv s e = concat <$> mapM tyInst e --((trace_ (show (s,e,"->",e'))) e')
  where
-  e' = flip fmap e $ \case
-            CClass c t -> CClass c $ applyTy s t
-            CEq a b -> CEq (applyTy s a) (applyTy s b)
-  tyInst (CClass CNum (TFun (TFMatVecElem (TVar C _)))) = return []     -- hack
-  tyInst x@(CClass c TVar{}) = return [x]
-  tyInst (CClass c t) = if isInstance c t then return [] else err
+--  tyInst (CClass CNum (TFun (TFMatVecElem (TVar C _)))) = return []     -- hack
+--  tyInst (TEq v (TFun (TFFTRepr' (TInterpolated C (TV4F C))))) = return [] -- hack
+  tyInst (CClass c t) = case applyTy s t of
+        t@TVar{} -> return [CClass c t]
+        t -> if isInstance c t then return [] else err
    where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
 
---  tyInst (TEq v (TFun (TFFTRepr' (TInterpolated C (TV4F C))))) = return []
+  tyInst (CEq fq n f) = reduceTF (undefined {-TODO!!!-}) error{-TODO!-} (return [CEq fq n f']) f'
+    where
+        f' = fmap (applyTy s) f
 
-  tyInst x = return [x] -- TODO: reduction of type families
 
 joinInstEnv :: [InstEnv] -> InstEnv
 joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
-    -- TODO: constraint solving
+    -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
+    -- TODO: type family injectivity reductions:  (v ~ F a, v ~ F b) --> a ~ b   if F injective in its parameter
 
 freeVarsTy :: Ty -> Set TName
 freeVarsTy (TVar _ a) = Set.singleton a
 freeVarsTy (TArr a b) = freeVarsTy a `mappend` freeVarsTy b
-freeVarsTy (TFun f) = foldMap freeVarsTy f
 freeVarsTy (TVertexStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TFragmentStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
 freeVarsTy (TPrimitiveStream _ a b _ c) = freeVarsTy a `mappend` freeVarsTy b `mappend` freeVarsTy c
@@ -141,7 +140,7 @@ freeVarsMonoEnv :: MonoEnv -> Set TName
 freeVarsMonoEnv m = F.foldMap freeVarsTy m
 
 freeVarsInstEnv :: InstEnv -> Set TName
-freeVarsInstEnv i = F.foldMap (freeVarsTy . (\(CClass _ ty) -> ty)) i
+freeVarsInstEnv i = F.foldMap (freeVarsTy . (\(CClass _ ty) -> ty)) i       -- TODO
 
 -- union mono envs matching on intersection
 joinMonoEnv :: MonoEnv -> MonoEnv -> Unique MonoEnv
@@ -152,14 +151,16 @@ joinMonoEnv a b = do
         if l == r then ml else throwErrorUnique $ k ++ " mismatch " ++ show l ++ " with " ++ show r
   T.sequence $ Map.unionWithKey merge (fmap return a) (fmap return b)
 
+-- replace free type variables with fresh type variables
 instTyping :: Typing -> Unique (Typing,Subst)
 instTyping (m,i,t) = do
-  let fv = freeVarsTy t `mappend` freeVarsMonoEnv m -- `mappend` freeVarsInstEnv i
+  let fv = freeVarsTy t `mappend` freeVarsMonoEnv m `mappend` freeVarsInstEnv i
   newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
   i' <- applyInstEnv s i
   return ((applyMonoEnv s m,i',applyTy s t),s)
 
+-- make single tvar substitution; check infinite types
 bindVar :: TName -> Ty -> Unique Subst
 bindVar n t
   | tvarEq t = return mempty
@@ -169,17 +170,20 @@ bindVar n t
   tvarEq (TVar _ m) = m == n
   tvarEq _ = False
 
+-- compose substitutions
+-- Note: compose does not unify:    {v |-> t1} `compose` {v |-> t2}  is wrong
 compose :: Subst -> Subst -> Subst
 compose b a = mappend a $ applyTy a <$> b
 
+-- TODO: compositional (not linear) unification?
 unifyTy :: Ty -> Ty -> Unique Subst
 unifyTy (TVar _ u) t = bindVar u t
 unifyTy t (TVar _ u) = bindVar u t
 unifyTy a@(TTuple f1 t1) b@(TTuple f2 t2) = do
-  let go s [] [] = return s
+  let go s [] [] = return s     -- TODO: use unifyEqs?
       go s (a1:xs1) (a2:xs2) = do
         s1 <- unifyTy a1 a2
-        return $ s `compose` s1
+        return $ s `compose` s1 -- TODO: should be recursive go call
       go _ _ _ = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
   go mempty t1 t2
 unifyTy (TArr a1 b1) (TArr a2 b2) = do
@@ -229,6 +233,7 @@ unifyEqs eqs = do
         return $ s `compose` s'
   foldM uniTy mempty eqs
 
+-- unify the types of each distinct variable in the monoenvs and the types in the [Ty] list
 unify :: [MonoEnv] -> [Ty] -> Unique Subst
 unify ml tl = do
   a <- newVar C

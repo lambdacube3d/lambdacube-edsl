@@ -62,14 +62,15 @@ type Nat = Ty
 
 --newtype Ty' = Ty' (Ty Ty')
 
+-- TODO: add type var, derive Functor, Foldable, Traversable
 data Ty -- star kind
   = TVar    Frequency TName
   | TArr    Ty Ty
   -- composit
   | TTuple  Frequency [Ty]
   | TArray  Frequency Ty
-  -- type family
-  | TFun    (TypeFun Ty)
+  -- type families are placed in constraints
+  -- | TFun    (TypeFun Ty)
   -- primitive types
   | TChar   Frequency
   | TString Frequency
@@ -151,7 +152,7 @@ data Ty -- star kind
 
 data Constraint
   = CClass Class Ty
-  | CEq Ty Ty
+  | CEq Frequency TName (TypeFun Ty)  -- CEq fq n f   ~~~  TVar fq n ~ TFun f
   deriving (Show,Eq,Ord)
 
 data Class
