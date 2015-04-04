@@ -321,56 +321,58 @@ isSigned = CClass IsSigned
 isIntegral = CClass IsIntegral
 isTypeLevelNatural = CClass IsTypeLevelNatural
 
-tFun = \case
-    TFMat (TV2F C) (TV2F C) -> TM22F C
-    TFMat (TV2F C) (TV3F C) -> TM23F C
-    TFMat (TV2F C) (TV4F C) -> TM24F C
-    TFMat (TV3F C) (TV2F C) -> TM32F C
-    TFMat (TV3F C) (TV3F C) -> TM33F C
-    TFMat (TV3F C) (TV4F C) -> TM34F C
-    TFMat (TV4F C) (TV2F C) -> TM42F C
-    TFMat (TV4F C) (TV3F C) -> TM43F C
-    TFMat (TV4F C) (TV4F C) -> TM44F C
+tFun f = reduceTF id error{-TODO-} (TFun f) f
 
-    TFMatVecElem (TV2F C)  -> TFloat C
-    TFMatVecElem (TV3F C)  -> TFloat C
-    TFMatVecElem (TV4F C)  -> TFloat C
-    TFMatVecElem (TV2I C)  -> TInt C
-    TFMatVecElem (TV3I C)  -> TInt C
-    TFMatVecElem (TV4I C)  -> TInt C
-    TFMatVecElem (TV2U C)  -> TWord C
-    TFMatVecElem (TV3U C)  -> TWord C
-    TFMatVecElem (TV4U C)  -> TWord C
-    TFMatVecElem (TV2B C)  -> TBool C
-    TFMatVecElem (TV3B C)  -> TBool C
-    TFMatVecElem (TV4B C)  -> TBool C
-    TFMatVecElem (TM22F C) -> TFloat C
-    TFMatVecElem (TM23F C) -> TFloat C
-    TFMatVecElem (TM24F C) -> TFloat C
-    TFMatVecElem (TM32F C) -> TFloat C
-    TFMatVecElem (TM33F C) -> TFloat C
-    TFMatVecElem (TM34F C) -> TFloat C
-    TFMatVecElem (TM42F C) -> TFloat C
-    TFMatVecElem (TM43F C) -> TFloat C
-    TFMatVecElem (TM44F C) -> TFloat C
+reduceTF reduced fail nothing = \case
+    TFMat (TV2F C) (TV2F C) -> reduced $ TM22F C
+    TFMat (TV2F C) (TV3F C) -> reduced $ TM23F C
+    TFMat (TV2F C) (TV4F C) -> reduced $ TM24F C
+    TFMat (TV3F C) (TV2F C) -> reduced $ TM32F C
+    TFMat (TV3F C) (TV3F C) -> reduced $ TM33F C
+    TFMat (TV3F C) (TV4F C) -> reduced $ TM34F C
+    TFMat (TV4F C) (TV2F C) -> reduced $ TM42F C
+    TFMat (TV4F C) (TV3F C) -> reduced $ TM43F C
+    TFMat (TV4F C) (TV4F C) -> reduced $ TM44F C
+
+    TFMatVecElem (TV2F C)  -> reduced $ TFloat C
+    TFMatVecElem (TV3F C)  -> reduced $ TFloat C
+    TFMatVecElem (TV4F C)  -> reduced $ TFloat C
+    TFMatVecElem (TV2I C)  -> reduced $ TInt C
+    TFMatVecElem (TV3I C)  -> reduced $ TInt C
+    TFMatVecElem (TV4I C)  -> reduced $ TInt C
+    TFMatVecElem (TV2U C)  -> reduced $ TWord C
+    TFMatVecElem (TV3U C)  -> reduced $ TWord C
+    TFMatVecElem (TV4U C)  -> reduced $ TWord C
+    TFMatVecElem (TV2B C)  -> reduced $ TBool C
+    TFMatVecElem (TV3B C)  -> reduced $ TBool C
+    TFMatVecElem (TV4B C)  -> reduced $ TBool C
+    TFMatVecElem (TM22F C) -> reduced $ TFloat C
+    TFMatVecElem (TM23F C) -> reduced $ TFloat C
+    TFMatVecElem (TM24F C) -> reduced $ TFloat C
+    TFMatVecElem (TM32F C) -> reduced $ TFloat C
+    TFMatVecElem (TM33F C) -> reduced $ TFloat C
+    TFMatVecElem (TM34F C) -> reduced $ TFloat C
+    TFMatVecElem (TM42F C) -> reduced $ TFloat C
+    TFMatVecElem (TM43F C) -> reduced $ TFloat C
+    TFMatVecElem (TM44F C) -> reduced $ TFloat C
 
     -- TODO: TFMatVecScalarElem
 
-    TFVec (TNat 2) (TFloat C) -> TV2F C
-    TFVec (TNat 3) (TFloat C) -> TV3F C
-    TFVec (TNat 4) (TFloat C) -> TV4F C
-    TFVec (TNat 2) (TInt C)   -> TV2I C
-    TFVec (TNat 3) (TInt C)   -> TV3I C
-    TFVec (TNat 4) (TInt C)   -> TV4I C
-    TFVec (TNat 2) (TWord C)  -> TV2U C
-    TFVec (TNat 3) (TWord C)  -> TV3U C
-    TFVec (TNat 4) (TWord C)  -> TV4U C
-    TFVec (TNat 2) (TBool C)  -> TV2B C
-    TFVec (TNat 3) (TBool C)  -> TV3B C
-    TFVec (TNat 4) (TBool C)  -> TV4B C
+    TFVec (TNat 2) (TFloat C) -> reduced $ TV2F C
+    TFVec (TNat 3) (TFloat C) -> reduced $ TV3F C
+    TFVec (TNat 4) (TFloat C) -> reduced $ TV4F C
+    TFVec (TNat 2) (TInt C)   -> reduced $ TV2I C
+    TFVec (TNat 3) (TInt C)   -> reduced $ TV3I C
+    TFVec (TNat 4) (TInt C)   -> reduced $ TV4I C
+    TFVec (TNat 2) (TWord C)  -> reduced $ TV2U C
+    TFVec (TNat 3) (TWord C)  -> reduced $ TV3U C
+    TFVec (TNat 4) (TWord C)  -> reduced $ TV4U C
+    TFVec (TNat 2) (TBool C)  -> reduced $ TV2B C
+    TFVec (TNat 3) (TBool C)  -> reduced $ TV3B C
+    TFVec (TNat 4) (TBool C)  -> reduced $ TV4B C
 
-    TFVecScalar (TNat 1) ty | True {-TODO-} -> ty
-    TFVecScalar (TNat n) ty | True {-TODO-} -> error "TODO: TFVecScalar"    -- TFVec (TNat n) ty
+    TFVecScalar (TNat 1) ty | True {-TODO-} -> reduced ty
+    TFVecScalar (TNat n) ty | True {-TODO-} -> reduceTF reduced fail nothing $ TFVec (TNat n) ty
 
 {- TODO
   type family FTRepr' a :: *
@@ -384,9 +386,9 @@ tFun = \case
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
 -}
-    TFFTRepr' (TInterpolated C (TV4F C)) -> TV4F C
+    TFFTRepr' (TInterpolated C (TV4F C)) -> reduced $ TV4F C
     TFFTRepr' (TVar C "t217")   -- hack
-        -> TTuple C [TFloat C, TV4F C]
+        -> reduced $ TTuple C [TFloat C, TV4F C]
 
 {- TODO
   type family ColorRepr a :: *
@@ -394,7 +396,7 @@ tFun = \case
     type instance ColorRepr (a :+: b) = Color a :+: (ColorRepr b)
 -}
     TFFrameBuffer (TTuple C [TImage C (TNat 1) (Depth (TFloat C)), TImage C (TNat 1) (Color (TV4F C))])
-        -> TFrameBuffer C (TNat 1) (TTuple C [TFloat C, TV4F C])
+        -> reduced $ TFrameBuffer C (TNat 1) (TTuple C [TFloat C, TV4F C])
 {- currently not used
   [injective] type family PrimitiveVertices (primitive :: PrimitiveType) a
     type instance PrimitiveVertices Point a             = a
@@ -444,7 +446,7 @@ tFun = \case
     type instance TexelRepr (Sampler dim arr (v t) RGB)     = V3 t
     type instance TexelRepr (Sampler dim arr (v t) RGBA)    = V4 t
 -}
-    f -> TFun f
+    f -> nothing
 
 mat h w       = tFun $ TFMat h w
 matVecElem a  = tFun $ TFMatVecElem a
