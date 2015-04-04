@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 module ToDeBruijn where
 
 import Data.ByteString.Char8

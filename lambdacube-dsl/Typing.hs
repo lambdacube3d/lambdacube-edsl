@@ -453,9 +453,8 @@ isVec d v c          = v ~~ TFVec d c
 isVecScalar d v c    = v ~~ TFVecScalar d c
 
 infix 4 ~~
--- Note: first parameter should be a TVar
-(~~) :: Ty -> TypeFun Ty -> ([Constraint], Subst)
-TVar C n ~~ f = reduceTF (\ty -> ([], Map.singleton n ty)) error{-TODO!-} ([CEq C n f], mempty) f
+(~~) :: Ty -> TypeFun Ty -> ([Constraint Ty], Subst)
+t ~~ f = reduceTF (\ty -> ([], undefined{-TODO!!!-} t ty)) error{-TODO!-} ([CEq t f], mempty) f
 
 isValidOutput      = cClass IsValidOutput
 isNum              = cClass CNum
@@ -463,7 +462,7 @@ isSigned           = cClass IsSigned
 isIntegral         = cClass IsIntegral
 isTypeLevelNatural = cClass IsTypeLevelNatural
 
-cClass :: Class -> Ty -> ([Constraint], Subst)
+cClass :: Class -> Ty -> ([Constraint Ty], Subst)
 cClass c ty = ([CClass c ty], mempty)
 
 infix 6 ==>

@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
 module CompositionalLC
     ( inference
     , compose
@@ -30,19 +31,7 @@ trace__ = D.trace
 trace_ _ = id
 trace = trace_
 
-{-
-  ->>
-  perdicate resolution operator
-
-  O
-  instance environment
-
-  +
-  e.g. O + O'
-  substitution-resolution-combinator
-
-  typing = type + mono env + instance env
--}
+-------------------------------------------------------------------------------- utility
 
 withRanges :: [Range] -> Unique a -> Unique a
 withRanges rl a = do
@@ -53,103 +42,60 @@ withRanges rl a = do
   put (z,q,rl0)
   return res
 
--- substitution
+-- union mono envs matching on intersection
+joinMonoEnv :: MonoEnv -> MonoEnv -> Unique MonoEnv
+joinMonoEnv a b = T.sequence $ Map.unionWithKey merge (fmap return a) (fmap return b)
+  where
+    merge k ml mr = do
+        l <- ml
+        r <- mr
+        if l == r then ml else throwErrorUnique $ k ++ " mismatch " ++ show l ++ " with " ++ show r
+
+-------------------------------------------------------------------------------- scope checking
+
+scopeChk :: ByteString -> Exp Range -> Either String ()
+scopeChk src e = scopeCheck src primFunSet e
+
+scopeCheck :: ByteString -> Set EName -> Exp Range -> Either String ()
+scopeCheck src vars (EVar r _ n) = if Set.member n vars then return () else throwErrorSrc src [r] $ "Variable " ++ n ++ " is not in scope."
+scopeCheck src vars (EApp r _ f a) = scopeCheck src vars f >> scopeCheck src vars a
+scopeCheck src vars (ELam r n f) = if Set.notMember n vars then scopeCheck src (Set.insert n vars) f else throwErrorSrc src [r] $ "Variable name clash: " ++ n
+scopeCheck src vars (ELet r n x e) = do
+  let vars' = Set.insert n vars
+  if Set.notMember n vars then scopeCheck src vars' x >> scopeCheck src vars' e else throwErrorSrc src [r] $ "Variable name clash: " ++ n
+scopeCheck src vars _ = return ()
+
+-------------------------------------------------------------------------------- free vars
+
+freeVarsTy :: Ty -> Set TName
+freeVarsTy (TVar _ a) = Set.singleton a
+freeVarsTy (Ty x) = foldMap freeVarsTy x
+
+freeVarsMonoEnv :: MonoEnv -> Set TName
+freeVarsMonoEnv = foldMap freeVarsTy
+
+freeVarsInstEnv :: InstEnv -> Set TName
+freeVarsInstEnv = foldMap $ \case
+    CClass _ ty -> freeVarsTy ty
+    CEq ty f -> freeVarsTy ty `mappend` foldMap freeVarsTy f
+
+-------------------------------------------------------------------------------- substitution
+
 applyTy :: Subst -> Ty -> Ty
+applyTy st ty | Map.null st = ty -- optimization
 applyTy st tv@(TVar _ a) = case Map.lookup a st of
   Nothing -> tv
   Just t  -> t
-applyTy st (TTuple f l) = TTuple f (map (applyTy st) l)
-applyTy st (TArr a b) = TArr (applyTy st a) (applyTy st b)
-applyTy st (TImage f a b) = TImage f (applyTy st a) (applyTy st b)
-applyTy st (TVertexStream f a b) = TVertexStream f (applyTy st a) (applyTy st b)
-applyTy st (TFragmentStream f a b) = TFragmentStream f (applyTy st a) (applyTy st b)
-applyTy st (TFrameBuffer f a b) = TFrameBuffer f (applyTy st a) (applyTy st b)
-applyTy st (TPrimitiveStream f a b f' c) = TPrimitiveStream f (applyTy st a) (applyTy st b) f' (applyTy st c)
-applyTy st (TBlending f a) = TBlending f (applyTy st a)
-applyTy st (TFragmentOperation f a) = TFragmentOperation f (applyTy st a)
-applyTy st (TInterpolated f a) = TInterpolated f (applyTy st a)
-applyTy st (TFetchPrimitive f a) = TFetchPrimitive f (applyTy st a)
-applyTy st (TVertexOut f a) = TVertexOut f (applyTy st a)
-applyTy st (TInput f a) = TInput f (applyTy st a)
-applyTy st (TRasterContext f a) = TRasterContext f (applyTy st a)
-applyTy st (TAccumulationContext f a) = TAccumulationContext f (applyTy st a)
-applyTy st (TFragmentFilter f a) = TFragmentFilter f (applyTy st a)
-applyTy st (TFragmentOut f a) = TFragmentOut f (applyTy st a)
-applyTy st (Color a) = Color (applyTy st a)
-applyTy st (Depth a) = Depth (applyTy st a)
-applyTy st (Stencil a) = Stencil (applyTy st a)
-{-
-applyTy st (TBlendEquation C) = TBlendEquation C
-applyTy st (TBlendingFactor C) = TBlendingFactor C
-applyTy st (TV4F C) = TV4F C
-applyTy st (TFloat C) = TFloat C
-applyTy st (TNat n) = TNat n
-applyTy st (TPolygonMode C) = TPolygonMode C
-applyTy st (TPolygonOffset C) = TPolygonOffset C
-applyTy st (TPointSize C) = TPointSize C
-applyTy st (TCullMode C) = TCullMode C
-applyTy st (TFrontFace C) = TFrontFace C
--}
-applyTy _ t = t --error $ "applyTy: " ++ show t
+applyTy st (Ty t) = Ty $ fmap (applyTy st) t
 
 applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
 
-applyInstEnv :: Subst -> InstEnv -> Unique InstEnv
-applyInstEnv s e = concat <$> mapM tyInst e --((trace_ (show (s,e,"->",e'))) e')
- where
---  tyInst (CClass CNum (TFun (TFMatVecElem (TVar C _)))) = return []     -- hack
---  tyInst (TEq v (TFun (TFFTRepr' (TInterpolated C (TV4F C))))) = return [] -- hack
-  tyInst (CClass c t) = case applyTy s t of
-        t@TVar{} -> return [CClass c t]
-        t -> if isInstance c t then return [] else err
-   where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
-
-  tyInst (CEq fq n f) = reduceTF (undefined {-TODO!!!-}) error{-TODO!-} (return [CEq fq n f']) f'
-    where
-        f' = fmap (applyTy s) f
-
-
-joinInstEnv :: [InstEnv] -> InstEnv
-joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
-    -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
-    -- TODO: type family injectivity reductions:  (v ~ F a, v ~ F b) --> a ~ b   if F injective in its parameter
-
-freeVarsTy :: Ty -> Set TName
-freeVarsTy (TVar _ a) = Set.singleton a
-freeVarsTy (TArr a b) = freeVarsTy a `mappend` freeVarsTy b
-freeVarsTy (TVertexStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
-freeVarsTy (TFragmentStream _ a b) = freeVarsTy a `mappend` freeVarsTy b
-freeVarsTy (TPrimitiveStream _ a b _ c) = freeVarsTy a `mappend` freeVarsTy b `mappend` freeVarsTy c
-freeVarsTy (TImage _ a b) = freeVarsTy a `mappend` freeVarsTy b
-freeVarsTy (TTuple _ a) = foldl mappend mempty $ map freeVarsTy a
-freeVarsTy (TArray _ a) = freeVarsTy a
-freeVarsTy (TBlending _ a) = freeVarsTy a
-freeVarsTy (TFragmentOperation _ a) = freeVarsTy a
-freeVarsTy (TInterpolated _ a) = freeVarsTy a
-freeVarsTy (TFetchPrimitive _ a) = freeVarsTy a
-freeVarsTy (TVertexOut _ a) = freeVarsTy a
-freeVarsTy (TRasterContext _ a) = freeVarsTy a
-freeVarsTy (TAccumulationContext _ a) = freeVarsTy a
-freeVarsTy (TFragmentFilter _ a) = freeVarsTy a
-freeVarsTy (TFragmentOut _ a) = freeVarsTy a
-freeVarsTy (Color a) = freeVarsTy a
-freeVarsTy _ = mempty
-
-freeVarsMonoEnv :: MonoEnv -> Set TName
-freeVarsMonoEnv m = F.foldMap freeVarsTy m
-
-freeVarsInstEnv :: InstEnv -> Set TName
-freeVarsInstEnv i = F.foldMap (freeVarsTy . (\(CClass _ ty) -> ty)) i       -- TODO
-
--- union mono envs matching on intersection
-joinMonoEnv :: MonoEnv -> MonoEnv -> Unique MonoEnv
-joinMonoEnv a b = do
-  let merge k ml mr = do
-        l <- ml
-        r <- mr
-        if l == r then ml else throwErrorUnique $ k ++ " mismatch " ++ show l ++ " with " ++ show r
-  T.sequence $ Map.unionWithKey merge (fmap return a) (fmap return b)
+-- basic substitution (renaming of variables)
+applyInstEnvBasic :: Subst -> InstEnv -> InstEnv
+applyInstEnvBasic s = map $ \case
+    CClass c t -> CClass c $ applyTy s t
+    CEq t f -> CEq (applyTy s t) $ fmap (applyTy s) f
 
 -- replace free type variables with fresh type variables
 instTyping :: Typing -> Unique (Typing,Subst)
@@ -157,8 +103,12 @@ instTyping (m,i,t) = do
   let fv = freeVarsTy t `mappend` freeVarsMonoEnv m `mappend` freeVarsInstEnv i
   newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
-  i' <- applyInstEnv s i
-  return ((applyMonoEnv s m,i',applyTy s t),s)
+  return ((applyMonoEnv s m, applyInstEnvBasic s i, applyTy s t), s)
+
+-------------------------------------------------------------------------------- unification
+
+uniTy :: Subst -> Ty -> Ty -> Unique Subst
+uniTy s a b = (s `compose`) <$> unifyTy (applyTy s a) (applyTy s b)
 
 -- make single tvar substitution; check infinite types
 bindVar :: TName -> Ty -> Unique Subst
@@ -175,10 +125,6 @@ bindVar n t
 compose :: Subst -> Subst -> Subst
 compose b a = mappend a $ applyTy a <$> b
 
-uniTy :: Subst -> Ty -> Ty -> Unique Subst
-uniTy s a b = (s `compose`) <$> unifyTy (applyTy s a) (applyTy s b)
-
--- TODO: compositional (not linear) unification?
 -- TODO: unify frequencies?
 unifyTy :: Ty -> Ty -> Unique Subst
 unifyTy (TVar _ u) t = bindVar u t
@@ -205,6 +151,7 @@ unifyTy a b
   | a == b = return mempty
   | otherwise = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
 
+-- TODO: compositional (not linear) unification?
 unifyEqs :: [(Ty,Ty)] -> Unique Subst
 unifyEqs = foldM (uncurry . uniTy) mempty
 
@@ -214,6 +161,28 @@ unify ml tl = unifyEqs $ concatMap pairs $ tl: Map.elems (Map.unionsWith (++) $ 
   where
     pairs [] = []
     pairs (x:xs) = map ((,) x) xs
+
+--------------------------------------------------------------------------------
+
+applyInstEnv :: Subst -> InstEnv -> Unique InstEnv
+applyInstEnv s e = concat <$> mapM tyInst e --((trace_ (show (s,e,"->",e'))) e')
+ where
+--  tyInst (CClass CNum (TFun (TFMatVecElem (TVar C _)))) = return []     -- hack
+--  tyInst (TEq v (TFun (TFFTRepr' (TInterpolated C (TV4F C))))) = return [] -- hack
+  tyInst (CClass c t) = case applyTy s t of
+        t@TVar{} -> return [CClass c t]
+        t -> if isInstance c t then return [] else err
+   where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
+
+  tyInst (CEq ty f) = reduceTF (\t -> undefined ty' t {-TODO!!!-}) error{-TODO!-} (return [CEq ty' f']) f'
+    where
+        ty' = applyTy s ty
+        f' = fmap (applyTy s) f
+
+joinInstEnv :: [InstEnv] -> InstEnv
+joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
+    -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
+    -- TODO: type family injectivity reductions:  (v ~ F a, v ~ F b) --> a ~ b   if F injective in its parameter
 
 prune :: Typing -> Typing
 prune (m,i,t) = (m,i,t) --(m,i',t)
@@ -292,6 +261,8 @@ infer penv (ELet r n x e) = withRanges [r] $ do
       ty = prune $ trace (show ("s",s,"penv",penv',"in",(m',i',t'))) $ trace_ (show $ ("s0",s0,m1,"s",s,m0,m')) $ (m,i,applyTy s t')
   return $ ELet ty n tx te
 
+-------------------------------------------------------------------------------- main inference function
+
 inference :: ByteString -> Exp Range -> Either String (Exp Typing)
 inference src e = case scopeChk src e of
   Left m  -> Left m
@@ -302,15 +273,3 @@ inference src e = case scopeChk src e of
       unamb mempty $ getTag a
       return a
 
--- scope checking
-scopeCheck :: ByteString -> Set EName -> Exp Range -> Either String ()
-scopeCheck src vars (EVar r _ n) = if Set.member n vars then return () else throwErrorSrc src [r] $ "Variable " ++ n ++ " is not in scope."
-scopeCheck src vars (EApp r _ f a) = scopeCheck src vars f >> scopeCheck src vars a
-scopeCheck src vars (ELam r n f) = if Set.notMember n vars then scopeCheck src (Set.insert n vars) f else throwErrorSrc src [r] $ "Variable name clash: " ++ n
-scopeCheck src vars (ELet r n x e) = do
-  let vars' = Set.insert n vars
-  if Set.notMember n vars then scopeCheck src vars' x >> scopeCheck src vars' e else throwErrorSrc src [r] $ "Variable name clash: " ++ n
-scopeCheck src vars _ = return ()
-
-scopeChk :: ByteString -> Exp Range -> Either String ()
-scopeChk src e = scopeCheck src primFunSet e
