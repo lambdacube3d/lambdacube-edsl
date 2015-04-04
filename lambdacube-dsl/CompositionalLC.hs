@@ -207,8 +207,7 @@ rightReduce ie = do
   where
     xs = Map.toList $ Map.unionsWith (++) [Map.singleton f [ty] | CEq ty f <- ie]
 
-simplifyInst c@(CClass _ TVar{}) = (:[]) <$> applyFuture applyConstraint c
-simplifyInst (CClass c t) = if isInstance c t then return [] else lift $ throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
+simplifyInst cl@(CClass c t) = isInstance (\c t -> (:[]) <$> applyFuture applyConstraint (CClass c t)) (lift . throwErrorUnique) ((:[]) <$> applyFuture applyConstraint cl) (return []) c t
 simplifyInst c@(CEq ty f) = reduceTF (\t -> addUnif ty t >> return []) error{-TODO: proper error handling-} ((:[]) <$> applyFuture applyConstraint c) f
 
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)

@@ -468,53 +468,54 @@ cClass c ty = CClass c ty
 infix 6 ==>
 cs ==> t = return (mempty, cs, t)
 
--- TODO: isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> Class -> Ty -> e
---       isInstance reduced fail nothing
--- TODO: reduce class constraints:  Eq [a] --> Eq a
-isInstance :: Class -> Ty -> Bool
-isInstance IsTypeLevelNatural (TNat _) = True
-isInstance IsValidOutput _ = True -- TODO
-isInstance IsNumComponent (TFloat _) = True
-isInstance IsNumComponent (TInt _) = True
-isInstance IsNumComponent (TWord _) = True
-isInstance IsNumComponent (TV2F _) = True
-isInstance IsNumComponent (TV3F _) = True
-isInstance IsNumComponent (TV4F _) = True
+-- reduce: reduce class constraints:  Eq [a] --> Eq a
+isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> e -> Class -> Ty -> e
+isInstance reduce fail keep ok = f where
 
-isInstance IsSigned (TFloat _) = True
-isInstance IsSigned (TInt _) = True
+    f _ TVar{} = keep
+    f IsTypeLevelNatural (TNat _) = ok
+    f IsValidOutput _ = ok -- TODO
+    f IsNumComponent (TFloat _) = ok
+    f IsNumComponent (TInt _) = ok
+    f IsNumComponent (TWord _) = ok
+    f IsNumComponent (TV2F _) = ok
+    f IsNumComponent (TV3F _) = ok
+    f IsNumComponent (TV4F _) = ok
 
-isInstance IsNum (TFloat _) = True
-isInstance IsNum (TInt _) = True
-isInstance IsNum (TWord _) = True
+    f IsSigned (TFloat _) = ok
+    f IsSigned (TInt _) = ok
 
-isInstance IsIntegral (TInt _) = True
-isInstance IsIntegral (TWord _) = True
+    f IsNum (TFloat _) = ok
+    f IsNum (TInt _) = ok
+    f IsNum (TWord _) = ok
 
-isInstance IsFloating (TFloat _) = True
-isInstance IsFloating (TV2F   _) = True
-isInstance IsFloating (TV3F   _) = True
-isInstance IsFloating (TV4F   _) = True
-isInstance IsFloating (TM22F  _) = True
-isInstance IsFloating (TM23F  _) = True
-isInstance IsFloating (TM24F  _) = True
-isInstance IsFloating (TM32F  _) = True
-isInstance IsFloating (TM33F  _) = True
-isInstance IsFloating (TM34F  _) = True
-isInstance IsFloating (TM42F  _) = True
-isInstance IsFloating (TM43F  _) = True
-isInstance IsFloating (TM44F  _) = True
+    f IsIntegral (TInt _) = ok
+    f IsIntegral (TWord _) = ok
 
-isInstance IsComponent (TFloat _) = True
-isInstance IsComponent (TInt _) = True
-isInstance IsComponent (TWord _) = True
-isInstance IsComponent (TBool _) = True
-isInstance IsComponent (TV2F _) = True
-isInstance IsComponent (TV3F _) = True
-isInstance IsComponent (TV4F _) = True
-isInstance c t = case Map.lookup c instances of
-    Nothing -> False
-    Just ts -> Set.member t ts
+    f IsFloating (TFloat _) = ok
+    f IsFloating (TV2F   _) = ok
+    f IsFloating (TV3F   _) = ok
+    f IsFloating (TV4F   _) = ok
+    f IsFloating (TM22F  _) = ok
+    f IsFloating (TM23F  _) = ok
+    f IsFloating (TM24F  _) = ok
+    f IsFloating (TM32F  _) = ok
+    f IsFloating (TM33F  _) = ok
+    f IsFloating (TM34F  _) = ok
+    f IsFloating (TM42F  _) = ok
+    f IsFloating (TM43F  _) = ok
+    f IsFloating (TM44F  _) = ok
+
+    f IsComponent (TFloat _) = ok
+    f IsComponent (TInt _) = ok
+    f IsComponent (TWord _) = ok
+    f IsComponent (TBool _) = ok
+    f IsComponent (TV2F _) = ok
+    f IsComponent (TV3F _) = ok
+    f IsComponent (TV4F _) = ok
+    f c t = case Map.lookup c instances of
+        Nothing -> fail $ "no " ++ show c ++ " instance for " ++ show t
+        Just ts -> if Set.member t ts then ok else fail $ "no " ++ show c ++ " instance for " ++ show t
 
 instances :: Map Class (Set Ty)
 instances = Map.fromList [(CNum,Set.fromList [TInt C,TFloat C])]
