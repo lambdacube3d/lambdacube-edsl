@@ -381,9 +381,7 @@ reduceTF reduced fail nothing = \case
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
     type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
 -}
-    TFFTRepr' (TInterpolated C (TV4F C)) -> reduced $ TV4F C
-    TFFTRepr' (TVar C "t217")   -- hack
-        -> reduced $ TTuple C [TFloat C, TV4F C]
+--    TFFTRepr' (TInterpolated C (TV4F C)) -> reduced $ TV4F C
 
 {- TODO
   type family ColorRepr a :: *
