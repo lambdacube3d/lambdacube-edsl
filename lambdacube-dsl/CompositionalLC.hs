@@ -23,6 +23,7 @@ import Data.Monoid
 import Data.Functor
 import qualified Data.Traversable as T
 import qualified Data.Foldable as F
+import Control.Monad.Tardis
 
 import Type
 import Typing
@@ -96,8 +97,10 @@ applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
 applyMonoEnv s e = fmap (applyTy s) e
 
 -- basic substitution (renaming of variables)
-applyInstEnvBasic :: Subst -> InstEnv -> InstEnv
-applyInstEnvBasic s = map $ \case
+applyInstEnv :: Subst -> InstEnv -> InstEnv
+applyInstEnv = map . applyConstraint
+
+applyConstraint s = \case
     CClass c t -> CClass c $ applyTy s t
     CEq t f -> CEq (applyTy s t) $ fmap (applyTy s) f
 
@@ -107,7 +110,7 @@ instTyping (m,i,t) = do
   let fv = freeVarsTy t `mappend` freeVarsMonoEnv m `mappend` freeVarsInstEnv i
   newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
-  return ((applyMonoEnv s m, applyInstEnvBasic s i, applyTy s t), s)
+  return ((applyMonoEnv s m, applyInstEnv s i, applyTy s t), s)
 
 -------------------------------------------------------------------------------- unification
 
@@ -125,9 +128,9 @@ bindVar n t
   tvarEq _ = False
 
 -- compose substitutions
--- Note: compose does not unify:    {v |-> t1} `compose` {v |-> t2}  is wrong
+-- Note: domain of substitutions is disjunct
 compose :: Subst -> Subst -> Subst
-compose b a = mappend a $ applyTy a <$> b
+s1 `compose` s2 = mappend s2 $ applyTy s2 <$> s1
 
 -- TODO: unify frequencies?
 unifyTy :: Ty -> Ty -> Unique Subst
@@ -168,26 +171,40 @@ unify ml tl = unifyEqs $ concatMap pairs $ tl: Map.elems (Map.unionsWith (++) $ 
 
 --------------------------------------------------------------------------------
 
-applyInstEnv :: Subst -> InstEnv -> Unique (Subst, InstEnv)
-applyInstEnv s e = (,) s <$> applyInstEnv_ s e
-applyInstEnv_ s e = concat <$> mapM tyInst e --((trace_ (show (s,e,"->",e'))) e')
- where
+type SubstAction = TardisT Subst Subst Unique
+
+untilNoUnif :: (a -> SubstAction a) -> Subst -> a -> Unique (Subst, a)
+untilNoUnif act = f where
+    f acc x = do
+        (x', (_, fw)) <- runTardisT (act x) (mempty, mempty)
+        if Map.null fw then return (acc, x) else f (acc `compose` fw) x'
+
+applyPast f x = do
+    s <- getPast
+    return $ f s x
+
+applyFuture f x = do
+    s <- getFuture
+    return $ f s x
+
+addUnif t1 t2 = do
+    s <- lift $ unifyTy t1 t2
+    modifyForwards (`compose` s)
+    modifyBackwards (s `compose`)
+
+simplifyInstEnv :: InstEnv -> SubstAction InstEnv
+simplifyInstEnv = fmap concat . mapM (applyPast applyConstraint >=> simplifyInst)
+
+simplifyInst c@(CClass _ TVar{}) = (:[]) <$> applyFuture applyConstraint c
+simplifyInst (CClass c t) = if isInstance c t then return [] else lift $ throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
+simplifyInst c@(CEq ty f) = reduceTF (\t -> addUnif ty t >> return []) error{-TODO!-} ((:[]) <$> applyFuture applyConstraint c) f
 --  tyInst (CClass CNum (TFun (TFMatVecElem (TVar C _)))) = return []     -- hack
 --  tyInst (TEq v (TFun (TFFTRepr' (TInterpolated C (TV4F C))))) = return [] -- hack
-  tyInst (CClass c t) = case applyTy s t of
-        t@TVar{} -> return [CClass c t]
-        t -> if isInstance c t then return [] else err
-   where err = throwErrorUnique $ "no " ++ show c ++ " instance for " ++ show t
-
-  tyInst (CEq ty f) = reduceTF (\t -> undefined ty' t {-TODO!!!-}) error{-TODO!-} (return [CEq ty' f']) f'
-    where
-        ty' = applyTy s ty
-        f' = fmap (applyTy s) f
 
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
 joinInstEnv s e_ = do
-    e <- mapM (applyInstEnv_ s) e_
-    return (s, Set.toList . Set.unions . map Set.fromList $ e)
+    (s, e) <- untilNoUnif (mapM simplifyInstEnv) s $ map (applyInstEnv s) e_
+    return (s, concat {- TODO!!!-} $ e)
     -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
     -- TODO: type family injectivity reductions:  (v ~ F a, v ~ F b) --> a ~ b   if F injective in its parameter
 
