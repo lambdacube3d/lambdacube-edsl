@@ -176,41 +176,17 @@ compose :: Subst -> Subst -> Subst
 compose b a = mappend a $ applyTy a <$> b
 
 -- TODO: compositional (not linear) unification?
+-- TODO: unify frequencies?
 unifyTy :: Ty -> Ty -> Unique Subst
 unifyTy (TVar _ u) t = bindVar u t
 unifyTy t (TVar _ u) = bindVar u t
-unifyTy a@(TTuple f1 t1) b@(TTuple f2 t2) = do
-  let go s [] [] = return s     -- TODO: use unifyEqs?
-      go s (a1:xs1) (a2:xs2) = do
-        s1 <- unifyTy a1 a2
-        return $ s `compose` s1 -- TODO: should be recursive go call
-      go _ _ _ = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
-  go mempty t1 t2
-unifyTy (TArr a1 b1) (TArr a2 b2) = do
-  s1 <- unifyTy a1 a2
-  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
-  return $ s1 `compose` s2
-unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = do
-  s1 <- unifyTy a1 a2
-  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
-  return $ s1 `compose` s2
-unifyTy (TFrameBuffer f1 a1 b1) (TFrameBuffer f2 a2 b2) = do
-  s1 <- unifyTy a1 a2
-  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
-  return $ s1 `compose` s2
-unifyTy (TVertexStream f1 a1 b1) (TVertexStream f2 a2 b2) = do
-  s1 <- unifyTy a1 a2
-  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
-  return $ s1 `compose` s2
-unifyTy (TFragmentStream f1 a1 b1) (TFragmentStream f2 a2 b2) = do
-  s1 <- unifyTy a1 a2
-  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
-  return $ s1 `compose` s2
-unifyTy (TPrimitiveStream f1 a1 b1 g1 c1) (TPrimitiveStream f2 a2 b2 g2 c2) = do
-  s1 <- unifyTy a1 a2
-  s2 <- unifyTy (applyTy s1 b1) (applyTy s1 b2)
-  s3 <- unifyTy (applyTy s2 $ applyTy s1 c1) (applyTy s2 $ applyTy s1 c2)
-  return $ s1 `compose` s2 `compose` s3
+unifyTy (TTuple f1 t1) (TTuple f2 t2) = unifyEqs $ zip t1 t2
+unifyTy (TArr a1 b1) (TArr a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
+unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
+unifyTy (TFrameBuffer f1 a1 b1) (TFrameBuffer f2 a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
+unifyTy (TVertexStream f1 a1 b1) (TVertexStream f2 a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
+unifyTy (TFragmentStream f1 a1 b1) (TFragmentStream f2 a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
+unifyTy (TPrimitiveStream f1 a1 b1 g1 c1) (TPrimitiveStream f2 a2 b2 g2 c2) = unifyEqs [(a1,a2),(b1,b2),(c1,c2)]
 unifyTy (TInput _ a1) (TInput _ a2) = unifyTy a1 a2
 unifyTy (TBlending _ a1) (TBlending _ a2) = unifyTy a1 a2
 unifyTy (TInterpolated _ a1) (TInterpolated _ a2) = unifyTy a1 a2
