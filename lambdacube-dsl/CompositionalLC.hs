@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 module CompositionalLC
     ( inference
     , compose
@@ -50,6 +51,9 @@ joinMonoEnv a b = T.sequence $ Map.unionWithKey merge (fmap return a) (fmap retu
         l <- ml
         r <- mr
         if l == r then ml else throwErrorUnique $ k ++ " mismatch " ++ show l ++ " with " ++ show r
+
+joinMonoEnvs :: [MonoEnv] -> Unique MonoEnv
+joinMonoEnvs = foldM joinMonoEnv mempty
 
 -------------------------------------------------------------------------------- scope checking
 
@@ -164,8 +168,9 @@ unify ml tl = unifyEqs $ concatMap pairs $ tl: Map.elems (Map.unionsWith (++) $ 
 
 --------------------------------------------------------------------------------
 
-applyInstEnv :: Subst -> InstEnv -> Unique InstEnv
-applyInstEnv s e = concat <$> mapM tyInst e --((trace_ (show (s,e,"->",e'))) e')
+applyInstEnv :: Subst -> InstEnv -> Unique (Subst, InstEnv)
+applyInstEnv s e = (,) s <$> applyInstEnv_ s e
+applyInstEnv_ s e = concat <$> mapM tyInst e --((trace_ (show (s,e,"->",e'))) e')
  where
 --  tyInst (CClass CNum (TFun (TFMatVecElem (TVar C _)))) = return []     -- hack
 --  tyInst (TEq v (TFun (TFFTRepr' (TInterpolated C (TV4F C))))) = return [] -- hack
@@ -179,8 +184,10 @@ applyInstEnv s e = concat <$> mapM tyInst e --((trace_ (show (s,e,"->",e'))) e')
         ty' = applyTy s ty
         f' = fmap (applyTy s) f
 
-joinInstEnv :: [InstEnv] -> InstEnv
-joinInstEnv e = Set.toList . Set.unions . map Set.fromList $ e
+joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
+joinInstEnv s e_ = do
+    e <- mapM (applyInstEnv_ s) e_
+    return (s, Set.toList . Set.unions . map Set.fromList $ e)
     -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
     -- TODO: type family injectivity reductions:  (v ~ F a, v ~ F b) --> a ~ b   if F injective in its parameter
 
@@ -200,66 +207,45 @@ unamb env (m,i,t) = do
         --CClass _ a -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
         _ -> return ()
 
+monoVar n = do
+    t <- trace "mono var" <$> newVar C
+    return ((Map.singleton n t, mempty, t), mempty)
+
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
 infer penv (ETuple r t) = withRanges [r] $ do
-  te <- mapM (infer penv) t
-  let (ml,il,tl) = unzip3 $ map getTag te
-  s <- unify ml []
-  m <- foldM (\a b -> joinMonoEnv (applyMonoEnv s a) (applyMonoEnv s b)) mempty ml
-  i <- joinInstEnv <$> mapM (applyInstEnv s) il
-  let ty = (m,i,TTuple C $ map (applyTy s) tl)
-  return (ETuple ty te)
+  te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
+  ETuple <$> (snd <$> unif ml il (TTuple C tl) []) <*> pure te
 infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
-infer penv (EVar r _ n)
-  | isPrimFun n = withRanges [r] $ EVar <$> inferPrimFun n <*> pure mempty <*> pure n
-  | otherwise = withRanges [r] $ case Map.lookup n penv of
-      Nothing -> do
-        t <- trace "mono var" <$> newVar C
-        return $ EVar (Map.singleton n t,mempty,t) mempty n
-      Just t -> trace "poly var" <$> do
-        (t',s) <- instTyping t
-        return $ EVar t' s n 
+infer penv (EVar r _ n) = withRanges [r] $ do
+  (t, s) <- if isPrimFun n
+    then (,) <$> inferPrimFun n <*> pure mempty
+    else maybe (monoVar n) (fmap (trace "poly var") . instTyping) $ Map.lookup n penv
+  return $ EVar t s n 
 infer penv (ELam r n f) = withRanges [r] $ do
-  tf <- infer penv f
-  let (m,i,t) = getTag tf
-  case Map.lookup n m of
-    Nothing -> do
-      a <- newVar C
-      return $ ELam (m,i,a ~> t) n tf
-    Just a -> return $ ELam (Map.delete n m,i,a ~> t) n tf
+  tf@(getTag -> (m, i, t)) <- infer penv f
+  a <- maybe (newVar C) return $ Map.lookup n m
+  return $ ELam (Map.delete n m, i, a ~> t) n tf
 infer penv (EApp r _ f a) = withRanges [r] $ do
-  tf <- infer penv f
-  ta <- infer penv a
-  let (m1,i1,t1) = getTag tf
-      (m2,i2,t2) = getTag ta
-  a <- newVar C
-  s <- unify [m1,m2] [t1,t2 ~> a]
-  m3 <- joinMonoEnv (applyMonoEnv s m1) (applyMonoEnv s m2)
-  i3 <- joinInstEnv <$> mapM (applyInstEnv s) [i1, i2]
-  unamb penv (m3,i3,applyTy s a)
+  tf@(getTag -> (m1, i1, t1)) <- infer penv f
+  ta@(getTag -> (m2, i2, t2)) <- infer penv a
+  v <- newVar C
+  (s, ty) <- unif [m1, m2] [i1, i2] v [t1, t2 ~> v]
+  unamb penv ty     -- move into unif?
   let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
-      tyFree = freeVarsTy tyF
-      (_,_,tyF) = getTag tf
-  return $ trace__ ("app subst:\n    " ++ show tyF ++ "\n    " ++ show tyBind) $ EApp (m3,i3,applyTy s a) s tf ta
+      tyFree = freeVarsTy t1
+  return $ trace__ ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ EApp ty s tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
-  tx <- infer penv x
-  let d1@(m1,i1,t1) = getTag tx
-  s0 <- unify [m1] [t1]
-  let m0 = Map.delete n $ applyMonoEnv s0 m1
-      t0 = applyTy s0 t1
-  i0 <- trace_ "1" <$> applyInstEnv s0 i1
-  trace (show ("m1",m1,"let1",d1,"let2",(m0,i0,t0))) $ unamb penv (m0,i0,t0)
-  let penv' = Map.insert n (m0,i0,t0) penv
-  te <- infer penv' e
-  let (m',i',t') = getTag te
-  s_ <- unify [m0,m'] []
-  let s = s0 `compose` s_
-  m <- joinMonoEnv (applyMonoEnv s m') (applyMonoEnv s m0)
-  a1 <- trace_ "2" <$> applyInstEnv s i'
-  a2 <- trace_ "3" <$> applyInstEnv s i0
-  let i = joinInstEnv [a1,a2]
-      ty = prune $ trace (show ("s",s,"penv",penv',"in",(m',i',t'))) $ trace_ (show $ ("s0",s0,m1,"s",s,m0,m')) $ (m,i,applyTy s t')
-  return $ ELet ty n tx te
+  tx@(getTag -> d1@(m1, i1, t1)) <- infer penv x
+  ty_@(m0, i0, t0) <- snd <$> unif [m1] [i1] t1 [t1]    -- this has no effect
+  trace (show ("m1",m1,"let1",d1,"let2",(m0,i0,t0))) $ unamb penv ty_    -- move into unif?
+  te@(getTag -> (m', i', t')) <- infer (Map.insert n (m0, i0, t0) penv) e
+  ELet <$> (snd <$> unif [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
+
+unif ms is t b = do
+    s <- unify ms b
+    (s, i) <- joinInstEnv s is
+    m <- joinMonoEnvs $ map (applyMonoEnv s) ms
+    return (s, (m, i, applyTy s t))
 
 -------------------------------------------------------------------------------- main inference function
 
