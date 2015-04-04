@@ -3,6 +3,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Typing where
 
+import Data.List
 import Data.Monoid
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import qualified Data.ByteString.Char8 as BS
@@ -440,6 +441,23 @@ reduceTF reduced fail nothing = \case
     type instance TexelRepr (Sampler dim arr (v t) RGBA)    = V4 t
 -}
     f -> nothing
+
+data InjType
+    = ITMat | ITVec | ITVecScalar | NoInj
+    deriving (Eq, Ord, Show)
+
+injType :: TypeFun Ty -> InjType
+injType TFMat{} = ITMat
+injType TFVec{} = ITVec
+injType TFVecScalar{} = ITVecScalar
+injType _ = NoInj
+
+testInj :: [TypeFun Ty] -> [[Ty]]
+testInj xs@(TFMat{}:_) = transpose [[a,b] | TFMat a b <- xs]
+testInj xs@(TFVec{}:_) = transpose [[a,b] | TFVec a b <- xs]
+testInj xs@(TFVecScalar{}:_) = transpose [[a,b] | TFVecScalar a b <- xs]
+testInj xs = []
+
 
 matVecElem t a       = t ~~ TFMatVecElem a
 matVecScalarElem t a = t ~~ TFMatVecScalarElem a

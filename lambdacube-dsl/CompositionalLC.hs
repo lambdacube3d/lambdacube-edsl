@@ -8,6 +8,8 @@ module CompositionalLC
     ) where
 
 import qualified Debug.Trace as D
+import Data.Function
+import Data.List
 import Data.Maybe
 import Data.ByteString.Char8 (ByteString)
 import Data.Foldable (foldMap)
@@ -207,13 +209,20 @@ rightReduce ie = do
   where
     xs = Map.toList $ Map.unionsWith (++) [Map.singleton f [ty] | CEq ty f <- ie]
 
+injectivityTest :: InstEnv -> SubstAction InstEnv
+injectivityTest ie = do
+    addUnif' $ concatMap (concatMap testInj . groupBy ((==) `on` injType) . sortBy (compare `on` injType) . snd) xs
+    return $ [x | x@CClass{} <- ie] ++ [CEq ty f | (ty, fs) <- xs, f <- nub fs]
+  where
+    xs = Map.toList $ Map.unionsWith (++) [Map.singleton ty [f] | CEq ty f <- ie]
+
 simplifyInst cl@(CClass c t) = isInstance (\c t -> (:[]) <$> applyFuture applyConstraint (CClass c t)) (lift . throwErrorUnique) ((:[]) <$> applyFuture applyConstraint cl) (return []) c t
 simplifyInst c@(CEq ty f) = reduceTF (\t -> addUnif ty t >> return []) error{-TODO: proper error handling-} ((:[]) <$> applyFuture applyConstraint c) f
 
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
 joinInstEnv s es = do
     (s, es) <- untilNoUnif (mapM simplifyInstEnv) s $ map (applyInstEnv s) es
-    untilNoUnif (rightReduce >=> simplifyInstEnv) s $ applyInstEnv s $ concat es
+    untilNoUnif (rightReduce >=> applyPast applyInstEnv >=> injectivityTest >=> simplifyInstEnv) s $ applyInstEnv s $ concat es
     -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
     -- TODO: type family injectivity reductions:  (v ~ F a, v ~ F b) --> a ~ b   if F injective in its parameter
 
