@@ -208,6 +208,10 @@ joinInstEnv s e_ = do
     -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
     -- TODO: type family injectivity reductions:  (v ~ F a, v ~ F b) --> a ~ b   if F injective in its parameter
 
+simplifyTyping (me, ie, t) = do
+    (s, ie) <- joinInstEnv mempty [ie]
+    return (applyMonoEnv s me, ie, applyTy s t)
+
 prune :: Typing -> Typing
 prune (m,i,t) = (m,i,t) --(m,i',t)
  where
@@ -235,7 +239,7 @@ infer penv (ETuple r t) = withRanges [r] $ do
 infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
 infer penv (EVar r _ n) = withRanges [r] $ do
   (t, s) <- if isPrimFun n
-    then (,) <$> inferPrimFun n <*> pure mempty
+    then (,) <$> (inferPrimFun n >>= simplifyTyping) <*> pure mempty
     else maybe (monoVar n) (fmap (trace "poly var") . instTyping) $ Map.lookup n penv
   return $ EVar t s n 
 infer penv (ELam r n f) = withRanges [r] $ do

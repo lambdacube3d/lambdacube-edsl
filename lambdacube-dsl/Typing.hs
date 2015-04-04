@@ -453,8 +453,8 @@ isVec d v c          = v ~~ TFVec d c
 isVecScalar d v c    = v ~~ TFVecScalar d c
 
 infix 4 ~~
-(~~) :: Ty -> TypeFun Ty -> ([Constraint Ty], Subst)
-t ~~ f = reduceTF (\ty -> ([], undefined{-TODO!!!-} t ty)) error{-TODO!-} ([CEq t f], mempty) f
+(~~) :: Ty -> TypeFun Ty -> Constraint Ty
+t ~~ f = CEq t f
 
 isValidOutput      = cClass IsValidOutput
 isNum              = cClass CNum
@@ -462,16 +462,11 @@ isSigned           = cClass IsSigned
 isIntegral         = cClass IsIntegral
 isTypeLevelNatural = cClass IsTypeLevelNatural
 
-cClass :: Class -> Ty -> ([Constraint Ty], Subst)
-cClass c ty = ([CClass c ty], mempty)
+cClass :: Class -> Ty -> Constraint Ty
+cClass c ty = CClass c ty
 
 infix 6 ==>
-cs ==> t = return (mempty, concat eqs, substitute (Map.unions{-TODO!!: use unify_compose-} ms) t)
-  where
-    (eqs, ms) = unzip cs
-
-substitute :: Subst -> Ty -> Ty
-substitute = undefined -- TODO!!!
+cs ==> t = return (mempty, cs, t)
 
 -- TODO: isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> Class -> Ty -> e
 --       isInstance reduced fail nothing
