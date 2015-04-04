@@ -175,6 +175,9 @@ bindVar n t
 compose :: Subst -> Subst -> Subst
 compose b a = mappend a $ applyTy a <$> b
 
+uniTy :: Subst -> Ty -> Ty -> Unique Subst
+uniTy s a b = (s `compose`) <$> unifyTy (applyTy s a) (applyTy s b)
+
 -- TODO: compositional (not linear) unification?
 -- TODO: unify frequencies?
 unifyTy :: Ty -> Ty -> Unique Subst
@@ -203,11 +206,7 @@ unifyTy a b
   | otherwise = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
 
 unifyEqs :: [(Ty,Ty)] -> Unique Subst
-unifyEqs eqs = do
-  let uniTy s (a,b) = do
-        s' <- unifyTy (applyTy s a) (applyTy s b)
-        return $ s `compose` s'
-  foldM uniTy mempty eqs
+unifyEqs = foldM (uncurry . uniTy) mempty
 
 -- unify the types of each distinct variable in the monoenvs and the types in the [Ty] list
 unify :: [MonoEnv] -> [Ty] -> Unique Subst
