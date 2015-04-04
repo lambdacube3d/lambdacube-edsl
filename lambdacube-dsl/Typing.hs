@@ -741,11 +741,11 @@ inferPrimFun a = case a of
   "ScreenOut"    -> do [a,b] <- newVars 2 C ; ty $ TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
-  "PrimAdd"   -> do [a,t] <- newVars 1 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimAdd"   -> do [a,t] <- newVars 2 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
   "PrimAddS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
-  "PrimSub"   -> do [a,t] <- newVars 1 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimSub"   -> do [a,t] <- newVars 2 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
   "PrimSubS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
-  "PrimMul"   -> do [a,t] <- newVars 1 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimMul"   -> do [a,t] <- newVars 2 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
   "PrimMulS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
   "PrimDiv"   -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
   "PrimDivS"  -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
