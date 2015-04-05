@@ -469,8 +469,8 @@ isVec d v c          = v ~~ TFVec d c
 isVecScalar d v c    = v ~~ TFVecScalar d c
 
 infix 4 ~~
-(~~) :: Ty -> TypeFun Ty -> Constraint Ty
-t ~~ f = CEq t f
+(~~) :: Ty -> TypeFun Ty -> InstEnv
+t ~~ f = ([], [CEq t f])
 
 isValidOutput      = cClass IsValidOutput
 isNum              = cClass CNum
@@ -478,8 +478,8 @@ isSigned           = cClass IsSigned
 isIntegral         = cClass IsIntegral
 isTypeLevelNatural = cClass IsTypeLevelNatural
 
-cClass :: Class -> Ty -> Constraint Ty
-cClass c ty = CClass c ty
+cClass :: Class -> Ty -> InstEnv
+cClass c ty = ([CClass c ty], [])
 
 -- reduce: reduce class constraints:  Eq [a] --> Eq a
 isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> e -> Class -> Ty -> e
@@ -544,7 +544,7 @@ inferPrimFun ok nothing = f where
  ty t = ok (mempty, mempty, t)
 
  infix 6 ==>
- cs ==> t = ok (mempty, cs, t)
+ cs ==> t = ok (mempty, mconcat cs, t)
 
  f = \case
   -- temporary const constructor

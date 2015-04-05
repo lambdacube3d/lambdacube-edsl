@@ -17,6 +17,7 @@ import Data.Functor.Identity
 import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Arrow
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -82,9 +83,8 @@ freeVarsMonoEnv :: MonoEnv -> Set TName
 freeVarsMonoEnv = foldMap freeVarsTy
 
 freeVarsInstEnv :: InstEnv -> Set TName
-freeVarsInstEnv = foldMap $ \case
-    CClass _ ty -> freeVarsTy ty
-    CEq ty f -> freeVarsTy ty `mappend` foldMap freeVarsTy f
+freeVarsInstEnv (cs, es) = foldMap (\(CClass _ ty) -> freeVarsTy ty) cs
+                 `mappend` foldMap (\(CEq ty f) -> freeVarsTy ty `mappend` foldMap freeVarsTy f) es
 
 -------------------------------------------------------------------------------- substitution
 
@@ -100,11 +100,12 @@ applyMonoEnv s e = fmap (applyTy s) e
 
 -- basic substitution (renaming of variables)
 applyInstEnv :: Subst -> InstEnv -> InstEnv
-applyInstEnv = map . applyConstraint
+applyInstEnv s (cs, es) = (map (applyClassConstraint s) cs, applyEqInstEnv s es)
 
-applyConstraint s = \case
-    CClass c t -> CClass c $ applyTy s t
-    CEq t f -> CEq (applyTy s t) $ fmap (applyTy s) f
+applyEqInstEnv =  map . applyEqConstraint
+
+applyClassConstraint s (CClass c t) = CClass c $ applyTy s t
+applyEqConstraint s (CEq t f) = CEq (applyTy s t) $ fmap (applyTy s) f
 
 -- replace free type variables with fresh type variables
 instTyping :: Typing -> Unique (Typing,Subst)
@@ -176,16 +177,15 @@ unify ml tl = unifyEqs' $ tl: Map.elems (Map.unionsWith (++) $ map (Map.map (:[]
 
 --------------------------------------------------------------------------------
 
-type SubstAction = TardisT Subst Subst Unique
+type SubstAction = TardisT Subst (Subst, Subst) Unique
 
 untilNoUnif :: (a -> SubstAction a) -> Subst -> a -> Unique (Subst, a)
-untilNoUnif act = f where
-    f acc x = do
-        (x', (_, fw)) <- runTardisT (act x) (mempty, mempty)
-        if Map.null fw then return (acc, x) else f (acc `compose` fw) x'
+untilNoUnif act acc x = do
+    (x', (_, (fw, _))) <- runTardisT (act x) (mempty, mempty)
+    if Map.null fw then return (acc, x) else untilNoUnif act (acc `compose` fw) x'
 
 applyPast f x = do
-    s <- getPast
+    (_, s) <- getPast
     return $ f s x
 
 applyFuture f x = do
@@ -193,38 +193,45 @@ applyFuture f x = do
     return $ f s x
 
 addUnif_ s = do
-    modifyForwards (`compose` s)
+    modifyForwards ((`compose` s) *** (`compose` s))
     modifyBackwards (s `compose`)
+
+barrier :: x -> SubstAction x
+barrier x = do
+    modifyForwards $ \(all, _partial) -> (all, mempty)
+    return x
 
 addUnif t1 t2 = lift (unifyTy t1 t2) >>= addUnif_
 addUnif' tss = lift (unifyEqs' tss) >>= addUnif_
 
-simplifyInstEnv :: InstEnv -> SubstAction InstEnv
-simplifyInstEnv = fmap concat . mapM (applyPast applyConstraint >=> simplifyInst)
+simplifyInstEnv :: EqInstEnv -> SubstAction EqInstEnv
+simplifyInstEnv = fmap concat . mapM (applyPast applyEqConstraint >=> simplifyInst)
 
-rightReduce :: InstEnv -> SubstAction InstEnv
+simplifyInst c@(CEq ty f) = reduceTF (\t -> addUnif ty t >> return []) error{-TODO: proper error handling-} ((:[]) <$> applyFuture applyEqConstraint c) f
+
+rightReduce :: EqInstEnv -> SubstAction EqInstEnv
 rightReduce ie = do
     addUnif' $ map snd xs
-    return $ [x | x@CClass{} <- ie] ++ [CEq ty f | (f, ty: _) <- xs]
+    return [CEq ty f | (f, ty: _) <- xs]
   where
     xs = Map.toList $ Map.unionsWith (++) [Map.singleton f [ty] | CEq ty f <- ie]
 
-injectivityTest :: InstEnv -> SubstAction InstEnv
+injectivityTest :: EqInstEnv -> SubstAction EqInstEnv
 injectivityTest ie = do
     addUnif' $ concatMap (concatMap testInj . groupBy ((==) `on` injType) . sortBy (compare `on` injType) . snd) xs
-    return $ [x | x@CClass{} <- ie] ++ [CEq ty f | (ty, fs) <- xs, f <- nub fs]
+    return [CEq ty f | (ty, fs) <- xs, f <- nub fs]
   where
     xs = Map.toList $ Map.unionsWith (++) [Map.singleton ty [f] | CEq ty f <- ie]
 
-simplifyInst cl@(CClass c t) = isInstance (\c t -> (:[]) <$> applyFuture applyConstraint (CClass c t)) (lift . throwErrorUnique) ((:[]) <$> applyFuture applyConstraint cl) (return []) c t
-simplifyInst c@(CEq ty f) = reduceTF (\t -> addUnif ty t >> return []) error{-TODO: proper error handling-} ((:[]) <$> applyFuture applyConstraint c) f
+simplifyClassInst cl@(CClass c t) = isInstance (\c t -> return [CClass c t]) throwErrorUnique (return [cl]) (return []) c t
 
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
-joinInstEnv s es = do
-    (s, es) <- untilNoUnif (mapM simplifyInstEnv) s $ map (applyInstEnv s) es
-    untilNoUnif (rightReduce >=> applyPast applyInstEnv >=> injectivityTest >=> simplifyInstEnv) s $ applyInstEnv s $ concat es
+joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
+    (s, es) <- untilNoUnif (rightReduce >=> applyPast applyEqInstEnv >=> barrier >=> injectivityTest >=> simplifyInstEnv) s
+                    $ applyEqInstEnv s es
+    cs <- concat <$> mapM (simplifyClassInst . applyClassConstraint s) cs
     -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
-    -- TODO: type family injectivity reductions:  (v ~ F a, v ~ F b) --> a ~ b   if F injective in its parameter
+    return (s, (cs, es))
 
 simplifyTyping (me, ie, t) = do
     (s, ie) <- joinInstEnv mempty [ie]
@@ -235,13 +242,12 @@ prune :: Typing -> Typing
 prune (m,i,t) = (m,i,t) --(m,i',t)
  where
   v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
-  i' = flip filter i $ \case
+  i' = flip filter (fst i) $ \case
         CClass _ a -> Set.member a v
-        _ -> True -- ???
 
 -- TODO
 unamb :: PolyEnv -> Typing -> Unique ()
-unamb env (m,i,t) = do
+unamb env (m,(i,_),t) = do
   let v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
   return ()
   forM_ i $ \case

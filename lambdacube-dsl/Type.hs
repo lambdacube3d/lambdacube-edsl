@@ -12,7 +12,9 @@ type TName = String
 type EName = String
 type MonoEnv = Map EName Ty
 type PolyEnv = Map EName Typing
-type InstEnv = [Constraint Ty]
+type ClassInstEnv = [ClassConstraint Ty]
+type EqInstEnv = [EqConstraint Ty]
+type InstEnv = (ClassInstEnv, EqInstEnv)
 type Typing = (MonoEnv,InstEnv,Ty)
 type Env = (PolyEnv,MonoEnv,InstEnv)
 
@@ -222,9 +224,12 @@ pattern TRasterContext a b = Ty (TRasterContext_ a b)
 pattern TVertexOut a b = Ty (TVertexOut_ a b)
 pattern TVertexStream a b c = Ty (TVertexStream_ a b c)
 
-data Constraint a
+data ClassConstraint a
   = CClass Class a
-  | CEq a (TypeFun a)  -- CEq t f   ~~~  t ~ TFun f
+  deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+
+data EqConstraint a
+  = CEq a (TypeFun a)  -- CEq t f   ~~~  t ~ TFun f
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 data Class

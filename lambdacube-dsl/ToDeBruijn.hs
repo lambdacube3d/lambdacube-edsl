@@ -1,5 +1,8 @@
 {-# LANGUAGE PatternSynonyms #-}
-module ToDeBruijn where
+module ToDeBruijn
+    ( toNF
+    , NF (N)
+    ) where
 
 import Data.ByteString.Char8
 import Data.Map as Map
