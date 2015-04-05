@@ -28,11 +28,12 @@ data Lit
 
 data Exp a
   = ELit      a Lit
-  | EVar      a Subst EName
-  | EApp      a Subst (Exp a) (Exp a)
+  | EVar      a EName
+  | EApp      a (Exp a) (Exp a)
   | ELam      a EName (Exp a)
   | ELet      a EName (Exp a) (Exp a)
   | ETuple    a [Exp a]
+  | ESubst    a Subst (Exp a)
 --  | EFix EName Exp
   deriving (Show,Eq,Ord)
 
@@ -40,11 +41,12 @@ type Subst = Map TName Ty
 
 getTag :: Show a => Exp a -> a
 getTag (ELit      r _) = r
-getTag (EVar      r _ _) = r
-getTag (EApp      r _ _ _) = r
+getTag (EVar      r _) = r
+getTag (EApp      r _ _) = r
 getTag (ELam      r _ _) = r
 getTag (ELet      r _ _ _) = r
 getTag (ETuple    r _) = r
+getTag (ESubst    r _ _) = r
 
 data Frequency -- frequency kind
   -- frequency values

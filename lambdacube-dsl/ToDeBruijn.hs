@@ -89,18 +89,19 @@ type NFEnv = Map EName EnvVar
 -- TODO: add let
 toNF :: Subst -> NFEnv -> Exp Typing -> [NF]
 toNF sub env (ELit t l) = [Arg l]
-toNF sub env (EApp (m,i,t) s a b) = let sub' = s `compose` sub in eval $ {-[App $ toTy (m,i,applyTy (s `compose` sub) t)] `mappend` -} toNF sub' env a `mappend` toNF sub' env b
+toNF sub env (EApp (m,i,t) a b) = eval $ {-[App $ toTy (m,i,applyTy sub t)] `mappend` -} toNF sub env a `mappend` toNF sub env b
 toNF sub env (ELet t n a b) = --case toNF env a of -- TODO
   -- x@(N _:_) -> error $ "let is not fully supported: " ++ show x
   --x -> toNF (Map.insert n x env) b
   toNF sub (Map.insert n (LetVar a) env) b
 --toNF sub env (EPrimFun t f) = 
-toNF sub env (EVar (m,i,t) s n)
+toNF sub env (ESubst _ s e) = toNF (s `compose` sub) env e
+toNF sub env (EVar (m,i,t) n)
   | isPrimFun n = [Fun n]
   | otherwise = case Map.lookup n env of
       Nothing -> error $ "unknown variable: " ++ n
-      Just (LetVar x) -> eval $ toNF (s `compose` sub) env x
-      Just LamVar     -> let ty = toTy (m,i,applyTy (s `compose` sub) t) in eval [N ty $ var ty 0 ""]
+      Just (LetVar x) -> eval $ toNF sub env x
+      Just LamVar     -> let ty = toTy (m,i,applyTy sub t) in eval [N ty $ var ty 0 ""]
 toNF sub env (ELam t n e) =
   let (tm,ti,tt@(TArr ta tb)) = t
   in case eval $ toNF sub (Map.insert n LamVar env) e of

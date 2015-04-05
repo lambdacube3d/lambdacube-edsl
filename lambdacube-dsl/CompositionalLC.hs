@@ -65,8 +65,8 @@ scopeChk :: ByteString -> Exp Range -> Either String ()
 scopeChk src e = scopeCheck src primFunSet e
 
 scopeCheck :: ByteString -> Set EName -> Exp Range -> Either String ()
-scopeCheck src vars (EVar r _ n) = if Set.member n vars then return () else throwErrorSrc src [r] $ "Variable " ++ n ++ " is not in scope."
-scopeCheck src vars (EApp r _ f a) = scopeCheck src vars f >> scopeCheck src vars a
+scopeCheck src vars (EVar r n) = if Set.member n vars then return () else throwErrorSrc src [r] $ "Variable " ++ n ++ " is not in scope."
+scopeCheck src vars (EApp r f a) = scopeCheck src vars f >> scopeCheck src vars a
 scopeCheck src vars (ELam r n f) = if Set.notMember n vars then scopeCheck src (Set.insert n vars) f else throwErrorSrc src [r] $ "Variable name clash: " ++ n
 scopeCheck src vars (ELet r n x e) = do
   let vars' = Set.insert n vars
@@ -256,44 +256,43 @@ unamb env (m,(i,_),t) = do
 
 monoVar n = do
     t <- trace "mono var" <$> newVar C
-    return ((Map.singleton n t, mempty, t), mempty)
-
-infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
-infer penv (ETuple r t) = withRanges [r] $ do
-  te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
-  ETuple <$> (snd <$> unif ml il (TTuple C tl) []) <*> pure te
-infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
-infer penv (EVar r _ n) = withRanges [r] $ do
-  (t, s) <- inferPrimFun
-        (\x -> (,) <$> simplifyTyping x <*> pure mempty)
-        (maybe (monoVar n) (fmap (trace "poly var") . instTyping) $ Map.lookup n penv)
-        n
-  return $ EVar t s n 
-infer penv (ELam r n f) = withRanges [r] $ do
-  tf@(getTag -> (m, i, t)) <- infer penv f
-  a <- maybe (newVar C) return $ Map.lookup n m
-  return $ ELam (Map.delete n m, i, a ~> t) n tf
-infer penv (EApp r _ f a) = withRanges [r] $ do
-  tf@(getTag -> (m1, i1, t1)) <- infer penv f
-  ta@(getTag -> (m2, i2, t2)) <- infer penv a
-  v <- newVar C
-  (s, ty) <- unif [m1, m2] [i1, i2] v [t1, t2 ~> v]
-  unamb penv ty     -- move into unif?
-  let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
-      tyFree = freeVarsTy t1
-  return $ trace__ ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ EApp ty s tf ta
-infer penv (ELet r n x e) = withRanges [r] $ do
-  tx@(getTag -> d1@(m1, i1, t1)) <- infer penv x
-  ty_@(m0, i0, t0) <- snd <$> unif [m1] [i1] t1 [t1]    -- this has no effect
-  trace (show ("m1",m1,"let1",d1,"let2",(m0,i0,t0))) $ unamb penv ty_    -- move into unif?
-  te@(getTag -> (m', i', t')) <- infer (Map.insert n (m0, i0, t0) penv) e
-  ELet <$> (snd <$> unif [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
+    return $ EVar (Map.singleton n t, mempty, t) n
 
 unif ms is t b = do
     s <- unify ms b
     (s, i) <- joinInstEnv s is
     m <- joinMonoEnvs $ map (applyMonoEnv s) ms
     return (s, (m, i, applyTy s t))
+
+infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
+infer penv (ETuple r t) = withRanges [r] $ do
+    te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
+    ETuple <$> (snd <$> unif ml il (TTuple C tl) []) <*> pure te
+infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
+infer penv (EVar r n) = withRanges [r] $ do
+    inferPrimFun
+        (\x -> EVar <$> simplifyTyping x <*> pure n)
+        (maybe (monoVar n) (fmap ((\(t, s) -> ESubst t s $ EVar t n) . trace "poly var") . instTyping) $ Map.lookup n penv)
+        n
+infer penv (ELam r n f) = withRanges [r] $ do
+    tf@(getTag -> (m, i, t)) <- infer penv f
+    a <- maybe (newVar C) return $ Map.lookup n m
+    return $ ELam (Map.delete n m, i, a ~> t) n tf
+infer penv (EApp r f a) = withRanges [r] $ do
+    tf@(getTag -> (m1, i1, t1)) <- infer penv f
+    ta@(getTag -> (m2, i2, t2)) <- infer penv a
+    v <- newVar C
+    (s, ty) <- unif [m1, m2] [i1, i2] v [t1, t2 ~> v]
+    unamb penv ty     -- move into unif?
+    let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
+        tyFree = freeVarsTy t1
+    return $ trace__ ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
+infer penv (ELet r n x e) = withRanges [r] $ do
+    tx@(getTag -> d1@(m1, i1, t1)) <- infer penv x
+    ty_@(m0, i0, t0) <- snd <$> unif [m1] [i1] t1 [t1]    -- this has no effect
+    trace (show ("m1",m1,"let1",d1,"let2",(m0,i0,t0))) $ unamb penv ty_    -- move into unif?
+    te@(getTag -> (m', i', t')) <- infer (Map.insert n (m0, i0, t0) penv) e
+    ELet <$> (snd <$> unif [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
 
 -------------------------------------------------------------------------------- main inference function
 

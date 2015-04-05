@@ -90,7 +90,7 @@ expr = buildExpressionParser table expr'
 
 table :: OperatorTable (IndentationParserT Char (LCParser Parser)) (Exp Range)
 table =
-  [ [binary "*." (\a b -> let r = mergeRange a b in EApp r mempty (EApp r mempty (EVar r mempty "PrimMulMatVec") a) b) AssocLeft]
+  [ [binary "*." (\a b -> let r = mergeRange a b in EApp r (EApp r (EVar r "PrimMulMatVec") a) b) AssocLeft]
    --[Prefix $ do op "*."; return id]
   ]
  where
@@ -102,11 +102,11 @@ table =
 expr' :: P (Exp Range)
 expr' = lam <|> letin <|> formula
 
-formula = (\p1 l p2 -> foldl1 (EApp (p1,p2) mempty) l) <$> position <*> some atom <*> position
+formula = (\p1 l p2 -> foldl1 (EApp (p1,p2)) l) <$> position <*> some atom <*> position
 
 atom =
   (\p1 l p2 -> ELit (p1,p2) l) <$> position <*> lit <*> position <|>
-  (\p1 v p2 -> EVar (p1,p2) mempty v) <$> position <*> var <*> position <|>
+  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
   (\p1 v p2 -> if length v == 1 then head v else ETuple (p1,p2) v) <$> position <*> parens (commaSep expr) <*> position <|>
   parens expr
 
