@@ -537,6 +537,7 @@ joinTupleType :: Ty -> Ty -> Ty
 joinTupleType (TTuple f l) (TTuple _ r) = TTuple f (l ++ r)
 joinTupleType l (TTuple f r) = TTuple f (l : r)
 joinTupleType (TTuple f l) r = TTuple f (l ++ [r])
+joinTupleType l r = TTuple C [l,r]
 
 inferPrimFun :: (Typing -> Unique e) -> Unique e -> EName -> Unique e
 inferPrimFun ok nothing = f where
