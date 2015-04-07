@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Typing where
@@ -329,6 +330,9 @@ reduceTF reduced fail nothing = \case
     TFMat (TV4F C) (TV2F C) -> reduced $ TM42F C
     TFMat (TV4F C) (TV3F C) -> reduced $ TM43F C
     TFMat (TV4F C) (TV4F C) -> reduced $ TM44F C
+    TFMat (TVar _ _) _ -> nothing
+    TFMat _ (TVar _ _) -> nothing
+    TFMat _ _ -> fail "...8"
 
     TFMatVecElem (TV2F C)  -> reduced $ TFloat C
     TFMatVecElem (TV3F C)  -> reduced $ TFloat C
@@ -351,8 +355,14 @@ reduceTF reduced fail nothing = \case
     TFMatVecElem (TM42F C) -> reduced $ TFloat C
     TFMatVecElem (TM43F C) -> reduced $ TFloat C
     TFMatVecElem (TM44F C) -> reduced $ TFloat C
+    TFMatVecElem (TVar _ _) -> nothing
+    TFMatVecElem _ -> fail "...9"
 
-    -- TODO: TFMatVecScalarElem
+    TFMatVecScalarElem (TFloat C) -> reduced $ TFloat C
+    TFMatVecScalarElem (TInt C)   -> reduced $ TInt C
+    TFMatVecScalarElem (TWord C)  -> reduced $ TWord C
+    TFMatVecScalarElem (TBool C)  -> reduced $ TBool C
+    TFMatVecScalarElem t -> reduceTF reduced fail nothing $ TFMatVecElem t
 
     TFVec (TNat 2) (TFloat C) -> reduced $ TV2F C
     TFVec (TNat 3) (TFloat C) -> reduced $ TV3F C
@@ -366,31 +376,60 @@ reduceTF reduced fail nothing = \case
     TFVec (TNat 2) (TBool C)  -> reduced $ TV2B C
     TFVec (TNat 3) (TBool C)  -> reduced $ TV3B C
     TFVec (TNat 4) (TBool C)  -> reduced $ TV4B C
+    TFVec (TVar _ _) _ -> nothing
+    TFVec _ (TVar _ _) -> nothing
+    TFVec _ _ -> fail "...1"
 
-    TFVecScalar (TNat 1) ty | True {-TODO-} -> reduced ty
-    TFVecScalar (TNat n) ty | True {-TODO-} -> reduceTF reduced fail nothing $ TFVec (TNat n) ty
+    TFVecScalar (TNat 1) ty -> case ty of
+        _ | ty `elem` [TFloat C, TInt C, TWord C, TBool C] -> reduced ty
+        TVar _ _ -> nothing
+        _ -> fail "...2"
+    TFVecScalar n ty -> reduceTF reduced fail nothing $ TFVec n ty
+
+    TFFTRepr' ty -> case ty of
+        TTuple C ts -> maybe (fail "...3") (maybe nothing (reduced . TTuple C) . sequence) $ mapM f ts
+        _ -> maybe (fail "...4") (maybe nothing reduced) $ f ty
+      where
+        f = \case
+            TInterpolated C a -> Just $ Just a
+            Depth a           -> Just $ Just a
+            Color a           -> Just $ Just a
+            TVar _ _ -> Just Nothing
+            _ -> Nothing
+
+    TFColorRepr ty -> case ty of
+        TTuple C ts -> reduced . TTuple C $ map Color ts
+        TVar _ _ -> nothing
+        ty -> reduced $ Color ty
+
+    TFFrameBuffer ty -> case ty of
+        TTuple C ts -> maybe (fail "...5") (maybe nothing end . sequence) $ mapM f ts
+        _ -> maybe (fail "...6") (maybe nothing (end . (:[]))) $ f ty
+      where
+        f = \case
+            TImage C (TNat n) (Depth ty) -> Just $ Just (n, ty)
+            TImage C (TNat n) (Color ty) -> Just $ Just (n, ty)
+            TImage C (TVar _ _) _ -> Just Nothing
+            TVar _ _ -> Just Nothing
+            _ -> Nothing
+
+        end (unzip -> (ns, tys))
+            | Just n <- allSame ns = reduced $ TFrameBuffer C (TNat n) $ tTuple C tys
+            | otherwise = fail "...7"
+
+        allSame (x:xs) = if all (==x) xs then Just x else Nothing
+
+        tTuple f [x] = x
+        tTuple f xs = TTuple f xs
 
 {- TODO
-  type family FTRepr' a :: *
-    type instance FTRepr' (i1 a :+: ZZ) = a
-    type instance FTRepr' (i1 a :+: i2 b :+: ZZ) = (a, b)
-    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: ZZ) = (a, b, c)
-    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: ZZ) = (a, b, c, d)
-    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: ZZ) = (a, b, c, d, e)
-    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: ZZ) = (a, b, c, d, e, f)
-    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: ZZ) = (a, b, c, d, e, f, g)
-    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: ZZ) = (a, b, c, d, e, f, g, h)
-    type instance FTRepr' (i1 a :+: i2 b :+: i3 c :+: i4 d :+: i5 e :+: i6 f :+: i7 g :+: i8 h :+: i9 i :+: ZZ) = (a, b, c, d, e, f, g, h ,i)
+  type family NoStencilRepr a :: *
+    type instance NoStencilRepr ZZ = ZZ
+    type instance NoStencilRepr (Stencil a :+: b) = NoStencilRepr b
+    type instance NoStencilRepr (Color a :+: b) = Color a :+: NoStencilRepr b
+    type instance NoStencilRepr (Depth a :+: b) = Depth a :+: NoStencilRepr b
 -}
---    TFFTRepr' (TInterpolated C (TV4F C)) -> reduced $ TV4F C
 
-{- TODO
-  type family ColorRepr a :: *
-    type instance ColorRepr ZZ = ZZ
-    type instance ColorRepr (a :+: b) = Color a :+: (ColorRepr b)
--}
-    TFFrameBuffer (TTuple C [TImage C (TNat 1) (Depth (TFloat C)), TImage C (TNat 1) (Color (TV4F C))])
-        -> reduced $ TFrameBuffer C (TNat 1) (TTuple C [TFloat C, TV4F C])
 {- currently not used
   [injective] type family PrimitiveVertices (primitive :: PrimitiveType) a
     type instance PrimitiveVertices Point a             = a
@@ -398,13 +437,6 @@ reduceTF reduced fail nothing = \case
     type instance PrimitiveVertices LineAdjacency a     = (a,a,a,a)
     type instance PrimitiveVertices Triangle a          = (a,a,a)
     type instance PrimitiveVertices TriangleAdjacency a = (a,a,a,a,a,a)
--}
-{- TODO
-  type family NoStencilRepr a :: *
-    type instance NoStencilRepr ZZ = ZZ
-    type instance NoStencilRepr (Stencil a :+: b) = NoStencilRepr b
-    type instance NoStencilRepr (Color a :+: b) = Color a :+: NoStencilRepr b
-    type instance NoStencilRepr (Depth a :+: b) = Depth a :+: NoStencilRepr b
 -}
 {- currently not used
   - texturing -
