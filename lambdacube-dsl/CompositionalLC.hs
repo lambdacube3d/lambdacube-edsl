@@ -207,7 +207,10 @@ addUnif' tss = lift (unifyEqs' tss) >>= addUnif_
 simplifyInstEnv :: EqInstEnv -> SubstAction EqInstEnv
 simplifyInstEnv = fmap concat . mapM (applyPast applyEqConstraint >=> simplifyInst)
 
-simplifyInst c@(CEq ty f) = reduceTF (\t -> addUnif ty t >> return []) error{-TODO: proper error handling-} ((:[]) <$> applyFuture applyEqConstraint c) f
+simplifyInst c@(CEq ty f) = reduceTF
+    (\t -> addUnif ty t >> return [])
+    (lift . throwErrorUnique . (("error during reduction of " ++ show f ++ "  ") ++))
+    ((:[]) <$> applyFuture applyEqConstraint c) f
 
 rightReduce :: EqInstEnv -> SubstAction EqInstEnv
 rightReduce ie = do
@@ -230,7 +233,7 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
     (s, es) <- untilNoUnif (rightReduce >=> applyPast applyEqInstEnv >=> barrier >=> injectivityTest >=> simplifyInstEnv) s
                     $ applyEqInstEnv s es
     cs <- concat <$> mapM (simplifyClassInst . applyClassConstraint s) cs
-    -- TODO: simplify class constraints:  (Ord a, Eq a) --> Ord a
+    -- if needed, simplify class constraints here:  (Ord a, Eq a) --> Ord a
     return (s, (cs, es))
 
 simplifyTyping (me, ie, t) = do

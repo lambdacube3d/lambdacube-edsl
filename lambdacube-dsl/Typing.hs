@@ -332,7 +332,7 @@ reduceTF reduced fail nothing = \case
     TFMat (TV4F C) (TV4F C) -> reduced $ TM44F C
     TFMat (TVar _ _) _ -> nothing
     TFMat _ (TVar _ _) -> nothing
-    TFMat _ _ -> fail "...8"
+    TFMat _ _ -> fail "no instance"
 
     TFMatVecElem (TV2F C)  -> reduced $ TFloat C
     TFMatVecElem (TV3F C)  -> reduced $ TFloat C
@@ -356,7 +356,7 @@ reduceTF reduced fail nothing = \case
     TFMatVecElem (TM43F C) -> reduced $ TFloat C
     TFMatVecElem (TM44F C) -> reduced $ TFloat C
     TFMatVecElem (TVar _ _) -> nothing
-    TFMatVecElem _ -> fail "...9"
+    TFMatVecElem _ -> fail "no instance"
 
     TFMatVecScalarElem (TFloat C) -> reduced $ TFloat C
     TFMatVecScalarElem (TInt C)   -> reduced $ TInt C
@@ -378,17 +378,17 @@ reduceTF reduced fail nothing = \case
     TFVec (TNat 4) (TBool C)  -> reduced $ TV4B C
     TFVec (TVar _ _) _ -> nothing
     TFVec _ (TVar _ _) -> nothing
-    TFVec _ _ -> fail "...1"
+    TFVec _ _ -> fail "no instance"
 
     TFVecScalar (TNat 1) ty -> case ty of
         _ | ty `elem` [TFloat C, TInt C, TWord C, TBool C] -> reduced ty
         TVar _ _ -> nothing
-        _ -> fail "...2"
+        _ -> fail "no instace"
     TFVecScalar n ty -> reduceTF reduced fail nothing $ TFVec n ty
 
     TFFTRepr' ty -> case ty of
-        TTuple C ts -> maybe (fail "...3") (maybe nothing (reduced . TTuple C) . sequence) $ mapM f ts
-        _ -> maybe (fail "...4") (maybe nothing reduced) $ f ty
+        TTuple C ts -> maybe (fail "expected Interpolated/Depth/Color inside tuple") (maybe nothing (reduced . TTuple C) . sequence) $ mapM f ts
+        _ -> maybe (fail "expected Interpolated/Depth/Color") (maybe nothing reduced) $ f ty
       where
         f = \case
             TInterpolated C a -> Just $ Just a
@@ -403,8 +403,8 @@ reduceTF reduced fail nothing = \case
         ty -> reduced $ Color ty
 
     TFFrameBuffer ty -> case ty of
-        TTuple C ts -> maybe (fail "...5") (maybe nothing end . sequence) $ mapM f ts
-        _ -> maybe (fail "...6") (maybe nothing (end . (:[]))) $ f ty
+        TTuple C ts -> maybe (fail "expected (Image Nat) inside tuple") (maybe nothing end . sequence) $ mapM f ts
+        _ -> maybe (fail "expected (Image Nat)") (maybe nothing (end . (:[]))) $ f ty
       where
         f = \case
             TImage C (TNat n) ty -> Just $ Just (n, ty)
@@ -414,7 +414,7 @@ reduceTF reduced fail nothing = \case
 
         end (unzip -> (ns, tys))
             | Just n <- allSame ns = reduced $ TFrameBuffer C (TNat n) $ tTuple C tys
-            | otherwise = fail "...7"
+            | otherwise = fail "frambuffer number of layers differ"
 
         allSame (x:xs) = if all (==x) xs then Just x else Nothing
 
