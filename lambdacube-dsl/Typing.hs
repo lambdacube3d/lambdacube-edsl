@@ -407,8 +407,7 @@ reduceTF reduced fail nothing = \case
         _ -> maybe (fail "...6") (maybe nothing (end . (:[]))) $ f ty
       where
         f = \case
-            TImage C (TNat n) (Depth ty) -> Just $ Just (n, ty)
-            TImage C (TNat n) (Color ty) -> Just $ Just (n, ty)
+            TImage C (TNat n) ty -> Just $ Just (n, ty)
             TImage C (TVar _ _) _ -> Just Nothing
             TVar _ _ -> Just Nothing
             _ -> Nothing
@@ -788,7 +787,7 @@ inferPrimFun ok nothing = f where
         ~> TFragmentStream C n a
         ~> TFrameBuffer C n t
         ~> TFrameBuffer C n t
-  "FrameBuffer"  -> do [a,t] <- newVars 2 C ; [frameBuffer t a] ==> a ~> t
+  "FrameBuffer"  -> do [a,t,t',n] <- newVars 4 C ; [fTRepr' t' t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
   "ScreenOut"    -> do [a,b] <- newVars 2 C ; ty $ TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
