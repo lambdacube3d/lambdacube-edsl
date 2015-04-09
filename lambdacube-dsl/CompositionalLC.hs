@@ -306,9 +306,8 @@ infer penv (EApp r f a) = withRanges [r] $ do
         tyFree = freeVarsTy t1
     return $ trace__ ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
-    tx@(getTag -> d1@(m1, i1, t1)) <- infer penv x
-    ty_@(m0, i0, t0) <- snd <$> unif penv [m1] [i1] t1 [t1]    -- this has no effect
-    te@(getTag -> (m', i', t')) <- infer (Map.insert n (m0, i0, t0) penv) e
+    tx@(getTag -> ty@(m0, i0, t0)) <- infer penv x
+    te@(getTag -> (m', i', t')) <- infer (Map.insert n ty penv) e
     ELet <$> ({-prune . -} snd <$> unif penv [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
 
 -------------------------------------------------------------------------------- main inference function
