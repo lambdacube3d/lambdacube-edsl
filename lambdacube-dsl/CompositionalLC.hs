@@ -268,6 +268,8 @@ unif ms is t b = do
     return (s, (m, i, applyTy s t))
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
+infer penv (EFieldProj r _ _) = withRanges [r] $ ETuple <$> inferLit (LString "") <*> pure [] -- TODO: inference for record field projection
+infer penv (ERecord r _) = withRanges [r] $ ETuple <$> inferLit (LString "") <*> pure [] -- TODO: inference for records
 infer penv (ETuple r t) = withRanges [r] $ do
     te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
     ETuple <$> (snd <$> unif ml il (TTuple C tl) []) <*> pure te

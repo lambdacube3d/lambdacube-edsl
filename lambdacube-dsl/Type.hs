@@ -10,6 +10,7 @@ import Data.Traversable
 
 type TName = String
 type EName = String
+type FName = String
 type MonoEnv = Map EName Ty
 type PolyEnv = Map EName Typing
 type ClassInstEnv = [ClassConstraint Ty]
@@ -33,6 +34,8 @@ data Exp a
   | ELam      a EName (Exp a)
   | ELet      a EName (Exp a) (Exp a)
   | ETuple    a [Exp a]
+  | ERecord   a [(FName,Exp a)]
+  | EFieldProj a (Exp a) FName
   | ESubst    a Subst (Exp a)
 --  | EFix EName Exp
   deriving (Show,Eq,Ord)
@@ -46,6 +49,8 @@ getTag (EApp      r _ _) = r
 getTag (ELam      r _ _) = r
 getTag (ELet      r _ _ _) = r
 getTag (ETuple    r _) = r
+getTag (ERecord   r _) = r
+getTag (EFieldProj r _ _) = r
 getTag (ESubst    r _ _) = r
 
 data Frequency -- frequency kind
