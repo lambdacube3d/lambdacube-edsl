@@ -248,26 +248,36 @@ prune (m, (is, es), t) = (m, (is', es), t)
     is' = flip filter is $ \case
         CClass _ ty -> freeVarsTy ty `hasCommon` defined
 
-    hasCommon a b = not $ Set.null $ a `Set.intersection` b
+hasCommon a b = not $ Set.null $ a `Set.intersection` b
 
 {- fail on ambiguous types
 Ambiguous:
   (Show a) => Int
-Not ambiguous (yet):
-  (Show a, a ~ F b) => b
-  (Show a, b ~ F a) => b
-Ambiguous, but not detected at the moment:
   (Int ~ F a) => Int
   (a ~ F a) => Int
   (a ~ F b, b ~ F a) => Int
+Not ambiguous:
+  (Show a, a ~ F b) => b
+  (Show a, b ~ F a) => b
 -}
 unamb :: PolyEnv -> Typing -> Unique ()
 unamb env ty@(m,(is,es),t)
     | used `Set.isSubsetOf` defined = return ()
     | otherwise = throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "poly env: " ++ show env]
   where
-    used = mconcat [freeVarsTy ty | CClass _ ty <- is] -- `mappend` mconcat [foldMap freeVarsTy f | CEq _ f <- es]
-    defined = freeVarsTy t `mappend` freeVarsMonoEnv m `mappend` mconcat [freeVarsTy ty `mappend` foldMap freeVarsTy f | CEq ty f <- es]
+    used = mconcat [freeVarsTy ty | CClass _ ty <- is] `mappend` mconcat [freeVarsTy ty `mappend` foldMap freeVarsTy f | CEq ty f <- es]
+    defined = untilFix f $ freeVarsMonoEnv m `mappend` freeVarsTy t
+
+    f s = s `mappend` mconcat
+            (  [foldMap freeVarsTy f | CEq ty f <- es, freeVarsTy ty `hasCommon` s]
+            ++ [freeVarsTy ty | CEq ty f <- es, foldMap freeVarsTy f `hasCommon` s]
+            )
+
+untilFix f s
+    | s == s' = s
+    | otherwise = untilFix f s'
+  where
+    s' = f s
 
 monoVar n = do
     t <- trace "mono var" <$> newVar C
