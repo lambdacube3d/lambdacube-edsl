@@ -240,39 +240,53 @@ simplifyTyping (me, ie, t) = do
     (s, ie) <- joinInstEnv mempty [ie]
     return (applyMonoEnv s me, ie, applyTy s t)
 
--- TODO
+-- TODO: revise
 prune :: Typing -> Typing
-prune (m,i,t) = (m,i,t) --(m,i',t)
- where
-  v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
-  i' = flip filter (fst i) $ \case
-        CClass _ a -> Set.member a v
+prune (m, (is, es), t) = (m, (is', es), t)
+  where
+    defined = freeVarsTy t `mappend` freeVarsMonoEnv m `mappend` mconcat [freeVarsTy ty `mappend` foldMap freeVarsTy f | CEq ty f <- es]
+    is' = flip filter is $ \case
+        CClass _ ty -> freeVarsTy ty `hasCommon` defined
 
--- TODO
+    hasCommon a b = not $ Set.null $ a `Set.intersection` b
+
+{- fail on ambiguous types
+Ambiguous:
+  (Show a) => Int
+Not ambiguous (yet):
+  (Show a, a ~ F b) => b
+  (Show a, b ~ F a) => b
+Ambiguous, but not detected at the moment:
+  (Int ~ F a) => Int
+  (a ~ F a) => Int
+  (a ~ F b, b ~ F a) => Int
+-}
 unamb :: PolyEnv -> Typing -> Unique ()
-unamb env (m,(i,_),t) = do
-  let v = Set.map (TVar C) $ freeVarsTy t `mappend` freeVarsMonoEnv m
-  return ()
-  forM_ i $ \case
-        --CClass _ a -> if Set.member a v then return () else throwErrorUnique $ unlines ["ambiguous type: " ++ show (i,t),"env: " ++ show m, "free vars: " ++ show v, "poly env: " ++ show env]
-        _ -> return ()
+unamb env ty@(m,(is,es),t)
+    | used `Set.isSubsetOf` defined = return ()
+    | otherwise = throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "poly env: " ++ show env]
+  where
+    used = mconcat [freeVarsTy ty | CClass _ ty <- is] -- `mappend` mconcat [foldMap freeVarsTy f | CEq _ f <- es]
+    defined = freeVarsTy t `mappend` freeVarsMonoEnv m `mappend` mconcat [freeVarsTy ty `mappend` foldMap freeVarsTy f | CEq ty f <- es]
 
 monoVar n = do
     t <- trace "mono var" <$> newVar C
     return $ EVar (Map.singleton n t, mempty, t) n
 
-unif ms is t b = do
+unif penv ms is t b = do
     s <- unify ms b
     (s, i) <- joinInstEnv s is
     m <- joinMonoEnvs $ map (applyMonoEnv s) ms
-    return (s, (m, i, applyTy s t))
+    let ty = (m, i, applyTy s t)
+    unamb penv ty
+    return (s, ty)
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
 infer penv (EFieldProj r _ _) = withRanges [r] $ ETuple <$> inferLit (LString "") <*> pure [] -- TODO: inference for record field projection
 infer penv (ERecord r _) = withRanges [r] $ ETuple <$> inferLit (LString "") <*> pure [] -- TODO: inference for records
 infer penv (ETuple r t) = withRanges [r] $ do
     te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
-    ETuple <$> (snd <$> unif ml il (TTuple C tl) []) <*> pure te
+    ETuple <$> (snd <$> unif penv ml il (TTuple C tl) []) <*> pure te
 infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
 infer penv (EVar r n) = withRanges [r] $ do
     inferPrimFun
@@ -287,17 +301,15 @@ infer penv (EApp r f a) = withRanges [r] $ do
     tf@(getTag -> (m1, i1, t1)) <- infer penv f
     ta@(getTag -> (m2, i2, t2)) <- infer penv a
     v <- newVar C
-    (s, ty) <- unif [m1, m2] [i1, i2] v [t1, t2 ~> v]
-    unamb penv ty     -- move into unif?
+    (s, ty) <- unif penv [m1, m2] [i1, i2] v [t1, t2 ~> v]
     let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
         tyFree = freeVarsTy t1
     return $ trace__ ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
     tx@(getTag -> d1@(m1, i1, t1)) <- infer penv x
-    ty_@(m0, i0, t0) <- snd <$> unif [m1] [i1] t1 [t1]    -- this has no effect
-    trace (show ("m1",m1,"let1",d1,"let2",(m0,i0,t0))) $ unamb penv ty_    -- move into unif?
+    ty_@(m0, i0, t0) <- snd <$> unif penv [m1] [i1] t1 [t1]    -- this has no effect
     te@(getTag -> (m', i', t')) <- infer (Map.insert n (m0, i0, t0) penv) e
-    ELet <$> (snd <$> unif [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
+    ELet <$> ({-prune . -} snd <$> unif penv [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
 
 -------------------------------------------------------------------------------- main inference function
 
