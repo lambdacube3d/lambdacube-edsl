@@ -2,6 +2,9 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Typing where
 
 import Data.List
@@ -634,8 +637,8 @@ inferPrimFun ok nothing = f where
 
  f = \case
   -- temporary const constructor
-  "Tup"          -> do [a] <- newVars 1 C ; ty $ a ~> a
-  "Const"        -> do [a] <- newVars 1 C ; ty $ a ~> a
+  "Tup"          -> newV $ \a -> ty $ a ~> a
+  "Const"        -> newV $ \a -> ty $ a ~> a
   -- Vector/Matrix
   "True"         -> ty $ TBool C
   "False"        -> ty $ TBool C
@@ -661,7 +664,7 @@ inferPrimFun ok nothing = f where
   "M43F"         -> ty $ TV4F C ~> TV4F C ~> TV4F C ~> TM43F C
   "M44F"         -> ty $ TV4F C ~> TV4F C ~> TV4F C ~> TV4F C ~> TM44F C
   -- Input declaration
-  "Uni"          -> do t <- newVar C ; ty $ TInput C t ~> t
+  "Uni"          -> newV $ \t -> ty $ TInput C t ~> t
   "IBool"        -> ty $ TString C ~> TInput C (TBool  C)
   "IV2B"         -> ty $ TString C ~> TInput C (TV2B   C)
   "IV3B"         -> ty $ TString C ~> TInput C (TV3B   C)
@@ -770,11 +773,11 @@ inferPrimFun ok nothing = f where
     FragmentOutDepth        :: Exp F Float  ->  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
     FragmentOutRastDepth    ::                  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
   -}
-  "FragmentOut"           -> do [a,t] <- newVars 2 C ; [colorRepr a t] ==> t ~> TFragmentOut C a
-  "FragmentOutDepth"      -> do [a,t] <- newVars 2 C ; [colorRepr a t] ==> TFloat C ~> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
-  "FragmentOutRastDepth"  -> do [a,t] <- newVars 2 C ; [colorRepr a t] ==> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
+  "FragmentOut"           -> newV $ \a t -> [colorRepr a t] ==> t ~> TFragmentOut C a
+  "FragmentOutDepth"      -> newV $ \a t -> [colorRepr a t] ==> TFloat C ~> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
+  "FragmentOutRastDepth"  -> newV $ \a t -> [colorRepr a t] ==> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
   -- Vertex Out
-  "VertexOut"    -> do [t,a] <- newVars 2 C ; [fTRepr' t a] ==> TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C t
+  "VertexOut"    -> newV $ \a t -> [fTRepr' t a] ==> TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C t
   -- PointSpriteCoordOrigin
   "LowerLeft"  -> ty $ TPointSpriteCoordOrigin C
   "UpperLeft"  -> ty $ TPointSpriteCoordOrigin C
@@ -789,40 +792,36 @@ inferPrimFun ok nothing = f where
   "LinesAdjacency"     -> ty $ TFetchPrimitive C TLineAdjacency
   "TrianglesAdjacency" -> ty $ TFetchPrimitive C TTriangleAdjacency
   -- Accumulation Context
-  "AccumulationContext"  -> do [t,t'] <- newVars 2 C ; [t' ~~ TFFragOps t] ==> t ~> TAccumulationContext C t'
+  "AccumulationContext"  -> newV $ \t' t -> [t' ~~ TFFragOps t] ==> t ~> TAccumulationContext C t'
   -- Image
-  "ColorImage"   -> do
-    [a,d,color,t] <- newVars 4 C
+  "ColorImage" -> newV $ \a d color t ->
     [isTypeLevelNatural a, isNum t, isVecScalar d color t] ==> a ~> color ~> TImage C a (Color color)
-  "DepthImage"   -> do
-    [a] <- newVars 1 C
+  "DepthImage" -> newV $ \a ->
     [isTypeLevelNatural a] ==> a ~> TFloat C ~> TImage C a (Depth $ TFloat C)
-  "StencilImage" -> do
-    [a] <- newVars 1 C
+  "StencilImage" -> newV $ \a ->
     [isTypeLevelNatural a] ==> a ~> TInt C ~> TImage C a (Stencil $ TInt C)
   -- Interpolation
-  "Flat"           -> do t <- newVar C ; ty $ t ~> TInterpolated C t
-  "Smooth"         -> do t <- newVar C ; [isFloating t] ==> t ~> TInterpolated C t
-  "NoPerspective"  -> do t <- newVar C ; [isFloating t] ==> t ~> TInterpolated C t
+  "Flat"           -> newV $ \t -> ty $ t ~> TInterpolated C t
+  "Smooth"         -> newV $ \t -> [isFloating t] ==> t ~> TInterpolated C t
+  "NoPerspective"  -> newV $ \t -> [isFloating t] ==> t ~> TInterpolated C t
   -- Fragment Operation
-  "ColorOp"    -> do
-    [d,mask,c,color] <- newVars 4 C
+  "ColorOp"    -> newV $ \d mask c color ->
     [isVecScalar d mask (TBool C), isVecScalar d color c, isNum c] ==> TBlending C c ~> mask ~> TFragmentOperation C (Color color)
   "DepthOp"    -> ty $ TComparisonFunction C ~> TBool C ~> TFragmentOperation C (Depth $ TFloat C)
     -- "StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
   -- Blending
-  "NoBlending"   -> do t <- newVar C ; ty $ TBlending C t
-  "BlendLogicOp" -> do t <- newVar C ; [isIntegral t] ==> TLogicOperation C ~> TBlending C t
+  "NoBlending"   -> newV $ \t -> ty $ TBlending C t
+  "BlendLogicOp" -> newV $ \t -> [isIntegral t] ==> TLogicOperation C ~> TBlending C t
   "Blend"        -> ty $ TTuple C [TBlendEquation C,TBlendEquation C]
                          ~> TTuple C [TTuple C [TBlendingFactor C,TBlendingFactor C],TTuple C [TBlendingFactor C,TBlendingFactor C]]
                          ~> TV4F C ~> TBlending C (TFloat C)
   -- Fragment Filter
-  "PassAll"  -> do t <- newVar C ; ty $ TFragmentFilter C t
-  "Filter"   -> do t <- newVar C ; ty $ (t ~> TBool C) ~> TFragmentFilter C t
+  "PassAll"  -> newV $ \t -> ty $ TFragmentFilter C t
+  "Filter"   -> newV $ \t -> ty $ (t ~> TBool C) ~> TFragmentFilter C t
   -- Render Operations
-  "Fetch"        -> do [t,a,b] <- newVars 3 C ; [cClass IsInputTuple t, fTRepr' b t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
-  "Transform"    -> do [a,b,p] <- newVars 3 C ; ty $ (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
-  "Rasterize"    -> do [a,b,c] <- newVars 3 C ; ty $ TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
+  "Fetch"        -> newV $ \a t b -> [cClass IsInputTuple t, fTRepr' b t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
+  "Transform"    -> newV $ \a b p -> ty $ (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
+  "Rasterize"    -> newV $ \a b c -> ty $ TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
   {-
     Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
                     => AccumulationContext b
@@ -832,8 +831,7 @@ inferPrimFun ok nothing = f where
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
   -}
-  "Accumulate"   -> do
-    [a,b,n,t] <- newVars 4 C
+  "Accumulate" -> newV $ \a b n t ->
     [isValidOutput b, fTRepr' t b] ==>
            TAccumulationContext C b
         ~> TFragmentFilter C a
@@ -841,129 +839,130 @@ inferPrimFun ok nothing = f where
         ~> TFragmentStream C n a
         ~> TFrameBuffer C n t
         ~> TFrameBuffer C n t
-  "FrameBuffer"  -> do [a,t,t',n] <- newVars 4 C ; [fTRepr' t' t, cClass IsValidFrameBuffer t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
-  "ScreenOut"    -> do [a,b] <- newVars 2 C ; ty $ TFrameBuffer C a b ~> TOutput C
+  "FrameBuffer"  -> newV $ \a t t' n ->
+    [fTRepr' t' t, cClass IsValidFrameBuffer t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
+  "ScreenOut"    -> newV $ \a b -> ty $ TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
-  "PrimAdd"   -> do [a,t] <- newVars 2 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
-  "PrimAddS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
-  "PrimSub"   -> do [a,t] <- newVars 2 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
-  "PrimSubS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
-  "PrimMul"   -> do [a,t] <- newVars 2 C ; [matVecElem t a, isNum t] ==> a ~> a ~> a
-  "PrimMulS"  -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
-  "PrimDiv"   -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimDivS"  -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimNeg"   -> do [a,t]   <- newVars 1 C ; [matVecScalarElem t a, isSigned t] ==> a ~> a
-  "PrimMod"   -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimModS"  -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimAdd"   -> newV $ \a t -> [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimAddS"  -> newV $ \a t -> [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
+  "PrimSub"   -> newV $ \a t -> [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimSubS"  -> newV $ \a t -> [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
+  "PrimMul"   -> newV $ \a t -> [matVecElem t a, isNum t] ==> a ~> a ~> a
+  "PrimMulS"  -> newV $ \a t -> [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
+  "PrimDiv"   -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimDivS"  -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimNeg"   -> newV $ \a t -> [matVecScalarElem t a, isSigned t] ==> a ~> a
+  "PrimMod"   -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimModS"  -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> a
   -- Bit-wise Functions
-  "PrimBAnd"      -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimBAndS"     -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimBOr"       -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimBOrS"      -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimBXor"      -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimBXorS"     -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimBNot"      -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> a
-  "PrimBShiftL"   -> do [d,a,b,t] <- newVars 4 C ; [isIntegral t, isVecScalar d a t, isVecScalar d b (TWord C)] ==> a ~> b ~> a
-  "PrimBShiftLS"  -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> TWord C ~> a
-  "PrimBShiftR"   -> do [d,a,b,t] <- newVars 4 C ; [isIntegral t, isVecScalar d a t, isVecScalar d b (TWord C)] ==> a ~> b ~> a
-  "PrimBShiftRS"  -> do [d,a,t] <- newVars 3 C ; [isIntegral t, isVecScalar d a t] ==> a ~> TWord C ~> a
+  "PrimBAnd"      -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimBAndS"     -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimBOr"       -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimBOrS"      -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimBXor"      -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimBXorS"     -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimBNot"      -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> a
+  "PrimBShiftL"   -> newV $ \d a b t -> [isIntegral t, isVecScalar d a t, isVecScalar d b (TWord C)] ==> a ~> b ~> a
+  "PrimBShiftLS"  -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> TWord C ~> a
+  "PrimBShiftR"   -> newV $ \d a b t -> [isIntegral t, isVecScalar d a t, isVecScalar d b (TWord C)] ==> a ~> b ~> a
+  "PrimBShiftRS"  -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> TWord C ~> a
   -- Logic Functions
-  "PrimAnd" -> do ty $ TBool C ~> TBool C ~> TBool C
-  "PrimOr"  -> do ty $ TBool C ~> TBool C ~> TBool C
-  "PrimXor" -> do ty $ TBool C ~> TBool C ~> TBool C
-  "PrimNot" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TBool C)] ==> a ~> a
-  "PrimAny" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TBool C)] ==> a ~> TBool C
-  "PrimAll" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TBool C)] ==> a ~> TBool C
+  "PrimAnd" -> ty $ TBool C ~> TBool C ~> TBool C
+  "PrimOr"  -> ty $ TBool C ~> TBool C ~> TBool C
+  "PrimXor" -> ty $ TBool C ~> TBool C ~> TBool C
+  "PrimNot" -> newV $ \d a -> [isVecScalar d a (TBool C)] ==> a ~> a
+  "PrimAny" -> newV $ \d a -> [isVecScalar d a (TBool C)] ==> a ~> TBool C
+  "PrimAll" -> newV $ \d a -> [isVecScalar d a (TBool C)] ==> a ~> TBool C
   -- Angle and Trigonometry Functions
-  "PrimACos"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimACosH"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimASin"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimASinH"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimATan"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimATan2"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
-  "PrimATanH"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimCos"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimCosH"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimDegrees" -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimRadians" -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimSin"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimSinH"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimTan"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimTanH"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimACos"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimACosH"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimASin"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimASinH"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimATan"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimATan2"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
+  "PrimATanH"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimCos"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimCosH"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimDegrees" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimRadians" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimSin"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimSinH"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimTan"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimTanH"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
   -- Exponential Functions
-  "PrimPow"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
-  "PrimExp"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimLog"     -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimExp2"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimLog2"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimSqrt"    -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimInvSqrt" -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimPow"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
+  "PrimExp"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimLog"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimExp2"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimLog2"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimSqrt"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimInvSqrt" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
   -- Common Functions
-  "PrimIsNan"       -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> b
-  "PrimIsInf"       -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> b
-  "PrimAbs"         -> do [d,a,t] <- newVars 3 C ; [isSigned t, isVecScalar d a t] ==> a ~> a
-  "PrimSign"        -> do [d,a,t] <- newVars 3 C ; [isSigned t, isVecScalar d a t] ==> a ~> a
-  "PrimFloor"       -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimTrunc"       -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimRound"       -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimRoundEven"   -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimCeil"        -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimFract"       -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimModF"        -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> TTuple C [a,a]
-  "PrimMin"         -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimMinS"        -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimMax"         -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimMaxS"        -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimClamp"       -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> a ~> a ~> a
-  "PrimClampS"      -> do [d,a,t] <- newVars 3 C ; [isNum t, isVecScalar d a t] ==> a ~> t ~> t ~> a
-  "PrimMix"         -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimMixS"        -> do [d,a] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C ~> a
-  "PrimMixB"        -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> a ~> b ~> a
-  "PrimStep"        -> do [a,d] <- newVars 2 C ; [isVec d a (TFloat C)] ==> a ~> a ~> a
-  "PrimStepS"       -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> TFloat C ~> a ~> a
-  "PrimSmoothStep"  -> do [a,d] <- newVars 2 C ; [isVec d a (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimSmoothStepS" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> TFloat C ~> TFloat C ~> a ~> a
+  "PrimIsNan"       -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> b
+  "PrimIsInf"       -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> b
+  "PrimAbs"         -> newV $ \d a t -> [isSigned t, isVecScalar d a t] ==> a ~> a
+  "PrimSign"        -> newV $ \d a t -> [isSigned t, isVecScalar d a t] ==> a ~> a
+  "PrimFloor"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimTrunc"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimRound"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimRoundEven"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimCeil"        -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimFract"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimModF"        -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> TTuple C [a,a]
+  "PrimMin"         -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimMinS"        -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimMax"         -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a
+  "PrimMaxS"        -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimClamp"       -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a ~> a
+  "PrimClampS"      -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> t ~> a
+  "PrimMix"         -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimMixS"        -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C ~> a
+  "PrimMixB"        -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> a ~> b ~> a
+  "PrimStep"        -> newV $ \d a -> [isVec d a (TFloat C)] ==> a ~> a ~> a
+  "PrimStepS"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> TFloat C ~> a ~> a
+  "PrimSmoothStep"  -> newV $ \d a -> [isVec d a (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimSmoothStepS" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> TFloat C ~> TFloat C ~> a ~> a
   -- Integer/Float Conversion Functions
-  "PrimFloatBitsToInt"  -> do [d,fv,iv] <- newVars 3 C ; [isVecScalar d fv (TFloat C), isVecScalar d iv (TInt C)] ==> fv ~> iv
-  "PrimFloatBitsToUInt" -> do [d,fv,uv] <- newVars 3 C ; [isVecScalar d fv (TFloat C), isVecScalar d uv (TWord C)] ==> fv ~> uv
-  "PrimIntBitsToFloat"  -> do [d,fv,iv] <- newVars 3 C ; [isVecScalar d fv (TFloat C), isVecScalar d iv (TInt C)] ==> iv ~> fv
-  "PrimUIntBitsToFloat" -> do [d,fv,uv] <- newVars 3 C ; [isVecScalar d fv (TFloat C), isVecScalar d uv (TWord C)] ==> uv ~> fv
+  "PrimFloatBitsToInt"  -> newV $ \d fv iv -> [isVecScalar d fv (TFloat C), isVecScalar d iv (TInt C)] ==> fv ~> iv
+  "PrimFloatBitsToUInt" -> newV $ \d fv uv -> [isVecScalar d fv (TFloat C), isVecScalar d uv (TWord C)] ==> fv ~> uv
+  "PrimIntBitsToFloat"  -> newV $ \d fv iv -> [isVecScalar d fv (TFloat C), isVecScalar d iv (TInt C)] ==> iv ~> fv
+  "PrimUIntBitsToFloat" -> newV $ \d fv uv -> [isVecScalar d fv (TFloat C), isVecScalar d uv (TWord C)] ==> uv ~> fv
   -- Geometric Functions
-  "PrimLength"      -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> TFloat C
-  "PrimDistance"    -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C
-  "PrimDot"         -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C
-  "PrimCross"       -> do [a]   <- newVars 1 C ; [isVecScalar (TNat 3) a (TFloat C)] ==> a ~> a ~> a
-  "PrimNormalize"   -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimFaceForward" -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimReflect"     -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
-  "PrimRefract"     -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimLength"      -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> TFloat C
+  "PrimDistance"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C
+  "PrimDot"         -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C
+  "PrimCross"       -> newV $ \a -> [isVecScalar (TNat 3) a (TFloat C)] ==> a ~> a ~> a
+  "PrimNormalize"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimFaceForward" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimReflect"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
+  "PrimRefract"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
   -- Matrix Functions
-  "PrimTranspose"     -> do [a,b,h,w] <- newVars 4 C ; [isMat a h w, isMat b w h] ==> a ~> b
-  "PrimDeterminant"   -> do [m,s] <- newVars 2 C ; [isMat m s s] ==> m ~> TFloat C
-  "PrimInverse"       -> do [m,s] <- newVars 2 C ; [isMat m s s] ==> m ~> m
-  "PrimOuterProduct"  -> do [m,h,w] <- newVars 3 C ; [isMat m h w] ==> w ~> h ~> m
-  "PrimMulMatVec"     -> do [m,h,w] <- newVars 3 C ; [isMat m h w] ==> m ~> w ~> h
-  "PrimMulVecMat"     -> do [m,h,w] <- newVars 3 C ; [isMat m h w] ==> h ~> m ~> w
-  "PrimMulMatMat"     -> do [a,b,c,i,j,k] <- newVars 6 C ; [isMat a i j, isMat b j k, isMat c i k] ==> a ~> b ~> c
+  "PrimTranspose"     -> newV $ \a b h w -> [isMat a h w, isMat b w h] ==> a ~> b
+  "PrimDeterminant"   -> newV $ \m s -> [isMat m s s] ==> m ~> TFloat C
+  "PrimInverse"       -> newV $ \m s -> [isMat m s s] ==> m ~> m
+  "PrimOuterProduct"  -> newV $ \m h w -> [isMat m h w] ==> w ~> h ~> m
+  "PrimMulMatVec"     -> newV $ \m h w -> [isMat m h w] ==> m ~> w ~> h
+  "PrimMulVecMat"     -> newV $ \m h w -> [isMat m h w] ==> h ~> m ~> w
+  "PrimMulMatMat"     -> newV $ \a b c i j k -> [isMat a i j, isMat b j k, isMat c i k] ==> a ~> b ~> c
   -- Vector and Scalar Relational Functions
-  "PrimLessThan"          -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimLessThanEqual"     -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimGreaterThan"       -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimGreaterThanEqual"  -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimEqualV"            -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimEqual"             -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a] ==> a ~> a ~> TBool C
-  "PrimNotEqualV"         -> do [d,a,b,t] <- newVars 2 C ; [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimNotEqual"          -> do [a,t] <- newVars 2 C ; [matVecScalarElem t a] ==> a ~> a ~> TBool C
+  "PrimLessThan"          -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimLessThanEqual"     -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimGreaterThan"       -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimGreaterThanEqual"  -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimEqualV"            -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimEqual"             -> newV $ \a t -> [matVecScalarElem t a] ==> a ~> a ~> TBool C
+  "PrimNotEqualV"         -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
+  "PrimNotEqual"          -> newV $ \a t -> [matVecScalarElem t a] ==> a ~> a ~> TBool C
   -- Fragment Processing Functions
-  "PrimDFdx"    -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimDFdy"    -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimFWidth"  -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimDFdx"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimDFdy"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimFWidth"  -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
   -- Noise Functions
-  "PrimNoise1"  -> do [a,d] <- newVars 2 C ; [isVecScalar d a (TFloat C)] ==> a ~> TFloat C
-  "PrimNoise2"  -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar (TNat 2) b (TFloat C)] ==> a ~> b
-  "PrimNoise3"  -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar (TNat 3) b (TFloat C)] ==> a ~> b
-  "PrimNoise4"  -> do [d,a,b] <- newVars 3 C ; [isVecScalar d a (TFloat C), isVecScalar (TNat 4) b (TFloat C)] ==> a ~> b
+  "PrimNoise1"  -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> TFloat C
+  "PrimNoise2"  -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar (TNat 2) b (TFloat C)] ==> a ~> b
+  "PrimNoise3"  -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar (TNat 3) b (TFloat C)] ==> a ~> b
+  "PrimNoise4"  -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar (TNat 4) b (TFloat C)] ==> a ~> b
 
 --  a -> throwErrorUnique $ "unknown primitive: " ++ show a
   a -> nothing
@@ -1000,8 +999,17 @@ throwErrorSrc src rl s = do
           se = fromIntegral $ bytes e
   throwError $ concat sl ++ s
 
-newVars :: Int -> Frequency -> Unique [Ty]
-newVars n f = replicateM n $ newVar f
+class NewVar a where
+    type NewVarRes a :: *
+    newV :: a -> Unique (NewVarRes a)
+
+instance NewVar (Unique a) where
+    type NewVarRes (Unique a) = a
+    newV = id
+
+instance NewVar a => NewVar (Ty -> a) where
+    type NewVarRes (Ty -> a) = NewVarRes a
+    newV f = newVar C >>= \v -> newV $ f v
 
 newVar :: Frequency -> Unique Ty
 newVar f = do

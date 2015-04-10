@@ -133,8 +133,7 @@ instance Substitute a => Substitute (EqConstraint a) where
 
 -- replace free type variables with fresh type variables
 instTyping :: Typing -> Unique (Typing,Subst)
-instTyping ty@(m, i, t) = do
-  let fv = freeVars t
+instTyping ty@(_, _, freeVars -> fv) = do
   newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
   return (subst s ty, s)
@@ -339,7 +338,7 @@ monoVar n = do
 unif penv ms is t b = do
     s <- unify ms b
     (s, i) <- joinInstEnv s is
-    m <- joinMonoEnvs $ map (subst s) ms
+    m <- joinMonoEnvs $ subst s ms
     let ty = (m, i, subst s t)
     unamb penv ty
     return (s, ty)
