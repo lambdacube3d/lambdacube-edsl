@@ -1,5 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
---module Parser where
+module Parser where
 
 import Control.Applicative
 import Data.ByteString.Char8 (unpack,pack)
@@ -18,6 +18,9 @@ import Text.Show.Pretty
 
 import Control.Monad
 import Text.Parser.LookAhead
+
+import Type
+import Typing (Range)
 
 type P a = IndentationParserT Token (LCParser Parser) a
 
@@ -51,10 +54,10 @@ lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
       ]
 
 keyword :: String -> P ()
-keyword w = reserve lcIdents w
+keyword = reserve lcIdents
 
 operator :: String -> P ()
-operator w = reserve lcOps w
+operator = reserve lcOps
 
 void_ a = a >> return ()
 
@@ -78,13 +81,13 @@ dataConstructor = void_ $ do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "data constructor must start with capital letter"
 
-var :: P ()
-var = void_ $ do
+var :: P String
+var = do
   i <- ident lcIdents
   if isUpper $ head i then fail "variable name must start with lower case letter" else return i
 
-varId :: P ()
-varId = void_ var <|> void_ (parens $ (ident lcOps :: P String))
+varId :: P String
+varId = var <|> parens (ident lcOps :: P String)
 
 moduleName :: P ()
 moduleName = void_ $ do
@@ -101,7 +104,7 @@ moduleDef = void_ $ do
   localAbsoluteIndentation $ do
     many importDef
     -- TODO: unordered definitions
-    many $ choice [dataDef,try typeSignature,typeSynonym,typeClassDef,try valueDef,fixityDef,typeClassInstanceDef]
+    many $ choice [dataDef,try typeSignature,typeSynonym,typeClassDef,void_ $ try valueDef,fixityDef,typeClassInstanceDef]
 
 importDef :: P ()
 importDef = void_ $ do
@@ -191,77 +194,98 @@ fixityDef = void_ $ do
     natural
     ident lcOps :: P String
 
-valuePattern :: P ()
-valuePattern = try (operator "_") <|> (try $ void_ $ var *> operator "@" *> valuePattern) <|> try var <|> try dataConstructor <|> try pat
- where
-  pat = parens ((try $ void_ $ dataConstructor *> some valuePattern) <|> var)
+undef = (const undefined <$>)
 
-valueDef :: P ()
+valuePattern :: P (Exp Range)
+valuePattern
+    =   try (undef $ operator "_")
+    <|> (try $ undef $ var *> operator "@" *> valuePattern)
+    <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position
+    <|> (undef $ try dataConstructor)
+    <|> try pat
+ where
+  pat = parens ((try $ undef $ dataConstructor *> some valuePattern) <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position)
+
+valueDef :: P (Exp Range -> Exp Range)
 valueDef = try $ do
-  varId
-  localIndentation Gt $ do
-    many valuePattern
+  p1 <- position
+  n <- varId
+  (a, d) <- localIndentation Gt $ do
+    a <- many valuePattern
     operator "="
-    expression
+    d <- expression
+    return (a, d)
   optional $ localIndentation Gt $ do
     keyword "where"
     localIndentation Gt $ localAbsoluteIndentation $ some valueDef
-  return ()
+  p2 <- position
+  return $ \e -> ELet (p1,p2) n (foldr (args (p1,p2)) d a) e
+  where
+    args r (EVar r' n) e = ELam r n e
 
-expression :: P ()
-expression = void_ $ some (
+application :: [Exp Range] -> Exp Range
+application [e] = e
+application es = EApp undefined{-TODO-} (application $ init es) (last es)
+
+expression :: P (Exp Range)
+expression = application <$> some (
   exp listExp <|>
-  exp literalExp <|>
+  exp ((\p1 l p2 -> ELit (p1,p2) l) <$> position <*> literalExp <*> position) <|>
   exp recordExp <|>
   exp lambda <|>
   exp ifthenelse <|>
   exp caseof <|>
   exp letin <|>
-  exp var <|>
-  exp dataConstructor <|> 
+  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
+  exp (undef dataConstructor) <|> 
   exp unit <|>
   exp tuple <|>
-  parens expression)
+  parens expression)    -- TODO: tuple aready handles parens
  where
   gt = localIndentation Gt
 
-  exp :: P () -> P ()
+  exp :: P (Exp Range) -> P (Exp Range)
   exp p = try (p <* optional (operator "::" *> typeExp))
 
-  tuple :: P ()
-  tuple = parens (expression <* some (comma *> expression))
+  tuple :: P (Exp Range)
+  tuple = (\p1 (v, vs) p2 -> if null vs then v else ETuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> expression <*> some (comma *> expression)) <*> position
 
-  unit :: P ()
-  unit = parens (pure ())
+  unit :: P (Exp Range)
+  unit = undef $ parens (pure ())
 
-  lambda :: P ()
-  lambda = operator "\\" *> many valuePattern *> operator "->" *> expression
+  lambda :: P (Exp Range)
+  lambda = (\p1 (EVar r n: _ {-TODO-}) e p2 -> ELam (p1,p2) n e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
 
-  ifthenelse :: P ()
-  ifthenelse = keyword "if" *> (gt $ expression *> keyword "then" *> gt expression *> keyword "else" *> gt expression)
+  ifthenelse :: P (Exp Range)
+  ifthenelse = undef $ keyword "if" *> (gt $ expression *> keyword "then" *> gt expression *> keyword "else" *> gt expression)
 
-  caseof :: P ()
-  caseof = do
+  caseof :: P (Exp Range)
+  caseof = undef $ do
     let casePat = valuePattern *> operator "->" *> (localIndentation Gt $ expression)
     localIndentation Ge $ do
       l <- keyword "case" *> expression *> keyword "of" <* (localIndentation Gt $ localAbsoluteIndentation $ some casePat) -- WORKS
       return ()
 
-  letin :: P ()
+  letin :: P (Exp Range)
   letin = do
     localIndentation Ge $ do
       l <- keyword "let" *> (localIndentation Gt $ localAbsoluteIndentation $ some valueDef) -- WORKS
       a <- keyword "in" *> (localIndentation Gt expression)
-      return ()
+      return $ foldr ($) a l
 
-  recordExp :: P ()
-  recordExp = void_ $ braces (sepBy (varId <* colon <* expression) comma)
+  recordExp :: P (Exp Range)
+  recordExp = undef $ braces (sepBy (varId <* colon <* expression) comma)
 
-  literalExp :: P ()
-  literalExp = choice [void_ (stringLiteral :: P String),void_ double,void_ integer]
+  literalExp :: P Lit
+  literalExp =
+      LFloat <$> {-try-} double <|>
+      LInt <$> integer <|>
+      LChar <$> charLiteral <|>
+      LString <$> stringLiteral <|>
+      LNat . fromIntegral <$ operator "#" <*> integer
 
-  listExp :: P ()
-  listExp = void_ $ brackets $ commaSep expression
+  listExp :: P (Exp Range)
+  listExp = undef $ brackets $ commaSep expression
 
 indentState = mkIndentationState 0 infIndentation True Ge
 
@@ -276,6 +300,10 @@ parseLC fname = do
       return (Left $ show m)
     Success e -> print "Parsed" >> (return $ Right ())
 
+parseLC_ :: String -> IO (BS.ByteString, Result (Exp Range))
+parseLC_ fname = do
+  src <- BS.readFile fname
+  return (src, parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expression <* eof) indentState) (Directed (pack fname) 0 0 0 0) src)
 main = test
 
 -- AST
