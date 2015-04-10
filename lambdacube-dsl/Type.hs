@@ -255,6 +255,7 @@ data Class
   | IsValidOutput
   | IsTypeLevelNatural
   | IsValidFrameBuffer
+  | IsInputTuple
   deriving (Show,Eq,Ord)
 
 data TypeFun a

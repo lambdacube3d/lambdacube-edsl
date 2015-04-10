@@ -417,11 +417,12 @@ reduceTF reduced fail nothing = \case
     TFVecScalar n ty -> reduceTF reduced fail nothing $ TFVec n ty
 
     TFFTRepr' ty -> case ty of
-        TTuple C ts -> maybe (fail "expected Interpolated/Depth/Color inside tuple") (maybe nothing (reduced . TTuple C) . sequence) $ mapM f ts
-        _ -> maybe (fail "expected Interpolated/Depth/Color") (maybe nothing reduced) $ f ty
+        TTuple C ts -> maybe (fail "expected Input/Interpolated/Depth/Color inside tuple") (maybe nothing (reduced . TTuple C) . sequence) $ mapM f ts
+        _ -> maybe (fail "expected Input/Interpolated/Depth/Color") (maybe nothing reduced) $ f ty
       where
         f = \case
             TInterpolated C a -> Just $ Just a
+            TInput C a        -> Just $ Just a
             Depth a           -> Just $ Just a
             Color a           -> Just $ Just a
             TVar _ _ -> Just Nothing
@@ -603,6 +604,12 @@ isInstance reduce fail keep ok = f where
         | sum [1 | Depth{} <- ts] <= 1 && sum [1 | Stencil{} <- ts] <= 1 = ok
         | otherwise = fail "not valid framebuffer"
     f IsValidFrameBuffer _ = ok
+
+    f IsInputTuple (TTuple C ts)
+        | sum [1 | TVar{} <- ts] > 0 = keep
+        | length [() | TInput{} <- ts] == length ts = ok
+        | otherwise = fail "not valid attribute input definition"
+    f IsInputTuple _ = ok
 
     f c t = case Map.lookup c instances of
         Nothing -> fail $ "no " ++ show c ++ " instance for " ++ show t
@@ -813,7 +820,7 @@ inferPrimFun ok nothing = f where
   "PassAll"  -> do t <- newVar C ; ty $ TFragmentFilter C t
   "Filter"   -> do t <- newVar C ; ty $ (t ~> TBool C) ~> TFragmentFilter C t
   -- Render Operations
-  "Fetch"        -> do [a,b] <- newVars 2 C ; ty $ TString C ~> TFetchPrimitive C a ~> TInput C b ~> TVertexStream C a b
+  "Fetch"        -> do [t,a,b] <- newVars 3 C ; [cClass IsInputTuple t, fTRepr' b t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
   "Transform"    -> do [a,b,p] <- newVars 3 C ; ty $ (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
   "Rasterize"    -> do [a,b,c] <- newVars 3 C ; ty $ TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
   {-
