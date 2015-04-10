@@ -319,6 +319,13 @@ primFunSet = Set.fromList
     PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
 
+backPropTF :: Ty -> TypeFun Ty -> [(Ty, Ty)]
+backPropTF (TV4F C) (TFVecScalar a b) = [(a, TNat 4), (b, TFloat C)]
+backPropTF (TV4B C) (TFVecScalar a b) = [(a, TNat 4), (b, TBool C)]
+backPropTF (TM44F C) (TFMat a b) = [(a, TV4F C), (b, TV4F C)]
+backPropTF b' (TFVecScalar (TNat 1) b) = [(b, b')]
+backPropTF _ _ = []
+
 reduceTF :: (Ty -> e) -> (String -> e) -> e -> TypeFun Ty -> e
 reduceTF reduced fail nothing = \case
     TFMat (TV2F C) (TV2F C) -> reduced $ TM22F C
@@ -394,6 +401,15 @@ reduceTF reduced fail nothing = \case
             TInterpolated C a -> Just $ Just a
             Depth a           -> Just $ Just a
             Color a           -> Just $ Just a
+            TVar _ _ -> Just Nothing
+            _ -> Nothing
+
+    TFFragOps ty -> case ty of
+        TTuple C ts -> maybe (fail "expected FragmentOperation inside tuple") (maybe nothing (reduced . TTuple C) . sequence) $ mapM f ts
+        _ -> maybe (fail "expected FragmentOperation") (maybe nothing reduced) $ f ty
+      where
+        f = \case
+            TFragmentOperation C a -> Just $ Just a
             TVar _ _ -> Just Nothing
             _ -> Nothing
 
@@ -735,7 +751,7 @@ inferPrimFun ok nothing = f where
   "LinesAdjacency"     -> ty $ TFetchPrimitive C TLineAdjacency
   "TrianglesAdjacency" -> ty $ TFetchPrimitive C TTriangleAdjacency
   -- Accumulation Context
-  "AccumulationContext"  -> do [t,t'] <- newVars 2 C ; ty $ {-TFragmentOperation C-} t ~> TAccumulationContext C t'
+  "AccumulationContext"  -> do [t,t'] <- newVars 2 C ; [t' ~~ TFFragOps t] ==> t ~> TAccumulationContext C t'
   -- Image
   "ColorImage"   -> do
     [a,d,color,t] <- newVars 4 C

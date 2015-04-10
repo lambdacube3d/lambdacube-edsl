@@ -210,7 +210,12 @@ simplifyInstEnv = fmap concat . mapM (applyPast applyEqConstraint >=> simplifyIn
 simplifyInst c@(CEq ty f) = reduceTF
     (\t -> addUnif ty t >> return [])
     (lift . throwErrorUnique . (("error during reduction of " ++ show f ++ "  ") ++))
-    ((:[]) <$> applyFuture applyEqConstraint c) f
+    ((:[]) <$> applyFuture applyEqConstraint c ) f
+
+simplifyInstEnv' :: EqInstEnv -> SubstAction EqInstEnv
+simplifyInstEnv' is = mapM_ simplifyInst' is >> return is
+
+simplifyInst' c@(CEq ty f) = mapM_ (uncurry addUnif) $ backPropTF ty f
 
 rightReduce :: EqInstEnv -> SubstAction EqInstEnv
 rightReduce ie = do
@@ -230,7 +235,10 @@ simplifyClassInst cl@(CClass c t) = isInstance (\c t -> return [CClass c t]) thr
 
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
 joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
-    (s, es) <- untilNoUnif (rightReduce >=> applyPast applyEqInstEnv >=> barrier >=> injectivityTest >=> simplifyInstEnv) s
+    (s, es) <- untilNoUnif (rightReduce >=> applyPast applyEqInstEnv >=> barrier >=>
+                            injectivityTest >=> applyPast applyEqInstEnv >=> barrier >=>
+                            simplifyInstEnv' >=>
+                            simplifyInstEnv) s
                     $ applyEqInstEnv s es
     cs <- concat <$> mapM (simplifyClassInst . applyClassConstraint s) cs
     -- if needed, simplify class constraints here:  (Ord a, Eq a) --> Ord a
@@ -242,11 +250,13 @@ simplifyTyping (me, ie, t) = do
 
 -- TODO: revise
 prune :: Typing -> Typing
-prune (m, (is, es), t) = (m, (is', es), t)
+prune (m, (is, es), t) = (m, (is', es'), t)
   where
-    defined = freeVarsTy t `mappend` freeVarsMonoEnv m `mappend` mconcat [freeVarsTy ty `mappend` foldMap freeVarsTy f | CEq ty f <- es]
+    defined = untilFix (growDefinedVars es) $ freeVarsMonoEnv m `mappend` freeVarsTy t
     is' = flip filter is $ \case
         CClass _ ty -> freeVarsTy ty `hasCommon` defined
+    es' = flip filter es $ \case
+        CEq ty f -> freeVarsTy ty `hasCommon` defined || foldMap freeVarsTy f `hasCommon` defined
 
 hasCommon a b = not $ Set.null $ a `Set.intersection` b
 
@@ -263,15 +273,15 @@ Not ambiguous:
 unamb :: PolyEnv -> Typing -> Unique ()
 unamb env ty@(m,(is,es),t)
     | used `Set.isSubsetOf` defined = return ()
-    | otherwise = throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "poly env: " ++ show env]
+    | otherwise = throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show env]
   where
     used = mconcat [freeVarsTy ty | CClass _ ty <- is] `mappend` mconcat [freeVarsTy ty `mappend` foldMap freeVarsTy f | CEq ty f <- es]
-    defined = untilFix f $ freeVarsMonoEnv m `mappend` freeVarsTy t
+    defined = untilFix (growDefinedVars es) $ freeVarsMonoEnv m `mappend` freeVarsTy t
 
-    f s = s `mappend` mconcat
-            (  [foldMap freeVarsTy f | CEq ty f <- es, freeVarsTy ty `hasCommon` s]
-            ++ [freeVarsTy ty | CEq ty f <- es, foldMap freeVarsTy f `hasCommon` s]
-            )
+growDefinedVars es s = s `mappend` mconcat
+        (  [foldMap freeVarsTy f | CEq ty f <- es, freeVarsTy ty `hasCommon` s]
+        ++ [freeVarsTy ty | CEq ty f <- es, foldMap freeVarsTy f `hasCommon` s]
+        )
 
 untilFix f s
     | s == s' = s
@@ -317,8 +327,10 @@ infer penv (EApp r f a) = withRanges [r] $ do
     return $ trace__ ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
     tx@(getTag -> ty@(m0, i0, t0)) <- infer penv x
-    te@(getTag -> (m', i', t')) <- infer (Map.insert n ty penv) e
-    ELet <$> ({-prune . -} snd <$> unif penv [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
+    D.traceM $ show ty
+    te@(getTag -> ty'@(m', i', t')) <- infer (Map.insert n ty penv) e
+    D.traceM $ show ty'
+    ELet <$> (prune . snd <$> unif penv [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
 
 -------------------------------------------------------------------------------- main inference function
 

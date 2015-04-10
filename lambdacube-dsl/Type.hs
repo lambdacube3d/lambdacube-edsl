@@ -262,5 +262,6 @@ data TypeFun a
   | TFFTRepr' a
   | TFColorRepr a
   | TFFrameBuffer a
+  | TFFragOps a
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
