@@ -532,15 +532,7 @@ testInj xs@(TFVec{}:_) = transpose [[a,b] | TFVec a b <- xs]
 testInj xs@(TFVecScalar{}:_) = transpose [[a,b] | TFVecScalar a b <- xs]
 testInj xs = []
 
-
-matVecElem t a       = t ~~ TFMatVecElem a
-matVecScalarElem t a = t ~~ TFMatVecScalarElem a
-fTRepr' t a          = t ~~ TFFTRepr' a
-colorRepr t a        = t ~~ TFColorRepr a
-frameBuffer t a      = t ~~ TFFrameBuffer a
-isMat m h w          = m ~~ TFMat h w
-isVec d v c          = v ~~ TFVec d c
-isVecScalar d v c    = v ~~ TFVecScalar d c
+vecS = TFVecScalar
 
 infix 4 ~~
 (~~) :: Ty -> TypeFun Ty -> InstEnv
@@ -630,198 +622,196 @@ joinTupleType l r = TTuple C [l,r]
 inferPrimFun :: (Typing -> Unique e) -> Unique e -> EName -> Unique e
 inferPrimFun ok nothing = f where
 
- ty t = ok (mempty, mempty, t)
-
  infix 6 ==>
  cs ==> t = ok (mempty, mconcat cs, t)
 
  f = \case
   -- temporary const constructor
-  "Tup"          -> newV $ \a -> ty $ a ~> a
-  "Const"        -> newV $ \a -> ty $ a ~> a
+  "Tup"          -> newV $ \a -> [] ==> a ~> a
+  "Const"        -> newV $ \a -> [] ==> a ~> a
   -- Vector/Matrix
-  "True"         -> ty $ TBool C
-  "False"        -> ty $ TBool C
-  "V2B"          -> ty $ TBool C ~> TBool C ~> TV2B C
-  "V3B"          -> ty $ TBool C ~> TBool C ~> TBool C ~> TV3B C
-  "V4B"          -> ty $ TBool C ~> TBool C ~> TBool C ~> TBool C ~> TV4B C
-  "V2U"          -> ty $ TWord C ~> TWord C ~> TV2U C
-  "V3U"          -> ty $ TWord C ~> TWord C ~> TWord C ~> TV3U C
-  "V4U"          -> ty $ TWord C ~> TWord C ~> TWord C ~> TWord C ~> TV4U C
-  "V2I"          -> ty $ TInt C ~> TInt C ~> TV2I C
-  "V3I"          -> ty $ TInt C ~> TInt C ~> TInt C ~> TV3I C
-  "V4I"          -> ty $ TInt C ~> TInt C ~> TInt C ~> TInt C ~> TV4I C
-  "V2F"          -> ty $ TFloat C ~> TFloat C ~> TV2F C
-  "V3F"          -> ty $ TFloat C ~> TFloat C ~> TFloat C ~> TV3F C
-  "V4F"          -> ty $ TFloat C ~> TFloat C ~> TFloat C ~> TFloat C ~> TV4F C
-  "M22F"         -> ty $ TV2F C ~> TV2F C ~> TM22F C
-  "M23F"         -> ty $ TV2F C ~> TV2F C ~> TV2F C ~> TM23F C
-  "M24F"         -> ty $ TV2F C ~> TV2F C ~> TV2F C ~> TV2F C ~> TM24F C
-  "M32F"         -> ty $ TV3F C ~> TV3F C ~> TM32F C
-  "M33F"         -> ty $ TV3F C ~> TV3F C ~> TV3F C ~> TM33F C
-  "M34F"         -> ty $ TV3F C ~> TV3F C ~> TV3F C ~> TV3F C ~> TM34F C
-  "M42F"         -> ty $ TV4F C ~> TV4F C ~> TM42F C
-  "M43F"         -> ty $ TV4F C ~> TV4F C ~> TV4F C ~> TM43F C
-  "M44F"         -> ty $ TV4F C ~> TV4F C ~> TV4F C ~> TV4F C ~> TM44F C
+  "True"         -> [] ==> TBool C
+  "False"        -> [] ==> TBool C
+  "V2B"          -> [] ==> TBool C ~> TBool C ~> TV2B C
+  "V3B"          -> [] ==> TBool C ~> TBool C ~> TBool C ~> TV3B C
+  "V4B"          -> [] ==> TBool C ~> TBool C ~> TBool C ~> TBool C ~> TV4B C
+  "V2U"          -> [] ==> TWord C ~> TWord C ~> TV2U C
+  "V3U"          -> [] ==> TWord C ~> TWord C ~> TWord C ~> TV3U C
+  "V4U"          -> [] ==> TWord C ~> TWord C ~> TWord C ~> TWord C ~> TV4U C
+  "V2I"          -> [] ==> TInt C ~> TInt C ~> TV2I C
+  "V3I"          -> [] ==> TInt C ~> TInt C ~> TInt C ~> TV3I C
+  "V4I"          -> [] ==> TInt C ~> TInt C ~> TInt C ~> TInt C ~> TV4I C
+  "V2F"          -> [] ==> TFloat C ~> TFloat C ~> TV2F C
+  "V3F"          -> [] ==> TFloat C ~> TFloat C ~> TFloat C ~> TV3F C
+  "V4F"          -> [] ==> TFloat C ~> TFloat C ~> TFloat C ~> TFloat C ~> TV4F C
+  "M22F"         -> [] ==> TV2F C ~> TV2F C ~> TM22F C
+  "M23F"         -> [] ==> TV2F C ~> TV2F C ~> TV2F C ~> TM23F C
+  "M24F"         -> [] ==> TV2F C ~> TV2F C ~> TV2F C ~> TV2F C ~> TM24F C
+  "M32F"         -> [] ==> TV3F C ~> TV3F C ~> TM32F C
+  "M33F"         -> [] ==> TV3F C ~> TV3F C ~> TV3F C ~> TM33F C
+  "M34F"         -> [] ==> TV3F C ~> TV3F C ~> TV3F C ~> TV3F C ~> TM34F C
+  "M42F"         -> [] ==> TV4F C ~> TV4F C ~> TM42F C
+  "M43F"         -> [] ==> TV4F C ~> TV4F C ~> TV4F C ~> TM43F C
+  "M44F"         -> [] ==> TV4F C ~> TV4F C ~> TV4F C ~> TV4F C ~> TM44F C
   -- Input declaration
-  "Uni"          -> newV $ \t -> ty $ TInput C t ~> t
-  "IBool"        -> ty $ TString C ~> TInput C (TBool  C)
-  "IV2B"         -> ty $ TString C ~> TInput C (TV2B   C)
-  "IV3B"         -> ty $ TString C ~> TInput C (TV3B   C)
-  "IV4B"         -> ty $ TString C ~> TInput C (TV4B   C)
-  "IWord"        -> ty $ TString C ~> TInput C (TWord  C)
-  "IV2U"         -> ty $ TString C ~> TInput C (TV2U   C)
-  "IV3U"         -> ty $ TString C ~> TInput C (TV3U   C)
-  "IV4U"         -> ty $ TString C ~> TInput C (TV4U   C)
-  "IInt"         -> ty $ TString C ~> TInput C (TInt   C)
-  "IV2I"         -> ty $ TString C ~> TInput C (TV2I   C)
-  "IV3I"         -> ty $ TString C ~> TInput C (TV3I   C)
-  "IV4I"         -> ty $ TString C ~> TInput C (TV4I   C)
-  "IFloat"       -> ty $ TString C ~> TInput C (TFloat C)
-  "IV2F"         -> ty $ TString C ~> TInput C (TV2F   C)
-  "IV3F"         -> ty $ TString C ~> TInput C (TV3F   C)
-  "IV4F"         -> ty $ TString C ~> TInput C (TV4F   C)
-  "IM22F"        -> ty $ TString C ~> TInput C (TM22F  C)
-  "IM23F"        -> ty $ TString C ~> TInput C (TM23F  C)
-  "IM24F"        -> ty $ TString C ~> TInput C (TM24F  C)
-  "IM32F"        -> ty $ TString C ~> TInput C (TM32F  C)
-  "IM33F"        -> ty $ TString C ~> TInput C (TM33F  C)
-  "IM34F"        -> ty $ TString C ~> TInput C (TM34F  C)
-  "IM42F"        -> ty $ TString C ~> TInput C (TM42F  C)
-  "IM43F"        -> ty $ TString C ~> TInput C (TM43F  C)
-  "IM44F"        -> ty $ TString C ~> TInput C (TM44F  C)
+  "Uni"          -> newV $ \t -> [] ==> TInput C t ~> t
+  "IBool"        -> [] ==> TString C ~> TInput C (TBool  C)
+  "IV2B"         -> [] ==> TString C ~> TInput C (TV2B   C)
+  "IV3B"         -> [] ==> TString C ~> TInput C (TV3B   C)
+  "IV4B"         -> [] ==> TString C ~> TInput C (TV4B   C)
+  "IWord"        -> [] ==> TString C ~> TInput C (TWord  C)
+  "IV2U"         -> [] ==> TString C ~> TInput C (TV2U   C)
+  "IV3U"         -> [] ==> TString C ~> TInput C (TV3U   C)
+  "IV4U"         -> [] ==> TString C ~> TInput C (TV4U   C)
+  "IInt"         -> [] ==> TString C ~> TInput C (TInt   C)
+  "IV2I"         -> [] ==> TString C ~> TInput C (TV2I   C)
+  "IV3I"         -> [] ==> TString C ~> TInput C (TV3I   C)
+  "IV4I"         -> [] ==> TString C ~> TInput C (TV4I   C)
+  "IFloat"       -> [] ==> TString C ~> TInput C (TFloat C)
+  "IV2F"         -> [] ==> TString C ~> TInput C (TV2F   C)
+  "IV3F"         -> [] ==> TString C ~> TInput C (TV3F   C)
+  "IV4F"         -> [] ==> TString C ~> TInput C (TV4F   C)
+  "IM22F"        -> [] ==> TString C ~> TInput C (TM22F  C)
+  "IM23F"        -> [] ==> TString C ~> TInput C (TM23F  C)
+  "IM24F"        -> [] ==> TString C ~> TInput C (TM24F  C)
+  "IM32F"        -> [] ==> TString C ~> TInput C (TM32F  C)
+  "IM33F"        -> [] ==> TString C ~> TInput C (TM33F  C)
+  "IM34F"        -> [] ==> TString C ~> TInput C (TM34F  C)
+  "IM42F"        -> [] ==> TString C ~> TInput C (TM42F  C)
+  "IM43F"        -> [] ==> TString C ~> TInput C (TM43F  C)
+  "IM44F"        -> [] ==> TString C ~> TInput C (TM44F  C)
   -- BlendingFactor
-  "Zero"                   -> ty $ TBlendingFactor C
-  "One"                    -> ty $ TBlendingFactor C
-  "SrcColor"               -> ty $ TBlendingFactor C
-  "OneMinusSrcColor"       -> ty $ TBlendingFactor C
-  "DstColor"               -> ty $ TBlendingFactor C
-  "OneMinusDstColor"       -> ty $ TBlendingFactor C
-  "SrcAlpha"               -> ty $ TBlendingFactor C
-  "OneMinusSrcAlpha"       -> ty $ TBlendingFactor C
-  "DstAlpha"               -> ty $ TBlendingFactor C
-  "OneMinusDstAlpha"       -> ty $ TBlendingFactor C
-  "ConstantColor"          -> ty $ TBlendingFactor C
-  "OneMinusConstantColor"  -> ty $ TBlendingFactor C
-  "ConstantAlpha"          -> ty $ TBlendingFactor C
-  "OneMinusConstantAlpha"  -> ty $ TBlendingFactor C
-  "SrcAlphaSaturate"       -> ty $ TBlendingFactor C
+  "Zero"                   -> [] ==> TBlendingFactor C
+  "One"                    -> [] ==> TBlendingFactor C
+  "SrcColor"               -> [] ==> TBlendingFactor C
+  "OneMinusSrcColor"       -> [] ==> TBlendingFactor C
+  "DstColor"               -> [] ==> TBlendingFactor C
+  "OneMinusDstColor"       -> [] ==> TBlendingFactor C
+  "SrcAlpha"               -> [] ==> TBlendingFactor C
+  "OneMinusSrcAlpha"       -> [] ==> TBlendingFactor C
+  "DstAlpha"               -> [] ==> TBlendingFactor C
+  "OneMinusDstAlpha"       -> [] ==> TBlendingFactor C
+  "ConstantColor"          -> [] ==> TBlendingFactor C
+  "OneMinusConstantColor"  -> [] ==> TBlendingFactor C
+  "ConstantAlpha"          -> [] ==> TBlendingFactor C
+  "OneMinusConstantAlpha"  -> [] ==> TBlendingFactor C
+  "SrcAlphaSaturate"       -> [] ==> TBlendingFactor C
   -- BlendEquation
-  "FuncAdd"                -> ty $ TBlendEquation C
-  "FuncSubtract"           -> ty $ TBlendEquation C
-  "FuncReverseSubtract"    -> ty $ TBlendEquation C
-  "Min"                    -> ty $ TBlendEquation C
-  "Max"                    -> ty $ TBlendEquation C
+  "FuncAdd"                -> [] ==> TBlendEquation C
+  "FuncSubtract"           -> [] ==> TBlendEquation C
+  "FuncReverseSubtract"    -> [] ==> TBlendEquation C
+  "Min"                    -> [] ==> TBlendEquation C
+  "Max"                    -> [] ==> TBlendEquation C
   -- LogicOperation
-  "Clear"        -> ty $ TLogicOperation C
-  "And"          -> ty $ TLogicOperation C
-  "AndReverse"   -> ty $ TLogicOperation C
-  "Copy"         -> ty $ TLogicOperation C
-  "AndInverted"  -> ty $ TLogicOperation C
-  "Noop"         -> ty $ TLogicOperation C
-  "Xor"          -> ty $ TLogicOperation C
-  "Or"           -> ty $ TLogicOperation C
-  "Nor"          -> ty $ TLogicOperation C
-  "Equiv"        -> ty $ TLogicOperation C
-  "Invert"       -> ty $ TLogicOperation C
-  "OrReverse"    -> ty $ TLogicOperation C
-  "CopyInverted" -> ty $ TLogicOperation C
-  "OrInverted"   -> ty $ TLogicOperation C
-  "Nand"         -> ty $ TLogicOperation C
-  "Set"          -> ty $ TLogicOperation C
+  "Clear"        -> [] ==> TLogicOperation C
+  "And"          -> [] ==> TLogicOperation C
+  "AndReverse"   -> [] ==> TLogicOperation C
+  "Copy"         -> [] ==> TLogicOperation C
+  "AndInverted"  -> [] ==> TLogicOperation C
+  "Noop"         -> [] ==> TLogicOperation C
+  "Xor"          -> [] ==> TLogicOperation C
+  "Or"           -> [] ==> TLogicOperation C
+  "Nor"          -> [] ==> TLogicOperation C
+  "Equiv"        -> [] ==> TLogicOperation C
+  "Invert"       -> [] ==> TLogicOperation C
+  "OrReverse"    -> [] ==> TLogicOperation C
+  "CopyInverted" -> [] ==> TLogicOperation C
+  "OrInverted"   -> [] ==> TLogicOperation C
+  "Nand"         -> [] ==> TLogicOperation C
+  "Set"          -> [] ==> TLogicOperation C
   -- StencilOperation
-  "OpZero"       -> ty $ TStencilOperation C
-  "OpKeep"       -> ty $ TStencilOperation C
-  "OpReplace"    -> ty $ TStencilOperation C
-  "OpIncr"       -> ty $ TStencilOperation C
-  "OpIncrWrap"   -> ty $ TStencilOperation C
-  "OpDecr"       -> ty $ TStencilOperation C
-  "OpDecrWrap"   -> ty $ TStencilOperation C
-  "OpInvert"     -> ty $ TStencilOperation C
+  "OpZero"       -> [] ==> TStencilOperation C
+  "OpKeep"       -> [] ==> TStencilOperation C
+  "OpReplace"    -> [] ==> TStencilOperation C
+  "OpIncr"       -> [] ==> TStencilOperation C
+  "OpIncrWrap"   -> [] ==> TStencilOperation C
+  "OpDecr"       -> [] ==> TStencilOperation C
+  "OpDecrWrap"   -> [] ==> TStencilOperation C
+  "OpInvert"     -> [] ==> TStencilOperation C
   -- ComparisonFunction
-  "Never"    -> ty $ TComparisonFunction C
-  "Less"     -> ty $ TComparisonFunction C
-  "Equal"    -> ty $ TComparisonFunction C
-  "Lequal"   -> ty $ TComparisonFunction C
-  "Greater"  -> ty $ TComparisonFunction C
-  "Notequal" -> ty $ TComparisonFunction C
-  "Gequal"   -> ty $ TComparisonFunction C
-  "Always"   -> ty $ TComparisonFunction C
+  "Never"    -> [] ==> TComparisonFunction C
+  "Less"     -> [] ==> TComparisonFunction C
+  "Equal"    -> [] ==> TComparisonFunction C
+  "Lequal"   -> [] ==> TComparisonFunction C
+  "Greater"  -> [] ==> TComparisonFunction C
+  "Notequal" -> [] ==> TComparisonFunction C
+  "Gequal"   -> [] ==> TComparisonFunction C
+  "Always"   -> [] ==> TComparisonFunction C
   -- ProvokingVertex
-  "LastVertex"   -> ty $ TProvokingVertex C
-  "FirstVertex"  -> ty $ TProvokingVertex C
+  "LastVertex"   -> [] ==> TProvokingVertex C
+  "FirstVertex"  -> [] ==> TProvokingVertex C
   -- CullMode
-  "CullNone"     -> ty $ TCullMode C
-  "CullFront"    -> ty $ TFrontFace C ~> TCullMode C
-  "CullBack"     -> ty $ TFrontFace C ~> TCullMode C
+  "CullNone"     -> [] ==> TCullMode C
+  "CullFront"    -> [] ==> TFrontFace C ~> TCullMode C
+  "CullBack"     -> [] ==> TFrontFace C ~> TCullMode C
   -- FrontFace
-  "CW"   -> ty $ TFrontFace C
-  "CCW"  -> ty $ TFrontFace C
+  "CW"   -> [] ==> TFrontFace C
+  "CCW"  -> [] ==> TFrontFace C
   -- PolygonMode
-  "PolygonFill"  -> ty $ TPolygonMode C
-  "PolygonPoint" -> ty $ TPointSize C ~> TPolygonMode C
-  "PolygonLine"  -> ty $ TFloat C ~> TPolygonMode C
+  "PolygonFill"  -> [] ==> TPolygonMode C
+  "PolygonPoint" -> [] ==> TPointSize C ~> TPolygonMode C
+  "PolygonLine"  -> [] ==> TFloat C ~> TPolygonMode C
   -- PolygonOffset
-  "NoOffset" -> ty $ TPolygonOffset C
-  "Offset"   -> ty $ TFloat C ~> TFloat C ~> TPolygonOffset C
+  "NoOffset" -> [] ==> TPolygonOffset C
+  "Offset"   -> [] ==> TFloat C ~> TFloat C ~> TPolygonOffset C
   -- PointSize
-  "PointSize"        -> ty $ TFloat C ~> TPointSize C
-  "ProgramPointSize" -> ty $ TPointSize C
+  "PointSize"        -> [] ==> TFloat C ~> TPointSize C
+  "ProgramPointSize" -> [] ==> TPointSize C
   -- Fragment Out
   {-
     FragmentOut             ::                  FlatExp F a -> FragmentOut (ColorRepr a)
     FragmentOutDepth        :: Exp F Float  ->  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
     FragmentOutRastDepth    ::                  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
   -}
-  "FragmentOut"           -> newV $ \a t -> [colorRepr a t] ==> t ~> TFragmentOut C a
-  "FragmentOutDepth"      -> newV $ \a t -> [colorRepr a t] ==> TFloat C ~> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
-  "FragmentOutRastDepth"  -> newV $ \a t -> [colorRepr a t] ==> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
+  "FragmentOut"           -> newV $ \a t -> [a ~~ TFColorRepr t] ==> t ~> TFragmentOut C a
+  "FragmentOutDepth"      -> newV $ \a t -> [a ~~ TFColorRepr t] ==> TFloat C ~> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
+  "FragmentOutRastDepth"  -> newV $ \a t -> [a ~~ TFColorRepr t] ==> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
   -- Vertex Out
-  "VertexOut"    -> newV $ \a t -> [fTRepr' t a] ==> TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C t
+  "VertexOut"    -> newV $ \a t -> [t ~~ TFFTRepr' a] ==> TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C t
   -- PointSpriteCoordOrigin
-  "LowerLeft"  -> ty $ TPointSpriteCoordOrigin C
-  "UpperLeft"  -> ty $ TPointSpriteCoordOrigin C
+  "LowerLeft"  -> [] ==> TPointSpriteCoordOrigin C
+  "UpperLeft"  -> [] ==> TPointSpriteCoordOrigin C
   -- Raster Context
-  "TriangleCtx"  -> ty $ TCullMode C ~> TPolygonMode C ~> TPolygonOffset C ~> TProvokingVertex C ~> TRasterContext C TTriangle
-  "PointCtx"     -> ty $ TPointSize C ~> TFloat C ~> TPointSpriteCoordOrigin C ~> TRasterContext C TPoint
-  "LineCtx"      -> ty $ TFloat C ~> TProvokingVertex C ~> TRasterContext C TLine
+  "TriangleCtx"  -> [] ==> TCullMode C ~> TPolygonMode C ~> TPolygonOffset C ~> TProvokingVertex C ~> TRasterContext C TTriangle
+  "PointCtx"     -> [] ==> TPointSize C ~> TFloat C ~> TPointSpriteCoordOrigin C ~> TRasterContext C TPoint
+  "LineCtx"      -> [] ==> TFloat C ~> TProvokingVertex C ~> TRasterContext C TLine
   -- Fetch Primitive
-  "Points"             -> ty $ TFetchPrimitive C TPoint
-  "Lines"              -> ty $ TFetchPrimitive C TLine
-  "Triangles"          -> ty $ TFetchPrimitive C TTriangle
-  "LinesAdjacency"     -> ty $ TFetchPrimitive C TLineAdjacency
-  "TrianglesAdjacency" -> ty $ TFetchPrimitive C TTriangleAdjacency
+  "Points"             -> [] ==> TFetchPrimitive C TPoint
+  "Lines"              -> [] ==> TFetchPrimitive C TLine
+  "Triangles"          -> [] ==> TFetchPrimitive C TTriangle
+  "LinesAdjacency"     -> [] ==> TFetchPrimitive C TLineAdjacency
+  "TrianglesAdjacency" -> [] ==> TFetchPrimitive C TTriangleAdjacency
   -- Accumulation Context
   "AccumulationContext"  -> newV $ \t' t -> [t' ~~ TFFragOps t] ==> t ~> TAccumulationContext C t'
   -- Image
   "ColorImage" -> newV $ \a d color t ->
-    [isTypeLevelNatural a, isNum t, isVecScalar d color t] ==> a ~> color ~> TImage C a (Color color)
+    [isTypeLevelNatural a, isNum t, color ~~ vecS d t] ==> a ~> color ~> TImage C a (Color color)
   "DepthImage" -> newV $ \a ->
     [isTypeLevelNatural a] ==> a ~> TFloat C ~> TImage C a (Depth $ TFloat C)
   "StencilImage" -> newV $ \a ->
     [isTypeLevelNatural a] ==> a ~> TInt C ~> TImage C a (Stencil $ TInt C)
   -- Interpolation
-  "Flat"           -> newV $ \t -> ty $ t ~> TInterpolated C t
+  "Flat"           -> newV $ \t -> [] ==> t ~> TInterpolated C t
   "Smooth"         -> newV $ \t -> [isFloating t] ==> t ~> TInterpolated C t
   "NoPerspective"  -> newV $ \t -> [isFloating t] ==> t ~> TInterpolated C t
   -- Fragment Operation
   "ColorOp"    -> newV $ \d mask c color ->
-    [isVecScalar d mask (TBool C), isVecScalar d color c, isNum c] ==> TBlending C c ~> mask ~> TFragmentOperation C (Color color)
-  "DepthOp"    -> ty $ TComparisonFunction C ~> TBool C ~> TFragmentOperation C (Depth $ TFloat C)
+    [mask ~~ vecS d (TBool C), color ~~ vecS d c, isNum c] ==> TBlending C c ~> mask ~> TFragmentOperation C (Color color)
+  "DepthOp"    -> [] ==> TComparisonFunction C ~> TBool C ~> TFragmentOperation C (Depth $ TFloat C)
     -- "StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
   -- Blending
-  "NoBlending"   -> newV $ \t -> ty $ TBlending C t
+  "NoBlending"   -> newV $ \t -> [] ==> TBlending C t
   "BlendLogicOp" -> newV $ \t -> [isIntegral t] ==> TLogicOperation C ~> TBlending C t
-  "Blend"        -> ty $ TTuple C [TBlendEquation C,TBlendEquation C]
+  "Blend"        -> [] ==> TTuple C [TBlendEquation C,TBlendEquation C]
                          ~> TTuple C [TTuple C [TBlendingFactor C,TBlendingFactor C],TTuple C [TBlendingFactor C,TBlendingFactor C]]
                          ~> TV4F C ~> TBlending C (TFloat C)
   -- Fragment Filter
-  "PassAll"  -> newV $ \t -> ty $ TFragmentFilter C t
-  "Filter"   -> newV $ \t -> ty $ (t ~> TBool C) ~> TFragmentFilter C t
+  "PassAll"  -> newV $ \t -> [] ==> TFragmentFilter C t
+  "Filter"   -> newV $ \t -> [] ==> (t ~> TBool C) ~> TFragmentFilter C t
   -- Render Operations
-  "Fetch"        -> newV $ \a t b -> [cClass IsInputTuple t, fTRepr' b t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
-  "Transform"    -> newV $ \a b p -> ty $ (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
-  "Rasterize"    -> newV $ \a b c -> ty $ TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
+  "Fetch"        -> newV $ \a t b -> [cClass IsInputTuple t, b ~~ TFFTRepr' t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
+  "Transform"    -> newV $ \a b p -> [] ==> (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
+  "Rasterize"    -> newV $ \a b c -> [] ==> TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
   {-
     Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
                     => AccumulationContext b
@@ -832,7 +822,7 @@ inferPrimFun ok nothing = f where
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
   -}
   "Accumulate" -> newV $ \a b n t ->
-    [isValidOutput b, fTRepr' t b] ==>
+    [isValidOutput b, t ~~ TFFTRepr' b] ==>
            TAccumulationContext C b
         ~> TFragmentFilter C a
         ~> (a ~> TFragmentOut C b)
@@ -840,129 +830,129 @@ inferPrimFun ok nothing = f where
         ~> TFrameBuffer C n t
         ~> TFrameBuffer C n t
   "FrameBuffer"  -> newV $ \a t t' n ->
-    [fTRepr' t' t, cClass IsValidFrameBuffer t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
-  "ScreenOut"    -> newV $ \a b -> ty $ TFrameBuffer C a b ~> TOutput C
+    [t' ~~ TFFTRepr' t, cClass IsValidFrameBuffer t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
+  "ScreenOut"    -> newV $ \a b -> [] ==> TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
-  "PrimAdd"   -> newV $ \a t -> [matVecElem t a, isNum t] ==> a ~> a ~> a
-  "PrimAddS"  -> newV $ \a t -> [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
-  "PrimSub"   -> newV $ \a t -> [matVecElem t a, isNum t] ==> a ~> a ~> a
-  "PrimSubS"  -> newV $ \a t -> [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
-  "PrimMul"   -> newV $ \a t -> [matVecElem t a, isNum t] ==> a ~> a ~> a
-  "PrimMulS"  -> newV $ \a t -> [matVecScalarElem t a, isNum t] ==> a ~> t ~> a
-  "PrimDiv"   -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimDivS"  -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimNeg"   -> newV $ \a t -> [matVecScalarElem t a, isSigned t] ==> a ~> a
-  "PrimMod"   -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimModS"  -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> a
+  "PrimAdd"   -> newV $ \a t -> [t ~~ TFMatVecElem a, isNum t] ==> a ~> a ~> a
+  "PrimAddS"  -> newV $ \a t -> [t ~~ TFMatVecScalarElem a, isNum t] ==> a ~> t ~> a
+  "PrimSub"   -> newV $ \a t -> [t ~~ TFMatVecElem a, isNum t] ==> a ~> a ~> a
+  "PrimSubS"  -> newV $ \a t -> [t ~~ TFMatVecScalarElem a, isNum t] ==> a ~> t ~> a
+  "PrimMul"   -> newV $ \a t -> [t ~~ TFMatVecElem a, isNum t] ==> a ~> a ~> a
+  "PrimMulS"  -> newV $ \a t -> [t ~~ TFMatVecScalarElem a, isNum t] ==> a ~> t ~> a
+  "PrimDiv"   -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> a ~> a
+  "PrimDivS"  -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> t ~> a
+  "PrimNeg"   -> newV $ \a t -> [t ~~ TFMatVecScalarElem a, isSigned t] ==> a ~> a
+  "PrimMod"   -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> a ~> a
+  "PrimModS"  -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> t ~> a
   -- Bit-wise Functions
-  "PrimBAnd"      -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimBAndS"     -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimBOr"       -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimBOrS"      -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimBXor"      -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimBXorS"     -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimBNot"      -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> a
-  "PrimBShiftL"   -> newV $ \d a b t -> [isIntegral t, isVecScalar d a t, isVecScalar d b (TWord C)] ==> a ~> b ~> a
-  "PrimBShiftLS"  -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> TWord C ~> a
-  "PrimBShiftR"   -> newV $ \d a b t -> [isIntegral t, isVecScalar d a t, isVecScalar d b (TWord C)] ==> a ~> b ~> a
-  "PrimBShiftRS"  -> newV $ \d a t -> [isIntegral t, isVecScalar d a t] ==> a ~> TWord C ~> a
+  "PrimBAnd"      -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> a ~> a
+  "PrimBAndS"     -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> t ~> a
+  "PrimBOr"       -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> a ~> a
+  "PrimBOrS"      -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> t ~> a
+  "PrimBXor"      -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> a ~> a
+  "PrimBXorS"     -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> t ~> a
+  "PrimBNot"      -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> a
+  "PrimBShiftL"   -> newV $ \d a b t -> [isIntegral t, a ~~ vecS d t, b ~~ vecS d (TWord C)] ==> a ~> b ~> a
+  "PrimBShiftLS"  -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> TWord C ~> a
+  "PrimBShiftR"   -> newV $ \d a b t -> [isIntegral t, a ~~ vecS d t, b ~~ vecS d (TWord C)] ==> a ~> b ~> a
+  "PrimBShiftRS"  -> newV $ \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> TWord C ~> a
   -- Logic Functions
-  "PrimAnd" -> ty $ TBool C ~> TBool C ~> TBool C
-  "PrimOr"  -> ty $ TBool C ~> TBool C ~> TBool C
-  "PrimXor" -> ty $ TBool C ~> TBool C ~> TBool C
-  "PrimNot" -> newV $ \d a -> [isVecScalar d a (TBool C)] ==> a ~> a
-  "PrimAny" -> newV $ \d a -> [isVecScalar d a (TBool C)] ==> a ~> TBool C
-  "PrimAll" -> newV $ \d a -> [isVecScalar d a (TBool C)] ==> a ~> TBool C
+  "PrimAnd" -> [] ==> TBool C ~> TBool C ~> TBool C
+  "PrimOr"  -> [] ==> TBool C ~> TBool C ~> TBool C
+  "PrimXor" -> [] ==> TBool C ~> TBool C ~> TBool C
+  "PrimNot" -> newV $ \d a -> [a ~~ vecS d (TBool C)] ==> a ~> a
+  "PrimAny" -> newV $ \d a -> [a ~~ vecS d (TBool C)] ==> a ~> TBool C
+  "PrimAll" -> newV $ \d a -> [a ~~ vecS d (TBool C)] ==> a ~> TBool C
   -- Angle and Trigonometry Functions
-  "PrimACos"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimACosH"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimASin"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimASinH"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimATan"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimATan2"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
-  "PrimATanH"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimCos"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimCosH"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimDegrees" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimRadians" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimSin"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimSinH"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimTan"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimTanH"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimACos"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimACosH"   -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimASin"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimASinH"   -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimATan"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimATan2"   -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a
+  "PrimATanH"   -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimCos"     -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimCosH"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimDegrees" -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimRadians" -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimSin"     -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimSinH"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimTan"     -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimTanH"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
   -- Exponential Functions
-  "PrimPow"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
-  "PrimExp"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimLog"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimExp2"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimLog2"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimSqrt"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimInvSqrt" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimPow"     -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a
+  "PrimExp"     -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimLog"     -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimExp2"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimLog2"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimSqrt"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimInvSqrt" -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
   -- Common Functions
-  "PrimIsNan"       -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> b
-  "PrimIsInf"       -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> b
-  "PrimAbs"         -> newV $ \d a t -> [isSigned t, isVecScalar d a t] ==> a ~> a
-  "PrimSign"        -> newV $ \d a t -> [isSigned t, isVecScalar d a t] ==> a ~> a
-  "PrimFloor"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimTrunc"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimRound"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimRoundEven"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimCeil"        -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimFract"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimModF"        -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> TTuple C [a,a]
-  "PrimMin"         -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimMinS"        -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimMax"         -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a
-  "PrimMaxS"        -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> a
-  "PrimClamp"       -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> a ~> a ~> a
-  "PrimClampS"      -> newV $ \d a t -> [isNum t, isVecScalar d a t] ==> a ~> t ~> t ~> a
-  "PrimMix"         -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimMixS"        -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C ~> a
-  "PrimMixB"        -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar d b (TBool C)] ==> a ~> a ~> b ~> a
-  "PrimStep"        -> newV $ \d a -> [isVec d a (TFloat C)] ==> a ~> a ~> a
-  "PrimStepS"       -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> TFloat C ~> a ~> a
-  "PrimSmoothStep"  -> newV $ \d a -> [isVec d a (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimSmoothStepS" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> TFloat C ~> TFloat C ~> a ~> a
+  "PrimIsNan"       -> newV $ \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS d (TBool C)] ==> a ~> b
+  "PrimIsInf"       -> newV $ \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS d (TBool C)] ==> a ~> b
+  "PrimAbs"         -> newV $ \d a t -> [isSigned t, a ~~ vecS d t] ==> a ~> a
+  "PrimSign"        -> newV $ \d a t -> [isSigned t, a ~~ vecS d t] ==> a ~> a
+  "PrimFloor"       -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimTrunc"       -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimRound"       -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimRoundEven"   -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimCeil"        -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimFract"       -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimModF"        -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> TTuple C [a,a]
+  "PrimMin"         -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> a ~> a
+  "PrimMinS"        -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> t ~> a
+  "PrimMax"         -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> a ~> a
+  "PrimMaxS"        -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> t ~> a
+  "PrimClamp"       -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> a ~> a ~> a
+  "PrimClampS"      -> newV $ \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> t ~> t ~> a
+  "PrimMix"         -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimMixS"        -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> TFloat C ~> a
+  "PrimMixB"        -> newV $ \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS d (TBool C)] ==> a ~> a ~> b ~> a
+  "PrimStep"        -> newV $ \d a -> [a ~~ TFVec d (TFloat C)] ==> a ~> a ~> a
+  "PrimStepS"       -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> TFloat C ~> a ~> a
+  "PrimSmoothStep"  -> newV $ \d a -> [a ~~ TFVec d (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimSmoothStepS" -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> TFloat C ~> TFloat C ~> a ~> a
   -- Integer/Float Conversion Functions
-  "PrimFloatBitsToInt"  -> newV $ \d fv iv -> [isVecScalar d fv (TFloat C), isVecScalar d iv (TInt C)] ==> fv ~> iv
-  "PrimFloatBitsToUInt" -> newV $ \d fv uv -> [isVecScalar d fv (TFloat C), isVecScalar d uv (TWord C)] ==> fv ~> uv
-  "PrimIntBitsToFloat"  -> newV $ \d fv iv -> [isVecScalar d fv (TFloat C), isVecScalar d iv (TInt C)] ==> iv ~> fv
-  "PrimUIntBitsToFloat" -> newV $ \d fv uv -> [isVecScalar d fv (TFloat C), isVecScalar d uv (TWord C)] ==> uv ~> fv
+  "PrimFloatBitsToInt"  -> newV $ \d fv iv -> [fv ~~ vecS d (TFloat C), iv ~~ vecS d (TInt C)] ==> fv ~> iv
+  "PrimFloatBitsToUInt" -> newV $ \d fv uv -> [fv ~~ vecS d (TFloat C), uv ~~ vecS d (TWord C)] ==> fv ~> uv
+  "PrimIntBitsToFloat"  -> newV $ \d fv iv -> [fv ~~ vecS d (TFloat C), iv ~~ vecS d (TInt C)] ==> iv ~> fv
+  "PrimUIntBitsToFloat" -> newV $ \d fv uv -> [fv ~~ vecS d (TFloat C), uv ~~ vecS d (TWord C)] ==> uv ~> fv
   -- Geometric Functions
-  "PrimLength"      -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> TFloat C
-  "PrimDistance"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C
-  "PrimDot"         -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> TFloat C
-  "PrimCross"       -> newV $ \a -> [isVecScalar (TNat 3) a (TFloat C)] ==> a ~> a ~> a
-  "PrimNormalize"   -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimFaceForward" -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimReflect"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a
-  "PrimRefract"     -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimLength"      -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> TFloat C
+  "PrimDistance"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> TFloat C
+  "PrimDot"         -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> TFloat C
+  "PrimCross"       -> newV $ \a -> [a ~~ vecS (TNat 3) (TFloat C)] ==> a ~> a ~> a
+  "PrimNormalize"   -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimFaceForward" -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a ~> a
+  "PrimReflect"     -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a
+  "PrimRefract"     -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a ~> a
   -- Matrix Functions
-  "PrimTranspose"     -> newV $ \a b h w -> [isMat a h w, isMat b w h] ==> a ~> b
-  "PrimDeterminant"   -> newV $ \m s -> [isMat m s s] ==> m ~> TFloat C
-  "PrimInverse"       -> newV $ \m s -> [isMat m s s] ==> m ~> m
-  "PrimOuterProduct"  -> newV $ \m h w -> [isMat m h w] ==> w ~> h ~> m
-  "PrimMulMatVec"     -> newV $ \m h w -> [isMat m h w] ==> m ~> w ~> h
-  "PrimMulVecMat"     -> newV $ \m h w -> [isMat m h w] ==> h ~> m ~> w
-  "PrimMulMatMat"     -> newV $ \a b c i j k -> [isMat a i j, isMat b j k, isMat c i k] ==> a ~> b ~> c
+  "PrimTranspose"     -> newV $ \a b h w -> [a ~~ TFMat h w, b ~~ TFMat w h] ==> a ~> b
+  "PrimDeterminant"   -> newV $ \m s -> [m ~~ TFMat s s] ==> m ~> TFloat C
+  "PrimInverse"       -> newV $ \m s -> [m ~~ TFMat s s] ==> m ~> m
+  "PrimOuterProduct"  -> newV $ \m h w -> [m ~~ TFMat h w] ==> w ~> h ~> m
+  "PrimMulMatVec"     -> newV $ \m h w -> [m ~~ TFMat h w] ==> m ~> w ~> h
+  "PrimMulVecMat"     -> newV $ \m h w -> [m ~~ TFMat h w] ==> h ~> m ~> w
+  "PrimMulMatMat"     -> newV $ \a b c i j k -> [a ~~ TFMat i j, b ~~ TFMat j k, c ~~ TFMat i k] ==> a ~> b ~> c
   -- Vector and Scalar Relational Functions
-  "PrimLessThan"          -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimLessThanEqual"     -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimGreaterThan"       -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimGreaterThanEqual"  -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimEqualV"            -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimEqual"             -> newV $ \a t -> [matVecScalarElem t a] ==> a ~> a ~> TBool C
-  "PrimNotEqualV"         -> newV $ \d a b t -> [isNum t, isVecScalar d a t, isVecScalar d b (TBool C)] ==> a ~> a ~> b
-  "PrimNotEqual"          -> newV $ \a t -> [matVecScalarElem t a] ==> a ~> a ~> TBool C
+  "PrimLessThan"          -> newV $ \d a b t -> [isNum t, a ~~ vecS d t, b ~~ vecS d (TBool C)] ==> a ~> a ~> b
+  "PrimLessThanEqual"     -> newV $ \d a b t -> [isNum t, a ~~ vecS d t, b ~~ vecS d (TBool C)] ==> a ~> a ~> b
+  "PrimGreaterThan"       -> newV $ \d a b t -> [isNum t, a ~~ vecS d t, b ~~ vecS d (TBool C)] ==> a ~> a ~> b
+  "PrimGreaterThanEqual"  -> newV $ \d a b t -> [isNum t, a ~~ vecS d t, b ~~ vecS d (TBool C)] ==> a ~> a ~> b
+  "PrimEqualV"            -> newV $ \d a b t -> [isNum t, a ~~ vecS d t, b ~~ vecS d (TBool C)] ==> a ~> a ~> b
+  "PrimEqual"             -> newV $ \a t -> [t ~~ TFMatVecScalarElem a] ==> a ~> a ~> TBool C
+  "PrimNotEqualV"         -> newV $ \d a b t -> [isNum t, a ~~ vecS d t, b ~~ vecS d (TBool C)] ==> a ~> a ~> b
+  "PrimNotEqual"          -> newV $ \a t -> [t ~~ TFMatVecScalarElem a] ==> a ~> a ~> TBool C
   -- Fragment Processing Functions
-  "PrimDFdx"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimDFdy"    -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
-  "PrimFWidth"  -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> a
+  "PrimDFdx"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimDFdy"    -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+  "PrimFWidth"  -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a
   -- Noise Functions
-  "PrimNoise1"  -> newV $ \d a -> [isVecScalar d a (TFloat C)] ==> a ~> TFloat C
-  "PrimNoise2"  -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar (TNat 2) b (TFloat C)] ==> a ~> b
-  "PrimNoise3"  -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar (TNat 3) b (TFloat C)] ==> a ~> b
-  "PrimNoise4"  -> newV $ \d a b -> [isVecScalar d a (TFloat C), isVecScalar (TNat 4) b (TFloat C)] ==> a ~> b
+  "PrimNoise1"  -> newV $ \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> TFloat C
+  "PrimNoise2"  -> newV $ \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS (TNat 2) (TFloat C)] ==> a ~> b
+  "PrimNoise3"  -> newV $ \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS (TNat 3) (TFloat C)] ==> a ~> b
+  "PrimNoise4"  -> newV $ \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS (TNat 4) (TFloat C)] ==> a ~> b
 
 --  a -> throwErrorUnique $ "unknown primitive: " ++ show a
   a -> nothing
