@@ -80,6 +80,7 @@ data Ty_ a
   | TArr_    a a
   -- composit
   | TTuple_  Frequency [a]
+  | TRecord_ (Map FName a)
   | TArray_  Frequency a
   -- type families are placed in constraints
   -- | TFun    (TypeFun a)
@@ -165,6 +166,7 @@ data Ty_ a
 pattern TVar a b = Ty (TVar_ a b)
 pattern TArr a b = Ty (TArr_ a b)
 pattern TTuple a b = Ty (TTuple_ a b)
+pattern TRecord b = Ty (TRecord_ b)
 pattern TArray a b = Ty (TArray_ a b)
 pattern TChar a = Ty (TChar_ a)
 pattern TString a = Ty (TString_ a)
@@ -237,6 +239,7 @@ data ClassConstraint a
 
 data EqConstraint a
   = CEq a (TypeFun a)  -- CEq t f   ~~~  t ~ TFun f
+  | Split a a a
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 data Class

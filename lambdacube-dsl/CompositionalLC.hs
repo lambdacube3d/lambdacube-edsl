@@ -83,8 +83,8 @@ freeVarsMonoEnv :: MonoEnv -> Set TName
 freeVarsMonoEnv = foldMap freeVarsTy
 
 freeVarsInstEnv :: InstEnv -> Set TName
-freeVarsInstEnv (cs, es) = foldMap (\(CClass _ ty) -> freeVarsTy ty) cs
-                 `mappend` foldMap (\(CEq ty f) -> freeVarsTy ty `mappend` foldMap freeVarsTy f) es
+freeVarsInstEnv (cs, es) = foldMap (foldMap freeVarsTy) cs
+                 `mappend` foldMap (foldMap freeVarsTy) es
 
 -------------------------------------------------------------------------------- substitution
 
@@ -104,8 +104,8 @@ applyInstEnv s (cs, es) = (map (applyClassConstraint s) cs, applyEqInstEnv s es)
 
 applyEqInstEnv =  map . applyEqConstraint
 
-applyClassConstraint s (CClass c t) = CClass c $ applyTy s t
-applyEqConstraint s (CEq t f) = CEq (applyTy s t) $ fmap (applyTy s) f
+applyClassConstraint = fmap . applyTy
+applyEqConstraint = fmap . applyTy
 
 -- replace free type variables with fresh type variables
 instTyping :: Typing -> Unique (Typing,Subst)
@@ -207,6 +207,32 @@ addUnif' tss = lift (unifyEqs' tss) >>= addUnif_
 simplifyInstEnv :: EqInstEnv -> SubstAction EqInstEnv
 simplifyInstEnv = fmap concat . mapM (applyPast applyEqConstraint >=> simplifyInst)
 
+isSplit a b c = not (b `hasCommon` c) && a == (b `mappend` c)
+
+simplifyInst x@(Split (TRecord a) (TRecord b) (TRecord c))
+    | isSplit (Map.keysSet a) (Map.keysSet b) (Map.keysSet c) = addUnif' [[t, x Map.! f] | (f, t) <- Map.toList a] >> return []
+    | otherwise = error "not split" -- TODO: better error handling
+  where x = b `mappend` c
+simplifyInst x@(Split (TRecord a) (TRecord b) c@(TVar C _))
+    | Map.keysSet b `Set.isSubsetOf` Map.keysSet a = do
+        addUnif' $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
+        return []
+    | otherwise = error "not split" -- TODO: better error handling
+simplifyInst x@(Split (TRecord a) c@(TVar C _) (TRecord b))
+    | Map.keysSet b `Set.isSubsetOf` Map.keysSet a = do
+        addUnif' $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
+        return []
+    | otherwise = error "not split" -- TODO: better error handling
+simplifyInst x@(Split c@(TVar C _) (TRecord a) (TRecord b))
+    | not $ Map.keysSet b `hasCommon` Map.keysSet a = do
+        addUnif c $ TRecord $ a `Map.union` b
+        return []
+    | otherwise = error "not split" -- TODO: better error handling
+simplifyInst x@(Split a@TVar{} b@TVar{} c) = (:[]) <$> applyFuture applyEqConstraint x
+simplifyInst x@(Split a@TVar{} b c@TVar{}) = (:[]) <$> applyFuture applyEqConstraint x
+simplifyInst x@(Split a b@TVar{} c@TVar{}) = (:[]) <$> applyFuture applyEqConstraint x
+simplifyInst x@(Split a@TVar{} b@TVar{} c@TVar{}) = (:[]) <$> applyFuture applyEqConstraint x
+simplifyInst x@(Split a b c) = error "bad split" -- TODO: better error handling
 simplifyInst c@(CEq ty f) = reduceTF
     (\t -> addUnif ty t >> return [])
     (lift . throwErrorUnique . (("error during reduction of " ++ show f ++ "  ") ++))
@@ -216,18 +242,19 @@ simplifyInstEnv' :: EqInstEnv -> SubstAction EqInstEnv
 simplifyInstEnv' is = mapM_ simplifyInst' is >> return is
 
 simplifyInst' c@(CEq ty f) = mapM_ (uncurry addUnif) $ backPropTF ty f
+simplifyInst' _ = return ()
 
 rightReduce :: EqInstEnv -> SubstAction EqInstEnv
 rightReduce ie = do
     addUnif' $ map snd xs
-    return [CEq ty f | (f, ty: _) <- xs]
+    return $ [CEq ty f | (f, ty: _) <- xs] ++ [s | s@Split{} <- ie]
   where
     xs = Map.toList $ Map.unionsWith (++) [Map.singleton f [ty] | CEq ty f <- ie]
 
 injectivityTest :: EqInstEnv -> SubstAction EqInstEnv
 injectivityTest ie = do
     addUnif' $ concatMap (concatMap testInj . groupBy ((==) `on` injType) . sortBy (compare `on` injType) . snd) xs
-    return [CEq ty f | (ty, fs) <- xs, f <- nub fs]
+    return $ [CEq ty f | (ty, fs) <- xs, f <- nub fs] ++ [s | s@Split{} <- ie]
   where
     xs = Map.toList $ Map.unionsWith (++) [Map.singleton ty [f] | CEq ty f <- ie]
 
@@ -263,12 +290,14 @@ unamb env ty@(m,(is,es),t)
     | used `Set.isSubsetOf` defined = return ()
     | otherwise = throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show env]
   where
-    used = mconcat [freeVarsTy ty | CClass _ ty <- is] `mappend` mconcat [freeVarsTy ty `mappend` foldMap freeVarsTy f | CEq ty f <- es]
+    used = mconcat [freeVarsTy ty | CClass _ ty <- is] `mappend` foldMap (foldMap freeVarsTy) es
     defined = untilFix (growDefinedVars es) $ freeVarsMonoEnv m `mappend` freeVarsTy t
 
 growDefinedVars es s = s `mappend` mconcat
         (  [foldMap freeVarsTy f | CEq ty f <- es, freeVarsTy ty `hasCommon` s]
         ++ [freeVarsTy ty | CEq ty f <- es, foldMap freeVarsTy f `hasCommon` s]
+        ++ [freeVarsTy b `mappend` freeVarsTy c | Split a b c <- es, freeVarsTy a `hasCommon` s]
+        ++ [freeVarsTy a | Split a b c <- es, foldMap freeVarsTy [b, c] `hasCommon` s]
         )
 
 hasCommon a b = not $ Set.null $ a `Set.intersection` b
@@ -292,8 +321,17 @@ unif penv ms is t b = do
     return (s, ty)
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
-infer penv (EFieldProj r _ _) = withRanges [r] $ ETuple <$> inferLit (LString "") <*> pure [] -- TODO: inference for record field projection
-infer penv (ERecord r _) = withRanges [r] $ ETuple <$> inferLit (LString "") <*> pure [] -- TODO: inference for records
+-- _.f :: Split r (Record [f :: a]) r' => r -> a
+infer penv (EFieldProj r e fn) = withRanges [r] $ do
+    te@(getTag -> (m, i, r)) <- infer penv e
+    a <- newVar C
+    r' <- newVar C
+    ty <- simplifyTyping (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) `mappend` i, a)
+    return $ EFieldProj ty te fn
+infer penv (ERecord r (unzip -> (fs, es))) = withRanges [r] $ do
+    trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) es
+    ty <- snd <$> unif penv ml il (TRecord $ Map.fromList {-TODO: check-} $ zip fs tl) []
+    return $ ERecord ty $ zip fs trs
 infer penv (ETuple r t) = withRanges [r] $ do
     te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
     ETuple <$> (snd <$> unif penv ml il (TTuple C tl) []) <*> pure te
