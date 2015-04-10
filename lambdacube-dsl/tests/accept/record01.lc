@@ -21,4 +21,6 @@ let
   fragmentShader' v = FragmentOutRastDepth (Const (V4F 1.0 0.4 0.0 0.2))
   fragmentShader v  = FragmentOutRastDepth (PrimMul v (Const (V4F 1.0 0.4 0.0 0.2)))
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
-in ScreenOut frame
+  record = {fieldA: 1.0, fieldB: frame, fieldC: blendFun}
+  field = record.fieldA
+in ScreenOut record.fieldB
