@@ -6,7 +6,7 @@
 module CompositionalLC
     ( inference
     , compose
-    , applyTy
+    , subst
     ) where
 
 import qualified Debug.Trace as D
@@ -103,37 +103,46 @@ instance (FreeVars a, FreeVars b) => FreeVars (a, b) where
 
 -------------------------------------------------------------------------------- substitution
 
-applyTy :: Subst -> Ty -> Ty
-applyTy st ty | Map.null st = ty -- optimization
-applyTy st tv@(TVar _ a) = case Map.lookup a st of
-  Nothing -> tv
-  Just t  -> t
-applyTy st (Ty t) = Ty $ fmap (applyTy st) t
-
-applyMonoEnv :: Subst -> MonoEnv -> MonoEnv
-applyMonoEnv s e = fmap (applyTy s) e
-
 -- basic substitution (renaming of variables)
-applyInstEnv :: Subst -> InstEnv -> InstEnv
-applyInstEnv s (cs, es) = (map (applyClassConstraint s) cs, applyEqInstEnv s es)
+class Substitute a where subst :: Subst -> a -> a
 
-applyEqInstEnv =  map . applyEqConstraint
+instance Substitute Ty where
+    subst st ty | Map.null st = ty -- optimization
+    subst st tv@(TVar _ a) = case Map.lookup a st of
+      Nothing -> tv
+      Just t  -> t
+    subst st (Ty t) = Ty $ fmap (subst st) t
 
-applyClassConstraint = fmap . applyTy
-applyEqConstraint = fmap . applyTy
+instance Substitute MonoEnv where
+    subst s e = fmap (subst s) e
+
+instance (Substitute a, Substitute b) => Substitute (a, b) where
+    subst s (cs, es) = (subst s cs, subst s es)
+
+instance (Substitute a, Substitute b, Substitute c) => Substitute (a, b, c) where
+    subst s (a, b, c) = (subst s a, subst s b, subst s c)
+
+instance Substitute a => Substitute [a] where
+    subst = map . subst
+
+instance Substitute a => Substitute (ClassConstraint a) where
+    subst = fmap . subst
+
+instance Substitute a => Substitute (EqConstraint a) where
+    subst = fmap . subst
 
 -- replace free type variables with fresh type variables
 instTyping :: Typing -> Unique (Typing,Subst)
-instTyping (m,i,t) = do
+instTyping ty@(m, i, t) = do
   let fv = freeVars t
   newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
-  return ((applyMonoEnv s m, applyInstEnv s i, applyTy s t), s)
+  return (subst s ty, s)
 
 -------------------------------------------------------------------------------- unification
 
 uniTy :: Subst -> Ty -> Ty -> Unique Subst
-uniTy s a b = (s `compose`) <$> unifyTy (applyTy s a) (applyTy s b)
+uniTy s a b = (s `compose`) <$> unifyTy (subst s a) (subst s b)
 
 -- make single tvar substitution; check infinite types
 bindVar :: TName -> Ty -> Unique Subst
@@ -148,7 +157,7 @@ bindVar n t
 -- compose substitutions
 -- Note: domain of substitutions is disjunct
 compose :: Subst -> Subst -> Subst
-s1 `compose` s2 = mappend s2 $ applyTy s2 <$> s1
+s1 `compose` s2 = mappend s2 $ subst s2 <$> s1
 
 -- unify frequencies?
 unifyTy :: Ty -> Ty -> Unique Subst
@@ -220,7 +229,7 @@ addUnif t1 t2 = lift (unifyTy t1 t2) >>= addUnif_
 addUnif' tss = lift (unifyEqs' tss) >>= addUnif_
 
 simplifyInstEnv :: EqInstEnv -> SubstAction EqInstEnv
-simplifyInstEnv = fmap concat . mapM (applyPast applyEqConstraint >=> simplifyInst)
+simplifyInstEnv = fmap concat . mapM (applyPast subst >=> simplifyInst)
 
 isSplit a b c = not (b `hasCommon` c) && a == (b `mappend` c)
 
@@ -243,15 +252,15 @@ simplifyInst x@(Split c@(TVar C _) (TRecord a) (TRecord b))
         addUnif c $ TRecord $ a `Map.union` b
         return []
     | otherwise = error "not split" -- TODO: better error handling
-simplifyInst x@(Split a@TVar{} b@TVar{} c) = (:[]) <$> applyFuture applyEqConstraint x
-simplifyInst x@(Split a@TVar{} b c@TVar{}) = (:[]) <$> applyFuture applyEqConstraint x
-simplifyInst x@(Split a b@TVar{} c@TVar{}) = (:[]) <$> applyFuture applyEqConstraint x
-simplifyInst x@(Split a@TVar{} b@TVar{} c@TVar{}) = (:[]) <$> applyFuture applyEqConstraint x
+simplifyInst x@(Split a@TVar{} b@TVar{} c) = (:[]) <$> applyFuture subst x
+simplifyInst x@(Split a@TVar{} b c@TVar{}) = (:[]) <$> applyFuture subst x
+simplifyInst x@(Split a b@TVar{} c@TVar{}) = (:[]) <$> applyFuture subst x
+simplifyInst x@(Split a@TVar{} b@TVar{} c@TVar{}) = (:[]) <$> applyFuture subst x
 simplifyInst x@(Split a b c) = error "bad split" -- TODO: better error handling
 simplifyInst c@(CEq ty f) = reduceTF
     (\t -> addUnif ty t >> return [])
     (lift . throwErrorUnique . (("error during reduction of " ++ show f ++ "  ") ++))
-    ((:[]) <$> applyFuture applyEqConstraint c ) f
+    ((:[]) <$> applyFuture subst c ) f
 
 simplifyInstEnv' :: EqInstEnv -> SubstAction EqInstEnv
 simplifyInstEnv' is = mapM_ simplifyInst' is >> return is
@@ -277,18 +286,18 @@ simplifyClassInst cl@(CClass c t) = isInstance (\c t -> return [CClass c t]) thr
 
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
 joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
-    (s, es) <- untilNoUnif (rightReduce >=> applyPast applyEqInstEnv >=> barrier >=>
-                            injectivityTest >=> applyPast applyEqInstEnv >=> barrier >=>
+    (s, es) <- untilNoUnif (rightReduce >=> applyPast subst >=> barrier >=>
+                            injectivityTest >=> applyPast subst >=> barrier >=>
                             simplifyInstEnv' >=>
                             simplifyInstEnv) s
-                    $ applyEqInstEnv s es
-    cs <- concat <$> mapM (simplifyClassInst . applyClassConstraint s) cs
+                    $ subst s es
+    cs <- concat <$> mapM (simplifyClassInst . subst s) cs
     -- if needed, simplify class constraints here:  (Ord a, Eq a) --> Ord a
     return (s, (cs, es))
 
 simplifyTyping (me, ie, t) = do
     (s, ie) <- joinInstEnv mempty [ie]
-    return (applyMonoEnv s me, ie, applyTy s t)
+    return (subst s me, ie, subst s t)
 
 {- fail on ambiguous types
 Ambiguous:
@@ -330,8 +339,8 @@ monoVar n = do
 unif penv ms is t b = do
     s <- unify ms b
     (s, i) <- joinInstEnv s is
-    m <- joinMonoEnvs $ map (applyMonoEnv s) ms
-    let ty = (m, i, applyTy s t)
+    m <- joinMonoEnvs $ map (subst s) ms
+    let ty = (m, i, subst s t)
     unamb penv ty
     return (s, ty)
 
