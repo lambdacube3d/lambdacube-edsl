@@ -19,6 +19,7 @@ import Data.Functor.Identity
 import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Monad.Writer
 import Control.Arrow
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -28,7 +29,6 @@ import Data.Monoid
 import Data.Functor
 import qualified Data.Traversable as T
 import qualified Data.Foldable as F
-import Control.Monad.Tardis
 
 import Type
 import Typing
@@ -195,100 +195,60 @@ unifyEqs' = unifyEqs . concatMap pairs
 
 --------------------------------------------------------------------------------
 
-type SubstAction = TardisT Subst (Subst, Subst) Unique
-
-untilNoUnif :: (a -> SubstAction a) -> Subst -> a -> Unique (Subst, a)
-untilNoUnif act acc x = do
-    (x', (_, (fw, _))) <- runTardisT (act x) (mempty, mempty)
-    if Map.null fw then return (acc, x) else untilNoUnif act (acc `compose` fw) x'
-
-applyPast f x = do
-    (_, s) <- getPast
-    return $ f s x
-
-applyFuture f x = do
-    s <- getFuture
-    return $ f s x
-
-addUnif_ s = do
-    modifyForwards ((`compose` s) *** (`compose` s))
-    modifyBackwards (s `compose`)
-
-barrier :: x -> SubstAction x
-barrier x = do
-    modifyForwards $ \(all, _partial) -> (all, mempty)
-    return x
-
-addUnif t1 t2 = lift (unifyTy t1 t2) >>= addUnif_
-addUnif' tss = lift (unifyEqs' tss) >>= addUnif_
-
-simplifyInstEnv :: EqInstEnv -> SubstAction EqInstEnv
-simplifyInstEnv = fmap concat . mapM (applyPast subst >=> simplifyInst)
-
-isSplit a b c = not (b `hasCommon` c) && a == (b `mappend` c)
-
-simplifyInst x@(Split (TRecord a) (TRecord b) (TRecord c))
-    | isSplit (Map.keysSet a) (Map.keysSet b) (Map.keysSet c) = addUnif' [[t, x Map.! f] | (f, t) <- Map.toList a] >> return []
-    | otherwise = error "not split" -- TODO: better error handling
-  where x = b `mappend` c
-simplifyInst x@(Split (TRecord a) (TRecord b) c@(TVar C _))
-    | Map.keysSet b `Set.isSubsetOf` Map.keysSet a = do
-        addUnif' $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
-        return []
-    | otherwise = error "not split" -- TODO: better error handling
-simplifyInst x@(Split (TRecord a) c@(TVar C _) (TRecord b))
-    | Map.keysSet b `Set.isSubsetOf` Map.keysSet a = do
-        addUnif' $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
-        return []
-    | otherwise = error "not split" -- TODO: better error handling
-simplifyInst x@(Split c@(TVar C _) (TRecord a) (TRecord b))
-    | not $ Map.keysSet b `hasCommon` Map.keysSet a = do
-        addUnif c $ TRecord $ a `Map.union` b
-        return []
-    | otherwise = error "not split" -- TODO: better error handling
-simplifyInst x@(Split a@TVar{} b@TVar{} c) = (:[]) <$> applyFuture subst x
-simplifyInst x@(Split a@TVar{} b c@TVar{}) = (:[]) <$> applyFuture subst x
-simplifyInst x@(Split a b@TVar{} c@TVar{}) = (:[]) <$> applyFuture subst x
-simplifyInst x@(Split a@TVar{} b@TVar{} c@TVar{}) = (:[]) <$> applyFuture subst x
-simplifyInst x@(Split a b c) = error "bad split" -- TODO: better error handling
-simplifyInst c@(CEq ty f) = reduceTF
-    (\t -> addUnif ty t >> return [])
-    (lift . throwErrorUnique . (("error during reduction of " ++ show f ++ "  ") ++))
-    ((:[]) <$> applyFuture subst c ) f
-
-simplifyInstEnv' :: EqInstEnv -> SubstAction EqInstEnv
-simplifyInstEnv' is = mapM_ simplifyInst' is >> return is
-
-simplifyInst' c@(CEq ty f) = mapM_ (uncurry addUnif) $ backPropTF ty f
-simplifyInst' _ = return ()
-
-rightReduce :: EqInstEnv -> SubstAction EqInstEnv
-rightReduce ie = do
-    addUnif' $ map snd xs
-    return $ [CEq ty f | (f, ty: _) <- xs] ++ [s | s@Split{} <- ie]
-  where
-    xs = Map.toList $ Map.unionsWith (++) [Map.singleton f [ty] | CEq ty f <- ie]
-
-injectivityTest :: EqInstEnv -> SubstAction EqInstEnv
-injectivityTest ie = do
-    addUnif' $ concatMap (concatMap testInj . groupBy ((==) `on` injType) . sortBy (compare `on` injType) . snd) xs
-    return $ [CEq ty f | (ty, fs) <- xs, f <- nub fs] ++ [s | s@Split{} <- ie]
-  where
-    xs = Map.toList $ Map.unionsWith (++) [Map.singleton ty [f] | CEq ty f <- ie]
-
-simplifyClassInst cl@(CClass c t) = isInstance (\c t -> return [CClass c t]) throwErrorUnique (return [cl]) (return []) c t
-
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
 joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
-    (s, es) <- untilNoUnif (rightReduce >=> applyPast subst >=> barrier >=>
-                            injectivityTest >=> applyPast subst >=> barrier >=>
-                            simplifyInstEnv' >=>
-                            simplifyInstEnv) s
-                    $ subst s es
+    (s, es) <- untilNoUnif s $ nub $ subst s es
     cs <- concat <$> mapM (simplifyClassInst . subst s) cs
     -- if needed, simplify class constraints here:  (Ord a, Eq a) --> Ord a
     return (s, (cs, es))
+  where
+    untilNoUnif acc es = do
+        (es, w) <- runWriterT $ do
+            -- right reduce
+            tell $ Map.elems $ Map.unionsWith (++) [Map.singleton f [ty] | CEq ty f <- es]
+            -- injectivity test
+            tell $ concatMap (concatMap testInj . groupBy ((==) `on` injType) . sortBy (compare `on` injType))
+                 $ Map.elems $ Map.unionsWith (++) [Map.singleton ty [f] | CEq ty f <- es]
+            filterM simplifyInst es
+        s <- unifyEqs' w
+        if Map.null s then return (acc, es) else untilNoUnif (acc `compose` s) $ nub $ subst s es
 
+    simplifyClassInst cl@(CClass c t) = isInstance (\c t -> return [CClass c t]) throwErrorUnique (return [cl]) (return []) c t
+
+    tell' x = tell x >> return False
+    keep = return True
+
+    isSplit a b c = not (b `hasCommon` c) && a == (b `mappend` c)
+
+    simplifyInst = \case
+        Split (TRecord a) (TRecord b) (TRecord c)
+            | isSplit (Map.keysSet a) (Map.keysSet b) (Map.keysSet c) -> tell' [[t, x Map.! f] | (f, t) <- Map.toList a]
+            | otherwise -> error "not split" -- TODO: better error handling
+          where x = b `mappend` c
+        Split (TRecord a) (TRecord b) c@(TVar C _)
+            | Map.keysSet b `Set.isSubsetOf` Map.keysSet a ->
+                tell' $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
+            | otherwise -> error "not split" -- TODO: better error handling
+        Split (TRecord a) c@(TVar C _) (TRecord b)
+            | Map.keysSet b `Set.isSubsetOf` Map.keysSet a ->
+                tell' $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
+            | otherwise -> error "not split" -- TODO: better error handling
+        Split c@(TVar C _) (TRecord a) (TRecord b)
+            | not $ Map.keysSet b `hasCommon` Map.keysSet a -> tell' [[c, TRecord $ a `Map.union` b]]
+            | otherwise -> error "not split" -- TODO: better error handling
+        Split TVar{} TVar{} _ -> keep
+        Split TVar{} _ TVar{} -> keep
+        Split a TVar{} TVar{} -> keep
+        Split TVar{} TVar{} TVar{} -> keep
+        Split a b c -> error "bad split" -- TODO: better error handling
+        CEq ty f -> do
+            forM_ (backPropTF ty f) $ \(t1, t2) -> tell [[t1, t2]]
+            reduceTF
+                (\t -> tell' [[ty, t]])
+                (lift . throwErrorUnique . (("error during reduction of " ++ show f ++ "  ") ++))
+                keep f
+
+simplifyTyping :: Typing -> Unique Typing   
 simplifyTyping (me, ie, t) = do
     (s, ie) <- joinInstEnv mempty [ie]
     return (subst s me, ie, subst s t)
