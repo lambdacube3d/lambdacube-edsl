@@ -110,7 +110,7 @@ applyEqConstraint s (CEq t f) = CEq (applyTy s t) $ fmap (applyTy s) f
 -- replace free type variables with fresh type variables
 instTyping :: Typing -> Unique (Typing,Subst)
 instTyping (m,i,t) = do
-  let fv = freeVarsTy t `mappend` freeVarsMonoEnv m `mappend` freeVarsInstEnv i
+  let fv = freeVarsTy t
   newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
   return ((applyMonoEnv s m, applyInstEnv s i, applyTy s t), s)
@@ -248,18 +248,6 @@ simplifyTyping (me, ie, t) = do
     (s, ie) <- joinInstEnv mempty [ie]
     return (applyMonoEnv s me, ie, applyTy s t)
 
--- TODO: revise
-prune :: Typing -> Typing
-prune (m, (is, es), t) = (m, (is', es'), t)
-  where
-    defined = untilFix (growDefinedVars es) $ freeVarsMonoEnv m `mappend` freeVarsTy t
-    is' = flip filter is $ \case
-        CClass _ ty -> freeVarsTy ty `hasCommon` defined
-    es' = flip filter es $ \case
-        CEq ty f -> freeVarsTy ty `hasCommon` defined || foldMap freeVarsTy f `hasCommon` defined
-
-hasCommon a b = not $ Set.null $ a `Set.intersection` b
-
 {- fail on ambiguous types
 Ambiguous:
   (Show a) => Int
@@ -282,6 +270,8 @@ growDefinedVars es s = s `mappend` mconcat
         (  [foldMap freeVarsTy f | CEq ty f <- es, freeVarsTy ty `hasCommon` s]
         ++ [freeVarsTy ty | CEq ty f <- es, foldMap freeVarsTy f `hasCommon` s]
         )
+
+hasCommon a b = not $ Set.null $ a `Set.intersection` b
 
 untilFix f s
     | s == s' = s
@@ -326,11 +316,9 @@ infer penv (EApp r f a) = withRanges [r] $ do
         tyFree = freeVarsTy t1
     return $ trace__ ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
-    tx@(getTag -> ty@(m0, i0, t0)) <- infer penv x
-    D.traceM $ show ty
-    te@(getTag -> ty'@(m', i', t')) <- infer (Map.insert n ty penv) e
-    D.traceM $ show ty'
-    ELet <$> (prune . snd <$> unif penv [m0, m'] [i', i0] t' []) <*> pure n <*> pure tx <*> pure te
+    tx@(getTag -> ty) <- infer penv x
+    te@(getTag -> ty') <- infer (Map.insert n ty penv) e
+    return $ ELet ty' n tx te
 
 -------------------------------------------------------------------------------- main inference function
 
