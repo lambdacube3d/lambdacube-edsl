@@ -314,7 +314,7 @@ infer penv (EApp r f a) = withRanges [r] $ do
     (s, ty) <- unif penv [m1, m2] [i1, i2] v [t1, t2 ~> v]
     let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
         tyFree = freeVarsTy t1
-    return $ trace__ ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
+    return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
     tx@(getTag -> ty) <- infer penv x
     te@(getTag -> ty') <- infer (Map.insert n ty penv) e
