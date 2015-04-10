@@ -268,7 +268,7 @@ eval (Fun "Smooth":N _ a:xs) = N noType (smooth a) : eval xs
 eval (Fun "NoPerspective":N _ a:xs) = N noType (noPerspective a) : eval xs
 eval (Fun "Flat":N _ a:xs) = N noType (flat a) : eval xs
 -- Fragment Operation
-eval (Fun "ColorOp":Blending b:xs) = FragmentOperation (ColorOp b (VV4B $ V4 True True True True)) : eval xs
+eval (Fun "ColorOp":Blending b:Val t v:xs) = FragmentOperation (ColorOp b v) : eval xs
 eval (Fun "DepthOp":ComparisonFunction a:Bool' b:xs) = FragmentOperation (DepthOp a b) : eval xs
 -- Blending
 eval (Fun "NoBlending":xs) = Blending NoBlending : eval xs
