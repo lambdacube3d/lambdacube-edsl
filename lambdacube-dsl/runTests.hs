@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings, PackageImports #-}
 
+import Data.List
 import Control.Applicative
 import Control.Monad
 
@@ -23,7 +24,9 @@ main = do
   let acceptPath = "./tests/accept/"
       rejectPath = "./tests/reject/"
 
-  samplesToAccept <- getArgs
+  args <- getArgs
+  let (verboseFlags,samplesToAccept) = partition (== "-v") args
+      verbose = verboseFlags /= []
   (testToAccept,testToReject) <- case samplesToAccept of
     [] -> do
       toAccept <- filter (\n -> ".lc" == takeExtension n) <$> getDirectoryContents acceptPath
@@ -33,21 +36,19 @@ main = do
 
   putStrLn $ "Catching errors (must get an error)"
   forM_ testToReject $ \n -> do
-    putStr $ " " ++ n
     result <- parseLC n
     case result of
-      ParseError e -> putStrLn $ " OK - got parse error: " ++ e
-      TypeError e -> putStrLn $ " OK - got type error: " ++ e
-      TypedExp _ -> putStrLn " FAIL - failed to catch error"
+      ParseError e -> putStrLn $ " * OK - " ++ n ++ " parse error " ++ if verbose then e else []
+      TypeError e -> putStrLn $ " * OK - " ++ n ++ " type error " ++ if verbose then e else []
+      TypedExp _ -> putStrLn $ " # FAIL - " ++ n ++ " failed to catch error"
 
   putStrLn $ "Checking valid pipelines"
   forM_ testToAccept $ \n -> do
-    putStr $ " " ++ n
     result <- parseLC n
     case result of
-      ParseError e -> putStrLn $ " FAIL - parse error: " ++ e
-      TypeError e -> putStrLn $ " FAIL - type error: " ++ e
-      TypedExp _ -> putStrLn " OK"
+      ParseError e -> putStrLn $ " # FAIL - " ++ n ++ " parse error: " ++ e
+      TypeError e -> putStrLn $ " # FAIL - " ++ n ++ " type error: " ++ e
+      TypedExp _ -> putStrLn $ " * OK - " ++ n
 
 parseLC :: String -> IO ParseResult
 parseLC fname = do

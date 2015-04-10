@@ -12,7 +12,7 @@ let
   cull = CullNone
   cull' = CullFront CW
   rasterCtx         = TriangleCtx cull polyMode' NoOffset FirstVertex
-  fragmentCtx       = AccumulationContext (DepthOp Less True, ColorOp blend)
+  fragmentCtx       = AccumulationContext (DepthOp Less True, ColorOp blend (V4B True True True True))
   modelViewProj     = Uni (IM44F "MVP")
   vertexShader v    = VertexOut (modelViewProj *. v) 1.0 () (Smooth v)
   vertexStream      = Fetch "stream" Triangles (IV4F "position")
@@ -21,4 +21,6 @@ let
   fragmentShader' v = FragmentOutRastDepth (Const (V4F 1.0 0.4 0.0 0.2))
   fragmentShader v  = FragmentOutRastDepth (PrimMul v (Const (V4F 1.0 0.4 0.0 0.2)))
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
+  record = {fieldA: 1.0, fieldB: frame, fieldC: blendFun}
+  field = record.fieldA
 in ScreenOut frame
