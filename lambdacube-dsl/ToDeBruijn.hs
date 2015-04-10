@@ -281,7 +281,7 @@ eval (Fun "Blend":
 eval (Fun "PassAll":xs) = N noType passAll : eval xs
 eval (Fun "Filter":N _ f:xs) = N noType (filter_ f) : eval xs
 -- Render Operations
-eval (Fun "Fetch":Arg (LString a):FetchPrimitive b:Input c (Single C.V4F):xs) = N noType (fetch (pack a) b [(c,V4F)]) : eval xs
+eval (Fun "Fetch":Arg (LString a):FetchPrimitive b:Input c (Single V4F):xs) = N noType (fetch (pack a) b [(c,V4F)]) : eval xs
 eval (Fun "Transform":N _ a:N _ b:xs) = N noType (transform a b) : eval xs
 eval (Fun "Rasterize":RasterContext a:N _ b:xs) = N noType (rasterize a b) : eval xs
 eval (Fun "Accumulate":N _ a:N _ b:N _ c:N _ d:N _ e:xs) = N noType (accumulate a b c d e) : eval xs

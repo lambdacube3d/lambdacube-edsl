@@ -547,6 +547,7 @@ isNum              = cClass CNum
 isSigned           = cClass IsSigned
 isIntegral         = cClass IsIntegral
 isTypeLevelNatural = cClass IsTypeLevelNatural
+isFloating         = cClass IsFloating
 
 cClass :: Class -> Ty -> InstEnv
 cClass c ty = ([CClass c ty], [])
@@ -793,9 +794,9 @@ inferPrimFun ok nothing = f where
     [a] <- newVars 1 C
     [isTypeLevelNatural a] ==> a ~> TInt C ~> TImage C a (Stencil $ TInt C)
   -- Interpolation
-  "Smooth"         -> do t <- newVar C ; ty $ t ~> TInterpolated C t
   "Flat"           -> do t <- newVar C ; ty $ t ~> TInterpolated C t
-  "NoPerspective"  -> do t <- newVar C ; ty $ t ~> TInterpolated C t
+  "Smooth"         -> do t <- newVar C ; [isFloating t] ==> t ~> TInterpolated C t
+  "NoPerspective"  -> do t <- newVar C ; [isFloating t] ==> t ~> TInterpolated C t
   -- Fragment Operation
   "ColorOp"    -> do
     [d,mask,c,color] <- newVars 4 C
@@ -804,10 +805,10 @@ inferPrimFun ok nothing = f where
     -- "StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
   -- Blending
   "NoBlending"   -> do t <- newVar C ; ty $ TBlending C t
-  "BlendLogicOp" -> do t <- newVar C ; ty $ TLogicOperation C ~> TBlending C t
-  "Blend"        -> do t <- newVar C ; ty $ TTuple C [TBlendEquation C,TBlendEquation C]
+  "BlendLogicOp" -> do t <- newVar C ; [isIntegral t] ==> TLogicOperation C ~> TBlending C t
+  "Blend"        -> ty $ TTuple C [TBlendEquation C,TBlendEquation C]
                          ~> TTuple C [TTuple C [TBlendingFactor C,TBlendingFactor C],TTuple C [TBlendingFactor C,TBlendingFactor C]]
-                         ~> TV4F C ~> TBlending C t --(TFloat C)
+                         ~> TV4F C ~> TBlending C (TFloat C)
   -- Fragment Filter
   "PassAll"  -> do t <- newVar C ; ty $ TFragmentFilter C t
   "Filter"   -> do t <- newVar C ; ty $ (t ~> TBool C) ~> TFragmentFilter C t
