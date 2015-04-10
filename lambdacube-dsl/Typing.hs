@@ -596,6 +596,13 @@ isInstance reduce fail keep ok = f where
     f IsComponent (TV2F _) = ok
     f IsComponent (TV3F _) = ok
     f IsComponent (TV4F _) = ok
+
+    f IsValidFrameBuffer (TTuple C ts)
+        | sum [1 | TVar{} <- ts] > 0 = keep
+        | sum [1 | Depth{} <- ts] <= 1 && sum [1 | Stencil{} <- ts] <= 1 = ok
+        | otherwise = fail "not valid framebuffer"
+    f IsValidFrameBuffer _ = ok
+
     f c t = case Map.lookup c instances of
         Nothing -> fail $ "no " ++ show c ++ " instance for " ++ show t
         Just ts -> if Set.member t ts then ok else fail $ "no " ++ show c ++ " instance for " ++ show t
@@ -826,7 +833,7 @@ inferPrimFun ok nothing = f where
         ~> TFragmentStream C n a
         ~> TFrameBuffer C n t
         ~> TFrameBuffer C n t
-  "FrameBuffer"  -> do [a,t,t',n] <- newVars 4 C ; [fTRepr' t' t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
+  "FrameBuffer"  -> do [a,t,t',n] <- newVars 4 C ; [fTRepr' t' t, cClass IsValidFrameBuffer t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
   "ScreenOut"    -> do [a,b] <- newVars 2 C ; ty $ TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)

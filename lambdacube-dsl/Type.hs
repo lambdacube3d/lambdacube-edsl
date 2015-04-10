@@ -254,6 +254,7 @@ data Class
   | IsSigned
   | IsValidOutput
   | IsTypeLevelNatural
+  | IsValidFrameBuffer
   deriving (Show,Eq,Ord)
 
 data TypeFun a
