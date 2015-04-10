@@ -1,6 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 module CompositionalLC
     ( inference
     , compose
@@ -75,16 +77,29 @@ scopeCheck src vars _ = return ()
 
 -------------------------------------------------------------------------------- free vars
 
-freeVarsTy :: Ty -> Set TName
-freeVarsTy (TVar _ a) = Set.singleton a
-freeVarsTy (Ty x) = foldMap freeVarsTy x
+class FreeVars a where freeVars :: a -> Set TName
 
-freeVarsMonoEnv :: MonoEnv -> Set TName
-freeVarsMonoEnv = foldMap freeVarsTy
+instance FreeVars Ty where
+    freeVars (TVar _ a) = Set.singleton a
+    freeVars (Ty x) = foldMap freeVars x
 
-freeVarsInstEnv :: InstEnv -> Set TName
-freeVarsInstEnv (cs, es) = foldMap (foldMap freeVarsTy) cs
-                 `mappend` foldMap (foldMap freeVarsTy) es
+instance FreeVars a => FreeVars (Map EName a) where
+    freeVars = foldMap freeVars
+
+instance FreeVars a => FreeVars [a] where
+    freeVars = foldMap freeVars
+
+instance FreeVars a => FreeVars (ClassConstraint a) where
+    freeVars = foldMap freeVars
+
+instance FreeVars a => FreeVars (EqConstraint a) where
+    freeVars = foldMap freeVars
+
+instance FreeVars a => FreeVars (TypeFun a) where
+    freeVars = foldMap freeVars
+
+instance (FreeVars a, FreeVars b) => FreeVars (a, b) where
+    freeVars (cs, es) = freeVars cs `mappend` freeVars es
 
 -------------------------------------------------------------------------------- substitution
 
@@ -110,7 +125,7 @@ applyEqConstraint = fmap . applyTy
 -- replace free type variables with fresh type variables
 instTyping :: Typing -> Unique (Typing,Subst)
 instTyping (m,i,t) = do
-  let fv = freeVarsTy t
+  let fv = freeVars t
   newVars <- replicateM (Set.size fv) (newVar C)
   let s = Map.fromList $ zip (Set.toList fv) newVars
   return ((applyMonoEnv s m, applyInstEnv s i, applyTy s t), s)
@@ -124,7 +139,7 @@ uniTy s a b = (s `compose`) <$> unifyTy (applyTy s a) (applyTy s b)
 bindVar :: TName -> Ty -> Unique Subst
 bindVar n t
   | tvarEq t = return mempty
-  | n `Set.member` freeVarsTy t = throwErrorUnique $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
+  | n `Set.member` freeVars t = throwErrorUnique $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
   | otherwise = return $ Map.singleton n t
  where
   tvarEq (TVar _ m) = m == n
@@ -286,18 +301,18 @@ Not ambiguous:
   (Show a, b ~ F a) => b
 -}
 unamb :: PolyEnv -> Typing -> Unique ()
-unamb env ty@(m,(is,es),t)
+unamb env ty@(m,pe@(is,es),t)
     | used `Set.isSubsetOf` defined = return ()
     | otherwise = throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show env]
   where
-    used = mconcat [freeVarsTy ty | CClass _ ty <- is] `mappend` foldMap (foldMap freeVarsTy) es
-    defined = untilFix (growDefinedVars es) $ freeVarsMonoEnv m `mappend` freeVarsTy t
+    used = freeVars pe
+    defined = untilFix (growDefinedVars es) $ freeVars (m, t)
 
 growDefinedVars es s = s `mappend` mconcat
-        (  [foldMap freeVarsTy f | CEq ty f <- es, freeVarsTy ty `hasCommon` s]
-        ++ [freeVarsTy ty | CEq ty f <- es, foldMap freeVarsTy f `hasCommon` s]
-        ++ [freeVarsTy b `mappend` freeVarsTy c | Split a b c <- es, freeVarsTy a `hasCommon` s]
-        ++ [freeVarsTy a | Split a b c <- es, foldMap freeVarsTy [b, c] `hasCommon` s]
+        (  [freeVars f | CEq ty f <- es, freeVars ty `hasCommon` s]
+        ++ [freeVars ty | CEq ty f <- es, freeVars f `hasCommon` s]
+        ++ [freeVars (b, c) | Split a b c <- es, freeVars a `hasCommon` s]
+        ++ [freeVars a | Split a b c <- es, freeVars (b, c) `hasCommon` s]
         )
 
 hasCommon a b = not $ Set.null $ a `Set.intersection` b
@@ -351,7 +366,7 @@ infer penv (EApp r f a) = withRanges [r] $ do
     v <- newVar C
     (s, ty) <- unif penv [m1, m2] [i1, i2] v [t1, t2 ~> v]
     let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
-        tyFree = freeVarsTy t1
+        tyFree = freeVars t1
     return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
 infer penv (ELet r n x e) = withRanges [r] $ do
     tx@(getTag -> ty) <- infer penv x
