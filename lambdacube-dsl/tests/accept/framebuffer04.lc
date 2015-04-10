@@ -1,0 +1,2 @@
+let frame = FrameBuffer (DepthImage #1 1.0)
+in ScreenOut frame

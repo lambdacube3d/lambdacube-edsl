@@ -1,0 +1,5 @@
+let frame = FrameBuffer (ColorImage #1 (V4F 0.0 0.0 0.4 1.0)
+                        ,ColorImage #1 (V4F 1.0 1.0 1.0 1.0)
+                        ,DepthImage #1 1.0
+                        )
+in ScreenOut frame
