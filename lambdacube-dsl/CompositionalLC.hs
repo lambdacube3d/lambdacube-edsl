@@ -61,6 +61,9 @@ joinMonoEnv a b = T.sequence $ Map.unionWithKey merge (fmap return a) (fmap retu
 joinMonoEnvs :: [MonoEnv] -> Unique MonoEnv
 joinMonoEnvs = foldM joinMonoEnv mempty
 
+hasCommon :: Ord a => Set a -> Set a -> Bool
+hasCommon a b = not $ Set.null $ a `Set.intersection` b
+
 -------------------------------------------------------------------------------- scope checking
 
 scopeChk :: ByteString -> Exp Range -> Either String ()
@@ -140,18 +143,12 @@ instTyping ty@(_, _, freeVars -> fv) = do
 
 -------------------------------------------------------------------------------- unification
 
-uniTy :: Subst -> Ty -> Ty -> Unique Subst
-uniTy s a b = (s `compose`) <$> unifyTy (subst s a) (subst s b)
-
 -- make single tvar substitution; check infinite types
 bindVar :: TName -> Ty -> Unique Subst
+bindVar n (TVar _ m) | m == n = return mempty
 bindVar n t
-  | tvarEq t = return mempty
   | n `Set.member` freeVars t = throwErrorUnique $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
   | otherwise = return $ Map.singleton n t
- where
-  tvarEq (TVar _ m) = m == n
-  tvarEq _ = False
 
 -- compose substitutions
 -- Note: domain of substitutions is disjunct
@@ -186,17 +183,15 @@ unifyTy a b
 
 -- compositional (not linear) unification?
 unifyEqs :: [(Ty,Ty)] -> Unique Subst
-unifyEqs = foldM (uncurry . uniTy) mempty
+unifyEqs = foldM uniTy mempty
+  where
+    uniTy s (a, b) = (s `compose`) <$> unifyTy (subst s a) (subst s b)
 
 unifyEqs' :: [[Ty]] -> Unique Subst
 unifyEqs' = unifyEqs . concatMap pairs
   where
     pairs [] = []
     pairs (x:xs) = map ((,) x) xs
-
--- unify the types of each distinct variable in the monoenvs and the types in the [Ty] list
-unify :: [MonoEnv] -> [Ty] -> Unique Subst
-unify ml tl = unifyEqs' $ tl: Map.elems (Map.unionsWith (++) $ map (Map.map (:[])) ml)
 
 --------------------------------------------------------------------------------
 
@@ -314,29 +309,25 @@ unamb env ty@(m,pe@(is,es),t)
     | otherwise = throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show env]
   where
     used = freeVars pe
-    defined = untilFix (growDefinedVars es) $ freeVars (m, t)
+    defined = growDefinedVars mempty $ freeVars (m, t)
 
-growDefinedVars es s = s `mappend` mconcat
-        (  [freeVars f | CEq ty f <- es, freeVars ty `hasCommon` s]
-        ++ [freeVars ty | CEq ty f <- es, freeVars f `hasCommon` s]
-        ++ [freeVars (b, c) | Split a b c <- es, freeVars a `hasCommon` s]
-        ++ [freeVars a | Split a b c <- es, freeVars (b, c) `hasCommon` s]
-        )
+    growDefinedVars acc s
+        | Set.null s = acc
+        | otherwise = growDefinedVars (acc `mappend` s) (grow s Set.\\ acc)
 
-hasCommon a b = not $ Set.null $ a `Set.intersection` b
-
-untilFix f s
-    | s == s' = s
-    | otherwise = untilFix f s'
-  where
-    s' = f s
+    grow = foldMap g es
+      where
+        a --> b = \s -> if a `hasCommon` s then b else mempty
+        a <-> b = (a --> b) `mappend` (b --> a)
+        g (CEq ty f) = freeVars ty <-> freeVars f
+        g (Split a b c) = freeVars a <-> freeVars (b, c)
 
 monoVar n = do
     t <- trace "mono var" <$> newVar C
     return $ EVar (Map.singleton n t, mempty, t) n
 
 unif penv ms is t b = do
-    s <- unify ms b
+    s <- unifyEqs' $ b: Map.elems (Map.unionsWith (++) $ map (Map.map (:[])) ms)
     (s, i) <- joinInstEnv s is
     m <- joinMonoEnvs $ subst s ms
     let ty = (m, i, subst s t)
