@@ -28,7 +28,7 @@ type Unique = StateT
     (Except String)
 
 type Range = (Delta,Delta)
-
+{-
 isPrimFun n = Set.member n primFunSet
 primFunSet = Set.fromList
   [ "Const"
@@ -312,6 +312,7 @@ primFunSet = Set.fromList
   , "PrimNoise3"
   , "PrimNoise4"
   ]
+-}
 {-
     -- Vec/Mat (de)construction
     PrimTupToV2             :: IsComponent a                            => PrimFun stage ((a,a)     -> V2 a)

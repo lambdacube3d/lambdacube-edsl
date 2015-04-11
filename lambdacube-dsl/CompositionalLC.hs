@@ -290,7 +290,7 @@ infer penv scope exp = withRanges [getTag exp] $ case exp of
     ELit r l -> ELit <$> inferLit l <*> pure l
     EVar r n -> do
         inferPrimFun
-            (\x -> EVar <$> simplifyTyping penv x <*> pure n)
+            (\x -> EVar <$> simplifyTyping penv x <*> pure ("prim:" ++ n))
             (maybe (monoVar scope n) (fmap ((\(t, s) -> ESubst s $ EVar t n) . trace "poly var") . instTyping) $ Map.lookup n penv)
             n
     ELam r n f

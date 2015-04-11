@@ -1,10 +1,12 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module ToDeBruijn
     ( toNF
     , NF (N)
     ) where
 
-import Data.ByteString.Char8
+import Data.ByteString.Char8 hiding (take, drop)
 import Data.Map as Map
 import Data.Monoid
 import LambdaCube.Core.DeBruijn hiding (Exp,N)
@@ -15,7 +17,7 @@ import qualified LambdaCube.Core.Type as C
 
 import CompositionalLC
 import Type
-import Typing (isPrimFun)
+--import Typing (isPrimFun)
 
 {-
 expV4F :: Exp Typing
@@ -85,6 +87,8 @@ data EnvVar
   = LetVar (Exp Typing)
   | LamVar
 
+isPrimFun x = take 5 x == "prim:"
+
 type NFEnv = Map EName EnvVar
 -- TODO: add let
 toNF :: Subst -> NFEnv -> Exp Typing -> [NF]
@@ -97,7 +101,7 @@ toNF sub env (ELet t n a b) = --case toNF env a of -- TODO
 --toNF sub env (EPrimFun t f) = 
 toNF sub env (ESubst s e) = toNF (s `compose` sub) env e
 toNF sub env (EVar (m,i,t) n)
-  | isPrimFun n = [Fun n]
+  | isPrimFun n = [Fun $ drop 5 n]
   | otherwise = case Map.lookup n env of
       Nothing -> error $ "unknown variable: " ++ n
       Just (LetVar x) -> eval $ toNF sub env x
