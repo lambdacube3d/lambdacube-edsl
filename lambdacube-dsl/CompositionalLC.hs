@@ -215,37 +215,37 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
 
     simplifyClassInst cl@(CClass c t) = isInstance (\c t -> return [CClass c t]) throwErrorUnique (return [cl]) (return []) c t
 
-    tell' x = tell x >> return False
+    discard x = tell x >> return False
     keep = return True
+    fail = lift . throwErrorUnique
 
     isSplit a b c = not (b `hasCommon` c) && a == (b `mappend` c)
 
+    diff a b c
+        | Map.keysSet b `Set.isSubsetOf` Map.keysSet a =
+            discard $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
+        | otherwise = fail "not split" -- TODO: better error handling
+
     simplifyInst = \case
         Split (TRecord a) (TRecord b) (TRecord c)
-            | isSplit (Map.keysSet a) (Map.keysSet b) (Map.keysSet c) -> tell' [[t, x Map.! f] | (f, t) <- Map.toList a]
-            | otherwise -> error "not split" -- TODO: better error handling
+            | isSplit (Map.keysSet a) (Map.keysSet b) (Map.keysSet c) -> discard [[t, x Map.! f] | (f, t) <- Map.toList a]
+            | otherwise -> fail "not split" -- TODO: better error handling
           where x = b `mappend` c
-        Split (TRecord a) (TRecord b) c@(TVar C _)
-            | Map.keysSet b `Set.isSubsetOf` Map.keysSet a ->
-                tell' $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
-            | otherwise -> error "not split" -- TODO: better error handling
-        Split (TRecord a) c@(TVar C _) (TRecord b)
-            | Map.keysSet b `Set.isSubsetOf` Map.keysSet a ->
-                tell' $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
-            | otherwise -> error "not split" -- TODO: better error handling
+        Split (TRecord a) (TRecord b) c@(TVar C _) -> diff a b c
+        Split (TRecord a) c@(TVar C _) (TRecord b) -> diff a b c
         Split c@(TVar C _) (TRecord a) (TRecord b)
-            | not $ Map.keysSet b `hasCommon` Map.keysSet a -> tell' [[c, TRecord $ a `Map.union` b]]
-            | otherwise -> error "not split" -- TODO: better error handling
+            | not $ Map.keysSet b `hasCommon` Map.keysSet a -> discard [[c, TRecord $ a `Map.union` b]]
+            | otherwise -> fail "not split" -- TODO: better error handling
         Split TVar{} TVar{} _ -> keep
         Split TVar{} _ TVar{} -> keep
         Split a TVar{} TVar{} -> keep
         Split TVar{} TVar{} TVar{} -> keep
-        Split a b c -> error "bad split" -- TODO: better error handling
+        Split a b c -> fail "bad split" -- TODO: better error handling
         CEq ty f -> do
             forM_ (backPropTF ty f) $ \(t1, t2) -> tell [[t1, t2]]
             reduceTF
-                (\t -> tell' [[ty, t]])
-                (lift . throwErrorUnique . (("error during reduction of " ++ show f ++ "  ") ++))
+                (\t -> discard [[ty, t]])
+                (fail . (("error during reduction of " ++ show f ++ "  ") ++))
                 keep f
 
 simplifyTyping :: Typing -> Unique Typing   
