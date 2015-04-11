@@ -29,12 +29,12 @@ import Control.Arrow
 import Type
 import Typing
 
+-------------------------------------------------------------------------------- utility
+
 trace__ = D.trace
 
 trace_ _ = id
 trace = trace_
-
--------------------------------------------------------------------------------- utility
 
 withRanges :: [Range] -> Unique a -> Unique a
 withRanges rl a = do
@@ -48,6 +48,8 @@ withRanges rl a = do
 hasCommon :: Ord a => Set a -> Set a -> Bool
 hasCommon a b = not $ Set.null $ a `Set.intersection` b
 
+pairs xs = zip xs $ tail xs
+
 -------------------------------------------------------------------------------- free vars
 
 class FreeVars a where freeVars :: a -> Set TName
@@ -56,23 +58,14 @@ instance FreeVars Ty where
     freeVars (TVar _ a) = Set.singleton a
     freeVars (Ty x) = foldMap freeVars x
 
-instance FreeVars a => FreeVars (Map EName a) where
-    freeVars = foldMap freeVars
-
-instance FreeVars a => FreeVars [a] where
-    freeVars = foldMap freeVars
-
-instance FreeVars a => FreeVars (ClassConstraint a) where
-    freeVars = foldMap freeVars
-
-instance FreeVars a => FreeVars (EqConstraint a) where
-    freeVars = foldMap freeVars
-
-instance FreeVars a => FreeVars (TypeFun a) where
-    freeVars = foldMap freeVars
-
 instance (FreeVars a, FreeVars b) => FreeVars (a, b) where
     freeVars (cs, es) = freeVars cs `mappend` freeVars es
+
+instance FreeVars a => FreeVars (Map EName a)       where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (ClassConstraint a) where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (EqConstraint a)    where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (TypeFun a)         where freeVars = foldMap freeVars
 
 -------------------------------------------------------------------------------- substitution
 
@@ -86,23 +79,15 @@ instance Substitute Ty where
       Just t  -> t
     subst st (Ty t) = Ty $ fmap (subst st) t
 
-instance Substitute MonoEnv where
-    subst s e = fmap (subst s) e
-
 instance (Substitute a, Substitute b) => Substitute (a, b) where
     subst s (cs, es) = (subst s cs, subst s es)
-
 instance (Substitute a, Substitute b, Substitute c) => Substitute (a, b, c) where
     subst s (a, b, c) = (subst s a, subst s b, subst s c)
 
-instance Substitute a => Substitute [a] where
-    subst = map . subst
-
-instance Substitute a => Substitute (ClassConstraint a) where
-    subst = fmap . subst
-
-instance Substitute a => Substitute (EqConstraint a) where
-    subst = fmap . subst
+instance Substitute MonoEnv                             where subst = fmap . subst
+instance Substitute a => Substitute [a]                 where subst = fmap . subst
+instance Substitute a => Substitute (ClassConstraint a) where subst = fmap . subst
+instance Substitute a => Substitute (EqConstraint a)    where subst = fmap . subst
 
 -------------------------------------------------------------------------------- type unification
 
@@ -150,11 +135,8 @@ unifyEqs = foldM uniTy mempty
   where
     uniTy s (a, b) = (s `compose`) <$> unifyTy (subst s a) (subst s b)
 
-unifyEqs' :: [[Ty]] -> Unique Subst
-unifyEqs' = unifyEqs . concatMap pairs
-  where
-    pairs [] = []
-    pairs (x:xs) = map ((,) x) xs
+unifyTypes :: [[Ty]] -> Unique Subst
+unifyTypes = unifyEqs . concatMap pairs
 
 -------------------------------------------------------------------------------- typing unification
 
@@ -173,7 +155,7 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
             tell $ concatMap (concatMap testInj . groupBy ((==) `on` injType) . sortBy (compare `on` injType))
                  $ Map.elems $ Map.unionsWith (++) [Map.singleton ty [f] | CEq ty f <- es]
             filterM simplifyInst es
-        s <- unifyEqs' w
+        s <- unifyTypes w
         if Map.null s then return (acc, es) else untilNoUnif (acc `compose` s) $ nub $ subst s es
 
     simplifyClassInst cl@(CClass c t) = isInstance (\c t -> return [CClass c t]) throwErrorUnique (return [cl]) (return []) c t
@@ -248,7 +230,7 @@ unamb penv ty@(m,pe@(is,es),t)
 
 unif :: PolyEnv -> [Ty] -> [MonoEnv] -> [InstEnv] -> Ty -> Unique (Subst, Typing)
 unif penv b ms is t = do
-    s <- unifyEqs' $ b: Map.elems (Map.unionsWith (++) $ map (fmap (:[])) ms)
+    s <- unifyTypes $ b: Map.elems (Map.unionsWith (++) $ map (fmap (:[])) ms)
     (s, i) <- joinInstEnv s is
     let ty = (Map.unions $ subst s ms, i, subst s t)
     unamb penv ty
@@ -264,10 +246,8 @@ type PolyEnv = Map EName Typing
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
 infer penv exp = withRanges [getTag exp] $ case exp of
     -- _.f :: Split r (Record [f :: a]) r' => r -> a
-    EFieldProj r e fn -> do
+    EFieldProj r e fn -> newV $ \a r' -> do
         te@(getTag -> (m, i, r)) <- infer penv e
-        a <- newVar C
-        r' <- newVar C
         ty <- simplifyTyping penv (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) `mappend` i, a)
         return $ EFieldProj ty te fn
     ERecord r (unzip -> (fs, es)) -> do
@@ -290,17 +270,15 @@ infer penv exp = withRanges [getTag exp] $ case exp of
             return $ ESubst s $ EVar (subst s ty) n
     ELam r n f
         | Map.member n penv -> throwErrorUnique $ "Variable name clash: " ++ n
-        | otherwise -> do
-            t <- newVar C
+        | otherwise -> newV $ \t -> do
             tf@(getTag -> (m, i, t)) <- infer (Map.insert n (Map.singleton n t, mempty, t) penv) f
             a <- maybe (newVar C) return $ Map.lookup n m
             let ty = (Map.delete n m, i, a ~> t)
             unamb penv ty
             return $ ELam ty n tf
-    EApp r f a -> do
+    EApp r f a -> newV $ \v -> do
         tf@(getTag -> (m1, i1, t1)) <- infer penv f
         ta@(getTag -> (m2, i2, t2)) <- infer penv a
-        v <- newVar C
         (s, ty) <- unif penv [t1, t2 ~> v] [m1, m2] [i1, i2] v
         let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
             tyFree = freeVars t1
