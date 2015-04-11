@@ -20,7 +20,6 @@ import Text.Parser.LookAhead
 
 --import CompositionalLC hiding (test)
 import Type
-import Typing (Range)
 
 {-
 type Indentation = Int

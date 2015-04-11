@@ -23,11 +23,6 @@ import Text.Trifecta hiding (err)
 
 import Type
 
-type Unique = StateT
-    (Int,ByteString,[Range])        -- (counter, complete source{-constant-}, stack of ranges)
-    (Except String)
-
-type Range = (Delta,Delta)
 {-
 isPrimFun n = Set.member n primFunSet
 primFunSet = Set.fromList
@@ -973,7 +968,7 @@ inferLit a = case a of
 
 throwErrorUnique :: String -> Unique a
 throwErrorUnique s = do
-  (_,src,rl) <- get
+  (_,_,src,rl) <- get
   throwErrorSrc src rl s
 
 throwErrorSrc src rl s = do
@@ -1004,6 +999,6 @@ instance NewVar a => NewVar (Ty -> a) where
 
 newVar :: Frequency -> Unique Ty
 newVar f = do
-  (n,s,r) <- get
-  put (n+1,s,r)
+  (d, n,s,r) <- get
+  put (d, n+1,s,r)
   return $ TVar f $ 't':show n

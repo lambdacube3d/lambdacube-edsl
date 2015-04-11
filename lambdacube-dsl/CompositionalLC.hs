@@ -38,11 +38,11 @@ trace = trace_
 
 withRanges :: [Range] -> Unique a -> Unique a
 withRanges rl a = do
-  (x,y,rl0) <- get
-  put (x,y,rl)
+  (d,x,y,rl0) <- get
+  put (d,x,y,rl)
   res <- a
-  (z,q,_) <- get
-  put (z,q,rl0)
+  (d,z,q,_) <- get
+  put (d,z,q,rl0)
   return res
 
 hasCommon :: Ord a => Set a -> Set a -> Bool
@@ -212,7 +212,7 @@ Not ambiguous:
 -}
 unamb :: PolyEnv -> Typing -> Unique ()
 unamb penv ty@(m,pe@(is,es),t)
-    = when (not $ used `Set.isSubsetOf` defined) $ throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show penv]
+    = addUnambCheck $ if used `Set.isSubsetOf` defined then Nothing else Just $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show penv]
   where
     used = freeVars pe
     defined = growDefinedVars mempty $ freeVars (m, t)
@@ -228,6 +228,8 @@ unamb penv ty@(m,pe@(is,es),t)
         g (CEq ty f) = freeVars ty <-> freeVars f
         g (Split a b c) = freeVars a <-> freeVars (b, c)
 
+addUnambCheck c = modify $ \(cs, x, y, z) -> (c: cs, x, y, z)
+
 unif :: PolyEnv -> [Ty] -> [MonoEnv] -> [InstEnv] -> Ty -> Unique (Subst, Typing)
 unif penv b ms is t = do
     s <- unifyTypes $ b: Map.elems (Map.unionsWith (++) $ map (fmap (:[])) ms)
@@ -239,7 +241,15 @@ unif penv b ms is t = do
 -------------------------------------------------------------------------------- type inference & scope checking
 
 inference :: ByteString -> Exp Range -> Either String (Exp Typing)
-inference src = runIdentity . runExceptT . flip evalStateT (0,src,[]) . infer mempty
+inference src = runExcept . flip evalStateT (mempty, 0, src, []) . chk . infer mempty
+  where
+    chk m = do
+        e <- m
+        (cs, _, _, _) <- get
+        check cs
+        return e
+    check cs@(Just _: _) = throwErrorUnique $ head $ catMaybes $ reverse cs
+    check _ = return ()
 
 type PolyEnv = Map EName Typing
 

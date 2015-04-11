@@ -7,6 +7,10 @@ module Type where
 import Data.Map (Map)
 import Data.Foldable
 import Data.Traversable
+import Data.ByteString (ByteString)
+import Control.Monad.Except
+import Control.Monad.State
+import Text.Trifecta.Delta (Delta)
 
 type TName = String
 type EName = String
@@ -16,7 +20,13 @@ type MonoEnv = Map EName Ty
 type ClassInstEnv = [ClassConstraint Ty]
 type EqInstEnv = [EqConstraint Ty]
 type InstEnv = (ClassInstEnv, EqInstEnv)
-type Typing = (MonoEnv,InstEnv,Ty)
+type Typing = (MonoEnv, InstEnv, Ty)
+
+type Range = (Delta, Delta)
+
+type Unique =
+    StateT ([Maybe String], Int, ByteString, [Range]) -- (unamb check results, counter, complete source{-constant-}, stack of ranges)
+    (Except String)
 
 data Lit
   = LInt    Integer
