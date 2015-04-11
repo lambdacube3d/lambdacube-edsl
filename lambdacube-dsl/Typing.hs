@@ -515,17 +515,12 @@ data InjType
     = ITMat | ITVec | ITVecScalar
     deriving (Eq, Ord, Show)
 
-injType :: TypeFun Ty -> Maybe InjType
-injType TFMat{} = Just ITMat
-injType TFVec{} = Just ITVec
-injType TFVecScalar{} = Just ITVecScalar
-injType _ = Nothing
-
-testInj :: [TypeFun Ty] -> [[Ty]]
-testInj xs@(TFMat{}:_) = transpose [[a,b] | TFMat a b <- xs]
-testInj xs@(TFVec{}:_) = transpose [[a,b] | TFVec a b <- xs]
-testInj xs@(TFVecScalar{}:_) = transpose [[a,b] | TFVecScalar a b <- xs]
-testInj xs = []
+injType :: TypeFun Ty -> Maybe (InjType, [Ty])
+injType = \case
+    TFMat a b -> Just (ITMat, [a, b])
+    TFVec a b -> Just (ITVec, [a, b])
+    TFVecScalar a b -> Just (ITVecScalar, [a, b])
+    _ -> Nothing
 
 vecS = TFVecScalar
 

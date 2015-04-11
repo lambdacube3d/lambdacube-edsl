@@ -147,7 +147,6 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
 
 -------------------------------------------------------------------------------- typing unification
 
--- if needed, simplify class constraints here:  (Ord a, Eq a) --> Ord a
 joinInstEnv :: Subst -> InstEnv -> Unique (Subst, InstEnv)
 joinInstEnv s es = untilNoUnif s $ nub $ subst s es
   where
@@ -156,7 +155,8 @@ joinInstEnv s es = untilNoUnif s $ nub $ subst s es
             -- right reduce
             tell $ groupBy' [(f, ty) | CEq ty f <- es]
             -- injectivity test
-            tell $ concatMap (concatMap testInj . groupBy') $ groupBy' [(ty, (it, f)) | CEq ty f <- es, Just it <- [injType f]]
+            tell $ concatMap (concatMap transpose . groupBy') $ groupBy' [(ty, (it, is)) | CEq ty f <- es, Just (it, is) <- [injType f]]
+            -- constraint reduction
             concat <$> mapM simplifyInst es
         s <- unifyTypes w
         if Map.null s then return (acc, es) else untilNoUnif (acc `compose` s) $ nub $ subst s es
@@ -194,14 +194,6 @@ joinInstEnv s es = untilNoUnif s $ nub $ subst s es
         keep = return [x]
         fail = lift . throwErrorUnique
 
-
-simplifyTyping :: PolyEnv -> Typing -> Unique Typing   
-simplifyTyping penv (me, ie, t) = do
-    (s, ie) <- joinInstEnv mempty ie
-    let ty = (subst s me, ie, subst s t)
-    unamb penv ty
-    return ty
-
 {- fail on ambiguous types
 Ambiguous:
   (Show a) => Int
@@ -231,9 +223,9 @@ unamb penv ty@(m, es, t)
         a --> b = \s -> if a `hasCommon` s then b else mempty
         a <-> b = (a --> b) <> (b --> a)
 
-addUnambCheck c = do
-    e <- errorUnique
-    modify $ \(cs, x, y, z) -> (((e ++) <$> c): cs, x, y, z)
+    addUnambCheck c = do
+        e <- errorUnique
+        modify $ \(cs, x, y, z) -> (((e ++) <$> c): cs, x, y, z)
 
 unif :: PolyEnv -> [Typing] -> ([Ty] -> ([Ty], Ty)) -> Unique (Subst, Typing)
 unif penv (unzip3 -> (ms, is, ts)) f = do
