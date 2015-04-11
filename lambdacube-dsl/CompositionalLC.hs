@@ -104,13 +104,6 @@ instance Substitute a => Substitute (ClassConstraint a) where
 instance Substitute a => Substitute (EqConstraint a) where
     subst = fmap . subst
 
--- replace free type variables with fresh type variables
-instTyping :: Typing -> Unique (Typing,Subst)
-instTyping ty@(_, _, freeVars -> fv) = do
-  newVars <- replicateM (Set.size fv) (newVar C)
-  let s = Map.fromList $ zip (Set.toList fv) newVars
-  return (subst s ty, s)
-
 -------------------------------------------------------------------------------- type unification
 
 -- make single tvar substitution; check infinite types
@@ -236,8 +229,8 @@ Not ambiguous:
   (Show a, b ~ F a) => b
 -}
 unamb :: PolyEnv -> Typing -> Unique ()
-unamb env ty@(m,pe@(is,es),t)
-    = when (not $ used `Set.isSubsetOf` defined) $ throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show env]
+unamb penv ty@(m,pe@(is,es),t)
+    = when (not $ used `Set.isSubsetOf` defined) $ throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show penv]
   where
     used = freeVars pe
     defined = growDefinedVars mempty $ freeVars (m, t)
@@ -263,61 +256,61 @@ unif penv b ms is t = do
 
 -------------------------------------------------------------------------------- type inference
 
-type Scope = Set EName
+type PolyEnv = Map EName Typing
 
-monoVar scope n
-    | n `Set.notMember` scope = throwErrorUnique $ "Variable " ++ n ++ " is not in scope."
-    | otherwise = do
-        t <- trace "mono var" <$> newVar C
-        return $ EVar (Map.singleton n t, mempty, t) n
-
-infer :: PolyEnv -> Scope -> Exp Range -> Unique (Exp Typing)
-infer penv scope exp = withRanges [getTag exp] $ case exp of
+infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
+infer penv exp = withRanges [getTag exp] $ case exp of
     -- _.f :: Split r (Record [f :: a]) r' => r -> a
     EFieldProj r e fn -> do
-        te@(getTag -> (m, i, r)) <- infer penv scope e
+        te@(getTag -> (m, i, r)) <- infer penv e
         a <- newVar C
         r' <- newVar C
         ty <- simplifyTyping penv (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) `mappend` i, a)
         return $ EFieldProj ty te fn
     ERecord r (unzip -> (fs, es)) -> do
-        trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv scope) es
+        trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) es
         ty <- snd <$> unif penv [] ml il (TRecord $ Map.fromList {-TODO: check-} $ zip fs tl)
         return $ ERecord ty $ zip fs trs
     ETuple r t -> do
-        te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv scope) t
+        te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
         ETuple <$> (snd <$> unif penv [] ml il (TTuple C tl)) <*> pure te
     ELit r l -> ELit <$> inferLit l <*> pure l
-    EVar r n -> do
+    EVar r n ->
         inferPrimFun
             (\x -> EVar <$> simplifyTyping penv x <*> pure ("prim:" ++ n))
-            (maybe (monoVar scope n) (fmap ((\(t, s) -> ESubst s $ EVar t n) . trace "poly var") . instTyping) $ Map.lookup n penv)
+            (maybe (throwErrorUnique $ "Variable " ++ n ++ " is not in scope.") instTyping $ Map.lookup n penv)
             n
+      where
+        instTyping ty@(_, _, freeVars -> fv) = do
+          newVars <- replicateM (Set.size fv) (newVar C)
+          let s = Map.fromList $ zip (Set.toList fv) newVars
+          return $ ESubst s $ EVar (subst s ty) n
     ELam r n f
-        | Set.member n scope -> throwErrorUnique $ "Variable name clash: " ++ n
+        | Map.member n penv -> throwErrorUnique $ "Variable name clash: " ++ n
         | otherwise -> do
-            tf@(getTag -> (m, i, t)) <- infer penv (Set.insert n scope) f
+            t <- newVar C
+            tf@(getTag -> (m, i, t)) <- infer (Map.insert n (Map.singleton n t, mempty, t) penv) f
             a <- maybe (newVar C) return $ Map.lookup n m
             let ty = (Map.delete n m, i, a ~> t)
             unamb penv ty
             return $ ELam ty n tf
     EApp r f a -> do
-        tf@(getTag -> (m1, i1, t1)) <- infer penv scope f
-        ta@(getTag -> (m2, i2, t2)) <- infer penv scope a
+        tf@(getTag -> (m1, i1, t1)) <- infer penv f
+        ta@(getTag -> (m2, i2, t2)) <- infer penv a
         v <- newVar C
         (s, ty) <- unif penv [t1, t2 ~> v] [m1, m2] [i1, i2] v
         let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
             tyFree = freeVars t1
         return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst s $ EApp ty tf ta
     ELet r n x e
-        | Set.member n scope -> throwErrorUnique $ "Variable name clash: " ++ n
+        | Map.member n penv -> throwErrorUnique $ "Variable name clash: " ++ n
         | otherwise -> do
-            tx@(getTag -> ty) <- infer penv scope x
-            te@(getTag -> ty') <- infer (Map.insert n ty penv) scope e
+            tx@(getTag -> ty) <- infer penv x
+            te@(getTag -> ty') <- infer (Map.insert n ty penv) e
             return $ ELet ty' n tx te
 
 -------------------------------------------------------------------------------- main inference function
 
 inference :: ByteString -> Exp Range -> Either String (Exp Typing)
-inference src = runIdentity . runExceptT . flip evalStateT (0,src,[]) . infer mempty mempty
+inference src = runIdentity . runExceptT . flip evalStateT (0,src,[]) . infer mempty
 

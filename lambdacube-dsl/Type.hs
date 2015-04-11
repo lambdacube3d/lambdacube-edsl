@@ -11,13 +11,12 @@ import Data.Traversable
 type TName = String
 type EName = String
 type FName = String
+
 type MonoEnv = Map EName Ty
-type PolyEnv = Map EName Typing
 type ClassInstEnv = [ClassConstraint Ty]
 type EqInstEnv = [EqConstraint Ty]
 type InstEnv = (ClassInstEnv, EqInstEnv)
 type Typing = (MonoEnv,InstEnv,Ty)
-type Env = (PolyEnv,MonoEnv,InstEnv)
 
 data Lit
   = LInt    Integer
