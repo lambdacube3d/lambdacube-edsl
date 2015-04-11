@@ -293,7 +293,7 @@ infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
     app f x = newV $ \v -> unif penv [f, x] (\[t1, t2] -> ([t1, t2 ~> v], v))
 
     insert' n t penv
-        | Map.member n penv = throwErrorUnique $ "Variable name clash: " ++ n
+        | Map.member n penv || Set.member n primFunSet = throwErrorUnique $ "Variable name clash: " ++ n
         | otherwise = return $ Map.insert n t penv
 
     addSubst (s, t@EApp{}) = ESubst (getTag t) s t
