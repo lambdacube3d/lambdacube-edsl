@@ -291,7 +291,7 @@ infer penv scope exp = withRanges [getTag exp] $ case exp of
     EVar r n -> do
         inferPrimFun
             (\x -> EVar <$> simplifyTyping penv x <*> pure n)
-            (maybe (monoVar scope n) (fmap ((\(t, s) -> ESubst t s $ EVar t n) . trace "poly var") . instTyping) $ Map.lookup n penv)
+            (maybe (monoVar scope n) (fmap ((\(t, s) -> ESubst s $ EVar t n) . trace "poly var") . instTyping) $ Map.lookup n penv)
             n
     ELam r n f
         | Set.member n scope -> throwErrorUnique $ "Variable name clash: " ++ n
@@ -308,7 +308,7 @@ infer penv scope exp = withRanges [getTag exp] $ case exp of
         (s, ty) <- unif penv [t1, t2 ~> v] [m1, m2] [i1, i2] v
         let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
             tyFree = freeVars t1
-        return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
+        return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst s $ EApp ty tf ta
     ELet r n x e
         | Set.member n scope -> throwErrorUnique $ "Variable name clash: " ++ n
         | otherwise -> do

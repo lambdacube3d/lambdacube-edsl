@@ -36,7 +36,7 @@ data Exp a
   | ETuple    a [Exp a]
   | ERecord   a [(FName,Exp a)]
   | EFieldProj a (Exp a) FName
-  | ESubst    a Subst (Exp a)
+  | ESubst    Subst (Exp a)
 --  | EFix EName Exp
   deriving (Show,Eq,Ord)
 
@@ -51,7 +51,7 @@ getTag (ELet      r _ _ _) = r
 getTag (ETuple    r _) = r
 getTag (ERecord   r _) = r
 getTag (EFieldProj r _ _) = r
-getTag (ESubst    r _ _) = r
+getTag (ESubst    _ r) = getTag r
 
 data Frequency -- frequency kind
   -- frequency values
