@@ -49,18 +49,6 @@ withRanges rl a = do
   put (z,q,rl0)
   return res
 
--- union mono envs matching on intersection
-joinMonoEnv :: MonoEnv -> MonoEnv -> Unique MonoEnv
-joinMonoEnv a b = T.sequence $ Map.unionWithKey merge (fmap return a) (fmap return b)
-  where
-    merge k ml mr = do
-        l <- ml
-        r <- mr
-        if l == r then ml else throwErrorUnique $ k ++ " mismatch " ++ show l ++ " with " ++ show r
-
-joinMonoEnvs :: [MonoEnv] -> Unique MonoEnv
-joinMonoEnvs = foldM joinMonoEnv mempty
-
 hasCommon :: Ord a => Set a -> Set a -> Bool
 hasCommon a b = not $ Set.null $ a `Set.intersection` b
 
@@ -141,7 +129,7 @@ instTyping ty@(_, _, freeVars -> fv) = do
   let s = Map.fromList $ zip (Set.toList fv) newVars
   return (subst s ty, s)
 
--------------------------------------------------------------------------------- unification
+-------------------------------------------------------------------------------- type unification
 
 -- make single tvar substitution; check infinite types
 bindVar :: TName -> Ty -> Unique Subst
@@ -193,7 +181,7 @@ unifyEqs' = unifyEqs . concatMap pairs
     pairs [] = []
     pairs (x:xs) = map ((,) x) xs
 
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------- typing unification
 
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
 joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
@@ -265,8 +253,7 @@ Not ambiguous:
 -}
 unamb :: PolyEnv -> Typing -> Unique ()
 unamb env ty@(m,pe@(is,es),t)
-    | used `Set.isSubsetOf` defined = return ()
-    | otherwise = throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show env]
+    = when (not $ used `Set.isSubsetOf` defined) $ throwErrorUnique $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show env]
   where
     used = freeVars pe
     defined = growDefinedVars mempty $ freeVars (m, t)
@@ -282,17 +269,19 @@ unamb env ty@(m,pe@(is,es),t)
         g (CEq ty f) = freeVars ty <-> freeVars f
         g (Split a b c) = freeVars a <-> freeVars (b, c)
 
+unif :: PolyEnv -> [Ty] -> [MonoEnv] -> [InstEnv] -> Ty -> Unique (Subst, Typing)
+unif penv b ms is t = do
+    s <- unifyEqs' $ b: Map.elems (Map.unionsWith (++) $ map (fmap (:[])) ms)
+    (s, i) <- joinInstEnv s is
+    let ty = (Map.unions $ subst s ms, i, subst s t)
+    unamb penv ty
+    return (s, ty)
+
+-------------------------------------------------------------------------------- type inference
+
 monoVar n = do
     t <- trace "mono var" <$> newVar C
     return $ EVar (Map.singleton n t, mempty, t) n
-
-unif penv ms is t b = do
-    s <- unifyEqs' $ b: Map.elems (Map.unionsWith (++) $ map (Map.map (:[])) ms)
-    (s, i) <- joinInstEnv s is
-    m <- joinMonoEnvs $ subst s ms
-    let ty = (m, i, subst s t)
-    unamb penv ty
-    return (s, ty)
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
 -- _.f :: Split r (Record [f :: a]) r' => r -> a
@@ -304,11 +293,11 @@ infer penv (EFieldProj r e fn) = withRanges [r] $ do
     return $ EFieldProj ty te fn
 infer penv (ERecord r (unzip -> (fs, es))) = withRanges [r] $ do
     trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) es
-    ty <- snd <$> unif penv ml il (TRecord $ Map.fromList {-TODO: check-} $ zip fs tl) []
+    ty <- snd <$> unif penv [] ml il (TRecord $ Map.fromList {-TODO: check-} $ zip fs tl)
     return $ ERecord ty $ zip fs trs
 infer penv (ETuple r t) = withRanges [r] $ do
     te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
-    ETuple <$> (snd <$> unif penv ml il (TTuple C tl) []) <*> pure te
+    ETuple <$> (snd <$> unif penv [] ml il (TTuple C tl)) <*> pure te
 infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
 infer penv (EVar r n) = withRanges [r] $ do
     inferPrimFun
@@ -323,7 +312,7 @@ infer penv (EApp r f a) = withRanges [r] $ do
     tf@(getTag -> (m1, i1, t1)) <- infer penv f
     ta@(getTag -> (m2, i2, t2)) <- infer penv a
     v <- newVar C
-    (s, ty) <- unif penv [m1, m2] [i1, i2] v [t1, t2 ~> v]
+    (s, ty) <- unif penv [t1, t2 ~> v] [m1, m2] [i1, i2] v
     let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
         tyFree = freeVars t1
     return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
