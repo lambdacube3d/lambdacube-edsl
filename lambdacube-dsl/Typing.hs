@@ -532,7 +532,7 @@ vecS = TFVecScalar
 
 infix 4 ~~
 (~~) :: Ty -> TypeFun Ty -> InstEnv
-t ~~ f = ([], [CEq t f])
+t ~~ f = [CEq t f]
 
 isValidOutput      = cClass IsValidOutput
 isNum              = cClass CNum
@@ -542,7 +542,7 @@ isTypeLevelNatural = cClass IsTypeLevelNatural
 isFloating         = cClass IsFloating
 
 cClass :: Class -> Ty -> InstEnv
-cClass c ty = ([CClass c ty], [])
+cClass c ty = [CClass c ty]
 
 -- reduce: reduce class constraints:  Eq [a] --> Eq a
 isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> e -> Class -> Ty -> e

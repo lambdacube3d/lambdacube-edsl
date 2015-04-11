@@ -17,9 +17,7 @@ type EName = String
 type FName = String
 
 type MonoEnv = Map EName Ty
-type ClassInstEnv = [ClassConstraint Ty]
-type EqInstEnv = [EqConstraint Ty]
-type InstEnv = (ClassInstEnv, EqInstEnv)
+type InstEnv = [Constraint Ty]
 type Typing = (MonoEnv, InstEnv, Ty)
 
 type Range = (Delta, Delta)
@@ -242,12 +240,9 @@ pattern TRasterContext a b = Ty (TRasterContext_ a b)
 pattern TVertexOut a b = Ty (TVertexOut_ a b)
 pattern TVertexStream a b c = Ty (TVertexStream_ a b c)
 
-data ClassConstraint a
-  = CClass Class a
-  deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
-
-data EqConstraint a
+data Constraint a
   = CEq a (TypeFun a)  -- CEq t f   ~~~  t ~ TFun f
+  | CClass Class a
   | Split a a a
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 

@@ -68,8 +68,7 @@ instance (FreeVars a, FreeVars b) => FreeVars (a, b) where
 
 instance FreeVars a => FreeVars (Map EName a)       where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
-instance FreeVars a => FreeVars (ClassConstraint a) where freeVars = foldMap freeVars
-instance FreeVars a => FreeVars (EqConstraint a)    where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (TypeFun a)         where freeVars = foldMap freeVars
 
 -------------------------------------------------------------------------------- substitution
@@ -89,8 +88,7 @@ instance (Substitute a, Substitute b, Substitute c) => Substitute (a, b, c) wher
 
 instance Substitute MonoEnv                             where subst = fmap . subst
 instance Substitute a => Substitute [a]                 where subst = fmap . subst
-instance Substitute a => Substitute (ClassConstraint a) where subst = fmap . subst
-instance Substitute a => Substitute (EqConstraint a)    where subst = fmap . subst
+instance Substitute a => Substitute (Constraint a)      where subst = fmap . subst
 
 -------------------------------------------------------------------------------- type unification
 
@@ -148,12 +146,9 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
 
 -------------------------------------------------------------------------------- typing unification
 
-joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
-joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
-    (s, es) <- untilNoUnif s $ nub $ subst s es
-    cs <- concat <$> mapM simplifyClassInst (subst s cs)
-    -- if needed, simplify class constraints here:  (Ord a, Eq a) --> Ord a
-    return (s, (cs, es))
+-- if needed, simplify class constraints here:  (Ord a, Eq a) --> Ord a
+joinInstEnv :: Subst -> InstEnv -> Unique (Subst, InstEnv)
+joinInstEnv s es = untilNoUnif s $ nub $ subst s es
   where
     untilNoUnif acc es = do
         (es, w) <- runWriterT $ do
@@ -161,25 +156,11 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
             tell $ groupBy' [(f, ty) | CEq ty f <- es]
             -- injectivity test
             tell $ concatMap (concatMap testInj . groupBy') $ groupBy' [(ty, (it, f)) | CEq ty f <- es, Just it <- [injType f]]
-            filterM simplifyInst es
+            concat <$> mapM simplifyInst es
         s <- unifyTypes w
         if Map.null s then return (acc, es) else untilNoUnif (acc `compose` s) $ nub $ subst s es
 
-    simplifyClassInst cl@(CClass c t) = isInstance (\c t -> return [CClass c t]) throwErrorUnique (return [cl]) (return []) c t
-
-    discard x = tell x >> return False
-    keep = return True
-    fail = lift . throwErrorUnique
-
-    diff a b c = case Map.keys $ b Map.\\ a of
-        [] -> discard $ [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
-        ks -> fail $ "extra keys: " ++ show ks
-
-    isRec TVar{} = True
-    isRec TRecord{} = True
-    isRec _ = False
-
-    simplifyInst = \case
+    simplifyInst x = case x of
         Split (TRecord a) (TRecord b) (TRecord c) ->
           case (Map.keys $ Map.intersection b c, Map.keys $ a Map.\\ (b <> c), Map.keys $ (b <> c) Map.\\ a) of
             ([], [], []) -> discard $ unifyMaps [a, b, c]
@@ -192,16 +173,30 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
         Split a b c
             | isRec a && isRec b && isRec c -> keep
             | otherwise -> fail $ "bad split: " ++ show (a, b, c)
+        CClass c t -> isInstance (\c t -> return [CClass c t]) fail keep (discard []) c t
         CEq ty f -> do
             forM_ (backPropTF ty f) $ \(t1, t2) -> tell [[t1, t2]]
             reduceTF
                 (\t -> discard [[ty, t]])
                 (fail . (("error during reduction of " ++ show f ++ "  ") ++))
                 keep f
+      where
+        isRec TVar{} = True
+        isRec TRecord{} = True
+        isRec _ = False
+
+        diff a b c = case Map.keys $ b Map.\\ a of
+            [] -> discard $ [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
+            ks -> fail $ "extra keys: " ++ show ks
+
+        discard xs = tell xs >> return []
+        keep = return [x]
+        fail = lift . throwErrorUnique
+
 
 simplifyTyping :: PolyEnv -> Typing -> Unique Typing   
 simplifyTyping penv (me, ie, t) = do
-    (s, ie) <- joinInstEnv mempty [ie]
+    (s, ie) <- joinInstEnv mempty ie
     let ty = (subst s me, ie, subst s t)
     unamb penv ty
     return ty
@@ -217,22 +212,23 @@ Not ambiguous:
   (Show a, b ~ F a) => b
 -}
 unamb :: PolyEnv -> Typing -> Unique ()
-unamb penv ty@(m,pe@(is,es),t)
+unamb penv ty@(m, es, t)
     = addUnambCheck $ if used `Set.isSubsetOf` defined then Nothing else Just $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show penv]
   where
-    used = freeVars pe
+    used = freeVars es
     defined = growDefinedVars mempty $ freeVars (m, t)
 
     growDefinedVars acc s
         | Set.null s = acc
         | otherwise = growDefinedVars (acc <> s) (grow s Set.\\ acc)
 
-    grow = foldMap g es
+    grow = flip foldMap es $ \case
+        CEq ty f -> freeVars ty <-> freeVars f
+        Split a b c -> freeVars a <-> freeVars (b, c)
+        _ -> mempty
       where
         a --> b = \s -> if a `hasCommon` s then b else mempty
         a <-> b = (a --> b) <> (b --> a)
-        g (CEq ty f) = freeVars ty <-> freeVars f
-        g (Split a b c) = freeVars a <-> freeVars (b, c)
 
 addUnambCheck c = do
     e <- errorUnique
@@ -241,7 +237,7 @@ addUnambCheck c = do
 unif :: PolyEnv -> [Ty] -> [MonoEnv] -> [InstEnv] -> Ty -> Unique (Subst, Typing)
 unif penv b ms is t = do
     s <- unifyTypes $ b: unifyMaps ms
-    (s, i) <- joinInstEnv s is
+    (s, i) <- joinInstEnv s $ concat is
     let ty = (Map.unions $ subst s ms, i, subst s t)
     unamb penv ty
     return (s, ty)
@@ -266,7 +262,7 @@ infer penv exp = withRanges [getTag exp] $ case exp of
     -- _.f :: Split r (Record [f :: a]) r' => r -> a
     EFieldProj r e fn -> newV $ \a r' -> do
         te@(getTag -> (m, i, r)) <- infer penv e
-        ty <- simplifyTyping penv (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) <> i, a)
+        ty <- simplifyTyping penv (m, Split r (TRecord $ Map.singleton fn a) r': i, a)
         return $ EFieldProj ty te fn
     ERecord r (unzip -> (fs, es)) -> do
         trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) es
