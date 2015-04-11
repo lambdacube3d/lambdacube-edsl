@@ -52,20 +52,6 @@ withRanges rl a = do
 hasCommon :: Ord a => Set a -> Set a -> Bool
 hasCommon a b = not $ Set.null $ a `Set.intersection` b
 
--------------------------------------------------------------------------------- scope checking
-
-scopeChk :: ByteString -> Exp Range -> Either String ()
-scopeChk src e = scopeCheck src primFunSet e
-
-scopeCheck :: ByteString -> Set EName -> Exp Range -> Either String ()
-scopeCheck src vars (EVar r n) = if Set.member n vars then return () else throwErrorSrc src [r] $ "Variable " ++ n ++ " is not in scope."
-scopeCheck src vars (EApp r f a) = scopeCheck src vars f >> scopeCheck src vars a
-scopeCheck src vars (ELam r n f) = if Set.notMember n vars then scopeCheck src (Set.insert n vars) f else throwErrorSrc src [r] $ "Variable name clash: " ++ n
-scopeCheck src vars (ELet r n x e) = do
-  let vars' = Set.insert n vars
-  if Set.notMember n vars then scopeCheck src vars' x >> scopeCheck src vars' e else throwErrorSrc src [r] $ "Variable name clash: " ++ n
-scopeCheck src vars _ = return ()
-
 -------------------------------------------------------------------------------- free vars
 
 class FreeVars a where freeVars :: a -> Set TName
@@ -279,57 +265,62 @@ unif penv b ms is t = do
 
 -------------------------------------------------------------------------------- type inference
 
-monoVar n = do
-    t <- trace "mono var" <$> newVar C
-    return $ EVar (Map.singleton n t, mempty, t) n
+type Scope = Set EName
 
-infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
--- _.f :: Split r (Record [f :: a]) r' => r -> a
-infer penv (EFieldProj r e fn) = withRanges [r] $ do
-    te@(getTag -> (m, i, r)) <- infer penv e
-    a <- newVar C
-    r' <- newVar C
-    ty <- simplifyTyping (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) `mappend` i, a)
-    return $ EFieldProj ty te fn
-infer penv (ERecord r (unzip -> (fs, es))) = withRanges [r] $ do
-    trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) es
-    ty <- snd <$> unif penv [] ml il (TRecord $ Map.fromList {-TODO: check-} $ zip fs tl)
-    return $ ERecord ty $ zip fs trs
-infer penv (ETuple r t) = withRanges [r] $ do
-    te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
-    ETuple <$> (snd <$> unif penv [] ml il (TTuple C tl)) <*> pure te
-infer penv (ELit r l) = withRanges [r] $ ELit <$> inferLit l <*> pure l
-infer penv (EVar r n) = withRanges [r] $ do
-    inferPrimFun
-        (\x -> EVar <$> simplifyTyping x <*> pure n)
-        (maybe (monoVar n) (fmap ((\(t, s) -> ESubst t s $ EVar t n) . trace "poly var") . instTyping) $ Map.lookup n penv)
-        n
-infer penv (ELam r n f) = withRanges [r] $ do
-    tf@(getTag -> (m, i, t)) <- infer penv f
-    a <- maybe (newVar C) return $ Map.lookup n m
-    return $ ELam (Map.delete n m, i, a ~> t) n tf
-infer penv (EApp r f a) = withRanges [r] $ do
-    tf@(getTag -> (m1, i1, t1)) <- infer penv f
-    ta@(getTag -> (m2, i2, t2)) <- infer penv a
-    v <- newVar C
-    (s, ty) <- unif penv [t1, t2 ~> v] [m1, m2] [i1, i2] v
-    let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
-        tyFree = freeVars t1
-    return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
-infer penv (ELet r n x e) = withRanges [r] $ do
-    tx@(getTag -> ty) <- infer penv x
-    te@(getTag -> ty') <- infer (Map.insert n ty penv) e
-    return $ ELet ty' n tx te
+monoVar scope n
+    | n `Set.notMember` scope = throwErrorUnique $ "Variable " ++ n ++ " is not in scope."
+    | otherwise = do
+        t <- trace "mono var" <$> newVar C
+        return $ EVar (Map.singleton n t, mempty, t) n
+
+infer :: PolyEnv -> Scope -> Exp Range -> Unique (Exp Typing)
+infer penv scope exp = withRanges [getTag exp] $ case exp of
+    -- _.f :: Split r (Record [f :: a]) r' => r -> a
+    EFieldProj r e fn -> do
+        te@(getTag -> (m, i, r)) <- infer penv scope e
+        a <- newVar C
+        r' <- newVar C
+        ty <- simplifyTyping (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) `mappend` i, a)
+        return $ EFieldProj ty te fn
+    ERecord r (unzip -> (fs, es)) -> do
+        trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv scope) es
+        ty <- snd <$> unif penv [] ml il (TRecord $ Map.fromList {-TODO: check-} $ zip fs tl)
+        return $ ERecord ty $ zip fs trs
+    ETuple r t -> do
+        te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv scope) t
+        ETuple <$> (snd <$> unif penv [] ml il (TTuple C tl)) <*> pure te
+    ELit r l -> ELit <$> inferLit l <*> pure l
+    EVar r n -> do
+        inferPrimFun
+            (\x -> EVar <$> simplifyTyping x <*> pure n)
+            (maybe (monoVar scope n) (fmap ((\(t, s) -> ESubst t s $ EVar t n) . trace "poly var") . instTyping) $ Map.lookup n penv)
+            n
+    ELam r n f
+        | Set.member n scope -> throwErrorUnique $ "Variable name clash: " ++ n
+        | otherwise -> do
+            tf@(getTag -> (m, i, t)) <- infer penv (Set.insert n scope) f
+            a <- maybe (newVar C) return $ Map.lookup n m
+            return $ ELam (Map.delete n m, i, a ~> t) n tf
+    EApp r f a -> do
+        tf@(getTag -> (m1, i1, t1)) <- infer penv scope f
+        ta@(getTag -> (m2, i2, t2)) <- infer penv scope a
+        v <- newVar C
+        (s, ty) <- unif penv [t1, t2 ~> v] [m1, m2] [i1, i2] v
+        let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
+            tyFree = freeVars t1
+        return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst ty s $ EApp ty tf ta
+    ELet r n x e
+        | Set.member n scope -> throwErrorUnique $ "Variable name clash: " ++ n
+        | otherwise -> do
+            tx@(getTag -> ty) <- infer penv scope x
+            te@(getTag -> ty') <- infer (Map.insert n ty penv) scope e
+            return $ ELet ty' n tx te
 
 -------------------------------------------------------------------------------- main inference function
 
 inference :: ByteString -> Exp Range -> Either String (Exp Typing)
-inference src e = case scopeChk src e of
-  Left m  -> Left m
-  Right () -> runIdentity $ runExceptT $ (flip evalStateT) (0,src,[]) act
-   where
-    act = do
-      a <- infer mempty e
-      unamb mempty $ getTag a
-      return a
+inference src e = runIdentity $ runExceptT $ flip evalStateT (0,src,[]) $ do
+    a <- infer mempty mempty e
+    unamb mempty $ getTag a
+    return a
 
