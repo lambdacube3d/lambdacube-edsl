@@ -48,8 +48,6 @@ withRanges rl a = do
 hasCommon :: Ord a => Set a -> Set a -> Bool
 hasCommon a b = not $ Set.null $ a `Set.intersection` b
 
-pairs xs = zip xs $ tail xs
-
 -------------------------------------------------------------------------------- free vars
 
 class FreeVars a where freeVars :: a -> Set TName
@@ -74,13 +72,11 @@ class Substitute a where subst :: Subst -> a -> a
 
 instance Substitute Ty where
     subst st ty | Map.null st = ty -- optimization
-    subst st tv@(TVar _ a) = case Map.lookup a st of
-      Nothing -> tv
-      Just t  -> t
-    subst st (Ty t) = Ty $ fmap (subst st) t
+    subst st tv@(TVar _ a) = fromMaybe tv $ Map.lookup a st
+    subst st (Ty t) = Ty $ subst st <$> t
 
 instance (Substitute a, Substitute b) => Substitute (a, b) where
-    subst s (cs, es) = (subst s cs, subst s es)
+    subst s = subst s *** subst s
 instance (Substitute a, Substitute b, Substitute c) => Substitute (a, b, c) where
     subst s (a, b, c) = (subst s a, subst s b, subst s c)
 
@@ -91,52 +87,57 @@ instance Substitute a => Substitute (EqConstraint a)    where subst = fmap . sub
 
 -------------------------------------------------------------------------------- type unification
 
--- make single tvar substitution; check infinite types
-bindVar :: TName -> Ty -> Unique Subst
-bindVar n (TVar _ m) | m == n = return mempty
-bindVar n t
-  | n `Set.member` freeVars t = throwErrorUnique $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
-  | otherwise = return $ Map.singleton n t
-
 -- compose substitutions
 -- Note: domain of substitutions is disjunct
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = mappend s2 $ subst s2 <$> s1
 
--- unify frequencies?
-unifyTy :: Ty -> Ty -> Unique Subst
-unifyTy (TVar _ u) t = bindVar u t
-unifyTy t (TVar _ u) = bindVar u t
-unifyTy (TTuple f1 t1) (TTuple f2 t2) = unifyEqs $ zip t1 t2
-unifyTy (TArr a1 b1) (TArr a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
-unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
-unifyTy (TFrameBuffer f1 a1 b1) (TFrameBuffer f2 a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
-unifyTy (TVertexStream f1 a1 b1) (TVertexStream f2 a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
-unifyTy (TFragmentStream f1 a1 b1) (TFragmentStream f2 a2 b2) = unifyEqs [(a1,a2),(b1,b2)]
-unifyTy (TPrimitiveStream f1 a1 b1 g1 c1) (TPrimitiveStream f2 a2 b2 g2 c2) = unifyEqs [(a1,a2),(b1,b2),(c1,c2)]
-unifyTy (TInput _ a1) (TInput _ a2) = unifyTy a1 a2
-unifyTy (TBlending _ a1) (TBlending _ a2) = unifyTy a1 a2
-unifyTy (TInterpolated _ a1) (TInterpolated _ a2) = unifyTy a1 a2
-unifyTy (TVertexOut _ a1) (TVertexOut _ a2) = unifyTy a1 a2
-unifyTy (TFetchPrimitive _ a1) (TFetchPrimitive _ a2) = unifyTy a1 a2
-unifyTy (TRasterContext _ a1) (TRasterContext _ a2) = unifyTy a1 a2
-unifyTy (TFragmentOperation _ a1) (TFragmentOperation _ a2) = unifyTy a1 a2
-unifyTy (TAccumulationContext _ a1) (TAccumulationContext _ a2) = unifyTy a1 a2
-unifyTy (TFragmentFilter _ a1) (TFragmentFilter _ a2) = unifyTy a1 a2
-unifyTy (TFragmentOut _ a1) (TFragmentOut _ a2) = unifyTy a1 a2
-unifyTy (Color a1) (Color a2) = unifyTy a1 a2
-unifyTy a b
-  | a == b = return mempty
-  | otherwise = throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
-
 -- compositional (not linear) unification?
-unifyEqs :: [(Ty,Ty)] -> Unique Subst
-unifyEqs = foldM uniTy mempty
-  where
-    uniTy s (a, b) = (s `compose`) <$> unifyTy (subst s a) (subst s b)
-
 unifyTypes :: [[Ty]] -> Unique Subst
-unifyTypes = unifyEqs . concatMap pairs
+unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith uni xs $ tail xs
+  where
+    uni :: Ty -> Ty -> StateT Subst Unique ()
+    uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
+      where
+        subst1 s tv@(TVar _ a) = fromMaybe tv $ Map.lookup a s
+        subst1 _ t = t
+
+        singSubst n t (TVar _ a) | a == n = t
+        singSubst n t (Ty ty) = Ty $ singSubst n t <$> ty
+
+        -- make single tvar substitution; check infinite types
+        bindVar n t = do
+            s <- get
+            let t' = subst s t
+            if n `Set.member` freeVars t
+                then lift $ throwErrorUnique $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
+                else put $ Map.insert n t' $ singSubst n t' <$> s
+
+        unifyTy :: Ty -> Ty -> StateT Subst Unique ()
+        unifyTy (TVar _ u) (TVar _ v) | u == v = return ()
+        unifyTy (TVar _ u) _ = bindVar u b
+        unifyTy _ (TVar _ u) = bindVar u a
+        unifyTy (TTuple f1 t1) (TTuple f2 t2) = sequence_ $ zipWith uni t1 t2
+        unifyTy (TArr a1 b1) (TArr a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy (TFrameBuffer f1 a1 b1) (TFrameBuffer f2 a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy (TVertexStream f1 a1 b1) (TVertexStream f2 a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy (TFragmentStream f1 a1 b1) (TFragmentStream f2 a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy (TPrimitiveStream f1 a1 b1 g1 c1) (TPrimitiveStream f2 a2 b2 g2 c2) = uni a1 a2 >> uni b1 b2 >> uni c1 c2
+        unifyTy (TInput _ a1) (TInput _ a2) = uni a1 a2
+        unifyTy (TBlending _ a1) (TBlending _ a2) = uni a1 a2
+        unifyTy (TInterpolated _ a1) (TInterpolated _ a2) = uni a1 a2
+        unifyTy (TVertexOut _ a1) (TVertexOut _ a2) = uni a1 a2
+        unifyTy (TFetchPrimitive _ a1) (TFetchPrimitive _ a2) = uni a1 a2
+        unifyTy (TRasterContext _ a1) (TRasterContext _ a2) = uni a1 a2
+        unifyTy (TFragmentOperation _ a1) (TFragmentOperation _ a2) = uni a1 a2
+        unifyTy (TAccumulationContext _ a1) (TAccumulationContext _ a2) = uni a1 a2
+        unifyTy (TFragmentFilter _ a1) (TFragmentFilter _ a2) = uni a1 a2
+        unifyTy (TFragmentOut _ a1) (TFragmentOut _ a2) = uni a1 a2
+        unifyTy (Color a1) (Color a2) = uni a1 a2
+        unifyTy a b
+          | a == b = return ()
+          | otherwise = lift $ throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
 
 -------------------------------------------------------------------------------- typing unification
 
@@ -290,9 +291,7 @@ infer penv exp = withRanges [getTag exp] $ case exp of
         tf@(getTag -> (m1, i1, t1)) <- infer penv f
         ta@(getTag -> (m2, i2, t2)) <- infer penv a
         (s, ty) <- unif penv [t1, t2 ~> v] [m1, m2] [i1, i2] v
-        let tyBind = Map.filterWithKey (\k _ -> Set.member k tyFree) s 
-            tyFree = freeVars t1
-        return $ trace ("app subst:\n    " ++ show t1 ++ "\n    " ++ show tyBind) $ ESubst s $ EApp ty tf ta
+        return $ ESubst s $ EApp ty tf ta
     ELet r n x e
         | Map.member n penv -> throwErrorUnique $ "Variable name clash: " ++ n
         | otherwise -> do
