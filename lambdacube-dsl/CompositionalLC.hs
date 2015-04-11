@@ -234,8 +234,9 @@ addUnambCheck c = do
     e <- errorUnique
     modify $ \(cs, x, y, z) -> (((e ++) <$> c): cs, x, y, z)
 
-unif :: PolyEnv -> [Ty] -> [MonoEnv] -> [InstEnv] -> Ty -> Unique (Subst, Typing)
-unif penv b ms is t = do
+unif :: PolyEnv -> [Typing] -> ([Ty] -> ([Ty], Ty)) -> Unique (Subst, Typing)
+unif penv (unzip3 -> (ms, is, ts)) f = do
+    let (b, t) = f ts
     s <- unifyTypes $ b: unifyMaps ms
     (s, i) <- joinInstEnv s $ concat is
     let ty = (Map.unions $ subst s ms, i, subst s t)
@@ -265,12 +266,12 @@ infer penv exp = withRanges [getTag exp] $ case exp of
         ty <- simplifyTyping penv (m, Split r (TRecord $ Map.singleton fn a) r': i, a)
         return $ EFieldProj ty te fn
     ERecord r (unzip -> (fs, es)) -> do
-        trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) es
-        ty <- snd <$> unif penv [] ml il (TRecord $ Map.fromList {-TODO: check-} $ zip fs tl)
+        trs <- mapM (infer penv) es
+        (_, ty) <- unif penv (map getTag trs) $ \tl -> ([], TRecord $ Map.fromList {-TODO: check-} $ zip fs tl)
         return $ ERecord ty $ zip fs trs
     ETuple r t -> do
-        te@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) t
-        ETuple <$> (snd <$> unif penv [] ml il (TTuple C tl)) <*> pure te
+        te <- mapM (infer penv) t
+        ETuple <$> (snd <$> unif penv (map getTag te) (\tl -> ([], TTuple C tl))) <*> pure te
     ELit r l -> ELit <$> inferLit l <*> pure l
     EVar r n ->
         inferPrimFun
@@ -291,9 +292,8 @@ infer penv exp = withRanges [getTag exp] $ case exp of
             unamb penv ty
             return $ ELam ty n tf
     EApp r f a -> newV $ \v -> do
-        tf@(getTag -> (m1, i1, t1)) <- infer penv f
-        ta@(getTag -> (m2, i2, t2)) <- infer penv a
-        (s, ty) <- unif penv [t1, t2 ~> v] [m1, m2] [i1, i2] v
+        ts@[tf, ta] <- mapM (infer penv) [f, a]
+        (s, ty) <- unif penv (map getTag ts) $ \[t1, t2] -> ([t1, t2 ~> v], v)
         return $ ESubst s $ EApp ty tf ta
     ELet r n x e
         | Map.member n penv -> throwErrorUnique $ "Variable name clash: " ++ n
