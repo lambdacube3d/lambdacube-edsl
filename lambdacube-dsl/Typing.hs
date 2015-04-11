@@ -967,11 +967,11 @@ inferLit a = case a of
   ty t = return (mempty, mempty, t)
 
 throwErrorUnique :: String -> Unique a
-throwErrorUnique s = do
-  (_,_,src,rl) <- get
-  throwErrorSrc src rl s
+throwErrorUnique s = errorUnique >>= throwError . (++ s)
 
-throwErrorSrc src rl s = do
+errorUnique :: Unique String
+errorUnique = do
+  (_,_,src,rl) <- get
   let sl = map mkSpan rl
       fullCode = True
       mkSpan (s,e) = unlines [show $ pretty (s,e), if fullCode then BS.unpack str else show $ pretty r]
@@ -983,7 +983,7 @@ throwErrorSrc src rl s = do
           b = rewind s
           sb = fromIntegral $ bytes b
           se = fromIntegral $ bytes e
-  throwError $ concat sl ++ s
+  return $ concat sl
 
 class NewVar a where
     type NewVarRes a :: *

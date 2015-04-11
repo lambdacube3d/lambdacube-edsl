@@ -234,7 +234,9 @@ unamb penv ty@(m,pe@(is,es),t)
         g (CEq ty f) = freeVars ty <-> freeVars f
         g (Split a b c) = freeVars a <-> freeVars (b, c)
 
-addUnambCheck c = modify $ \(cs, x, y, z) -> (c: cs, x, y, z)
+addUnambCheck c = do
+    e <- errorUnique
+    modify $ \(cs, x, y, z) -> (((e ++) <$> c): cs, x, y, z)
 
 unif :: PolyEnv -> [Ty] -> [MonoEnv] -> [InstEnv] -> Ty -> Unique (Subst, Typing)
 unif penv b ms is t = do
