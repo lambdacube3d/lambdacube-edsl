@@ -8,6 +8,7 @@
 module Typing where
 
 import Data.List
+import Data.Maybe
 import Data.Monoid
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import qualified Data.ByteString.Char8 as BS
@@ -960,8 +961,14 @@ inferLit a = case a of
  where
   ty t = return (mempty, mempty, t)
 
+checkUnambError = do
+    (cs, _, _, _) <- get
+    case cs of
+        (Just _: _) -> throwError $ head $ catMaybes $ reverse cs
+        _ -> return ()
+
 throwErrorUnique :: String -> Unique a
-throwErrorUnique s = errorUnique >>= throwError . (++ s)
+throwErrorUnique s = checkUnambError >> errorUnique >>= throwError . (++ s)
 
 errorUnique :: Unique String
 errorUnique = do

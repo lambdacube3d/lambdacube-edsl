@@ -243,11 +243,8 @@ inference src = runExcept . flip evalStateT (mempty, 0, src, []) . chk . infer m
   where
     chk m = do
         e <- m
-        (cs, _, _, _) <- get
-        check cs
+        checkUnambError
         return e
-    check cs@(Just _: _) = throwErrorUnique $ head $ catMaybes $ reverse cs
-    check _ = return ()
 
 type PolyEnv = Map EName Typing
 
