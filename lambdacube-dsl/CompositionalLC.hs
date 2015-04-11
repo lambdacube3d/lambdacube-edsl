@@ -175,21 +175,23 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
         [] -> discard $ [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
         ks -> fail $ "extra keys: " ++ show ks
 
+    isRec TVar{} = True
+    isRec TRecord{} = True
+    isRec _ = False
+
     simplifyInst = \case
         Split (TRecord a) (TRecord b) (TRecord c) ->
           case (Map.keys $ Map.intersection b c, Map.keys $ a Map.\\ (b <> c), Map.keys $ (b <> c) Map.\\ a) of
             ([], [], []) -> discard $ unifyMaps [a, b, c]
             ks -> fail $ "extra keys: " ++ show ks
-        Split (TRecord a) (TRecord b) c@(TVar C _) -> diff a b c
-        Split (TRecord a) c@(TVar C _) (TRecord b) -> diff a b c
-        Split c@(TVar C _) (TRecord a) (TRecord b) -> case Map.keys $ Map.intersection a b of
+        Split (TRecord a) (TRecord b) c@TVar{} -> diff a b c
+        Split (TRecord a) c@TVar{} (TRecord b) -> diff a b c
+        Split c@TVar{} (TRecord a) (TRecord b) -> case Map.keys $ Map.intersection a b of
             [] -> discard [[c, TRecord $ a <> b]]
             ks -> fail $ "extra keys: " ++ show ks
-        Split TVar{} TVar{} _ -> keep
-        Split TVar{} _ TVar{} -> keep
-        Split a TVar{} TVar{} -> keep
-        Split TVar{} TVar{} TVar{} -> keep
-        Split a b c -> fail $ "bad split: " ++ show (a, b, c)
+        Split a b c
+            | isRec a && isRec b && isRec c -> keep
+            | otherwise -> fail $ "bad split: " ++ show (a, b, c)
         CEq ty f -> do
             forM_ (backPropTF ty f) $ \(t1, t2) -> tell [[t1, t2]]
             reduceTF
