@@ -16,19 +16,15 @@ import Data.Maybe
 import Data.ByteString.Char8 (ByteString)
 import Data.Foldable (foldMap)
 import Data.Functor.Identity
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Arrow
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Monoid
-import Data.Functor
-import qualified Data.Traversable as T
-import qualified Data.Foldable as F
 
 import Type
 import Typing
@@ -222,10 +218,12 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
                 (fail . (("error during reduction of " ++ show f ++ "  ") ++))
                 keep f
 
-simplifyTyping :: Typing -> Unique Typing   
-simplifyTyping (me, ie, t) = do
+simplifyTyping :: PolyEnv -> Typing -> Unique Typing   
+simplifyTyping penv (me, ie, t) = do
     (s, ie) <- joinInstEnv mempty [ie]
-    return (subst s me, ie, subst s t)
+    let ty = (subst s me, ie, subst s t)
+    unamb penv ty
+    return ty
 
 {- fail on ambiguous types
 Ambiguous:
@@ -280,7 +278,7 @@ infer penv scope exp = withRanges [getTag exp] $ case exp of
         te@(getTag -> (m, i, r)) <- infer penv scope e
         a <- newVar C
         r' <- newVar C
-        ty <- simplifyTyping (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) `mappend` i, a)
+        ty <- simplifyTyping penv (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) `mappend` i, a)
         return $ EFieldProj ty te fn
     ERecord r (unzip -> (fs, es)) -> do
         trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv scope) es
@@ -292,7 +290,7 @@ infer penv scope exp = withRanges [getTag exp] $ case exp of
     ELit r l -> ELit <$> inferLit l <*> pure l
     EVar r n -> do
         inferPrimFun
-            (\x -> EVar <$> simplifyTyping x <*> pure n)
+            (\x -> EVar <$> simplifyTyping penv x <*> pure n)
             (maybe (monoVar scope n) (fmap ((\(t, s) -> ESubst t s $ EVar t n) . trace "poly var") . instTyping) $ Map.lookup n penv)
             n
     ELam r n f
@@ -300,7 +298,9 @@ infer penv scope exp = withRanges [getTag exp] $ case exp of
         | otherwise -> do
             tf@(getTag -> (m, i, t)) <- infer penv (Set.insert n scope) f
             a <- maybe (newVar C) return $ Map.lookup n m
-            return $ ELam (Map.delete n m, i, a ~> t) n tf
+            let ty = (Map.delete n m, i, a ~> t)
+            unamb penv ty
+            return $ ELam ty n tf
     EApp r f a -> do
         tf@(getTag -> (m1, i1, t1)) <- infer penv scope f
         ta@(getTag -> (m2, i2, t2)) <- infer penv scope a
@@ -319,8 +319,5 @@ infer penv scope exp = withRanges [getTag exp] $ case exp of
 -------------------------------------------------------------------------------- main inference function
 
 inference :: ByteString -> Exp Range -> Either String (Exp Typing)
-inference src e = runIdentity $ runExceptT $ flip evalStateT (0,src,[]) $ do
-    a <- infer mempty mempty e
-    unamb mempty $ getTag a
-    return a
+inference src = runIdentity . runExceptT . flip evalStateT (0,src,[]) . infer mempty mempty
 
