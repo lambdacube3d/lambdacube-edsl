@@ -84,11 +84,10 @@ instance Substitute Ty where
 
 instance (Substitute a, Substitute b) => Substitute (a, b) where
     subst s = subst s *** subst s
-instance (Substitute a, Substitute b, Substitute c) => Substitute (a, b, c) where
-    subst s (a, b, c) = (subst s a, subst s b, subst s c)
 
-instance Substitute MonoEnv                             where subst = fmap . subst
 instance Substitute a => Substitute [a]                 where subst = fmap . subst
+instance Substitute a => Substitute (Typing_ a)         where subst = fmap . subst
+instance Substitute a => Substitute (MonoEnv a)         where subst = fmap . subst
 instance Substitute a => Substitute (Constraint a)      where subst = fmap . subst
 
 -------------------------------------------------------------------------------- type unification
@@ -147,7 +146,7 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
 
 -------------------------------------------------------------------------------- typing unification
 
-joinInstEnv :: Subst -> InstEnv -> Unique (Subst, InstEnv)
+joinInstEnv :: Subst -> InstEnv Ty -> Unique (Subst, InstEnv Ty)
 joinInstEnv s es = untilNoUnif s $ nub $ subst s es
   where
     untilNoUnif acc es = do
@@ -205,7 +204,7 @@ Not ambiguous:
   (Show a, b ~ F a) => b
 -}
 unamb :: PolyEnv -> Typing -> Unique ()
-unamb penv ty@(m, es, t)
+unamb penv ty@(Typing m es t)
     = addUnambCheck $ if used `Set.isSubsetOf` defined then Nothing else Just $ unlines ["ambiguous type: " ++ show ty, "env: " ++ show m, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show penv]
   where
     used = freeVars es
@@ -228,30 +227,27 @@ unamb penv ty@(m, es, t)
         modify $ \(cs, x, y, z) -> (((e ++) <$> c): cs, x, y, z)
 
 unif :: PolyEnv -> [Typing] -> ([Ty] -> ([Ty], Ty)) -> Unique (Subst, Typing)
-unif penv (unzip3 -> (ms, is, ts)) f = do
+unif penv (unzip3 . map (\(Typing a b c) -> (a, b, c)) -> (ms, is, ts)) f = do
     let (b, t) = f ts
     s <- unifyTypes $ b: unifyMaps ms
     (s, i) <- joinInstEnv s $ concat is
-    let ty = (Map.unions $ subst s ms, i, subst s t)
+    let ty = Typing (Map.unions $ subst s ms) i (subst s t)
     unamb penv ty
     return (s, ty)
 
 -------------------------------------------------------------------------------- type inference & scope checking
 
 inference :: ByteString -> Exp Range -> Either String (Exp Typing)
-inference src = runExcept . flip evalStateT (mempty, 0, src, []) . chk . infer mempty
+inference src = runExcept . flip evalStateT (mempty, 0, src, []) . (infer mempty >=> chk)
   where
-    chk m = do
-        e <- m
-        checkUnambError
-        return e
+    chk e = checkUnambError >> return e
 
 type PolyEnv = Map EName Typing
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
 infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
     ELam _ n f -> do
-        tv <- newV $ \t -> return (Map.singleton n t, mempty, t) :: Unique Typing
+        tv <- newV $ \t -> return $ Typing (Map.singleton n t) mempty t :: Unique Typing
         tf <- insert' n tv penv >>= \penv' -> infer penv' f
         (s, ty) <- unif penv [tv, getTag tf] $ \[a, t] -> ([], a ~> t)
         return (s, ELam ty n tf)
@@ -273,12 +269,16 @@ infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
                 n
         return (s, Exp $ setTag t e')
   where
-    instTyping ty@(_, _, freeVars -> fv) = do
+    -- complex example:
+    --      forall b y {-monomorph vars-} . () => b ->      -- monoenv & monomorph part of instenv
+    --      forall a x {-polymorph vars-} . (b ~ F y, Num a, a ~ F x) => a  -- type & polymorph part of instenv
+    instTyping ty@(Typing me ie t) = do
+        let fv = freeVars t --ty Set.\\ grow ie (freeVars me)
         newVars <- replicateM (Set.size fv) (newVar C)
         let s = Map.fromList $ zip (Set.toList fv) newVars
         return (s, subst s ty)
 
-    fieldProjType fn = newV $ \a r r' -> return (mempty, [Split r r' (TRecord $ Map.singleton fn a)], r ~> a) :: Unique Typing
+    fieldProjType fn = newV $ \a r r' -> return $ Typing mempty [Split r r' (TRecord $ Map.singleton fn a)] (r ~> a) :: Unique Typing
 
     insert' n t penv
         | Map.member n penv || Set.member n primFunSet = throwErrorUnique $ "Variable name clash: " ++ n

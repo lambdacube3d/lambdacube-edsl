@@ -91,27 +91,28 @@ type NFEnv = Map EName EnvVar
 -- TODO: add let
 toNF :: Subst -> NFEnv -> Exp Typing -> [NF]
 toNF sub env (ELit t l) = [Arg l]
-toNF sub env (EApp (m,i,t) a b) = eval $ {-[App $ toTy (m,i,subst sub t)] `mappend` -} toNF sub env a `mappend` toNF sub env b
+toNF sub env (EApp t a b) = eval $ {-[App $ toTy (m,i,subst sub t)] `mappend` -} toNF sub env a `mappend` toNF sub env b
 toNF sub env (ELet t n a b) = --case toNF env a of -- TODO
   -- x@(N _:_) -> error $ "let is not fully supported: " ++ show x
   --x -> toNF (Map.insert n x env) b
   toNF sub (Map.insert n (LetVar a) env) b
 --toNF sub env (EPrimFun t f) = 
 toNF sub env (ESubst _ s e) = toNF (s `compose` sub) env e
-toNF sub env (EVar (m,i,t) n)
+toNF sub env (EVar t n)
   | isPrimFun n = [Fun n]
   | otherwise = case Map.lookup n env of
       Nothing -> error $ "unknown variable: " ++ n
       Just (LetVar x) -> eval $ toNF sub env x
-      Just LamVar     -> let ty = toTy (m,i,subst sub t) in eval [N ty $ var ty 0 ""]
+      Just LamVar     -> let ty = toTy' sub t in eval [N ty $ var ty 0 ""]
 toNF sub env (ELam t n e) =
-  let (tm,ti,tt@(TArr ta tb)) = t
-  in case eval $ toNF sub (Map.insert n LamVar env) e of
-    [N _ x] -> let ty = toTy (tm,ti,subst sub tt) in [N ty $ lam ty $ body x]
+  case eval $ toNF sub (Map.insert n LamVar env) e of
+    [N _ x] -> let ty = toTy' sub t in [N ty $ lam ty $ body x]
     x -> error $ "lam is not fully supported: " ++ show x
-toNF sub env (ETuple (m,i,t) []) = let ty = toTy (m,i,subst sub t) in [N ty $ tup ty []]
-toNF sub env (ETuple (m,i,t) a) = [Tuple' (toTy (m,i,subst sub t)) (fmap (eval . toNF sub env) a)]
+toNF sub env (ETuple t []) = let ty = toTy' sub t in [N ty $ tup ty []]
+toNF sub env (ETuple t a) = [Tuple' (toTy' sub t) (fmap (eval . toNF sub env) a)]
 --toNF _ _ x = error $ "toNF error: " ++ show x
+
+toTy' s t = toTy $ subst s t
 
 eval :: [NF] -> [NF]
 -- Const and other temp construction
@@ -418,33 +419,34 @@ noType = Unknown ""
 
 -- TODO: use constraints
 toTy :: Typing -> C.Ty
-toTy (_,_,TBool  _) = Single C.Bool 
-toTy (_,_,TV2B   _) = Single C.V2B  
-toTy (_,_,TV3B   _) = Single C.V3B  
-toTy (_,_,TV4B   _) = Single C.V4B  
-toTy (_,_,TWord  _) = Single C.Word 
-toTy (_,_,TV2U   _) = Single C.V2U  
-toTy (_,_,TV3U   _) = Single C.V3U  
-toTy (_,_,TV4U   _) = Single C.V4U  
-toTy (_,_,TInt   _) = Single C.Int  
-toTy (_,_,TV2I   _) = Single C.V2I  
-toTy (_,_,TV3I   _) = Single C.V3I  
-toTy (_,_,TV4I   _) = Single C.V4I  
-toTy (_,_,TFloat _) = Single C.Float
-toTy (_,_,TV2F   _) = Single C.V2F  
-toTy (_,_,TV3F   _) = Single C.V3F  
-toTy (_,_,TV4F   _) = Single C.V4F  
-toTy (_,_,TM22F  _) = Single C.M22F 
-toTy (_,_,TM23F  _) = Single C.M23F 
-toTy (_,_,TM24F  _) = Single C.M24F 
-toTy (_,_,TM32F  _) = Single C.M32F 
-toTy (_,_,TM33F  _) = Single C.M33F 
-toTy (_,_,TM34F  _) = Single C.M34F 
-toTy (_,_,TM42F  _) = Single C.M42F 
-toTy (_,_,TM43F  _) = Single C.M43F 
-toTy (_,_,TM44F  _) = Single C.M44F 
-toTy (m,i,TInterpolated _ t) = toTy (m,i,t)
-toTy t = Unknown (show t)
+toTy (Typing m i t) = case t of
+    TBool  _ -> Single C.Bool 
+    TV2B   _ -> Single C.V2B  
+    TV3B   _ -> Single C.V3B  
+    TV4B   _ -> Single C.V4B  
+    TWord  _ -> Single C.Word 
+    TV2U   _ -> Single C.V2U  
+    TV3U   _ -> Single C.V3U  
+    TV4U   _ -> Single C.V4U  
+    TInt   _ -> Single C.Int  
+    TV2I   _ -> Single C.V2I  
+    TV3I   _ -> Single C.V3I  
+    TV4I   _ -> Single C.V4I  
+    TFloat _ -> Single C.Float
+    TV2F   _ -> Single C.V2F  
+    TV3F   _ -> Single C.V3F  
+    TV4F   _ -> Single C.V4F  
+    TM22F  _ -> Single C.M22F 
+    TM23F  _ -> Single C.M23F 
+    TM24F  _ -> Single C.M24F 
+    TM32F  _ -> Single C.M32F 
+    TM33F  _ -> Single C.M33F 
+    TM34F  _ -> Single C.M34F 
+    TM42F  _ -> Single C.M42F 
+    TM43F  _ -> Single C.M43F 
+    TM44F  _ -> Single C.M44F 
+    TInterpolated _ t -> toTy $ Typing m i t
+    t -> Unknown (show t)
 {-
 data InputType
     = Bool

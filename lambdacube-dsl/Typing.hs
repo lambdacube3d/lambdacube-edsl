@@ -526,7 +526,7 @@ injType = \case
 vecS = TFVecScalar
 
 infix 4 ~~
-(~~) :: Ty -> TypeFun Ty -> InstEnv
+(~~) :: Ty -> TypeFun Ty -> InstEnv Ty
 t ~~ f = [CEq t f]
 
 isValidOutput      = cClass IsValidOutput
@@ -536,7 +536,7 @@ isIntegral         = cClass IsIntegral
 isTypeLevelNatural = cClass IsTypeLevelNatural
 isFloating         = cClass IsFloating
 
-cClass :: Class -> Ty -> InstEnv
+cClass :: Class -> Ty -> InstEnv Ty
 cClass c ty = [CClass c ty]
 
 -- reduce: reduce class constraints:  Eq [a] --> Eq a
@@ -614,7 +614,7 @@ inferPrimFun :: (Typing -> Unique e) -> Unique e -> EName -> Unique e
 inferPrimFun ok nothing = f where
 
  infix 6 ==>
- cs ==> t = ok (mempty, mconcat cs, t)
+ cs ==> t = ok $ Typing mempty (mconcat cs) t
 
  f = \case
   -- temporary const constructor
@@ -959,7 +959,7 @@ inferLit a = case a of
   LString _ -> ty $ TString C
   LNat i    -> ty $ TNat i
  where
-  ty t = return (mempty, mempty, t)
+  ty t = return $ Typing mempty mempty t
 
 checkUnambError = do
     (cs, _, _, _) <- get

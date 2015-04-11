@@ -17,9 +17,11 @@ type TName = String
 type EName = String
 type FName = String
 
-type MonoEnv = Map EName Ty
-type InstEnv = [Constraint Ty]
-type Typing = (MonoEnv, InstEnv, Ty)
+type MonoEnv a = Map EName a
+type InstEnv a = [Constraint a]
+type Typing = Typing_ Ty
+data Typing_ a = Typing (MonoEnv a) (InstEnv a) a
+  deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 type Range = (Delta, Delta)
 
