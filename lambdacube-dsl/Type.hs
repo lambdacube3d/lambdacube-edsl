@@ -3,9 +3,11 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Type where
 
 import Data.Map (Map)
+import Data.Monoid
 import Data.Foldable
 import Data.Traversable
 import Data.ByteString (ByteString)
@@ -17,10 +19,17 @@ type TName = String
 type EName = String
 type FName = String
 
+type Subst = Map TName Ty
+
 type MonoEnv a = Map EName a
 type InstEnv a = [Constraint a]
 type Typing = Typing_ Ty
-data Typing_ a = Typing (MonoEnv a) (InstEnv a) a
+
+data Typing_ a = Typing
+    { monoEnv :: MonoEnv a
+    , instEnv :: InstEnv a
+    , typingType :: a
+    }
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 type Range = (Delta, Delta)
@@ -63,8 +72,6 @@ pattern ERecord a b = Exp (ERecord_ a b)
 pattern EFieldProj a c = Exp (EFieldProj_ a c)
 pattern ESubst a b c = Exp (ESubst_ a b c)
 
-type Subst = Map TName Ty
-
 getTag :: Exp a -> a
 getTag (ELit      r _) = r
 getTag (EVar      r _) = r
@@ -101,6 +108,12 @@ data Frequency -- frequency kind
 
 infixr 7 ~>
 a ~> b = TArr a b
+
+infix 6 ==>
+cs ==> t = Typing mempty cs t
+
+infix 4 ~~
+(~~) = CEq
 
 type Semantic = Ty
 type PrimitiveType = Ty
@@ -290,12 +303,19 @@ data Class
   | IsInputTuple
   deriving (Show,Eq,Ord)
 
+isValidOutput      = CClass IsValidOutput
+isNum              = CClass CNum
+isSigned           = CClass IsSigned
+isIntegral         = CClass IsIntegral
+isTypeLevelNatural = CClass IsTypeLevelNatural
+isFloating         = CClass IsFloating
+
 data TypeFun a
-  = TFMat a a               -- TODO: data family
+  = TFMat a a               -- may be data family
   | TFMatVecElem a
   | TFMatVecScalarElem a
-  | TFVec a a               -- TODO: data family
-  | TFVecScalar a a         -- injective in both params
+  | TFVec a a               -- may be data family
+  | TFVecScalar a a
   | TFFTRepr' a
   | TFColorRepr a
   | TFFrameBuffer a

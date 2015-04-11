@@ -525,20 +525,6 @@ injType = \case
 
 vecS = TFVecScalar
 
-infix 4 ~~
-(~~) :: Ty -> TypeFun Ty -> InstEnv Ty
-t ~~ f = [CEq t f]
-
-isValidOutput      = cClass IsValidOutput
-isNum              = cClass CNum
-isSigned           = cClass IsSigned
-isIntegral         = cClass IsIntegral
-isTypeLevelNatural = cClass IsTypeLevelNatural
-isFloating         = cClass IsFloating
-
-cClass :: Class -> Ty -> InstEnv Ty
-cClass c ty = [CClass c ty]
-
 -- reduce: reduce class constraints:  Eq [a] --> Eq a
 isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> e -> Class -> Ty -> e
 isInstance reduce fail keep ok = f where
@@ -614,7 +600,7 @@ inferPrimFun :: (Typing -> Unique e) -> Unique e -> EName -> Unique e
 inferPrimFun ok nothing = f where
 
  infix 6 ==>
- cs ==> t = ok $ Typing mempty (mconcat cs) t
+ cs ==> t = ok $ Typing mempty cs t
 
  f = \case
   -- temporary const constructor
@@ -800,7 +786,7 @@ inferPrimFun ok nothing = f where
   "PassAll"  -> newV $ \t -> [] ==> TFragmentFilter C t
   "Filter"   -> newV $ \t -> [] ==> (t ~> TBool C) ~> TFragmentFilter C t
   -- Render Operations
-  "Fetch"        -> newV $ \a t b -> [cClass IsInputTuple t, b ~~ TFFTRepr' t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
+  "Fetch"        -> newV $ \a t b -> [CClass IsInputTuple t, b ~~ TFFTRepr' t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
   "Transform"    -> newV $ \a b p -> [] ==> (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
   "Rasterize"    -> newV $ \a b c -> [] ==> TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
   {-
@@ -821,7 +807,7 @@ inferPrimFun ok nothing = f where
         ~> TFrameBuffer C n t
         ~> TFrameBuffer C n t
   "FrameBuffer"  -> newV $ \a t t' n ->
-    [t' ~~ TFFTRepr' t, cClass IsValidFrameBuffer t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
+    [t' ~~ TFFTRepr' t, CClass IsValidFrameBuffer t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
   "ScreenOut"    -> newV $ \a b -> [] ==> TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
@@ -959,7 +945,7 @@ inferLit a = case a of
   LString _ -> ty $ TString C
   LNat i    -> ty $ TNat i
  where
-  ty t = return $ Typing mempty mempty t
+  ty t = return $ [] ==> t
 
 checkUnambError = do
     (cs, _, _, _) <- get
