@@ -161,7 +161,7 @@ unifyEqs' = unifyEqs . concatMap pairs
 joinInstEnv :: Subst -> [InstEnv] -> Unique (Subst, InstEnv)
 joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
     (s, es) <- untilNoUnif s $ nub $ subst s es
-    cs <- concat <$> mapM (simplifyClassInst . subst s) cs
+    cs <- concat <$> mapM simplifyClassInst (subst s cs)
     -- if needed, simplify class constraints here:  (Ord a, Eq a) --> Ord a
     return (s, (cs, es))
   where
@@ -254,7 +254,10 @@ unif penv b ms is t = do
     unamb penv ty
     return (s, ty)
 
--------------------------------------------------------------------------------- type inference
+-------------------------------------------------------------------------------- type inference & scope checking
+
+inference :: ByteString -> Exp Range -> Either String (Exp Typing)
+inference src = runIdentity . runExceptT . flip evalStateT (0,src,[]) . infer mempty
 
 type PolyEnv = Map EName Typing
 
@@ -282,9 +285,9 @@ infer penv exp = withRanges [getTag exp] $ case exp of
             n
       where
         instTyping ty@(_, _, freeVars -> fv) = do
-          newVars <- replicateM (Set.size fv) (newVar C)
-          let s = Map.fromList $ zip (Set.toList fv) newVars
-          return $ ESubst s $ EVar (subst s ty) n
+            newVars <- replicateM (Set.size fv) (newVar C)
+            let s = Map.fromList $ zip (Set.toList fv) newVars
+            return $ ESubst s $ EVar (subst s ty) n
     ELam r n f
         | Map.member n penv -> throwErrorUnique $ "Variable name clash: " ++ n
         | otherwise -> do
@@ -308,9 +311,4 @@ infer penv exp = withRanges [getTag exp] $ case exp of
             tx@(getTag -> ty) <- infer penv x
             te@(getTag -> ty') <- infer (Map.insert n ty penv) e
             return $ ELet ty' n tx te
-
--------------------------------------------------------------------------------- main inference function
-
-inference :: ByteString -> Exp Range -> Either String (Exp Typing)
-inference src = runIdentity . runExceptT . flip evalStateT (0,src,[]) . infer mempty
 
