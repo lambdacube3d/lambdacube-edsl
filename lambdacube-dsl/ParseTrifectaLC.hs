@@ -106,7 +106,7 @@ formula = (\p1 l p2 -> foldl1 (EApp (p1,p2)) l) <$> position <*> some atom <*> p
 
 atom =
   (\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* colon <*> expr) comma) <*> position <|>
-  try ((\p1 r f p2 -> EFieldProj (p1,p2) (EVar (p1,p2) r) f) <$> position <*> var <* dot <*> var <*> position) <|>
+  try ((\p1 r p f p2 -> EApp (p1,p2) (EFieldProj (p,p2) f) (EVar (p1,p) r)) <$> position <*> var <*> position <* dot <*> var <*> position) <|>
   (\p1 l p2 -> ELit (p1,p2) l) <$> position <*> lit <*> position <|>
   (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
   (\p1 v p2 -> if length v == 1 then head v else ETuple (p1,p2) v) <$> position <*> parens (commaSep expr) <*> position <|>

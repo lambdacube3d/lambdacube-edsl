@@ -46,7 +46,7 @@ data Exp_ a b
   | ELet_      a EName b b
   | ETuple_    a [b]
   | ERecord_   a [(FName, b)]
-  | EFieldProj_ a b FName
+  | EFieldProj_ a FName
   | ESubst_    a Subst b
 --  | EFix EName Exp
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
@@ -58,7 +58,7 @@ pattern ELam a b c = Exp (ELam_ a b c)
 pattern ELet a b c d = Exp (ELet_ a b c d)
 pattern ETuple a b = Exp (ETuple_ a b)
 pattern ERecord a b = Exp (ERecord_ a b)
-pattern EFieldProj a b c = Exp (EFieldProj_ a b c)
+pattern EFieldProj a c = Exp (EFieldProj_ a c)
 pattern ESubst a b c = Exp (ESubst_ a b c)
 
 type Subst = Map TName Ty
@@ -71,7 +71,7 @@ getTag (ELam      r _ _) = r
 getTag (ELet      r _ _ _) = r
 getTag (ETuple    r _) = r
 getTag (ERecord   r _) = r
-getTag (EFieldProj r _ _) = r
+getTag (EFieldProj r _) = r
 getTag (ESubst    r _ _) = r
 
 setTag :: a -> Exp_ x b -> Exp_ a b
@@ -83,7 +83,7 @@ setTag a = \case
     ELet_      _ x y z   -> ELet_ a x y z
     ETuple_    _ x       -> ETuple_ a x
     ERecord_   _ x       -> ERecord_ a x
-    EFieldProj_ _ x y    -> EFieldProj_ a x y
+    EFieldProj_ _ x      -> EFieldProj_ a x
     ESubst_    _ x y     -> ESubst_ a x y
 
 data Frequency -- frequency kind

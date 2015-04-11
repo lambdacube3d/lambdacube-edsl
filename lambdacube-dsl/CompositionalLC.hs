@@ -265,8 +265,8 @@ infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
     Exp e -> do
         e' <- T.mapM (infer penv) e
         (s, t) <- case e' of
-            EApp_ _ tf ta -> app (getTag tf) (getTag ta)
-            EFieldProj_ _ te fn -> join $ app <$> fieldProjType fn <*> pure (getTag te)
+            EApp_ _ tf ta -> newV $ \v -> unif penv [getTag tf, getTag ta] (\[tf, ta] -> ([tf, ta ~> v], v))
+            EFieldProj_ _ fn -> (,) mempty <$> fieldProjType fn
             ERecord_ _ trs -> unif penv (map (getTag . snd) trs) $ \tl -> ([], TRecord $ Map.fromList $ zip (map fst trs) tl)
             ETuple_ _ te -> unif penv (map getTag te) (\tl -> ([], TTuple C tl))
             ELit_ _ l -> (,) mempty <$> inferLit l
@@ -282,7 +282,6 @@ infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
         return (s, subst s ty)
 
     fieldProjType fn = newV $ \a r r' -> return (mempty, [Split r r' (TRecord $ Map.singleton fn a)], r ~> a) :: Unique Typing
-    app f x = newV $ \v -> unif penv [f, x] (\[t1, t2] -> ([t1, t2 ~> v], v))
 
     insert' n t penv
         | Map.member n penv || Set.member n primFunSet = throwErrorUnique $ "Variable name clash: " ++ n
