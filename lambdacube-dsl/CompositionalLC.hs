@@ -67,9 +67,10 @@ instance FreeVars Ty where
 instance (FreeVars a, FreeVars b) => FreeVars (a, b) where
     freeVars (cs, es) = freeVars cs <> freeVars es
 
-instance FreeVars a => FreeVars (Map EName a)       where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (Map EName a)       where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (Typing_ a)         where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (TypeFun a)         where freeVars = foldMap freeVars
 
 -------------------------------------------------------------------------------- substitution
@@ -270,10 +271,10 @@ infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
         return (s, Exp $ setTag t e')
   where
     -- complex example:
-    --      forall b y {-monomorph vars-} . () => b ->      -- monoenv & monomorph part of instenv
-    --      forall a x {-polymorph vars-} . (b ~ F y, Num a, a ~ F x) => a  -- type & polymorph part of instenv
+    --      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
+    --      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
     instTyping ty@(Typing me ie t) = do
-        let fv = freeVars t --ty Set.\\ grow ie (freeVars me)
+        let fv = freeVars ty Set.\\ freeVars me         -- TODO: revise
         newVars <- replicateM (Set.size fv) (newVar C)
         let s = Map.fromList $ zip (Set.toList fv) newVars
         return (s, subst s ty)
