@@ -3,6 +3,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module CompositionalLC
     ( inference
     , compose
@@ -48,6 +49,12 @@ withRanges rl a = do
 hasCommon :: Ord a => Set a -> Set a -> Bool
 hasCommon a b = not $ Set.null $ a `Set.intersection` b
 
+groupBy' :: Ord a => [(a, b)] -> [[b]]
+groupBy' = unifyMaps . map (uncurry Map.singleton)
+
+unifyMaps :: Ord a => [Map a b] -> [[b]]
+unifyMaps = Map.elems . Map.unionsWith (++) . map ((:[]) <$>)
+
 -------------------------------------------------------------------------------- free vars
 
 class FreeVars a where freeVars :: a -> Set TName
@@ -57,7 +64,7 @@ instance FreeVars Ty where
     freeVars (Ty x) = foldMap freeVars x
 
 instance (FreeVars a, FreeVars b) => FreeVars (a, b) where
-    freeVars (cs, es) = freeVars cs `mappend` freeVars es
+    freeVars (cs, es) = freeVars cs <> freeVars es
 
 instance FreeVars a => FreeVars (Map EName a)       where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
@@ -90,7 +97,7 @@ instance Substitute a => Substitute (EqConstraint a)    where subst = fmap . sub
 -- compose substitutions
 -- Note: domain of substitutions is disjunct
 compose :: Subst -> Subst -> Subst
-s1 `compose` s2 = mappend s2 $ subst s2 <$> s1
+s1 `compose` s2 = s2 <> (subst s2 <$> s1)
 
 -- compositional (not linear) unification?
 unifyTypes :: [[Ty]] -> Unique Subst
@@ -151,10 +158,9 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
     untilNoUnif acc es = do
         (es, w) <- runWriterT $ do
             -- right reduce
-            tell $ Map.elems $ Map.unionsWith (++) [Map.singleton f [ty] | CEq ty f <- es]
+            tell $ groupBy' [(f, ty) | CEq ty f <- es]
             -- injectivity test
-            tell $ concatMap (concatMap testInj . groupBy ((==) `on` injType) . sortBy (compare `on` injType))
-                 $ Map.elems $ Map.unionsWith (++) [Map.singleton ty [f] | CEq ty f <- es]
+            tell $ concatMap (concatMap testInj . groupBy') $ groupBy' [(ty, (it, f)) | CEq ty f <- es, Just it <- [injType f]]
             filterM simplifyInst es
         s <- unifyTypes w
         if Map.null s then return (acc, es) else untilNoUnif (acc `compose` s) $ nub $ subst s es
@@ -165,28 +171,25 @@ joinInstEnv s (unzip -> (concat -> cs, concat -> es)) = do
     keep = return True
     fail = lift . throwErrorUnique
 
-    isSplit a b c = not (b `hasCommon` c) && a == (b `mappend` c)
-
-    diff a b c
-        | Map.keysSet b `Set.isSubsetOf` Map.keysSet a =
-            discard $ [c, TRecord $ a Map.\\ b]: [[t, a Map.! f] | (f, t) <- Map.toList b]
-        | otherwise = fail "not split" -- TODO: better error handling
+    diff a b c = case Map.keys $ b Map.\\ a of
+        [] -> discard $ [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
+        ks -> fail $ "extra keys: " ++ show ks
 
     simplifyInst = \case
-        Split (TRecord a) (TRecord b) (TRecord c)
-            | isSplit (Map.keysSet a) (Map.keysSet b) (Map.keysSet c) -> discard [[t, x Map.! f] | (f, t) <- Map.toList a]
-            | otherwise -> fail "not split" -- TODO: better error handling
-          where x = b `mappend` c
+        Split (TRecord a) (TRecord b) (TRecord c) ->
+          case (Map.keys $ Map.intersection b c, Map.keys $ a Map.\\ (b <> c), Map.keys $ (b <> c) Map.\\ a) of
+            ([], [], []) -> discard $ unifyMaps [a, b, c]
+            ks -> fail $ "extra keys: " ++ show ks
         Split (TRecord a) (TRecord b) c@(TVar C _) -> diff a b c
         Split (TRecord a) c@(TVar C _) (TRecord b) -> diff a b c
-        Split c@(TVar C _) (TRecord a) (TRecord b)
-            | not $ Map.keysSet b `hasCommon` Map.keysSet a -> discard [[c, TRecord $ a `Map.union` b]]
-            | otherwise -> fail "not split" -- TODO: better error handling
+        Split c@(TVar C _) (TRecord a) (TRecord b) -> case Map.keys $ Map.intersection a b of
+            [] -> discard [[c, TRecord $ a <> b]]
+            ks -> fail $ "extra keys: " ++ show ks
         Split TVar{} TVar{} _ -> keep
         Split TVar{} _ TVar{} -> keep
         Split a TVar{} TVar{} -> keep
         Split TVar{} TVar{} TVar{} -> keep
-        Split a b c -> fail "bad split" -- TODO: better error handling
+        Split a b c -> fail $ "bad split: " ++ show (a, b, c)
         CEq ty f -> do
             forM_ (backPropTF ty f) $ \(t1, t2) -> tell [[t1, t2]]
             reduceTF
@@ -220,12 +223,12 @@ unamb penv ty@(m,pe@(is,es),t)
 
     growDefinedVars acc s
         | Set.null s = acc
-        | otherwise = growDefinedVars (acc `mappend` s) (grow s Set.\\ acc)
+        | otherwise = growDefinedVars (acc <> s) (grow s Set.\\ acc)
 
     grow = foldMap g es
       where
         a --> b = \s -> if a `hasCommon` s then b else mempty
-        a <-> b = (a --> b) `mappend` (b --> a)
+        a <-> b = (a --> b) <> (b --> a)
         g (CEq ty f) = freeVars ty <-> freeVars f
         g (Split a b c) = freeVars a <-> freeVars (b, c)
 
@@ -233,7 +236,7 @@ addUnambCheck c = modify $ \(cs, x, y, z) -> (c: cs, x, y, z)
 
 unif :: PolyEnv -> [Ty] -> [MonoEnv] -> [InstEnv] -> Ty -> Unique (Subst, Typing)
 unif penv b ms is t = do
-    s <- unifyTypes $ b: Map.elems (Map.unionsWith (++) $ map (fmap (:[])) ms)
+    s <- unifyTypes $ b: unifyMaps ms
     (s, i) <- joinInstEnv s is
     let ty = (Map.unions $ subst s ms, i, subst s t)
     unamb penv ty
@@ -259,7 +262,7 @@ infer penv exp = withRanges [getTag exp] $ case exp of
     -- _.f :: Split r (Record [f :: a]) r' => r -> a
     EFieldProj r e fn -> newV $ \a r' -> do
         te@(getTag -> (m, i, r)) <- infer penv e
-        ty <- simplifyTyping penv (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) `mappend` i, a)
+        ty <- simplifyTyping penv (m, (mempty, [Split r (TRecord $ Map.singleton fn a) r']) <> i, a)
         return $ EFieldProj ty te fn
     ERecord r (unzip -> (fs, es)) -> do
         trs@(unzip3 . map getTag -> (ml, il, tl)) <- mapM (infer penv) es

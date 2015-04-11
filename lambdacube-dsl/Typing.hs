@@ -513,14 +513,14 @@ reduceTF reduced fail nothing = \case
     f -> nothing
 
 data InjType
-    = ITMat | ITVec | ITVecScalar | NoInj
+    = ITMat | ITVec | ITVecScalar
     deriving (Eq, Ord, Show)
 
-injType :: TypeFun Ty -> InjType
-injType TFMat{} = ITMat
-injType TFVec{} = ITVec
-injType TFVecScalar{} = ITVecScalar
-injType _ = NoInj
+injType :: TypeFun Ty -> Maybe InjType
+injType TFMat{} = Just ITMat
+injType TFVec{} = Just ITVec
+injType TFVecScalar{} = Just ITVecScalar
+injType _ = Nothing
 
 testInj :: [TypeFun Ty] -> [[Ty]]
 testInj xs@(TFMat{}:_) = transpose [[a,b] | TFMat a b <- xs]
