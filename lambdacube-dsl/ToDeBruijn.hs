@@ -17,7 +17,7 @@ import qualified LambdaCube.Core.Type as C
 
 import CompositionalLC
 import Type
---import Typing (isPrimFun)
+import Typing (isPrimFun)
 
 {-
 expV4F :: Exp Typing
@@ -87,8 +87,6 @@ data EnvVar
   = LetVar (Exp Typing)
   | LamVar
 
-isPrimFun x = take 5 x == "prim:"
-
 type NFEnv = Map EName EnvVar
 -- TODO: add let
 toNF :: Subst -> NFEnv -> Exp Typing -> [NF]
@@ -99,9 +97,9 @@ toNF sub env (ELet t n a b) = --case toNF env a of -- TODO
   --x -> toNF (Map.insert n x env) b
   toNF sub (Map.insert n (LetVar a) env) b
 --toNF sub env (EPrimFun t f) = 
-toNF sub env (ESubst s e) = toNF (s `compose` sub) env e
+toNF sub env (ESubst _ s e) = toNF (s `compose` sub) env e
 toNF sub env (EVar (m,i,t) n)
-  | isPrimFun n = [Fun $ drop 5 n]
+  | isPrimFun n = [Fun n]
   | otherwise = case Map.lookup n env of
       Nothing -> error $ "unknown variable: " ++ n
       Just (LetVar x) -> eval $ toNF sub env x

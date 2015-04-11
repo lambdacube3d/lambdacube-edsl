@@ -16,6 +16,7 @@ import Data.List
 import Data.Maybe
 import Data.ByteString.Char8 (ByteString)
 import Data.Foldable (foldMap)
+import qualified Data.Traversable as T
 import Data.Functor.Identity
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -259,46 +260,42 @@ inference src = runExcept . flip evalStateT (mempty, 0, src, []) . chk . infer m
 type PolyEnv = Map EName Typing
 
 infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
-infer penv exp = withRanges [getTag exp] $ case exp of
-    -- _.f :: Split r (Record [f :: a]) r' => r -> a
-    EFieldProj r e fn -> newV $ \a r' -> do
-        te@(getTag -> (m, i, r)) <- infer penv e
-        ty <- simplifyTyping penv (m, Split r (TRecord $ Map.singleton fn a) r': i, a)
-        return $ EFieldProj ty te fn
-    ERecord r (unzip -> (fs, es)) -> do
-        trs <- mapM (infer penv) es
-        (_, ty) <- unif penv (map getTag trs) $ \tl -> ([], TRecord $ Map.fromList {-TODO: check-} $ zip fs tl)
-        return $ ERecord ty $ zip fs trs
-    ETuple r t -> do
-        te <- mapM (infer penv) t
-        ETuple <$> (snd <$> unif penv (map getTag te) (\tl -> ([], TTuple C tl))) <*> pure te
-    ELit r l -> ELit <$> inferLit l <*> pure l
-    EVar r n ->
-        inferPrimFun
-            (\x -> EVar <$> simplifyTyping penv x <*> pure ("prim:" ++ n))
-            (maybe (throwErrorUnique $ "Variable " ++ n ++ " is not in scope.") instTyping $ Map.lookup n penv)
-            n
-      where
-        instTyping ty@(_, _, freeVars -> fv) = do
-            newVars <- replicateM (Set.size fv) (newVar C)
-            let s = Map.fromList $ zip (Set.toList fv) newVars
-            return $ ESubst s $ EVar (subst s ty) n
-    ELam r n f
-        | Map.member n penv -> throwErrorUnique $ "Variable name clash: " ++ n
-        | otherwise -> newV $ \t -> do
-            tf@(getTag -> (m, i, t)) <- infer (Map.insert n (Map.singleton n t, mempty, t) penv) f
-            a <- maybe (newVar C) return $ Map.lookup n m
-            let ty = (Map.delete n m, i, a ~> t)
-            unamb penv ty
-            return $ ELam ty n tf
-    EApp r f a -> newV $ \v -> do
-        ts@[tf, ta] <- mapM (infer penv) [f, a]
-        (s, ty) <- unif penv (map getTag ts) $ \[t1, t2] -> ([t1, t2 ~> v], v)
-        return $ ESubst s $ EApp ty tf ta
-    ELet r n x e
-        | Map.member n penv -> throwErrorUnique $ "Variable name clash: " ++ n
-        | otherwise -> do
-            tx@(getTag -> ty) <- infer penv x
-            te@(getTag -> ty') <- infer (Map.insert n ty penv) e
-            return $ ELet ty' n tx te
+infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
+    ELam _ n f -> do
+        tv <- newV $ \t -> return (Map.singleton n t, mempty, t) :: Unique Typing
+        tf <- insert' n tv penv >>= \penv' -> infer penv' f
+        (s, ty) <- unif penv [tv, getTag tf] $ \[a, t] -> ([], a ~> t)
+        return (s, ELam ty n tf)
+    ELet _ n x e -> do
+        tx <- infer penv x
+        te <- insert' n (getTag tx) penv >>= \penv' -> infer penv' e
+        return (mempty, ELet (getTag te) n tx te)
+    Exp e -> do
+        e' <- T.mapM (infer penv) e
+        (s, t) <- case e' of
+            EApp_ _ tf ta -> app (getTag tf) (getTag ta)
+            EFieldProj_ _ te fn -> join $ app <$> fieldProjType fn <*> pure (getTag te)
+            ERecord_ _ trs -> unif penv (map (getTag . snd) trs) $ \tl -> ([], TRecord $ Map.fromList $ zip (map fst trs) tl)
+            ETuple_ _ te -> unif penv (map getTag te) (\tl -> ([], TTuple C tl))
+            ELit_ _ l -> (,) mempty <$> inferLit l
+            EVar_ _ n -> inferPrimFun
+                (\x -> unif penv [x] (\[x] -> ([], x)))
+                (maybe (throwErrorUnique $ "Variable " ++ n ++ " is not in scope.") instTyping $ Map.lookup n penv)
+                n
+        return (s, Exp $ setTag t e')
+  where
+    instTyping ty@(_, _, freeVars -> fv) = do
+        newVars <- replicateM (Set.size fv) (newVar C)
+        let s = Map.fromList $ zip (Set.toList fv) newVars
+        return (s, subst s ty)
 
+    fieldProjType fn = newV $ \a r r' -> return (mempty, [Split r r' (TRecord $ Map.singleton fn a)], r ~> a) :: Unique Typing
+    app f x = newV $ \v -> unif penv [f, x] (\[t1, t2] -> ([t1, t2 ~> v], v))
+
+    insert' n t penv
+        | Map.member n penv = throwErrorUnique $ "Variable name clash: " ++ n
+        | otherwise = return $ Map.insert n t penv
+
+    addSubst (s, t@EApp{}) = ESubst (getTag t) s t
+    addSubst (s, t@EVar{}) = ESubst (getTag t) s t
+    addSubst (_, t) = t

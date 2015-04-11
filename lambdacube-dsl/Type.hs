@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -34,22 +35,35 @@ data Lit
   | LNat    Int
   deriving (Show,Eq,Ord)
 
-data Exp a
-  = ELit      a Lit
-  | EVar      a EName
-  | EApp      a (Exp a) (Exp a)
-  | ELam      a EName (Exp a)
-  | ELet      a EName (Exp a) (Exp a)
-  | ETuple    a [Exp a]
-  | ERecord   a [(FName,Exp a)]
-  | EFieldProj a (Exp a) FName
-  | ESubst    Subst (Exp a)
---  | EFix EName Exp
+newtype Exp a = Exp (Exp_ a (Exp a))
   deriving (Show,Eq,Ord)
+
+data Exp_ a b
+  = ELit_      a Lit
+  | EVar_      a EName
+  | EApp_      a b b
+  | ELam_      a EName b
+  | ELet_      a EName b b
+  | ETuple_    a [b]
+  | ERecord_   a [(FName, b)]
+  | EFieldProj_ a b FName
+  | ESubst_    a Subst b
+--  | EFix EName Exp
+  deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+
+pattern ELit a b = Exp (ELit_ a b)
+pattern EVar a b = Exp (EVar_ a b)
+pattern EApp a b c = Exp (EApp_ a b c)
+pattern ELam a b c = Exp (ELam_ a b c)
+pattern ELet a b c d = Exp (ELet_ a b c d)
+pattern ETuple a b = Exp (ETuple_ a b)
+pattern ERecord a b = Exp (ERecord_ a b)
+pattern EFieldProj a b c = Exp (EFieldProj_ a b c)
+pattern ESubst a b c = Exp (ESubst_ a b c)
 
 type Subst = Map TName Ty
 
-getTag :: Show a => Exp a -> a
+getTag :: Exp a -> a
 getTag (ELit      r _) = r
 getTag (EVar      r _) = r
 getTag (EApp      r _ _) = r
@@ -58,7 +72,19 @@ getTag (ELet      r _ _ _) = r
 getTag (ETuple    r _) = r
 getTag (ERecord   r _) = r
 getTag (EFieldProj r _ _) = r
-getTag (ESubst    _ r) = getTag r
+getTag (ESubst    r _ _) = r
+
+setTag :: a -> Exp_ x b -> Exp_ a b
+setTag a = \case
+    ELit_      _ x       -> ELit_ a x
+    EVar_      _ x       -> EVar_ a x
+    EApp_      _ x y     -> EApp_ a x y
+    ELam_      _ x y     -> ELam_ a x y
+    ELet_      _ x y z   -> ELet_ a x y z
+    ETuple_    _ x       -> ETuple_ a x
+    ERecord_   _ x       -> ERecord_ a x
+    EFieldProj_ _ x y    -> EFieldProj_ a x y
+    ESubst_    _ x y     -> ESubst_ a x y
 
 data Frequency -- frequency kind
   -- frequency values
