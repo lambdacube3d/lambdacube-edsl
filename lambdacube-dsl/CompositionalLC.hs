@@ -56,7 +56,6 @@ instance Substitute a => Substitute (MonoEnv a)         where subst = fmap . sub
 instance Substitute a => Substitute (Constraint a)      where subst = fmap . subst
 
 
--- composeSubst substitutions
 -- Note: domain of substitutions is disjunct
 composeSubst :: Subst -> Subst -> Subst
 s1 `composeSubst` s2 = s2 <> (subst s2 <$> s1)
