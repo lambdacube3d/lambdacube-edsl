@@ -199,6 +199,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
             ETuple_ _ te -> unifyTypings (map getTag te) (\tl -> ([], [] ==> TTuple C tl))
             ELit_ _ l -> (,) mempty <$> inferLit l
             EVar_ _ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
+            ETyping_ _ e ty -> unifyTypings [getTag e, ty] $ \[te, ty] -> ([te, ty], [] ==> ty)
   where
     inferPatTyping :: Pat Range -> TCM (Pat Typing, TCM a -> TCM a)
     inferPatTyping p_@(Pat p) = local (id *** const [getTagP p_]) $ do
