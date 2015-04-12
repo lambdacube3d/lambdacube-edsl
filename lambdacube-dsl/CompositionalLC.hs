@@ -87,23 +87,9 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
         unifyTy (TVar _ u) _ = bindVar u b
         unifyTy _ (TVar _ u) | bidirectional = bindVar u a
         unifyTy (TTuple f1 t1) (TTuple f2 t2) = sequence_ $ zipWith uni t1 t2
+        unifyTy (TCon f1 n1 t1) (TCon f2 n2 t2) | n1 == n2 = sequence_ $ zipWith uni t1 t2
         unifyTy (TArr a1 b1) (TArr a2 b2) = uni a1 a2 >> uni b1 b2
-        unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = uni a1 a2 >> uni b1 b2
-        unifyTy (TFrameBuffer f1 a1 b1) (TFrameBuffer f2 a2 b2) = uni a1 a2 >> uni b1 b2
-        unifyTy (TVertexStream f1 a1 b1) (TVertexStream f2 a2 b2) = uni a1 a2 >> uni b1 b2
-        unifyTy (TFragmentStream f1 a1 b1) (TFragmentStream f2 a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TPrimitiveStream f1 a1 b1 g1 c1) (TPrimitiveStream f2 a2 b2 g2 c2) = uni a1 a2 >> uni b1 b2 >> uni c1 c2
-        unifyTy (TInput _ a1) (TInput _ a2) = uni a1 a2
-        unifyTy (TBlending _ a1) (TBlending _ a2) = uni a1 a2
-        unifyTy (TInterpolated _ a1) (TInterpolated _ a2) = uni a1 a2
-        unifyTy (TVertexOut _ a1) (TVertexOut _ a2) = uni a1 a2
-        unifyTy (TFetchPrimitive _ a1) (TFetchPrimitive _ a2) = uni a1 a2
-        unifyTy (TRasterContext _ a1) (TRasterContext _ a2) = uni a1 a2
-        unifyTy (TFragmentOperation _ a1) (TFragmentOperation _ a2) = uni a1 a2
-        unifyTy (TAccumulationContext _ a1) (TAccumulationContext _ a2) = uni a1 a2
-        unifyTy (TFragmentFilter _ a1) (TFragmentFilter _ a2) = uni a1 a2
-        unifyTy (TFragmentOut _ a1) (TFragmentOut _ a2) = uni a1 a2
-        unifyTy (Color a1) (Color a2) = uni a1 a2
         unifyTy a b
           | a == b = return ()
           | otherwise = lift $ throwErrorTCM $ "can not unify " ++ show a ++ " with " ++ show b

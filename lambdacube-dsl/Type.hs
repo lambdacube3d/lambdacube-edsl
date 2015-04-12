@@ -19,6 +19,7 @@ import Control.Arrow
 import Text.Trifecta.Delta (Delta)
 
 type TName = String
+type TCName = String    -- type constructor name; if this turns out to be slow use Int or ADT instead of String
 type EName = String
 type FName = String
 
@@ -168,6 +169,7 @@ newtype Ty = Ty (Ty_ Ty)
 data Ty_ a
   -- star kind
   = TVar_    Frequency TName
+  | TCon_    Frequency TCName [a]     -- saturated type constructor application
   | TArr_    a a
   -- composit
   | TTuple_  Frequency [a]
@@ -186,75 +188,23 @@ data Ty_ a
   -- lambdacube types
   | TNat_    Int
 
-  -- Semantic
-  | Depth_   a
-  | Stencil_ a
-  | Color_   a
-
-  -- PrimitiveType
-  | TTriangle_
-  | TLine_
-  | TPoint_
-  | TTriangleAdjacency_
-  | TLineAdjacency_
-
-  -- Vector/Matrix
-  | TV2B_    Frequency
-  | TV3B_    Frequency
-  | TV4B_    Frequency
-  | TV2U_    Frequency
-  | TV3U_    Frequency
-  | TV4U_    Frequency
-  | TV2I_    Frequency
-  | TV3I_    Frequency
-  | TV4I_    Frequency
-  | TV2F_    Frequency
-  | TV3F_    Frequency
-  | TV4F_    Frequency
-  | TM22F_   Frequency
-  | TM23F_   Frequency
-  | TM24F_   Frequency
-  | TM32F_   Frequency
-  | TM33F_   Frequency
-  | TM34F_   Frequency
-  | TM42F_   Frequency
-  | TM43F_   Frequency
-  | TM44F_   Frequency
-
-  -- ADT
-  | TCullMode_               Frequency
-  | TPolygonMode_            Frequency
-  | TPolygonOffset_          Frequency
-  | TProvokingVertex_        Frequency
-  | TFrontFace_              Frequency
-  | TPointSize_              Frequency
-  | TBlendingFactor_         Frequency
-  | TBlendEquation_          Frequency
-  | TLogicOperation_         Frequency
-  | TStencilOperation_       Frequency
-  | TComparisonFunction_     Frequency
-  | TPointSpriteCoordOrigin_ Frequency
-
-  -- GADT
-  | TAccumulationContext_  Frequency a
-  | TBlending_             Frequency a
+  -- GADT/special (two frequencies)
+  | TPrimitiveStream_      Frequency a{-PrimitiveType-} a{-Nat-} Frequency a -- ???
+{-
   | TFetchPrimitive_       Frequency a{-PrimitiveType-}
-  | TFragmentFilter_       Frequency a
   | TFragmentOperation_    Frequency a{-Semantic-}
   | TFragmentOut_          Frequency a{-Semantic-}
   | TFragmentStream_       Frequency a{-Nat-} a
   | TFrameBuffer_          Frequency a{-Nat-} a
   | TImage_                Frequency a{-Nat-} a{-Semantic-}
-  | TInput_                Frequency a
-  | TInterpolated_         Frequency a
-  | TOutput_               Frequency
-  | TPrimitiveStream_      Frequency a{-PrimitiveType-} a{-Nat-} Frequency a -- ???
   | TRasterContext_        Frequency a{-PrimitiveType-}
   | TVertexOut_            Frequency a -- ???
   | TVertexStream_         Frequency a{-PrimitiveType-} a
+-}
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 pattern TVar a b = Ty (TVar_ a b)
+pattern TCon f a b = Ty (TCon_ f a b)
 pattern TArr a b = Ty (TArr_ a b)
 pattern TTuple a b = Ty (TTuple_ a b)
 pattern TRecord b = Ty (TRecord_ b)
@@ -266,63 +216,74 @@ pattern TWord a = Ty (TWord_ a)
 pattern TInt a = Ty (TInt_ a)
 pattern TFloat a = Ty (TFloat_ a)
 pattern TNat a = Ty (TNat_ a)
-pattern Depth a = Ty (Depth_ a)
-pattern Stencil a = Ty (Stencil_ a)
-pattern Color a = Ty (Color_ a)
-pattern TTriangle = Ty TTriangle_
-pattern TLine = Ty TLine_
-pattern TPoint = Ty TPoint_
-pattern TTriangleAdjacency = Ty TTriangleAdjacency_
-pattern TLineAdjacency = Ty TLineAdjacency_
-pattern TV2B a = Ty (TV2B_ a)
-pattern TV3B a = Ty (TV3B_ a)
-pattern TV4B a = Ty (TV4B_ a)
-pattern TV2U a = Ty (TV2U_ a)
-pattern TV3U a = Ty (TV3U_ a)
-pattern TV4U a = Ty (TV4U_ a)
-pattern TV2I a = Ty (TV2I_ a)
-pattern TV3I a = Ty (TV3I_ a)
-pattern TV4I a = Ty (TV4I_ a)
-pattern TV2F a = Ty (TV2F_ a)
-pattern TV3F a = Ty (TV3F_ a)
-pattern TV4F a = Ty (TV4F_ a)
-pattern TM22F a = Ty (TM22F_ a)
-pattern TM23F a = Ty (TM23F_ a)
-pattern TM24F a = Ty (TM24F_ a)
-pattern TM32F a = Ty (TM32F_ a)
-pattern TM33F a = Ty (TM33F_ a)
-pattern TM34F a = Ty (TM34F_ a)
-pattern TM42F a = Ty (TM42F_ a)
-pattern TM43F a = Ty (TM43F_ a)
-pattern TM44F a = Ty (TM44F_ a)
-pattern TCullMode a = Ty (TCullMode_ a)
-pattern TPolygonMode a = Ty (TPolygonMode_ a)
-pattern TPolygonOffset a = Ty (TPolygonOffset_ a)
-pattern TProvokingVertex a = Ty (TProvokingVertex_ a)
-pattern TFrontFace a = Ty (TFrontFace_ a)
-pattern TPointSize a = Ty (TPointSize_ a)
-pattern TBlendingFactor a = Ty (TBlendingFactor_ a)
-pattern TBlendEquation a = Ty (TBlendEquation_ a)
-pattern TLogicOperation a = Ty (TLogicOperation_ a)
-pattern TStencilOperation a = Ty (TStencilOperation_ a)
-pattern TComparisonFunction a = Ty (TComparisonFunction_ a)
-pattern TPointSpriteCoordOrigin a = Ty (TPointSpriteCoordOrigin_ a)
-pattern TAccumulationContext a b = Ty (TAccumulationContext_ a b)
-pattern TBlending a b = Ty (TBlending_ a b)
-pattern TFetchPrimitive a b = Ty (TFetchPrimitive_ a b)
-pattern TFragmentFilter a b = Ty (TFragmentFilter_ a b)
-pattern TFragmentOperation a b = Ty (TFragmentOperation_ a b)
-pattern TFragmentOut a b = Ty (TFragmentOut_ a b)
-pattern TFragmentStream a b c = Ty (TFragmentStream_ a b c)
-pattern TFrameBuffer a b c = Ty (TFrameBuffer_ a b c)
-pattern TImage a b c = Ty (TImage_ a b c)
-pattern TInput a b = Ty (TInput_ a b)
-pattern TInterpolated a b = Ty (TInterpolated_ a b)
-pattern TOutput a = Ty (TOutput_ a)
+
+-- Semantic
+pattern Depth a = TCon C "Depth" [a]
+pattern Stencil a = TCon C "Stencil" [a]
+pattern Color a = TCon C "Color" [a]
+
+-- PrimitiveType
+pattern TTriangle = TCon C "Triangle" []
+pattern TLine = TCon C "Line" []
+pattern TPoint = TCon C "Point" []
+pattern TTriangleAdjacency = TCon C "TriangleAdjacency" []
+pattern TLineAdjacency = TCon C "LineAdjacency" []
+
+-- Vector/Matrix
+pattern TV2B a = TCon a "V2B" []
+pattern TV3B a = TCon a "V3B" []
+pattern TV4B a = TCon a "V4B" []
+pattern TV2U a = TCon a "V2U" []
+pattern TV3U a = TCon a "V3U" []
+pattern TV4U a = TCon a "V4U" []
+pattern TV2I a = TCon a "V2I" []
+pattern TV3I a = TCon a "V3I" []
+pattern TV4I a = TCon a "V4I" []
+pattern TV2F a = TCon a "V2F" []
+pattern TV3F a = TCon a "V3F" []
+pattern TV4F a = TCon a "V4F" []
+pattern TM22F a = TCon a "M22F" []
+pattern TM23F a = TCon a "M23F" []
+pattern TM24F a = TCon a "M24F" []
+pattern TM32F a = TCon a "M32F" []
+pattern TM33F a = TCon a "M33F" []
+pattern TM34F a = TCon a "M34F" []
+pattern TM42F a = TCon a "M42F" []
+pattern TM43F a = TCon a "M43F" []
+pattern TM44F a = TCon a "M44F" []
+
+-- ADT
+pattern TCullMode a = TCon a "CullMode" []
+pattern TPolygonMode a = TCon a "PolygonMode" []
+pattern TPolygonOffset a = TCon a "PolygonOffset" []
+pattern TProvokingVertex a = TCon a "ProvokingVertex" []
+pattern TFrontFace a = TCon a "FrontFace" []
+pattern TPointSize a = TCon a "PointSize" []
+pattern TBlendingFactor a = TCon a "BlendingFactor" []
+pattern TBlendEquation a = TCon a "BlendEquation" []
+pattern TLogicOperation a = TCon a "LogicOperation" []
+pattern TStencilOperation a = TCon a "StencilOperation" []
+pattern TComparisonFunction a = TCon a "ComparisonFunction" []
+pattern TPointSpriteCoordOrigin a = TCon a "PointSpriteCoordOrigin" []
+
+-- GADT
+pattern TAccumulationContext a b = TCon a "AccumulationContext" [b]
+pattern TBlending a b = TCon a "Blending" [b]
+pattern TFetchPrimitive a b = TCon a "FetchPrimitive" [b]
+pattern TFragmentFilter a b = TCon a "FragmentFilter" [b]
+pattern TFragmentOperation a b = TCon a "FragmentOperation" [b]
+pattern TFragmentOut a b = TCon a "FragmentOut" [b]
+pattern TFragmentStream a b c = TCon a "FragmentStream" [b, c]
+pattern TFrameBuffer a b c = TCon a "FrameBuffer" [b, c]
+pattern TImage a b c = TCon a "Image" [b, c]
+pattern TInput a b = TCon a "Input" [b]
+pattern TInterpolated a b = TCon a "Interpolated" [b]
+pattern TOutput a = TCon a "Output" []
+pattern TRasterContext a b = TCon a "RasterContext" [b]
+pattern TVertexOut a b = TCon a "VertexOut" [b]
+pattern TVertexStream a b c = TCon a "VertexStream" [b, c]
+
 pattern TPrimitiveStream a b c d e = Ty (TPrimitiveStream_ a b c d e)
-pattern TRasterContext a b = Ty (TRasterContext_ a b)
-pattern TVertexOut a b = Ty (TVertexOut_ a b)
-pattern TVertexStream a b c = Ty (TVertexStream_ a b c)
 
 data Constraint a
   = CEq a (TypeFun a)   -- unification between a type and a fully applied type function; CEq t f:  t ~ f
