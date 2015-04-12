@@ -210,6 +210,7 @@ valueDef :: P (Exp Range -> Exp Range)
 valueDef = do
   p1 <- position
   n <- varId
+  p1' <- position
   (a, d) <- localIndentation Gt $ do
     a <- many valuePattern
     operator "="
@@ -219,9 +220,9 @@ valueDef = do
     keyword "where"
     localIndentation Gt $ localAbsoluteIndentation $ some valueDef
   p2 <- position
-  return $ \e -> ELet (p1,p2) n (foldr (args (p1,p2)) d a) e
+  return $ \e -> ELet (p1,p2) (PVar (p1,p1') n) (foldr (args (p1,p2)) d a) e
   where
-    args r (EVar r' n) e = ELam r n e
+    args r (EVar r' n) e = ELam r (PVar r' n) e
 
 application :: [Exp Range] -> Exp Range
 application [e] = e
@@ -255,7 +256,7 @@ expression = application <$> some (
   unit = (\p1 p2 -> ETuple (p1,p2) []) <$> position <* parens (pure ()) <*> position
 
   lambda :: P (Exp Range)
-  lambda = (\p1 (EVar r n: _ {-TODO-}) e p2 -> ELam (p1,p2) n e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
+  lambda = (\p1 (EVar r n: _ {-TODO-}) e p2 -> ELam (p1,p2) (PVar r n) e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
 
   ifthenelse :: P (Exp Range)
   ifthenelse = undef $ keyword "if" *> (gt $ expression *> keyword "then" *> gt expression *> keyword "else" *> gt expression)
