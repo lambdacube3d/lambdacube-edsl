@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Parser where
 
 import Control.Applicative
@@ -20,9 +21,8 @@ import Control.Monad
 import Text.Parser.LookAhead
 
 import Type
-import Typing (Range)
 
-type P a = IndentationParserT Token (LCParser Parser) a
+type P a = IndentationParserT Char (LCParser Parser) a
 
 newtype LCParser p a = LCParser { runLCParser :: p a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, LookAheadParsing, DeltaParsing)
@@ -76,13 +76,13 @@ typeVar = void_ $ do
   i <- ident lcIdents
   if isUpper $ head i then fail "type variable name must start with lower case letter" else return i
 
-dataConstructor :: P ()
-dataConstructor = void_ $ do
+dataConstructor :: P String
+dataConstructor = try $ do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "data constructor must start with capital letter"
 
 var :: P String
-var = do
+var = try $ do
   i <- ident lcIdents
   if isUpper $ head i then fail "variable name must start with lower case letter" else return i
 
@@ -207,7 +207,7 @@ valuePattern
   pat = parens ((try $ undef $ dataConstructor *> some valuePattern) <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position)
 
 valueDef :: P (Exp Range -> Exp Range)
-valueDef = try $ do
+valueDef = do
   p1 <- position
   n <- varId
   (a, d) <- localIndentation Gt $ do
@@ -225,19 +225,20 @@ valueDef = try $ do
 
 application :: [Exp Range] -> Exp Range
 application [e] = e
-application es = EApp undefined{-TODO-} (application $ init es) (last es)
+application es = EApp (mempty,mempty){-undefined-}{-TODO-} (application $ init es) (last es)
 
 expression :: P (Exp Range)
 expression = application <$> some (
   exp listExp <|>
   exp ((\p1 l p2 -> ELit (p1,p2) l) <$> position <*> literalExp <*> position) <|>
   exp recordExp <|>
+  exp recordFieldProjection <|>
   exp lambda <|>
   exp ifthenelse <|>
   exp caseof <|>
   exp letin <|>
   (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
-  exp (undef dataConstructor) <|> 
+  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> dataConstructor <*> position <|> -- TODO: distinct data constructors
   exp unit <|>
   exp tuple <|>
   parens expression)    -- TODO: tuple aready handles parens
@@ -251,7 +252,7 @@ expression = application <$> some (
   tuple = (\p1 (v, vs) p2 -> if null vs then v else ETuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> expression <*> some (comma *> expression)) <*> position
 
   unit :: P (Exp Range)
-  unit = undef $ parens (pure ())
+  unit = (\p1 p2 -> ETuple (p1,p2) []) <$> position <* parens (pure ()) <*> position
 
   lambda :: P (Exp Range)
   lambda = (\p1 (EVar r n: _ {-TODO-}) e p2 -> ELam (p1,p2) n e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
@@ -274,7 +275,10 @@ expression = application <$> some (
       return $ foldr ($) a l
 
   recordExp :: P (Exp Range)
-  recordExp = undef $ braces (sepBy (varId <* colon <* expression) comma)
+  recordExp = (\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* colon <*> expression) comma) <*> position
+
+  recordFieldProjection :: P (Exp Range)
+  recordFieldProjection = try ((\p1 r p f p2 -> EApp (p1,p2) (EFieldProj (p,p2) f) (EVar (p1,p) r)) <$> position <*> var <*> position <* dot <*> var <*> position)
 
   literalExp :: P Lit
   literalExp =

@@ -12,7 +12,8 @@ import System.FilePath
 
 import Type
 import CompositionalLC hiding (test)
-import ParseTrifectaLC
+--import ParseTrifectaLC
+import Parser hiding (main, parseLC)
 
 data ParseResult
   = ParseError String

@@ -14,7 +14,7 @@ let
   rasterCtx         = TriangleCtx cull polyMode' NoOffset FirstVertex
   fragmentCtx       = AccumulationContext (DepthOp Less False, ColorOp blend (V4B True True True True))
   modelViewProj     = Uni (IM44F "MVP")
-  vertexShader v    = VertexOut (modelViewProj *. v) 1.0 () (Smooth v)
+  vertexShader v    = VertexOut (PrimMulMatVec modelViewProj v) 1.0 () (Smooth v)
   vertexStream      = Fetch "stream" Triangles (IV4F "position")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
