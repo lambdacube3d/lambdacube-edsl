@@ -179,7 +179,7 @@ inference e = runExcept $ fst <$> evalRWST (inferTyping e <* checkUnambError) me
 inferTyping :: Exp Range -> TCM (Exp Typing)
 inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
     ELam _ n f -> do
-        tv <- newV $ \t -> return $ Typing (Map.singleton n t) mempty t :: TCM Typing
+        tv <- newV $ \t -> Typing (Map.singleton n t) mempty t :: Typing
         tf <- withTyping n tv $ inferTyping f
         (s, ty) <- unifyTypings [tv, getTag tf] $ \[a, t] -> ([], a ~> t)
         return (s, ELam ty n tf)
@@ -208,6 +208,6 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
 withTyping :: EName -> Typing -> TCM a -> TCM a
 withTyping n t m = do
     penv <- asks fst
-    if Map.member n penv || Set.member n primFunSet
+    if Map.member n penv || Map.member n primFunMap
         then throwErrorTCM $ "Variable name clash: " ++ n
         else local (Map.insert n t *** id) m
