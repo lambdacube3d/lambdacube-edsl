@@ -255,6 +255,14 @@ reduceConstraint x = case x of
                 | all (==n) ns = reduced $ TFrameBuffer C (TNat n) $ tTuple C tys
                 | otherwise = fail "frambuffer number of layers differ"
 
+        TFJoinTupleType TVar{} _ -> nothing  -- TODO: observe res?
+        TFJoinTupleType _ TVar{} -> nothing  -- TODO: observe res?
+        TFJoinTupleType (TTuple f l) (TTuple _ r) -> reduced $ TTuple f (l ++ r)
+        TFJoinTupleType l (TTuple f r) -> reduced $ TTuple f (l : r)
+        TFJoinTupleType (TTuple f l) r -> reduced $ TTuple f (l ++ [r])
+        TFJoinTupleType l r -> reduced $ TTuple C [l,r]
+
+
         _ -> nothing
       where
         like f = reduceConstraint (CEq res f)
@@ -315,13 +323,6 @@ injType = \case
     _ -> Nothing
 
 vecS = TFVecScalar
-
-
-joinTupleType :: Ty -> Ty -> Ty
-joinTupleType (TTuple f l) (TTuple _ r) = TTuple f (l ++ r)
-joinTupleType l (TTuple f r) = TTuple f (l : r)
-joinTupleType (TTuple f l) r = TTuple f (l ++ [r])
-joinTupleType l r = TTuple C [l,r]
 
 inferPrimFun :: (Typing -> TCM e) -> TCM e -> EName -> TCM e
 inferPrimFun ok nothing n = maybe nothing (>>= ok) $ Map.lookup n primFunMap
@@ -480,8 +481,8 @@ primFunMap = Map.fromList $ execWriter $ do
     FragmentOutRastDepth    ::                  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
   -}
   "FragmentOut"           --> \a t -> [a ~~ TFColorRepr t] ==> t ~> TFragmentOut C a
-  "FragmentOutDepth"      --> \a t -> [a ~~ TFColorRepr t] ==> TFloat C ~> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
-  "FragmentOutRastDepth"  --> \a t -> [a ~~ TFColorRepr t] ==> t ~> TFragmentOut C (joinTupleType (Depth $ TFloat C) a)
+  "FragmentOutDepth"      --> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth $ TFloat C) a] ==> TFloat C ~> t ~> TFragmentOut C b
+  "FragmentOutRastDepth"  --> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth $ TFloat C) a] ==> t ~> TFragmentOut C b
   -- Vertex Out
   "VertexOut"    --> \a t -> [t ~~ TFFTRepr' a] ==> TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C t
   -- PointSpriteCoordOrigin

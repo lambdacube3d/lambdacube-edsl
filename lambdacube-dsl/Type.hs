@@ -326,5 +326,6 @@ data TypeFun a
   | TFColorRepr a
   | TFFrameBuffer a
   | TFFragOps a
+  | TFJoinTupleType a a
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
