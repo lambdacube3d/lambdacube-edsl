@@ -141,8 +141,15 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
 
 -------------------------------------------------------------------------------- typing unification
 
-joinInstEnv :: Subst -> InstEnv Ty -> Unique (Subst, InstEnv Ty)
-joinInstEnv s es = untilNoUnif s $ nub $ subst s es
+unif :: PolyEnv -> [Typing] -> ([Ty] -> ([Ty], Ty)) -> Unique (Subst, Typing)
+unif penv ts f = do
+    let (b, t) = f $ map typingType ts
+        ms = map monoEnv ts
+    s <- unifyTypes $ b: unifyMaps ms
+    (s, i) <- untilNoUnif s $ nub $ subst s $ concat $ map instEnv ts
+    let ty = Typing (Map.unions $ subst s ms) i (subst s t)
+    unamb penv ty
+    return (s, ty)
   where
     untilNoUnif acc es = do
         (es, w) <- runWriterT $ do
@@ -199,38 +206,28 @@ Not ambiguous:
   (Show a, b ~ F a) => b
 -}
 unamb :: PolyEnv -> Typing -> Unique ()
-unamb penv ty
-    = addUnambCheck $ if used `Set.isSubsetOf` defined then Nothing else Just $ unlines
-        ["ambiguous type: " ++ show ty, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show penv]
+unamb penv ty = do
+    e <- errorUnique
+    let c = if used `Set.isSubsetOf` defined then Nothing else Just $ unlines
+            [e, "ambiguous type: " ++ show ty, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show penv]
+    modify $ \(cs, x, y, z) -> (c: cs, x, y, z)
   where
     used = freeVars $ instEnv ty
-    defined = growDefinedVars mempty $ freeVars (monoEnv ty) <> freeVars (typingType ty)
+    defined = growDefinedVars (instEnv ty) $ freeVars (monoEnv ty) <> freeVars (typingType ty)
 
-    growDefinedVars acc s
+growDefinedVars ie s = cycle mempty s
+  where
+    cycle acc s
         | Set.null s = acc
-        | otherwise = growDefinedVars (acc <> s) (grow s Set.\\ acc)
+        | otherwise = cycle (acc <> s) (grow s Set.\\ acc)
 
-    grow = flip foldMap (instEnv ty) $ \case
+    grow = flip foldMap ie $ \case
         CEq ty f -> freeVars ty <-> freeVars f
         Split a b c -> freeVars a <-> (freeVars b <> freeVars c)
         _ -> mempty
       where
         a --> b = \s -> if a `hasCommon` s then b else mempty
         a <-> b = (a --> b) <> (b --> a)
-
-    addUnambCheck c = do
-        e <- errorUnique
-        modify $ \(cs, x, y, z) -> (((e ++) <$> c): cs, x, y, z)
-
-unif :: PolyEnv -> [Typing] -> ([Ty] -> ([Ty], Ty)) -> Unique (Subst, Typing)
-unif penv ts f = do
-    let (b, t) = f $ map typingType ts
-        ms = map monoEnv ts
-    s <- unifyTypes $ b: unifyMaps ms
-    (s, i) <- joinInstEnv s $ concat $ map instEnv ts
-    let ty = Typing (Map.unions $ subst s ms) i (subst s t)
-    unamb penv ty
-    return (s, ty)
 
 -------------------------------------------------------------------------------- type inference & scope checking
 
@@ -270,7 +267,7 @@ infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
     --      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
     --      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
     instTyping ty = do
-        let fv = freeVars ty Set.\\ freeVars (monoEnv ty)         -- TODO: revise
+        let fv = growDefinedVars (instEnv ty) $ freeVars (monoEnv ty)         -- TODO: revise
         newVars <- replicateM (Set.size fv) (newVar C)
         let s = Map.fromList $ zip (Set.toList fv) newVars
         return (s, subst s ty)
