@@ -419,7 +419,7 @@ noType = Unknown ""
 
 -- TODO: use constraints
 toTy :: Typing -> C.Ty
-toTy (Typing m i t) = case t of
+toTy ty@(Typing m i t) = case t of
     TBool  _ -> Single C.Bool 
     TV2B   _ -> Single C.V2B  
     TV3B   _ -> Single C.V3B  
@@ -446,7 +446,7 @@ toTy (Typing m i t) = case t of
     TM43F  _ -> Single C.M43F 
     TM44F  _ -> Single C.M44F 
     TInterpolated _ t -> toTy $ Typing m i t
-    t -> Unknown (show t)
+    t -> Unknown (show ty)
 {-
 data InputType
     = Bool

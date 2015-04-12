@@ -186,10 +186,12 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
         tf <- tr $ inferTyping f
         (s, ty) <- unifyTypings [getTagP p, getTag tf] $ \[a, t] -> ([], [] ==> a ~> t)
         return (s, ELam ty p tf)
-    ELet _ (PVar _ n) x e -> do
+    ELet _ p x e -> do              -- TODO: revise
         tx <- inferTyping x
-        te <- withTyping n (getTag tx) $ inferTyping e
-        return (mempty, ELet (getTag te) (PVar (getTag tx) n) tx te)
+        (p, tr) <- inferPatTyping p
+        te <- tr $ inferTyping e
+        (s, ty) <- unifyTypings [getTagP p, getTag tx, getTag te] $ \[pt, t, te] -> ([pt, t], [] ==> te)
+        return (s, ELet ty p tx te)
     Exp e -> do
         e' <- T.mapM inferTyping e
         (id *** Exp . (\t -> setTag undefined t e')) <$> case e' of
@@ -218,9 +220,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
     noTr = addTr $ const id
     addTr tr m = (\x -> (x, tr x)) <$> m
 
-    addSubst (s, t@EApp{}) = ESubst (getTag t) s t
-    addSubst (s, t@EVar{}) = ESubst (getTag t) s t
-    addSubst (_, t) = t
+    addSubst (s, t) = ESubst (getTag t) s t
 
 withTyping :: EName -> Typing -> TCM a -> TCM a
 withTyping n t m = do
