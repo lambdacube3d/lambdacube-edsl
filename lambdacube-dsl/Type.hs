@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Type where
 
@@ -22,7 +23,8 @@ type FName = String
 
 type Subst = Map TName Ty
 type MonoEnv a = Map EName a
-type PolyEnv = Map EName Typing
+newtype PolyEnv = PolyEnv { getPolyEnv :: Map EName (TCM (Subst, Typing)) }
+    deriving Monoid
 type Typing = Typing_ Ty
 
 data Typing_ a = Typing

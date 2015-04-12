@@ -262,7 +262,6 @@ reduceConstraint x = case x of
         TFJoinTupleType (TTuple f l) r -> reduced $ TTuple f (l ++ [r])
         TFJoinTupleType l r -> reduced $ TTuple C [l,r]
 
-
         _ -> nothing
       where
         like f = reduceConstraint (CEq res f)
@@ -323,9 +322,6 @@ injType = \case
     _ -> Nothing
 
 vecS = TFVecScalar
-
-inferPrimFun :: (Typing -> TCM e) -> TCM e -> EName -> TCM e
-inferPrimFun ok nothing n = maybe nothing (>>= ok) $ Map.lookup n primFunMap
 
 infix 0 -->
 s --> m = tell [(s, newV m)]

@@ -174,7 +174,8 @@ dependentVars ie s = cycle mempty s
 
 
 inference :: Exp Range -> Either ErrorMsg (Exp Typing)
-inference e = runExcept $ fst <$> evalRWST (inferTyping e <* checkUnambError) mempty (mempty, 0)
+inference e = runExcept $ fst <$>
+    evalRWST (inferTyping e <* checkUnambError) (PolyEnv $ fmap ((,) mempty) <$> primFunMap, mempty) (mempty, 0)
 
 inferTyping :: Exp Range -> TCM (Exp Typing)
 inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
@@ -189,17 +190,13 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
         return (mempty, ELet (getTag te) n tx te)
     Exp e -> do
         e' <- T.mapM inferTyping e
-        (s, t) <- case e' of
+        (id *** Exp . (`setTag` e')) <$> case e' of
             EApp_ _ tf ta -> newV $ \v -> unifyTypings [getTag tf, getTag ta] (\[tf, ta] -> ([tf, ta ~> v], v))
             EFieldProj_ _ fn -> (,) mempty <$> fieldProjType fn
             ERecord_ _ trs -> unifyTypings (map (getTag . snd) trs) $ \tl -> ([], TRecord $ Map.fromList $ zip (map fst trs) tl)
             ETuple_ _ te -> unifyTypings (map getTag te) (\tl -> ([], TTuple C tl))
             ELit_ _ l -> (,) mempty <$> inferLit l
-            EVar_ _ n -> inferPrimFun
-                (\x -> unifyTypings [x] (\[x] -> ([], x)))
-                (asks fst >>= maybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") instantiateTyping . Map.lookup n)
-                n
-        return (s, Exp $ setTag t e')
+            EVar_ _ n -> asks (getPolyEnv . fst) >>= maybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") id . Map.lookup n
   where
     addSubst (s, t@EApp{}) = ESubst (getTag t) s t
     addSubst (s, t@EVar{}) = ESubst (getTag t) s t
@@ -207,7 +204,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
 
 withTyping :: EName -> Typing -> TCM a -> TCM a
 withTyping n t m = do
-    penv <- asks fst
-    if Map.member n penv || Map.member n primFunMap
+    penv <- asks $ getPolyEnv . fst
+    if Map.member n penv
         then throwErrorTCM $ "Variable name clash: " ++ n
-        else local (Map.insert n t *** id) m
+        else local ((<> PolyEnv (Map.singleton n (instantiateTyping t))) *** id) m
