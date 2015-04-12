@@ -62,8 +62,8 @@ composeSubst :: Subst -> Subst -> Subst
 s1 `composeSubst` s2 = s2 <> (subst s2 <$> s1)
 
 -- unify each types in the sublists
-unifyTypes :: [[Ty]] -> TCM Subst
-unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith uni xs $ tail xs
+unifyTypes :: Bool -> [[Ty]] -> TCM Subst
+unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith uni xs $ tail xs
   where
     uni :: Ty -> Ty -> StateT Subst TCM ()
     uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
@@ -85,7 +85,7 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
         unifyTy :: Ty -> Ty -> StateT Subst TCM ()
         unifyTy (TVar _ u) (TVar _ v) | u == v = return ()
         unifyTy (TVar _ u) _ = bindVar u b
-        unifyTy _ (TVar _ u) = bindVar u a
+        unifyTy _ (TVar _ u) | bidirectional = bindVar u a
         unifyTy (TTuple f1 t1) (TTuple f2 t2) = sequence_ $ zipWith uni t1 t2
         unifyTy (TArr a1 b1) (TArr a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TImage f1 a1 b1) (TImage f2 a2 b2) = uni a1 a2 >> uni b1 b2
@@ -108,15 +108,18 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
           | a == b = return ()
           | otherwise = lift $ throwErrorTCM $ "can not unify " ++ show a ++ " with " ++ show b
 
-unifyTypings
+unifyTypings = unifyTypings_ True
+
+unifyTypings_
     :: (NewVar a, NewVarRes a ~ ([Ty], Typing))
-    => [Typing]
-    -> ([Ty] -> a)   -- main typing types -> (extra unification, result typing)
+    => Bool         -- bidirectional unification
+    -> [Typing]
+    -> ([Ty] -> a)  -- main typing types -> (extra unification, result typing)
     -> TCM (Subst, Typing)
-unifyTypings ts f = do
+unifyTypings_ bidirectional ts f = do
     (b, t) <- newV $ f $ map typingType ts
     let ms = map monoEnv $ t: ts
-    s <- unifyTypes $ b: unifyMaps ms
+    s <- unifyTypes bidirectional $ b: unifyMaps ms
     (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints $ t: ts
     let ty = Typing (Map.unions $ subst s ms) i (subst s $ typingType t)
     ambiguityCheck ty
@@ -132,7 +135,7 @@ unifyTypings ts f = do
             -- injectivity test:  (t ~ Vec a1 b1, t ~ Vec a2 b2)  -->  a1 ~ a2, b1 ~ b2
             tell $ concatMap (concatMap transpose . groupByFst) $ groupByFst [(ty, (it, is)) | CEq ty (injType -> Just (it, is)) <- es]
             concat <$> mapM reduceConstraint es
-        s <- unifyTypes w
+        s <- unifyTypes True w
         if Map.null s then return (acc, es) else untilNoUnif (acc `composeSubst` s) $ nub $ subst s es
 
 -- Ambiguous: (Int ~ F a) => Int
@@ -201,7 +204,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
             ETuple_ _ te -> unifyTypings (map getTag te) (\tl -> ([], [] ==> TTuple C tl))
             ELit_ _ l -> (,) mempty <$> inferLit l
             EVar_ _ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            ETyping_ _ e ty -> unifyTypings [getTag e, ty] $ \[te, ty] -> ([te, ty], [] ==> ty)
+            ETyping_ _ e ty -> unifyTypings_ False [getTag e, ty] $ \[te, ty] -> ([te, ty], [] ==> ty)
   where
     inferPatTyping :: Pat Range -> TCM (Pat Typing, TCM a -> TCM a)
     inferPatTyping p_@(Pat p) = local (id *** const [getTagP p_]) $ do
