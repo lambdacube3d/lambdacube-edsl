@@ -97,7 +97,7 @@ toNF sub env (ELet t n a b) = --case toNF env a of -- TODO
   --x -> toNF (Map.insert n x env) b
   toNF sub (Map.insert n (LetVar a) env) b
 --toNF sub env (EPrimFun t f) = 
-toNF sub env (ESubst _ s e) = toNF (s `compose` sub) env e
+toNF sub env (ESubst _ s e) = toNF (s `composeSubst` sub) env e
 toNF sub env (EVar t n)
   | isPrimFun n = [Fun n]
   | otherwise = case Map.lookup n env of

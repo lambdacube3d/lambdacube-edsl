@@ -14,7 +14,7 @@ import Text.PrettyPrint.ANSI.Leijen (pretty)
 import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Char8 (ByteString)
 import Control.Monad.Except
-import Control.Monad.State
+import Control.Monad.RWS
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -601,7 +601,7 @@ joinTupleType l (TTuple f r) = TTuple f (l : r)
 joinTupleType (TTuple f l) r = TTuple f (l ++ [r])
 joinTupleType l r = TTuple C [l,r]
 
-inferPrimFun :: (Typing -> Unique e) -> Unique e -> EName -> Unique e
+inferPrimFun :: (Typing -> TCM e) -> TCM e -> EName -> TCM e
 inferPrimFun ok nothing = f where
 
  infix 6 ==>
@@ -791,7 +791,7 @@ inferPrimFun ok nothing = f where
   "PassAll"  -> newV $ \t -> [] ==> TFragmentFilter C t
   "Filter"   -> newV $ \t -> [] ==> (t ~> TBool C) ~> TFragmentFilter C t
   -- Render Operations
-  "Fetch"        -> newV $ \a t b -> [CClass IsInputTuple t, b ~~ TFFTRepr' t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
+  "Fetch"        -> newV $ \a t b -> [IsInputTuple @@ t, b ~~ TFFTRepr' t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
   "Transform"    -> newV $ \a b p -> [] ==> (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
   "Rasterize"    -> newV $ \a b c -> [] ==> TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
   {-
@@ -812,7 +812,7 @@ inferPrimFun ok nothing = f where
         ~> TFrameBuffer C n t
         ~> TFrameBuffer C n t
   "FrameBuffer"  -> newV $ \a t t' n ->
-    [t' ~~ TFFTRepr' t, CClass IsValidFrameBuffer t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
+    [t' ~~ TFFTRepr' t, IsValidFrameBuffer @@ t, TFrameBuffer C n t ~~ TFFrameBuffer a] ==> a ~> TFrameBuffer C n t'
   "ScreenOut"    -> newV $ \a b -> [] ==> TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
@@ -936,10 +936,10 @@ inferPrimFun ok nothing = f where
   "PrimNoise3"  -> newV $ \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS (TNat 3) (TFloat C)] ==> a ~> b
   "PrimNoise4"  -> newV $ \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS (TNat 4) (TFloat C)] ==> a ~> b
 
---  a -> throwErrorUnique $ "unknown primitive: " ++ show a
+--  a -> throwErrorTCM $ "unknown primitive: " ++ show a
   a -> nothing
 
-inferLit :: Lit -> Unique Typing
+inferLit :: Lit -> TCM Typing
 inferLit a = case a of
   LInt _ -> do
     --t <- newVar C
@@ -953,18 +953,19 @@ inferLit a = case a of
   ty t = return $ [] ==> t
 
 checkUnambError = do
-    (cs, _, _, _) <- get
+    cs <- gets fst
     case cs of
         (Just _: _) -> throwError $ head $ catMaybes $ reverse cs
         _ -> return ()
 
-throwErrorUnique :: String -> Unique a
-throwErrorUnique s = checkUnambError >> errorUnique >>= throwError . (++ s)
+throwErrorTCM :: String -> TCM a
+throwErrorTCM s = checkUnambError >> errorTCM >>= throwError . fmap (++ s)
 
-errorUnique :: Unique String
-errorUnique = do
-  (_,_,src,rl) <- get
-  let sl = map mkSpan rl
+errorTCM :: TCM (ByteString -> String)
+errorTCM = do
+  rl <- asks snd
+  return $ \src -> let
+      sl = map mkSpan rl
       fullCode = True
       mkSpan (s,e) = unlines [show $ pretty (s,e), if fullCode then BS.unpack str else show $ pretty r]
         where
@@ -975,22 +976,22 @@ errorUnique = do
           b = rewind s
           sb = fromIntegral $ bytes b
           se = fromIntegral $ bytes e
-  return $ concat sl
+    in concat sl
 
 class NewVar a where
     type NewVarRes a :: *
-    newV :: a -> Unique (NewVarRes a)
+    newV :: a -> TCM (NewVarRes a)
 
-instance NewVar (Unique a) where
-    type NewVarRes (Unique a) = a
+instance NewVar (TCM a) where
+    type NewVarRes (TCM a) = a
     newV = id
 
 instance NewVar a => NewVar (Ty -> a) where
     type NewVarRes (Ty -> a) = NewVarRes a
-    newV f = newVar C >>= \v -> newV $ f v
+    newV f = newVar C >>= newV . f
 
-newVar :: Frequency -> Unique Ty
+newVar :: Frequency -> TCM Ty
 newVar f = do
-  (d, n,s,r) <- get
-  put (d, n+1,s,r)
+  (d, n) <- get
+  put (d, n+1)
   return $ TVar f $ 't':show n

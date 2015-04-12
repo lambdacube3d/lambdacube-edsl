@@ -57,8 +57,8 @@ parseLC fname = do
     Failure m -> do
       return (ParseError $ show m)
     Success e -> do
-      case inference src e of
+      case inference e of
         Right t   -> do
           return (TypedExp t)
         Left m    -> do
-          return (TypeError m)
+          return (TypeError $ m src)

@@ -6,18 +6,15 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module CompositionalLC
     ( inference
-    , compose
+    , composeSubst
     , subst
     ) where
 
-import qualified Debug.Trace as D
 import Data.Function
 import Data.List
 import Data.Maybe
-import Data.ByteString.Char8 (ByteString)
 import Data.Foldable (foldMap)
 import qualified Data.Traversable as T
-import Data.Functor.Identity
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -25,38 +22,13 @@ import qualified Data.Set as Set
 import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Monad.RWS
 import Control.Monad.Writer
 import Control.Arrow
 
 import Type
 import Typing
 
--------------------------------------------------------------------------------- utility
-
-trace__ = D.trace
-
-trace_ _ = id
-trace = trace_
-
-withRanges :: [Range] -> Unique a -> Unique a
-withRanges rl a = do
-  (d,x,y,rl0) <- get
-  put (d,x,y,rl)
-  res <- a
-  (d,z,q,_) <- get
-  put (d,z,q,rl0)
-  return res
-
-hasCommon :: Ord a => Set a -> Set a -> Bool
-hasCommon a b = not $ Set.null $ a `Set.intersection` b
-
-groupBy' :: Ord a => [(a, b)] -> [[b]]
-groupBy' = unifyMaps . map (uncurry Map.singleton)
-
-unifyMaps :: Ord a => [Map a b] -> [[b]]
-unifyMaps = Map.elems . Map.unionsWith (++) . map ((:[]) <$>)
-
--------------------------------------------------------------------------------- free vars
 
 class FreeVars a where freeVars :: a -> Set TName
 
@@ -70,9 +42,7 @@ instance FreeVars a => FreeVars (TypeFun a)         where freeVars = foldMap fre
 instance FreeVars a => FreeVars (MonoEnv a)         where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap freeVars
 
--------------------------------------------------------------------------------- substitution
 
--- basic substitution (renaming of variables)
 class Substitute a where subst :: Subst -> a -> a
 
 instance Substitute Ty where
@@ -85,18 +55,17 @@ instance Substitute a => Substitute (Typing_ a)         where subst = fmap . sub
 instance Substitute a => Substitute (MonoEnv a)         where subst = fmap . subst
 instance Substitute a => Substitute (Constraint a)      where subst = fmap . subst
 
--------------------------------------------------------------------------------- type unification
 
--- compose substitutions
+-- composeSubst substitutions
 -- Note: domain of substitutions is disjunct
-compose :: Subst -> Subst -> Subst
-s1 `compose` s2 = s2 <> (subst s2 <$> s1)
+composeSubst :: Subst -> Subst -> Subst
+s1 `composeSubst` s2 = s2 <> (subst s2 <$> s1)
 
--- compositional (not linear) unification?
-unifyTypes :: [[Ty]] -> Unique Subst
+-- unify each types in the sublists
+unifyTypes :: [[Ty]] -> TCM Subst
 unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith uni xs $ tail xs
   where
-    uni :: Ty -> Ty -> StateT Subst Unique ()
+    uni :: Ty -> Ty -> StateT Subst TCM ()
     uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
       where
         subst1 s tv@(TVar _ a) = fromMaybe tv $ Map.lookup a s
@@ -110,10 +79,10 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
             s <- get
             let t' = subst s t
             if n `Set.member` freeVars t
-                then lift $ throwErrorUnique $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
+                then lift $ throwErrorTCM $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
                 else put $ Map.insert n t' $ singSubst n t' <$> s
 
-        unifyTy :: Ty -> Ty -> StateT Subst Unique ()
+        unifyTy :: Ty -> Ty -> StateT Subst TCM ()
         unifyTy (TVar _ u) (TVar _ v) | u == v = return ()
         unifyTy (TVar _ u) _ = bindVar u b
         unifyTy _ (TVar _ u) = bindVar u a
@@ -137,32 +106,39 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
         unifyTy (Color a1) (Color a2) = uni a1 a2
         unifyTy a b
           | a == b = return ()
-          | otherwise = lift $ throwErrorUnique $ "can not unify " ++ show a ++ " with " ++ show b
+          | otherwise = lift $ throwErrorTCM $ "can not unify " ++ show a ++ " with " ++ show b
 
--------------------------------------------------------------------------------- typing unification
 
-unif :: PolyEnv -> [Typing] -> ([Ty] -> ([Ty], Ty)) -> Unique (Subst, Typing)
-unif penv ts f = do
+unifyTypings
+    :: [Typing]
+    -> ([Ty] -> ([Ty], Ty))   -- main typing types -> (extra unification, result typing type)
+    -> TCM (Subst, Typing)
+unifyTypings ts f = do
     let (b, t) = f $ map typingType ts
         ms = map monoEnv ts
     s <- unifyTypes $ b: unifyMaps ms
-    (s, i) <- untilNoUnif s $ nub $ subst s $ concat $ map instEnv ts
+    (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints ts
     let ty = Typing (Map.unions $ subst s ms) i (subst s t)
-    unamb penv ty
+    ambiguityCheck ty
     return (s, ty)
   where
+    groupByFst :: Ord a => [(a, b)] -> [[b]]
+    groupByFst = unifyMaps . map (uncurry Map.singleton)
+
+    unifyMaps :: Ord a => [Map a b] -> [[b]]
+    unifyMaps = Map.elems . Map.unionsWith (++) . map ((:[]) <$>)
+
     untilNoUnif acc es = do
         (es, w) <- runWriterT $ do
-            -- right reduce
-            tell $ groupBy' [(f, ty) | CEq ty f <- es]
-            -- injectivity test
-            tell $ concatMap (concatMap transpose . groupBy') $ groupBy' [(ty, (it, is)) | CEq ty f <- es, Just (it, is) <- [injType f]]
-            -- constraint reduction
-            concat <$> mapM simplifyInst es
+            -- unify left hand sides where the right hand side is equal:  (t1 ~ F a, t2 ~ F a)  -->  t1 ~ t2
+            tell $ groupByFst [(f, ty) | CEq ty f <- es]
+            -- injectivity test:  (t ~ Vec a1 b1, t ~ Vec a2 b2)  -->  a1 ~ a2, b1 ~ b2
+            tell $ concatMap (concatMap transpose . groupByFst) $ groupByFst [(ty, (it, is)) | CEq ty (injType -> Just (it, is)) <- es]
+            concat <$> mapM reduceConstraint es
         s <- unifyTypes w
-        if Map.null s then return (acc, es) else untilNoUnif (acc `compose` s) $ nub $ subst s es
+        if Map.null s then return (acc, es) else untilNoUnif (acc `composeSubst` s) $ nub $ subst s es
 
-    simplifyInst x = case x of
+    reduceConstraint x = case x of
         Split (TRecord a) (TRecord b) (TRecord c) ->
           case (Map.keys $ Map.intersection b c, Map.keys $ a Map.\\ (b <> c), Map.keys $ (b <> c) Map.\\ a) of
             ([], [], []) -> discard $ unifyMaps [a, b, c]
@@ -174,16 +150,15 @@ unif penv ts f = do
             ks -> fail $ "extra keys: " ++ show ks
         Split a b c
             | isRec a && isRec b && isRec c -> keep
-            | otherwise -> fail $ "bad split: " ++ show (a, b, c)
+            | otherwise -> fail $ "bad split: " ++ show x
         CClass c t -> isInstance (\c t -> return [CClass c t]) fail keep (discard []) c t
-        CEq ty f -> do
-            forM_ (backPropTF ty f) $ \(t1, t2) -> tell [[t1, t2]]
-            reduceTF
+        CEq ty f -> reduceTF
                 (\t -> discard [[ty, t]])
                 (fail . (("error during reduction of " ++ show f ++ "  ") ++))
-                keep f
+                (tell [[t1, t2] | (t1, t2) <- backPropTF ty f] >> keep)
+                f
       where
-        isRec TVar{} = True
+        isRec TVar{}    = True
         isRec TRecord{} = True
         isRec _ = False
 
@@ -193,29 +168,24 @@ unif penv ts f = do
 
         discard xs = tell xs >> return []
         keep = return [x]
-        fail = lift . throwErrorUnique
+        fail = lift . throwErrorTCM
 
-{- fail on ambiguous types
-Ambiguous:
-  (Show a) => Int
-  (Int ~ F a) => Int
-  (a ~ F a) => Int
-  (a ~ F b, b ~ F a) => Int
-Not ambiguous:
-  (Show a, a ~ F b) => b
-  (Show a, b ~ F a) => b
--}
-unamb :: PolyEnv -> Typing -> Unique ()
-unamb penv ty = do
-    e <- errorUnique
-    let c = if used `Set.isSubsetOf` defined then Nothing else Just $ unlines
-            [e, "ambiguous type: " ++ show ty, "defined vars: " ++ show defined, "used vars: " ++ show used, "poly env: " ++ show penv]
-    modify $ \(cs, x, y, z) -> (c: cs, x, y, z)
+-- Ambiguous: (Int ~ F a) => Int
+-- Not ambiguous: (Show a, a ~ F b) => b
+ambiguityCheck :: Typing -> TCM ()
+ambiguityCheck ty = do
+    e <- errorTCM
+    let c = if used `Set.isSubsetOf` defined then Nothing else Just $ e <> \_ -> unlines
+            ["ambiguous type: " ++ show ty, "defined vars: " ++ show defined, "used vars: " ++ show used]
+    modify $ (c:) *** id
   where
-    used = freeVars $ instEnv ty
-    defined = growDefinedVars (instEnv ty) $ freeVars (monoEnv ty) <> freeVars (typingType ty)
+    used = freeVars $ constraints ty
+    defined = dependentVars (constraints ty) $ freeVars (monoEnv ty) <> freeVars (typingType ty)
 
-growDefinedVars ie s = cycle mempty s
+-- compute dependent type vars in constraints
+-- Example:  dependentVars [(a, b) ~ F b c, d ~ F e] [c] == [a,b,c]
+dependentVars :: [Constraint Ty] -> Set TName -> Set TName
+dependentVars ie s = cycle mempty s
   where
     cycle acc s
         | Set.null s = acc
@@ -226,40 +196,35 @@ growDefinedVars ie s = cycle mempty s
         Split a b c -> freeVars a <-> (freeVars b <> freeVars c)
         _ -> mempty
       where
-        a --> b = \s -> if a `hasCommon` s then b else mempty
+        a --> b = \s -> if Set.null $ a `Set.intersection` s then mempty else b
         a <-> b = (a --> b) <> (b --> a)
 
--------------------------------------------------------------------------------- type inference & scope checking
 
-inference :: ByteString -> Exp Range -> Either String (Exp Typing)
-inference src = runExcept . flip evalStateT (mempty, 0, src, []) . (infer mempty >=> chk)
-  where
-    chk e = checkUnambError >> return e
+inference :: Exp Range -> Either ErrorMsg (Exp Typing)
+inference e = runExcept $ fst <$> evalRWST (inferTyping e <* checkUnambError) mempty (mempty, 0)
 
-type PolyEnv = Map EName Typing
-
-infer :: PolyEnv -> Exp Range -> Unique (Exp Typing)
-infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
+inferTyping :: Exp Range -> TCM (Exp Typing)
+inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
     ELam _ n f -> do
-        tv <- newV $ \t -> return $ Typing (Map.singleton n t) mempty t :: Unique Typing
-        tf <- insert' n tv penv >>= \penv' -> infer penv' f
-        (s, ty) <- unif penv [tv, getTag tf] $ \[a, t] -> ([], a ~> t)
+        tv <- newV $ \t -> return $ Typing (Map.singleton n t) mempty t :: TCM Typing
+        tf <- insert' n tv $ inferTyping f
+        (s, ty) <- unifyTypings [tv, getTag tf] $ \[a, t] -> ([], a ~> t)
         return (s, ELam ty n tf)
     ELet _ n x e -> do
-        tx <- infer penv x
-        te <- insert' n (getTag tx) penv >>= \penv' -> infer penv' e
+        tx <- inferTyping x
+        te <- insert' n (getTag tx) $ inferTyping e
         return (mempty, ELet (getTag te) n tx te)
     Exp e -> do
-        e' <- T.mapM (infer penv) e
+        e' <- T.mapM inferTyping e
         (s, t) <- case e' of
-            EApp_ _ tf ta -> newV $ \v -> unif penv [getTag tf, getTag ta] (\[tf, ta] -> ([tf, ta ~> v], v))
+            EApp_ _ tf ta -> newV $ \v -> unifyTypings [getTag tf, getTag ta] (\[tf, ta] -> ([tf, ta ~> v], v))
             EFieldProj_ _ fn -> (,) mempty <$> fieldProjType fn
-            ERecord_ _ trs -> unif penv (map (getTag . snd) trs) $ \tl -> ([], TRecord $ Map.fromList $ zip (map fst trs) tl)
-            ETuple_ _ te -> unif penv (map getTag te) (\tl -> ([], TTuple C tl))
+            ERecord_ _ trs -> unifyTypings (map (getTag . snd) trs) $ \tl -> ([], TRecord $ Map.fromList $ zip (map fst trs) tl)
+            ETuple_ _ te -> unifyTypings (map getTag te) (\tl -> ([], TTuple C tl))
             ELit_ _ l -> (,) mempty <$> inferLit l
             EVar_ _ n -> inferPrimFun
-                (\x -> unif penv [x] (\[x] -> ([], x)))
-                (maybe (throwErrorUnique $ "Variable " ++ n ++ " is not in scope.") instTyping $ Map.lookup n penv)
+                (\x -> unifyTypings [x] (\[x] -> ([], x)))
+                (asks fst >>= maybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") instTyping . Map.lookup n)
                 n
         return (s, Exp $ setTag t e')
   where
@@ -267,16 +232,18 @@ infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
     --      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
     --      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
     instTyping ty = do
-        let fv = growDefinedVars (instEnv ty) $ freeVars (typingType ty)         -- TODO: revise
+        let fv = dependentVars (constraints ty) $ freeVars (typingType ty)  -- TODO: make it more precise if necessary
         newVars <- replicateM (Set.size fv) (newVar C)
-        let s = Map.fromList $ zip (Set.toList fv) newVars
+        let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
         return (s, subst s ty)
 
-    fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: Unique Typing
+    fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
 
-    insert' n t penv
-        | Map.member n penv || Set.member n primFunSet = throwErrorUnique $ "Variable name clash: " ++ n
-        | otherwise = return $ Map.insert n t penv
+    insert' n t m = do
+        penv <- asks fst
+        if Map.member n penv || Set.member n primFunSet
+            then throwErrorTCM $ "Variable name clash: " ++ n
+            else local (Map.insert n t *** id) m
 
     addSubst (s, t@EApp{}) = ESubst (getTag t) s t
     addSubst (s, t@EVar{}) = ESubst (getTag t) s t

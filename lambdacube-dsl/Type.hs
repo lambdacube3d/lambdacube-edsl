@@ -13,6 +13,7 @@ import Data.Traversable
 import Data.ByteString (ByteString)
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Monad.RWS
 import Text.Trifecta.Delta (Delta)
 
 type TName = String
@@ -20,23 +21,25 @@ type EName = String
 type FName = String
 
 type Subst = Map TName Ty
-
 type MonoEnv a = Map EName a
-type InstEnv a = [Constraint a]
+type PolyEnv = Map EName Typing
 type Typing = Typing_ Ty
 
 data Typing_ a = Typing
-    { monoEnv :: MonoEnv a
-    , instEnv :: InstEnv a
-    , typingType :: a
+    { monoEnv     :: MonoEnv a
+    , constraints :: [Constraint a]
+    , typingType  :: a
     }
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 type Range = (Delta, Delta)
 
-type Unique =
-    StateT ([Maybe String], Int, ByteString, [Range]) -- (unamb check results, counter, complete source{-constant-}, stack of ranges)
-    (Except String)
+type ErrorMsg = ByteString -> String    -- complete source -> message
+
+-- type checking monad
+type TCM =
+    RWST (PolyEnv, [Range]) () ([Maybe ErrorMsg], Int) -- (poly env, stack of ranges) (unamb check results, typevar counter)
+    (Except ErrorMsg)
 
 data Lit
   = LInt    Integer
@@ -105,15 +108,6 @@ data Frequency -- frequency kind
   | FVar TName
   | FMax [Frequency]
   deriving (Show,Eq,Ord)
-
-infixr 7 ~>
-a ~> b = TArr a b
-
-infix 6 ==>
-cs ==> t = Typing mempty cs t
-
-infix 4 ~~
-(~~) = CEq
 
 type Semantic = Ty
 type PrimitiveType = Ty
@@ -286,6 +280,18 @@ data Constraint a
   | CClass Class a
   | Split a a a
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+
+infixr 7 ~>
+a ~> b = TArr a b
+
+infix 6 ==>
+cs ==> t = Typing mempty cs t
+
+infix 4 ~~
+(~~) = CEq
+
+infix 9 @@
+(@@) = CClass
 
 data Class
   = CNum

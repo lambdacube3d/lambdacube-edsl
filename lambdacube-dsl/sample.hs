@@ -252,10 +252,10 @@ parseLC fname = do
       --print $ pretty $ delta r
       --print $ pretty r
       --putStrLn $ ppShow e
-      case inference src e of
+      case inference e of
         Right t   -> do
           --putStrLn $ ppShow t
           return (Right t)
         Left m    -> do
-          putStrLn $ "error: " ++ m
-          return (Left m)
+          putStrLn $ "error: " ++ m src
+          return (Left $ m src)
