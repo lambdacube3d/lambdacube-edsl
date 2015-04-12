@@ -359,8 +359,9 @@ reduceTF reduced fail nothing = \case
     TFMat (TV4F C) (TV2F C) -> reduced $ TM42F C
     TFMat (TV4F C) (TV3F C) -> reduced $ TM43F C
     TFMat (TV4F C) (TV4F C) -> reduced $ TM44F C
-    TFMat (TVar _ _) _ -> nothing
-    TFMat _ (TVar _ _) -> nothing
+    TFMat TVar{} TVar{} -> nothing
+    TFMat TVar{} x | x `elem` [TV2F C, TV3F C, TV4F C] -> nothing
+    TFMat x TVar{} | x `elem` [TV2F C, TV3F C, TV4F C] -> nothing
     TFMat _ _ -> fail "no instance"
 
     TFMatVecElem (TV2F C)  -> reduced $ TFloat C
@@ -384,7 +385,7 @@ reduceTF reduced fail nothing = \case
     TFMatVecElem (TM42F C) -> reduced $ TFloat C
     TFMatVecElem (TM43F C) -> reduced $ TFloat C
     TFMatVecElem (TM44F C) -> reduced $ TFloat C
-    TFMatVecElem (TVar _ _) -> nothing
+    TFMatVecElem TVar{} -> nothing
     TFMatVecElem _ -> fail "no instance"
 
     TFMatVecScalarElem (TFloat C) -> reduced $ TFloat C
@@ -405,13 +406,14 @@ reduceTF reduced fail nothing = \case
     TFVec (TNat 2) (TBool C)  -> reduced $ TV2B C
     TFVec (TNat 3) (TBool C)  -> reduced $ TV3B C
     TFVec (TNat 4) (TBool C)  -> reduced $ TV4B C
-    TFVec (TVar _ _) _ -> nothing
-    TFVec _ (TVar _ _) -> nothing
+    TFVec TVar{} TVar{} -> nothing
+    TFVec TVar{} x | x `elem` [TFloat C, TInt C, TWord C, TBool C] -> nothing
+    TFVec n TVar{} | n `elem` [TNat 2, TNat 3, TNat 4] -> nothing
     TFVec _ _ -> fail "no instance"
 
     TFVecScalar (TNat 1) ty -> case ty of
         _ | ty `elem` [TFloat C, TInt C, TWord C, TBool C] -> reduced ty
-        TVar _ _ -> nothing
+        TVar{} -> nothing
         _ -> fail "no instace"
     TFVecScalar n ty -> reduceTF reduced fail nothing $ TFVec n ty
 
@@ -424,7 +426,7 @@ reduceTF reduced fail nothing = \case
             TInput C a        -> Just $ Just a
             Depth a           -> Just $ Just a
             Color a           -> Just $ Just a
-            TVar _ _ -> Just Nothing
+            TVar{} -> Just Nothing
             _ -> Nothing
 
     TFFragOps ty -> case ty of
@@ -433,12 +435,12 @@ reduceTF reduced fail nothing = \case
       where
         f = \case
             TFragmentOperation C a -> Just $ Just a
-            TVar _ _ -> Just Nothing
+            TVar{} -> Just Nothing
             _ -> Nothing
 
     TFColorRepr ty -> case ty of
         TTuple C ts -> reduced . TTuple C $ map Color ts
-        TVar _ _ -> nothing
+        TVar{} -> nothing
         ty -> reduced $ Color ty
 
     TFFrameBuffer ty -> case ty of
@@ -447,8 +449,8 @@ reduceTF reduced fail nothing = \case
       where
         f = \case
             TImage C (TNat n) ty -> Just $ Just (n, ty)
-            TImage C (TVar _ _) _ -> Just Nothing
-            TVar _ _ -> Just Nothing
+            TImage C TVar{} _ -> Just Nothing
+            TVar{} -> Just Nothing
             _ -> Nothing
 
         end (unzip -> (ns, tys))
@@ -530,8 +532,11 @@ isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> e -> Class -> Ty -> e
 isInstance reduce fail keep ok = f where
 
     f _ TVar{} = keep
+
     f IsTypeLevelNatural (TNat _) = ok
+
     f IsValidOutput _ = ok -- TODO
+
     f IsNumComponent (TFloat _) = ok
     f IsNumComponent (TInt _) = ok
     f IsNumComponent (TWord _) = ok
