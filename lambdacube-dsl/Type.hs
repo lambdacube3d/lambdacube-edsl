@@ -15,6 +15,7 @@ import Data.ByteString (ByteString)
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.RWS
+import Control.Arrow
 import Text.Trifecta.Delta (Delta)
 
 type TName = String
@@ -97,6 +98,7 @@ data Exp_ a b
   | EApp_      a b b
   | ELam_      a (Pat a) b
   | ELet_      a (Pat a) b b
+  | ECase_     a b [(Pat a, b)]
   | ETuple_    a [b]
   | ERecord_   a [(FName, b)]
   | EFieldProj_ a FName
@@ -110,6 +112,7 @@ pattern EVar a b = Exp (EVar_ a b)
 pattern EApp a b c = Exp (EApp_ a b c)
 pattern ELam a b c = Exp (ELam_ a b c)
 pattern ELet a b c d = Exp (ELet_ a b c d)
+pattern ECase a b c = Exp (ECase_ a b c)
 pattern ETuple a b = Exp (ETuple_ a b)
 pattern ERecord a b = Exp (ERecord_ a b)
 pattern EFieldProj a c = Exp (EFieldProj_ a c)
@@ -123,6 +126,7 @@ getTag = \case
     EApp      r _ _ -> r
     ELam      r _ _ -> r
     ELet      r _ _ _ -> r
+    ECase     r _ _ -> r
     ETuple    r _ -> r
     ERecord   r _ -> r
     EFieldProj r _ -> r
@@ -136,6 +140,7 @@ setTag f a = \case
     EApp_      _ x y     -> EApp_ a x y
     ELam_      _ x y     -> ELam_ a (f x) y
     ELet_      _ x y z   -> ELet_ a (f x) y z
+    ECase_     _ x y     -> ECase_ a x (map (f *** id) y)
     ETuple_    _ x       -> ETuple_ a x
     ERecord_   _ x       -> ERecord_ a x
     EFieldProj_ _ x      -> EFieldProj_ a x

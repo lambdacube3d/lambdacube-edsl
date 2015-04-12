@@ -14,7 +14,7 @@ module CompositionalLC
 import Data.Function
 import Data.List
 import Data.Maybe
-import Data.Foldable (foldMap)
+import Data.Foldable (Foldable, foldMap, toList)
 import qualified Data.Traversable as T
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -113,14 +113,14 @@ unifyTypings = unifyTypings_ True
 unifyTypings_
     :: (NewVar a, NewVarRes a ~ ([Ty], Typing))
     => Bool         -- bidirectional unification
-    -> [Typing]
-    -> ([Ty] -> a)  -- main typing types -> (extra unification, result typing)
+    -> [[Typing]]   -- unify each group
+    -> ([Ty] -> a)  -- main typing types for each unified group -> (extra unification, result typing)
     -> TCM (Subst, Typing)
 unifyTypings_ bidirectional ts f = do
-    (b, t) <- newV $ f $ map typingType ts
-    let ms = map monoEnv $ t: ts
-    s <- unifyTypes bidirectional $ b: unifyMaps ms
-    (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints $ t: ts
+    (b, t) <- newV $ f $ map (typingType . head) ts
+    let ms = map monoEnv $ t: concat ts
+    s <- unifyTypes bidirectional $ b: (map . map) typingType ts ++ unifyMaps ms
+    (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints $ t: concat ts
     let ty = Typing (Map.unions $ subst s ms) i (subst s $ typingType t)
     ambiguityCheck ty
     return (s, ty)
@@ -187,24 +187,32 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
     ELam _ p f -> do
         (p, tr) <- inferPatTyping p
         tf <- tr $ inferTyping f
-        (s, ty) <- unifyTypings [getTagP p, getTag tf] $ \[a, t] -> ([], [] ==> a ~> t)
+        (s, ty) <- unifyTypings [[getTagP p], [getTag tf]] $ \[a, t] -> ([], [] ==> a ~> t)
         return (s, ELam ty p tf)
     ELet _ p x e -> do              -- TODO: revise
         tx <- inferTyping x
         (p, tr) <- inferPatTyping p
         te <- tr $ inferTyping e
-        (s, ty) <- unifyTypings [getTagP p, getTag tx, getTag te] $ \[pt, t, te] -> ([pt, t], [] ==> te)
+        (s, ty) <- unifyTypings [[getTagP p, getTag tx], [getTag te]] $ \[_, te] -> ([], [] ==> te)
         return (s, ELet ty p tx te)
+    ECase _ e cs -> do
+        te <- inferTyping e
+        cs <- forM cs $ \(p, exp) -> do
+            (p, tr) <- inferPatTyping p
+            exp <- tr $ inferTyping exp
+            return (p, exp)
+        (s, ty) <- unifyTypings [getTag te: map (getTagP . fst) cs, map (getTag . snd) cs] $ \[_, x] -> ([], [] ==> x)
+        return (s, ECase ty te cs)
     Exp e -> do
         e' <- T.mapM inferTyping e
         (id *** Exp . (\t -> setTag undefined t e')) <$> case e' of
-            EApp_ _ tf ta -> unifyTypings [getTag tf, getTag ta] (\[tf, ta] v -> ([tf, ta ~> v], [] ==> v))
+            EApp_ _ tf ta -> unifyTypings [[getTag tf], [getTag ta]] (\[tf, ta] v -> ([tf, ta ~> v], [] ==> v))
             EFieldProj_ _ fn -> (,) mempty <$> fieldProjType fn
-            ERecord_ _ trs -> unifyTypings (map (getTag . snd) trs) $ \tl -> ([], [] ==> TRecord (Map.fromList $ zip (map fst trs) tl))
-            ETuple_ _ te -> unifyTypings (map getTag te) (\tl -> ([], [] ==> TTuple C tl))
+            ERecord_ _ trs -> unifyTypings (map (sep . getTag . snd) trs) $ \tl -> ([], [] ==> TRecord (Map.fromList $ zip (map fst trs) tl))
+            ETuple_ _ te -> unifyTypings (map (sep . getTag) te) (\tl -> ([], [] ==> TTuple C tl))
             ELit_ _ l -> (,) mempty <$> inferLit l
             EVar_ _ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            ETyping_ _ e ty -> unifyTypings_ False [getTag e, ty] $ \[te, ty] -> ([te, ty], [] ==> ty)
+            ETyping_ _ e ty -> unifyTypings_ False [[getTag e, ty]] $ \[ty] -> ([], [] ==> ty)
   where
     inferPatTyping :: Pat Range -> TCM (Pat Typing, TCM a -> TCM a)
     inferPatTyping p_@(Pat p) = local (id *** const [getTagP p_]) $ do
@@ -213,13 +221,14 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
             PLit_ _ n -> noTr $ inferLit n
             Wildcard_ _ -> noTr $ newV $ \t -> t :: Ty
             PVar_ _ n -> addTr (withTyping n) $ newV $ \t -> Typing (Map.singleton n t) mempty t :: Typing
-            PTuple_ _ ps -> noTr $ snd <$> unifyTypings (map (getTagP . fst) ps) (\tl -> ([], [] ==> TTuple C tl))
+            PTuple_ _ ps -> noTr $ snd <$> unifyTypings (map (sep . getTagP . fst) ps) (\tl -> ([], [] ==> TTuple C tl))
             PCon_ _ n ps -> noTr $ do
                 (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-                snd <$> unifyTypings (tn: map (getTagP . fst) ps) (\(tn: tl) v -> ([tn, foldr (~>) v tl], [] ==> v))
-            PRecord_ _ ps -> noTr $ snd <$> unifyTypings (map (getTagP . fst . snd) ps)
+                snd <$> unifyTypings ([tn]: map (sep . getTagP . fst) ps) (\(tn: tl) v -> ([tn, foldr (~>) v tl], [] ==> v))
+            PRecord_ _ ps -> noTr $ snd <$> unifyTypings (map (sep . getTagP . fst . snd) ps)
                 (\tl v v' -> ([], [Split v v' $ TRecord $ Map.fromList $ zip (map fst ps) tl] ==> v))
 
+    sep = (:[])
     noTr = addTr $ const id
     addTr tr m = (\x -> (x, tr x)) <$> m
 
