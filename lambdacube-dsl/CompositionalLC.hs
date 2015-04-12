@@ -107,7 +107,6 @@ unifyTypes xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith
           | a == b = return ()
           | otherwise = lift $ throwErrorTCM $ "can not unify " ++ show a ++ " with " ++ show b
 
-
 unifyTypings
     :: [Typing]
     -> ([Ty] -> ([Ty], Ty))   -- main typing types -> (extra unification, result typing type)
@@ -124,9 +123,6 @@ unifyTypings ts f = do
     groupByFst :: Ord a => [(a, b)] -> [[b]]
     groupByFst = unifyMaps . map (uncurry Map.singleton)
 
-    unifyMaps :: Ord a => [Map a b] -> [[b]]
-    unifyMaps = Map.elems . Map.unionsWith (++) . map ((:[]) <$>)
-
     untilNoUnif acc es = do
         (es, w) <- runWriterT $ do
             -- unify left hand sides where the right hand side is equal:  (t1 ~ F a, t2 ~ F a)  -->  t1 ~ t2
@@ -136,38 +132,6 @@ unifyTypings ts f = do
             concat <$> mapM reduceConstraint es
         s <- unifyTypes w
         if Map.null s then return (acc, es) else untilNoUnif (acc `composeSubst` s) $ nub $ subst s es
-
-    reduceConstraint x = case x of
-        Split (TRecord a) (TRecord b) (TRecord c) ->
-          case (Map.keys $ Map.intersection b c, Map.keys $ a Map.\\ (b <> c), Map.keys $ (b <> c) Map.\\ a) of
-            ([], [], []) -> discard $ unifyMaps [a, b, c]
-            ks -> fail $ "extra keys: " ++ show ks
-        Split (TRecord a) (TRecord b) c@TVar{} -> diff a b c
-        Split (TRecord a) c@TVar{} (TRecord b) -> diff a b c
-        Split c@TVar{} (TRecord a) (TRecord b) -> case Map.keys $ Map.intersection a b of
-            [] -> discard [[c, TRecord $ a <> b]]
-            ks -> fail $ "extra keys: " ++ show ks
-        Split a b c
-            | isRec a && isRec b && isRec c -> keep
-            | otherwise -> fail $ "bad split: " ++ show x
-        CClass c t -> isInstance (\c t -> return [CClass c t]) fail keep (discard []) c t
-        CEq ty f -> reduceTF
-                (\t -> discard [[ty, t]])
-                (fail . (("error during reduction of " ++ show f ++ "  ") ++))
-                (tell [[t1, t2] | (t1, t2) <- backPropTF ty f] >> keep)
-                f
-      where
-        isRec TVar{}    = True
-        isRec TRecord{} = True
-        isRec _ = False
-
-        diff a b c = case Map.keys $ b Map.\\ a of
-            [] -> discard $ [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
-            ks -> fail $ "extra keys: " ++ show ks
-
-        discard xs = tell xs >> return []
-        keep = return [x]
-        fail = lift . throwErrorTCM
 
 -- Ambiguous: (Int ~ F a) => Int
 -- Not ambiguous: (Show a, a ~ F b) => b
@@ -180,6 +144,16 @@ ambiguityCheck ty = do
   where
     used = freeVars $ constraints ty
     defined = dependentVars (constraints ty) $ freeVars (monoEnv ty) <> freeVars (typingType ty)
+
+-- complex example:
+--      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
+--      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
+instantiateTyping :: Typing -> TCM (Subst, Typing)
+instantiateTyping ty = do
+    let fv = dependentVars (constraints ty) $ freeVars (typingType ty)  -- TODO: make it more precise if necessary
+    newVars <- replicateM (Set.size fv) (newVar C)
+    let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
+    return (s, subst s ty)
 
 -- compute dependent type vars in constraints
 -- Example:  dependentVars [(a, b) ~ F b c, d ~ F e] [c] == [a,b,c]
@@ -206,12 +180,12 @@ inferTyping :: Exp Range -> TCM (Exp Typing)
 inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
     ELam _ n f -> do
         tv <- newV $ \t -> return $ Typing (Map.singleton n t) mempty t :: TCM Typing
-        tf <- insert' n tv $ inferTyping f
+        tf <- withTyping n tv $ inferTyping f
         (s, ty) <- unifyTypings [tv, getTag tf] $ \[a, t] -> ([], a ~> t)
         return (s, ELam ty n tf)
     ELet _ n x e -> do
         tx <- inferTyping x
-        te <- insert' n (getTag tx) $ inferTyping e
+        te <- withTyping n (getTag tx) $ inferTyping e
         return (mempty, ELet (getTag te) n tx te)
     Exp e -> do
         e' <- T.mapM inferTyping e
@@ -223,27 +197,17 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
             ELit_ _ l -> (,) mempty <$> inferLit l
             EVar_ _ n -> inferPrimFun
                 (\x -> unifyTypings [x] (\[x] -> ([], x)))
-                (asks fst >>= maybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") instTyping . Map.lookup n)
+                (asks fst >>= maybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") instantiateTyping . Map.lookup n)
                 n
         return (s, Exp $ setTag t e')
   where
-    -- complex example:
-    --      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
-    --      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
-    instTyping ty = do
-        let fv = dependentVars (constraints ty) $ freeVars (typingType ty)  -- TODO: make it more precise if necessary
-        newVars <- replicateM (Set.size fv) (newVar C)
-        let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
-        return (s, subst s ty)
-
-    fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
-
-    insert' n t m = do
-        penv <- asks fst
-        if Map.member n penv || Set.member n primFunSet
-            then throwErrorTCM $ "Variable name clash: " ++ n
-            else local (Map.insert n t *** id) m
-
     addSubst (s, t@EApp{}) = ESubst (getTag t) s t
     addSubst (s, t@EVar{}) = ESubst (getTag t) s t
     addSubst (_, t) = t
+
+withTyping :: EName -> Typing -> TCM a -> TCM a
+withTyping n t m = do
+    penv <- asks fst
+    if Map.member n penv || Set.member n primFunSet
+        then throwErrorTCM $ "Variable name clash: " ++ n
+        else local (Map.insert n t *** id) m

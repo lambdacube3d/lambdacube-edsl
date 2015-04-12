@@ -15,6 +15,8 @@ import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Char8 (ByteString)
 import Control.Monad.Except
 import Control.Monad.RWS
+import Control.Monad.Writer
+import Control.Applicative
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -318,149 +320,19 @@ primFunSet = Set.fromList
     PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
 
-backPropTF :: Ty -> TypeFun Ty -> [(Ty, Ty)]
-backPropTF (TM22F C) (TFMat a b) = [(a, TV2F C), (b, TV2F C)]
-backPropTF (TM23F C) (TFMat a b) = [(a, TV2F C), (b, TV3F C)]
-backPropTF (TM24F C) (TFMat a b) = [(a, TV2F C), (b, TV4F C)]
-backPropTF (TM32F C) (TFMat a b) = [(a, TV3F C), (b, TV2F C)]
-backPropTF (TM33F C) (TFMat a b) = [(a, TV3F C), (b, TV3F C)]
-backPropTF (TM34F C) (TFMat a b) = [(a, TV3F C), (b, TV4F C)]
-backPropTF (TM42F C) (TFMat a b) = [(a, TV4F C), (b, TV2F C)]
-backPropTF (TM43F C) (TFMat a b) = [(a, TV4F C), (b, TV3F C)]
-backPropTF (TM44F C) (TFMat a b) = [(a, TV4F C), (b, TV4F C)]
-backPropTF (TV2F C) (TFVec a b) = [(a, TNat 2), (b, TFloat C)]
-backPropTF (TV3F C) (TFVec a b) = [(a, TNat 3), (b, TFloat C)]
-backPropTF (TV4F C) (TFVec a b) = [(a, TNat 4), (b, TFloat C)]
-backPropTF (TV2I C) (TFVec a b) = [(a, TNat 2), (b, TInt C)]
-backPropTF (TV3I C) (TFVec a b) = [(a, TNat 3), (b, TInt C)]
-backPropTF (TV4I C) (TFVec a b) = [(a, TNat 4), (b, TInt C)]
-backPropTF (TV2U C) (TFVec a b) = [(a, TNat 2), (b, TWord C)]
-backPropTF (TV3U C) (TFVec a b) = [(a, TNat 3), (b, TWord C)]
-backPropTF (TV4U C) (TFVec a b) = [(a, TNat 4), (b, TWord C)]
-backPropTF (TV2B C) (TFVec a b) = [(a, TNat 2), (b, TBool C)]
-backPropTF (TV3B C) (TFVec a b) = [(a, TNat 3), (b, TBool C)]
-backPropTF (TV4B C) (TFVec a b) = [(a, TNat 4), (b, TBool C)]
-backPropTF b' (TFVecScalar (TNat 1) b) = [(b, b')]
-backPropTF (TFloat C) (TFVecScalar a b) = [(a, TNat 1), (b, TFloat C)]
-backPropTF (TInt C)   (TFVecScalar a b) = [(a, TNat 1), (b, TInt C)]
-backPropTF (TWord C)  (TFVecScalar a b) = [(a, TNat 1), (b, TWord C)]
-backPropTF (TBool C)  (TFVecScalar a b) = [(a, TNat 1), (b, TBool C)]
-backPropTF x (TFVecScalar a b) = backPropTF x (TFVec a b)
-backPropTF _ _ = []
+matches TVar{} _ = True
+matches x ts = x `elem` ts
 
-reduceTF :: (Ty -> e) -> (String -> e) -> e -> TypeFun Ty -> e
-reduceTF reduced fail nothing = \case
-    TFMat (TV2F C) (TV2F C) -> reduced $ TM22F C
-    TFMat (TV2F C) (TV3F C) -> reduced $ TM23F C
-    TFMat (TV2F C) (TV4F C) -> reduced $ TM24F C
-    TFMat (TV3F C) (TV2F C) -> reduced $ TM32F C
-    TFMat (TV3F C) (TV3F C) -> reduced $ TM33F C
-    TFMat (TV3F C) (TV4F C) -> reduced $ TM34F C
-    TFMat (TV4F C) (TV2F C) -> reduced $ TM42F C
-    TFMat (TV4F C) (TV3F C) -> reduced $ TM43F C
-    TFMat (TV4F C) (TV4F C) -> reduced $ TM44F C
-    TFMat TVar{} TVar{} -> nothing
-    TFMat TVar{} x | x `elem` [TV2F C, TV3F C, TV4F C] -> nothing
-    TFMat x TVar{} | x `elem` [TV2F C, TV3F C, TV4F C] -> nothing
-    TFMat _ _ -> fail "no instance"
+unifyMaps :: Ord a => [Map a b] -> [[b]]
+unifyMaps = Map.elems . Map.unionsWith (++) . map ((:[]) <$>)
 
-    TFMatVecElem (TV2F C)  -> reduced $ TFloat C
-    TFMatVecElem (TV3F C)  -> reduced $ TFloat C
-    TFMatVecElem (TV4F C)  -> reduced $ TFloat C
-    TFMatVecElem (TV2I C)  -> reduced $ TInt C
-    TFMatVecElem (TV3I C)  -> reduced $ TInt C
-    TFMatVecElem (TV4I C)  -> reduced $ TInt C
-    TFMatVecElem (TV2U C)  -> reduced $ TWord C
-    TFMatVecElem (TV3U C)  -> reduced $ TWord C
-    TFMatVecElem (TV4U C)  -> reduced $ TWord C
-    TFMatVecElem (TV2B C)  -> reduced $ TBool C
-    TFMatVecElem (TV3B C)  -> reduced $ TBool C
-    TFMatVecElem (TV4B C)  -> reduced $ TBool C
-    TFMatVecElem (TM22F C) -> reduced $ TFloat C
-    TFMatVecElem (TM23F C) -> reduced $ TFloat C
-    TFMatVecElem (TM24F C) -> reduced $ TFloat C
-    TFMatVecElem (TM32F C) -> reduced $ TFloat C
-    TFMatVecElem (TM33F C) -> reduced $ TFloat C
-    TFMatVecElem (TM34F C) -> reduced $ TFloat C
-    TFMatVecElem (TM42F C) -> reduced $ TFloat C
-    TFMatVecElem (TM43F C) -> reduced $ TFloat C
-    TFMatVecElem (TM44F C) -> reduced $ TFloat C
-    TFMatVecElem TVar{} -> nothing
-    TFMatVecElem _ -> fail "no instance"
+isRec TRecord{} = True
+isRec t = isVar t
 
-    TFMatVecScalarElem (TFloat C) -> reduced $ TFloat C
-    TFMatVecScalarElem (TInt C)   -> reduced $ TInt C
-    TFMatVecScalarElem (TWord C)  -> reduced $ TWord C
-    TFMatVecScalarElem (TBool C)  -> reduced $ TBool C
-    TFMatVecScalarElem t -> reduceTF reduced fail nothing $ TFMatVecElem t
+isVar TVar{} = True
+isVar _ = False
 
-    TFVec (TNat 2) (TFloat C) -> reduced $ TV2F C
-    TFVec (TNat 3) (TFloat C) -> reduced $ TV3F C
-    TFVec (TNat 4) (TFloat C) -> reduced $ TV4F C
-    TFVec (TNat 2) (TInt C)   -> reduced $ TV2I C
-    TFVec (TNat 3) (TInt C)   -> reduced $ TV3I C
-    TFVec (TNat 4) (TInt C)   -> reduced $ TV4I C
-    TFVec (TNat 2) (TWord C)  -> reduced $ TV2U C
-    TFVec (TNat 3) (TWord C)  -> reduced $ TV3U C
-    TFVec (TNat 4) (TWord C)  -> reduced $ TV4U C
-    TFVec (TNat 2) (TBool C)  -> reduced $ TV2B C
-    TFVec (TNat 3) (TBool C)  -> reduced $ TV3B C
-    TFVec (TNat 4) (TBool C)  -> reduced $ TV4B C
-    TFVec TVar{} TVar{} -> nothing
-    TFVec TVar{} x | x `elem` [TFloat C, TInt C, TWord C, TBool C] -> nothing
-    TFVec n TVar{} | n `elem` [TNat 2, TNat 3, TNat 4] -> nothing
-    TFVec _ _ -> fail "no instance"
-
-    TFVecScalar (TNat 1) ty -> case ty of
-        _ | ty `elem` [TFloat C, TInt C, TWord C, TBool C] -> reduced ty
-        TVar{} -> nothing
-        _ -> fail "no instace"
-    TFVecScalar n ty -> reduceTF reduced fail nothing $ TFVec n ty
-
-    TFFTRepr' ty -> case ty of
-        TTuple C ts -> maybe (fail "expected Input/Interpolated/Depth/Color inside tuple") (maybe nothing (reduced . TTuple C) . sequence) $ mapM f ts
-        _ -> maybe (fail "expected Input/Interpolated/Depth/Color") (maybe nothing reduced) $ f ty
-      where
-        f = \case
-            TInterpolated C a -> Just $ Just a
-            TInput C a        -> Just $ Just a
-            Depth a           -> Just $ Just a
-            Color a           -> Just $ Just a
-            TVar{} -> Just Nothing
-            _ -> Nothing
-
-    TFFragOps ty -> case ty of
-        TTuple C ts -> maybe (fail "expected FragmentOperation inside tuple") (maybe nothing (reduced . TTuple C) . sequence) $ mapM f ts
-        _ -> maybe (fail "expected FragmentOperation") (maybe nothing reduced) $ f ty
-      where
-        f = \case
-            TFragmentOperation C a -> Just $ Just a
-            TVar{} -> Just Nothing
-            _ -> Nothing
-
-    TFColorRepr ty -> case ty of
-        TTuple C ts -> reduced . TTuple C $ map Color ts
-        TVar{} -> nothing
-        ty -> reduced $ Color ty
-
-    TFFrameBuffer ty -> case ty of
-        TTuple C ts -> maybe (fail "expected (Image Nat) inside tuple") (maybe nothing end . sequence) $ mapM f ts
-        _ -> maybe (fail "expected (Image Nat)") (maybe nothing (end . (:[]))) $ f ty
-      where
-        f = \case
-            TImage C (TNat n) ty -> Just $ Just (n, ty)
-            TImage C TVar{} _ -> Just Nothing
-            TVar{} -> Just Nothing
-            _ -> Nothing
-
-        end (unzip -> (ns, tys))
-            | Just n <- allSame ns = reduced $ TFrameBuffer C (TNat n) $ tTuple C tys
-            | otherwise = fail "frambuffer number of layers differ"
-
-        allSame (x:xs) = if all (==x) xs then Just x else Nothing
-
-        tTuple f [x] = x
-        tTuple f xs = TTuple f xs
+iff x y b = if b then x else y
 
 {- TODO
   type family NoStencilRepr a :: *
@@ -512,7 +384,218 @@ reduceTF reduced fail nothing = \case
     type instance TexelRepr (Sampler dim arr (v t) RGB)     = V3 t
     type instance TexelRepr (Sampler dim arr (v t) RGBA)    = V4 t
 -}
-    f -> nothing
+
+type TCMC = WriterT [[Ty]] TCM
+
+reduceConstraint :: Constraint Ty -> TCMC [Constraint Ty]
+reduceConstraint x = case x of
+
+    Split (TRecord a) (TRecord b) (TRecord c) ->
+      case (Map.keys $ Map.intersection b c, Map.keys $ a Map.\\ (b <> c), Map.keys $ (b <> c) Map.\\ a) of
+        ([], [], []) -> discard $ unifyMaps [a, b, c]
+        ks -> failure $ "extra keys: " ++ show ks
+    Split (TRecord a) (TRecord b) c@TVar{} -> diff a b c
+    Split (TRecord a) c@TVar{} (TRecord b) -> diff a b c
+    Split c@TVar{} (TRecord a) (TRecord b) -> case Map.keys $ Map.intersection a b of
+        [] -> discard [[c, TRecord $ a <> b]]
+        ks -> failure $ "extra keys: " ++ show ks
+    Split a b c
+        | isRec a && isRec b && isRec c -> nothing
+        | otherwise -> failure $ "bad split: " ++ show x
+
+    CClass _ TVar{} -> nothing
+    CClass c t -> case c of
+
+        IsTypeLevelNatural -> case t of
+            TNat{} -> discard []
+            _ -> noInstance
+
+        IsValidOutput -> discard [] -- TODO
+
+        IsValidFrameBuffer -> case t of
+            TTuple C ts
+                | any isVar ts -> nothing
+                | sum [1 | Depth{} <- ts] <= 1 && sum [1 | Stencil{} <- ts] <= 1 -> discard []
+                | otherwise -> noInstance
+            _ -> discard []
+
+        IsInputTuple -> case t of
+            TTuple C ts
+                | any isVar ts -> nothing
+                | length [() | TInput{} <- ts] == length ts -> discard []
+                | otherwise -> noInstance
+            _ -> discard []
+
+        _ -> maybe noInstance (iff (discard []) noInstance . Set.member t) $ Map.lookup c instances
+      where
+        noInstance = failure $ "no " ++ show c ++ " instance for " ++ show t
+
+    CEq res f -> case f of
+
+        TFMat (TV2F C) (TV2F C) -> reduced $ TM22F C
+        TFMat (TV2F C) (TV3F C) -> reduced $ TM23F C
+        TFMat (TV2F C) (TV4F C) -> reduced $ TM24F C
+        TFMat (TV3F C) (TV2F C) -> reduced $ TM32F C
+        TFMat (TV3F C) (TV3F C) -> reduced $ TM33F C
+        TFMat (TV3F C) (TV4F C) -> reduced $ TM34F C
+        TFMat (TV4F C) (TV2F C) -> reduced $ TM42F C
+        TFMat (TV4F C) (TV3F C) -> reduced $ TM43F C
+        TFMat (TV4F C) (TV4F C) -> reduced $ TM44F C
+        TFMat a b -> check (a `matches` [TV2F C, TV3F C, TV4F C] && b `matches` [TV2F C, TV3F C, TV4F C]) $ observe res $ \case
+            TM22F C -> keep [[a, TV2F C], [b, TV2F C]]
+            TM23F C -> keep [[a, TV2F C], [b, TV3F C]]
+            TM24F C -> keep [[a, TV2F C], [b, TV4F C]]
+            TM32F C -> keep [[a, TV3F C], [b, TV2F C]]
+            TM33F C -> keep [[a, TV3F C], [b, TV3F C]]
+            TM34F C -> keep [[a, TV3F C], [b, TV4F C]]
+            TM42F C -> keep [[a, TV4F C], [b, TV2F C]]
+            TM43F C -> keep [[a, TV4F C], [b, TV3F C]]
+            TM44F C -> keep [[a, TV4F C], [b, TV4F C]]
+            _ -> fail "no instance"
+
+        TFVec (TNat 2) (TFloat C) -> reduced $ TV2F C
+        TFVec (TNat 3) (TFloat C) -> reduced $ TV3F C
+        TFVec (TNat 4) (TFloat C) -> reduced $ TV4F C
+        TFVec (TNat 2) (TInt C)   -> reduced $ TV2I C
+        TFVec (TNat 3) (TInt C)   -> reduced $ TV3I C
+        TFVec (TNat 4) (TInt C)   -> reduced $ TV4I C
+        TFVec (TNat 2) (TWord C)  -> reduced $ TV2U C
+        TFVec (TNat 3) (TWord C)  -> reduced $ TV3U C
+        TFVec (TNat 4) (TWord C)  -> reduced $ TV4U C
+        TFVec (TNat 2) (TBool C)  -> reduced $ TV2B C
+        TFVec (TNat 3) (TBool C)  -> reduced $ TV3B C
+        TFVec (TNat 4) (TBool C)  -> reduced $ TV4B C
+        TFVec a b -> check (a `matches` [TNat 2, TNat 3, TNat 4] && b `matches` [TFloat C, TInt C, TWord C, TBool C])
+                     $ observe res $ \case
+            TV2F C -> keep [[a, TNat 2], [b, TFloat C]]
+            TV3F C -> keep [[a, TNat 3], [b, TFloat C]]
+            TV4F C -> keep [[a, TNat 4], [b, TFloat C]]
+            TV2I C -> keep [[a, TNat 2], [b, TInt C]]
+            TV3I C -> keep [[a, TNat 3], [b, TInt C]]
+            TV4I C -> keep [[a, TNat 4], [b, TInt C]]
+            TV2U C -> keep [[a, TNat 2], [b, TWord C]]
+            TV3U C -> keep [[a, TNat 3], [b, TWord C]]
+            TV4U C -> keep [[a, TNat 4], [b, TWord C]]
+            TV2B C -> keep [[a, TNat 2], [b, TBool C]]
+            TV3B C -> keep [[a, TNat 3], [b, TBool C]]
+            TV4B C -> keep [[a, TNat 4], [b, TBool C]]
+            _ -> fail "no instance"
+
+        TFVecScalar a b -> case a of
+            TNat 1 -> case b of
+                TVar{} | res `matches` [TFloat C, TInt C, TWord C, TBool C] -> keep [[b, res]]
+                b -> check (b `elem` [TFloat C, TInt C, TWord C, TBool C]) $ reduced b
+            TVar{} -> check (b `matches` [TFloat C, TInt C, TWord C, TBool C]) $ observe res $ \case
+                TFloat C -> keep [[a, TNat 1], [b, TFloat C]]
+                TInt C   -> keep [[a, TNat 1], [b, TInt C]]
+                TWord C  -> keep [[a, TNat 1], [b, TWord C]]
+                TBool C  -> keep [[a, TNat 1], [b, TBool C]]
+                _ -> like $ TFVec a b
+            _ -> like $ TFVec a b
+
+        TFMatVecElem t -> observe t $ \case
+            TV2F C  -> reduced $ TFloat C
+            TV3F C  -> reduced $ TFloat C
+            TV4F C  -> reduced $ TFloat C
+            TV2I C  -> reduced $ TInt C
+            TV3I C  -> reduced $ TInt C
+            TV4I C  -> reduced $ TInt C
+            TV2U C  -> reduced $ TWord C
+            TV3U C  -> reduced $ TWord C
+            TV4U C  -> reduced $ TWord C
+            TV2B C  -> reduced $ TBool C
+            TV3B C  -> reduced $ TBool C
+            TV4B C  -> reduced $ TBool C
+            TM22F C -> reduced $ TFloat C
+            TM23F C -> reduced $ TFloat C
+            TM24F C -> reduced $ TFloat C
+            TM32F C -> reduced $ TFloat C
+            TM33F C -> reduced $ TFloat C
+            TM34F C -> reduced $ TFloat C
+            TM42F C -> reduced $ TFloat C
+            TM43F C -> reduced $ TFloat C
+            TM44F C -> reduced $ TFloat C
+            _ -> fail "no instance"
+
+        TFMatVecScalarElem t -> observe t $ \case
+            TFloat C -> reduced $ TFloat C
+            TInt C   -> reduced $ TInt C
+            TWord C  -> reduced $ TWord C
+            TBool C  -> reduced $ TBool C
+            t -> like $ TFMatVecElem t
+
+        TFColorRepr ty -> observe ty $ \case
+            TTuple C ts -> reduced . TTuple C $ map Color ts
+            ty -> reduced $ Color ty
+
+        TFFTRepr' ty -> caseTuple "expected Input/Interpolated/Depth/Color" ty (reduced . tTuple C) $ \case
+            TInterpolated C a -> reduce' a
+            TInput C a        -> reduce' a
+            Depth a           -> reduce' a
+            Color a           -> reduce' a
+            _ -> fail'
+
+        TFFragOps ty -> caseTuple "expected FragmentOperation" ty (reduced . tTuple C) $ \case
+            TFragmentOperation C a -> reduce' a
+            _ -> fail'
+
+        TFFrameBuffer ty -> caseTuple "expected (Image Nat)" ty end $ \case
+            TImage C a b -> observe' a $ \case
+                TNat n -> reduce' (n, b)
+                _ -> fail'
+            _ -> fail'
+          where
+            end (unzip -> (n: ns, tys))
+                | all (==n) ns = reduced $ TFrameBuffer C (TNat n) $ tTuple C tys
+                | otherwise = fail "frambuffer number of layers differ"
+
+        _ -> nothing
+      where
+        like f = reduceConstraint (CEq res f)
+        reduced t = discard [[res, t]]
+        check b m = if b then m else fail "no instance"
+        fail = failure . (("error during reduction of " ++ show res ++ " ~ " ++ show f ++ "  ") ++)
+
+        reduce' = Just . Just
+        nothing' = Just Nothing
+        fail' = Nothing
+        observe' TVar{} _ = nothing'
+        observe' x f = f x
+
+        caseTuple :: String -> Ty -> ([a] -> TCMC [Constraint Ty]) -> (Ty -> Maybe (Maybe a)) -> TCMC [Constraint Ty]
+        caseTuple msg ty end f = observe ty $ \case
+            TTuple C ts -> maybe (fail $ msg ++ " inside tuple") (maybe nothing end . sequence) $ mapM f' ts
+            _ -> maybe (fail msg) (maybe nothing (end . (:[]))) $ f' ty
+          where f' x = observe' x f
+
+        tTuple f [x] = x
+        tTuple f xs = TTuple f xs
+  where
+    diff a b c = case Map.keys $ b Map.\\ a of
+        [] -> discard $ [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
+        ks -> failure $ "extra keys: " ++ show ks
+
+    discard xs = tell xs >> return []
+    keep xs = tell xs >> return [x]
+    failure = lift . throwErrorTCM
+
+    nothing = keep []
+    observe TVar{} _ = nothing
+    observe x f = f x
+
+instances :: Map Class (Set Ty)
+instances = Map.fromList
+    [ item CNum         [TInt C, TFloat C]
+    , item IsIntegral   [TInt C, TWord C]
+    , item IsNumComponent [TFloat C, TInt C, TWord C, TV2F C, TV3F C, TV4F C]
+    , item IsSigned     [TFloat C, TInt C]
+    , item IsNum        [TFloat C, TInt C, TWord C]
+    , item IsFloating   [TFloat C, TV2F C, TV3F C, TV4F C, TM22F C, TM23F C, TM24F C, TM32F C, TM33F C, TM34F C, TM42F C, TM43F C, TM44F C]
+    , item IsComponent  [TFloat C, TInt C, TWord C, TBool C, TV2F C, TV3F C, TV4F C]
+    ]
+  where
+    item a b = (a, Set.fromList b)
+
 
 data InjType
     = ITMat | ITVec | ITVecScalar
@@ -527,73 +610,6 @@ injType = \case
 
 vecS = TFVecScalar
 
--- reduce: reduce class constraints:  Eq [a] --> Eq a
-isInstance :: (Class -> Ty -> e) -> (String -> e) -> e -> e -> Class -> Ty -> e
-isInstance reduce fail keep ok = f where
-
-    f _ TVar{} = keep
-
-    f IsTypeLevelNatural (TNat _) = ok
-
-    f IsValidOutput _ = ok -- TODO
-
-    f IsNumComponent (TFloat _) = ok
-    f IsNumComponent (TInt _) = ok
-    f IsNumComponent (TWord _) = ok
-    f IsNumComponent (TV2F _) = ok
-    f IsNumComponent (TV3F _) = ok
-    f IsNumComponent (TV4F _) = ok
-
-    f IsSigned (TFloat _) = ok
-    f IsSigned (TInt _) = ok
-
-    f IsNum (TFloat _) = ok
-    f IsNum (TInt _) = ok
-    f IsNum (TWord _) = ok
-
-    f IsIntegral (TInt _) = ok
-    f IsIntegral (TWord _) = ok
-
-    f IsFloating (TFloat _) = ok
-    f IsFloating (TV2F   _) = ok
-    f IsFloating (TV3F   _) = ok
-    f IsFloating (TV4F   _) = ok
-    f IsFloating (TM22F  _) = ok
-    f IsFloating (TM23F  _) = ok
-    f IsFloating (TM24F  _) = ok
-    f IsFloating (TM32F  _) = ok
-    f IsFloating (TM33F  _) = ok
-    f IsFloating (TM34F  _) = ok
-    f IsFloating (TM42F  _) = ok
-    f IsFloating (TM43F  _) = ok
-    f IsFloating (TM44F  _) = ok
-
-    f IsComponent (TFloat _) = ok
-    f IsComponent (TInt _) = ok
-    f IsComponent (TWord _) = ok
-    f IsComponent (TBool _) = ok
-    f IsComponent (TV2F _) = ok
-    f IsComponent (TV3F _) = ok
-    f IsComponent (TV4F _) = ok
-
-    f IsValidFrameBuffer (TTuple C ts)
-        | sum [1 | TVar{} <- ts] > 0 = keep
-        | sum [1 | Depth{} <- ts] <= 1 && sum [1 | Stencil{} <- ts] <= 1 = ok
-        | otherwise = fail "not valid framebuffer"
-    f IsValidFrameBuffer _ = ok
-
-    f IsInputTuple (TTuple C ts)
-        | sum [1 | TVar{} <- ts] > 0 = keep
-        | length [() | TInput{} <- ts] == length ts = ok
-        | otherwise = fail "not valid attribute input definition"
-    f IsInputTuple _ = ok
-
-    f c t = case Map.lookup c instances of
-        Nothing -> fail $ "no " ++ show c ++ " instance for " ++ show t
-        Just ts -> if Set.member t ts then ok else fail $ "no " ++ show c ++ " instance for " ++ show t
-
-instances :: Map Class (Set Ty)
-instances = Map.fromList [(CNum,Set.fromList [TInt C,TFloat C])]
 
 joinTupleType :: Ty -> Ty -> Ty
 joinTupleType (TTuple f l) (TTuple _ r) = TTuple f (l ++ r)
@@ -939,6 +955,10 @@ inferPrimFun ok nothing = f where
 --  a -> throwErrorTCM $ "unknown primitive: " ++ show a
   a -> nothing
 
+fieldProjType :: FName -> TCM Typing
+fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
+
+
 inferLit :: Lit -> TCM Typing
 inferLit a = case a of
   LInt _ -> do
@@ -961,7 +981,7 @@ checkUnambError = do
 throwErrorTCM :: String -> TCM a
 throwErrorTCM s = checkUnambError >> errorTCM >>= throwError . fmap (++ s)
 
-errorTCM :: TCM (ByteString -> String)
+errorTCM :: TCM ErrorMsg
 errorTCM = do
   rl <- asks snd
   return $ \src -> let
