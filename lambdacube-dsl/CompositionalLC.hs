@@ -196,7 +196,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
             ERecord_ _ trs -> unifyTypings (map (getTag . snd) trs) $ \tl -> ([], TRecord $ Map.fromList $ zip (map fst trs) tl)
             ETuple_ _ te -> unifyTypings (map getTag te) (\tl -> ([], TTuple C tl))
             ELit_ _ l -> (,) mempty <$> inferLit l
-            EVar_ _ n -> asks (getPolyEnv . fst) >>= maybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") id . Map.lookup n
+            EVar_ _ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
   where
     addSubst (s, t@EApp{}) = ESubst (getTag t) s t
     addSubst (s, t@EVar{}) = ESubst (getTag t) s t
