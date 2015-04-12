@@ -323,13 +323,6 @@ data Class
   | IsInputTuple
   deriving (Show,Eq,Ord)
 
-isValidOutput      = CClass IsValidOutput
-isNum              = CClass CNum
-isSigned           = CClass IsSigned
-isIntegral         = CClass IsIntegral
-isTypeLevelNatural = CClass IsTypeLevelNatural
-isFloating         = CClass IsFloating
-
 data TypeFun a
   = TFMat a a               -- may be data family
   | TFMatVecElem a

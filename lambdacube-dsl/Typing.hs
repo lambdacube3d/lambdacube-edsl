@@ -450,26 +450,26 @@ primFunMap = Map.fromList $ execWriter $ do
 
   "AccumulationContext" --> \t' t -> [t' ~~ TFFragOps t] ==> t ~> TAccumulationContext C t'
 
-  "ColorImage"          --> \a d color t -> [isTypeLevelNatural a, isNum t, color ~~ vecS d t] ==> a ~> color
-                                                                            ~> TImage C a (Color color)
-  "DepthImage"          --> \a -> [isTypeLevelNatural a] ==> a ~> TFloat C  ~> TImage C a (Depth $ TFloat C)
-  "StencilImage"        --> \a -> [isTypeLevelNatural a] ==> a ~> TInt C    ~> TImage C a (Stencil $ TInt C)
+  "ColorImage"          --> \a d color t -> [IsTypeLevelNatural @@ a, IsNum @@ t, color ~~ vecS d t] ==> a ~> color
+                                                                               ~> TImage C a (Color color)
+  "DepthImage"          --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TFloat C  ~> TImage C a (Depth $ TFloat C)
+  "StencilImage"        --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TInt C    ~> TImage C a (Stencil $ TInt C)
 
   ["Smooth", "NoPerspective"]
-                        ---> \t -> [isFloating t] ==> t ~> TInterpolated C t
-  ["Flat"]              ---> \t ->                    t ~> TInterpolated C t
+                        ---> \t -> [IsFloating @@ t] ==> t ~> TInterpolated C t
+  ["Flat"]              ---> \t ->                       t ~> TInterpolated C t
 
-  "ColorOp"             --> \d mask c color -> [mask ~~ vecS d (TBool C), color ~~ vecS d c, isNum c] ==> TBlending C c ~> mask
+  "ColorOp"             --> \d mask c color -> [mask ~~ vecS d (TBool C), color ~~ vecS d c, IsNum @@ c] ==> TBlending C c ~> mask
                                                                 ~> TFragmentOperation C (Color color)
   "DepthOp"             --> TComparisonFunction C ~> TBool C    ~> TFragmentOperation C (Depth $ TFloat C)
     -- "StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
 
   -- Blending
-  "NoBlending"          --> \t ->                                           TBlending C t
-  "BlendLogicOp"        --> \t -> [isIntegral t] ==> TLogicOperation C ~>   TBlending C t
+  "NoBlending"          --> \t ->                                            TBlending C t
+  "BlendLogicOp"        --> \t -> [IsIntegral @@ t] ==> TLogicOperation C ~> TBlending C t
   "Blend"               --> TTuple C [TBlendEquation C,TBlendEquation C]
                          ~> TTuple C [TTuple C [TBlendingFactor C,TBlendingFactor C],TTuple C [TBlendingFactor C,TBlendingFactor C]]
-                         ~> TV4F C ~>                                       TBlending C (TFloat C)
+                         ~> TV4F C ~>                                        TBlending C (TFloat C)
   -- Fragment Filter
   "PassAll"             --> \t ->                   TFragmentFilter C t
   "Filter"              --> \t -> (t ~> TBool C) ~> TFragmentFilter C t
@@ -486,7 +486,7 @@ primFunMap = Map.fromList $ execWriter $ do
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
                     -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
   -}
-  "Accumulate"          --> \a b n t -> [isValidOutput b, t ~~ TFFTRepr' b] ==>
+  "Accumulate"          --> \a b n t -> [IsValidOutput @@ b, t ~~ TFFTRepr' b] ==>
                            TAccumulationContext C b
                         ~> TFragmentFilter C a
                         ~> (a ~> TFragmentOut C b)
@@ -499,17 +499,17 @@ primFunMap = Map.fromList $ execWriter $ do
   "ScreenOut"           --> \a b -> TFrameBuffer C a b ~> TOutput C
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
-  ["PrimAdd", "PrimSub", "PrimMul"]     ---> \a t   -> [t ~~ TFMatVecElem a, isNum t] ==> a ~> a ~> a
-  ["PrimAddS", "PrimSubS", "PrimMulS"]  ---> \a t   -> [t ~~ TFMatVecScalarElem a, isNum t] ==> a ~> t ~> a
-  ["PrimDiv", "PrimMod"]                ---> \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> a ~> a
-  ["PrimDivS", "PrimModS"]              ---> \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> t ~> a
-  ["PrimNeg"]                           ---> \a t   -> [t ~~ TFMatVecScalarElem a, isSigned t] ==> a ~> a
+  ["PrimAdd", "PrimSub", "PrimMul"]     ---> \a t   -> [t ~~ TFMatVecElem a, IsNum @@ t] ==> a ~> a ~> a
+  ["PrimAddS", "PrimSubS", "PrimMulS"]  ---> \a t   -> [t ~~ TFMatVecScalarElem a, IsNum @@ t] ==> a ~> t ~> a
+  ["PrimDiv", "PrimMod"]                ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a
+  ["PrimDivS", "PrimModS"]              ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> a
+  ["PrimNeg"]                           ---> \a t   -> [t ~~ TFMatVecScalarElem a, IsSigned @@ t] ==> a ~> a
   -- Bit-wise Functions
-  ["PrimBAnd", "PrimBOr", "PrimBXor"]   ---> \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> a ~> a
-  ["PrimBAndS", "PrimBOrS", "PrimBXorS"]---> \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> t ~> a
-  ["PrimBNot"]                          ---> \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> a
-  ["PrimBShiftL", "PrimBShiftR"]        ---> \d a b t -> [isIntegral t, a ~~ vecS d t, b ~~ vecS d (TWord C)] ==> a ~> b ~> a
-  ["PrimBShiftLS", "PrimBShiftRS"]      ---> \d a t -> [isIntegral t, a ~~ vecS d t] ==> a ~> TWord C ~> a
+  ["PrimBAnd", "PrimBOr", "PrimBXor"]   ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> a ~> a
+  ["PrimBAndS", "PrimBOrS", "PrimBXorS"]---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> t ~> a
+  ["PrimBNot"]                          ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> a
+  ["PrimBShiftL", "PrimBShiftR"]        ---> \d a b t -> [IsIntegral @@ t, a ~~ vecS d t, b ~~ vecS d (TWord C)] ==> a ~> b ~> a
+  ["PrimBShiftLS", "PrimBShiftRS"]      ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> TWord C ~> a
   -- Logic Functions
   ["PrimAnd", "PrimOr", "PrimXor"]      ---> TBool C ~> TBool C ~> TBool C
   ["PrimNot"]                           ---> \d a   -> [a ~~ vecS d (TBool C)] ==> a ~> a
@@ -521,13 +521,13 @@ primFunMap = Map.fromList $ execWriter $ do
   -- Common Functions
   ["PrimFloor", "PrimTrunc", "PrimRound", "PrimRoundEven", "PrimCeil", "PrimFract"]
                                         ---> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> a
-  ["PrimMin", "PrimMax"]                ---> \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> a ~> a
-  ["PrimMinS", "PrimMaxS"]              ---> \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> t ~> a
+  ["PrimMin", "PrimMax"]                ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a
+  ["PrimMinS", "PrimMaxS"]              ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> a
   ["PrimIsNan", "PrimIsInf"]            ---> \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS d (TBool C)] ==> a ~> b
-  ["PrimAbs", "PrimSign"]               ---> \d a t -> [isSigned t, a ~~ vecS d t] ==> a ~> a
+  ["PrimAbs", "PrimSign"]               ---> \d a t -> [IsSigned @@ t, a ~~ vecS d t] ==> a ~> a
   "PrimModF"            --> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> TTuple C [a,a]
-  "PrimClamp"           --> \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> a ~> a ~> a
-  "PrimClampS"          --> \d a t -> [isNum t, a ~~ vecS d t] ==> a ~> t ~> t ~> a
+  "PrimClamp"           --> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a ~> a
+  "PrimClampS"          --> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> t ~> a
   "PrimMix"             --> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a ~> a
   "PrimMixS"            --> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> TFloat C ~> a
   "PrimMixB"            --> \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS d (TBool C)] ==> a ~> a ~> b ~> a
@@ -559,7 +559,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "PrimMulMatMat"       --> \a b c i j k -> [a ~~ TFMat i j, b ~~ TFMat j k, c ~~ TFMat i k] ==> a ~> b ~> c
   -- Vector and Scalar Relational Functions
   ["PrimLessThan", "PrimLessThanEqual", "PrimGreaterThan", "PrimGreaterThanEqual", "PrimEqualV", "PrimNotEqualV"]
-                        ---> \d a b t -> [isNum t, a ~~ vecS d t, b ~~ vecS d (TBool C)] ==> a ~> a ~> b
+                        ---> \d a b t -> [IsNum @@ t, a ~~ vecS d t, b ~~ vecS d (TBool C)] ==> a ~> a ~> b
   ["PrimEqual", "PrimNotEqual"]
                         ---> \a t  -> [t ~~ TFMatVecScalarElem a] ==> a ~> a ~> TBool C
   -- Fragment Processing Functions
@@ -573,7 +573,6 @@ primFunMap = Map.fromList $ execWriter $ do
 
 fieldProjType :: FName -> TCM Typing
 fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
-
 
 inferLit :: Lit -> TCM Typing
 inferLit a = case a of
