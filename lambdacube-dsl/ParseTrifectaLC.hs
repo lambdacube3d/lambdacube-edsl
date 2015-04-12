@@ -80,9 +80,9 @@ letin = do
     return $ foldr ($) a l
 
 def :: P (Exp Range -> Exp Range)
-def = (\p1 n a d p2 e -> ELet (p1,p2) n (foldr (args (p1,p2)) d a) e) <$> position <*> var <*> many var <* kw "=" <*> localIndentation Gt expr <*> position
+def = (\p1 n p a d p2 e -> ELet (p1,p2) (PVar (p1,p) n) (foldr (args (p1,p2)) d a) e) <$> position <*> var <*> position <*> many var <* kw "=" <*> localIndentation Gt expr <*> position
   where
-    args r n e = ELam r n e
+    args r n e = ELam r (PVar r n) e
 
 expr :: P (Exp Range)
 expr = buildExpressionParser table expr'
@@ -113,7 +113,7 @@ atom =
   parens expr
 
 lam :: P (Exp Range)
-lam = (\p1 n e p2 -> ELam (p1,p2) n e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
+lam = (\p1 n e p2 -> ELam (p1,p2) (PVar (p1,p2) n) e) <$> position <* op "\\" <*> var <* op "->" <*> expr <*> position
 
 indentState = mkIndentationState 0 infIndentation True Ge
 

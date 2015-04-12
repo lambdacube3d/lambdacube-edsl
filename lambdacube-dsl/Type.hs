@@ -51,6 +51,43 @@ data Lit
   | LNat    Int
   deriving (Show,Eq,Ord)
 
+newtype Pat a = Pat (Pat_ a (Pat a))
+  deriving (Show,Eq,Ord)
+
+data Pat_ a b
+  = PLit_ a Lit
+  | PVar_ a EName
+  | PCon_ a EName [b]
+  | PTuple_ a [b]
+  | PRecord_ a [(FName, b)]
+  | Wildcard_ a
+  deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+
+pattern PLit a b = Pat (PLit_ a b)
+pattern PVar a b = Pat (PVar_ a b)
+pattern PCon a b c = Pat (PCon_ a b c)
+pattern PTuple a b = Pat (PTuple_ a b)
+pattern PRecord a b = Pat (PRecord_ a b)
+pattern Wildcard a = Pat (Wildcard_ a)
+
+getTagP :: Pat a -> a
+getTagP = \case
+    PLit      a x       -> a
+    PVar      a x       -> a
+    PCon      a n x     -> a
+    PTuple    a x       -> a
+    PRecord   a x       -> a
+    Wildcard  a         -> a
+
+setTagP :: a -> Pat_ x b -> Pat_ a b
+setTagP a = \case
+    PLit_      _ x       -> PLit_ a x
+    PVar_      _ x       -> PVar_ a x
+    PCon_      _ n x     -> PCon_ a n x
+    PTuple_    _ x       -> PTuple_ a x
+    PRecord_   _ x       -> PRecord_ a x
+    Wildcard_  _         -> Wildcard_ a
+
 newtype Exp a = Exp (Exp_ a (Exp a))
   deriving (Show,Eq,Ord)
 
@@ -58,8 +95,8 @@ data Exp_ a b
   = ELit_      a Lit
   | EVar_      a EName
   | EApp_      a b b
-  | ELam_      a EName b
-  | ELet_      a EName b b
+  | ELam_      a (Pat a) b
+  | ELet_      a (Pat a) b b
   | ETuple_    a [b]
   | ERecord_   a [(FName, b)]
   | EFieldProj_ a FName
@@ -88,13 +125,13 @@ getTag (ERecord   r _) = r
 getTag (EFieldProj r _) = r
 getTag (ESubst    r _ _) = r
 
-setTag :: a -> Exp_ x b -> Exp_ a b
-setTag a = \case
+setTag :: (Pat x -> Pat a) -> a -> Exp_ x b -> Exp_ a b
+setTag f a = \case
     ELit_      _ x       -> ELit_ a x
     EVar_      _ x       -> EVar_ a x
     EApp_      _ x y     -> EApp_ a x y
-    ELam_      _ x y     -> ELam_ a x y
-    ELet_      _ x y z   -> ELet_ a x y z
+    ELam_      _ x y     -> ELam_ a (f x) y
+    ELet_      _ x y z   -> ELet_ a (f x) y z
     ETuple_    _ x       -> ETuple_ a x
     ERecord_   _ x       -> ERecord_ a x
     EFieldProj_ _ x      -> EFieldProj_ a x

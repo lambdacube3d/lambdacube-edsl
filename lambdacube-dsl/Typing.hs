@@ -323,11 +323,9 @@ injType = \case
 
 vecS = TFVecScalar
 
-infix 0 -->
-s --> m = tell [(s, newV m)]
-
-infix 0 --->
+infix 0 --->, -->
 ss ---> m = tell [(s, newV m) | s <- ss]
+s --> m = [s] ---> m
 
 isPrimFun n = Map.member n primFunMap
 {-
@@ -616,15 +614,15 @@ errorTCM = do
 
 class NewVar a where
     type NewVarRes a :: *
+    type NewVarRes a = a
     newV :: a -> TCM (NewVarRes a)
 
 instance NewVar (TCM a) where
     type NewVarRes (TCM a) = a
     newV = id
 
-instance NewVar Typing where
-    type NewVarRes Typing = Typing
-    newV = return
+instance NewVar Typing where newV = return
+instance NewVar (a, b) where newV = return
 
 instance NewVar Ty where
     type NewVarRes Ty = Typing

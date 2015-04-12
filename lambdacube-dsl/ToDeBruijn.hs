@@ -92,7 +92,7 @@ type NFEnv = Map EName EnvVar
 toNF :: Subst -> NFEnv -> Exp Typing -> [NF]
 toNF sub env (ELit t l) = [Arg l]
 toNF sub env (EApp t a b) = eval $ {-[App $ toTy (m,i,subst sub t)] `mappend` -} toNF sub env a `mappend` toNF sub env b
-toNF sub env (ELet t n a b) = --case toNF env a of -- TODO
+toNF sub env (ELet t (PVar _ n) a b) = --case toNF env a of -- TODO
   -- x@(N _:_) -> error $ "let is not fully supported: " ++ show x
   --x -> toNF (Map.insert n x env) b
   toNF sub (Map.insert n (LetVar a) env) b
@@ -104,7 +104,7 @@ toNF sub env (EVar t n)
       Nothing -> error $ "unknown variable: " ++ n
       Just (LetVar x) -> eval $ toNF sub env x
       Just LamVar     -> let ty = toTy' sub t in eval [N ty $ var ty 0 ""]
-toNF sub env (ELam t n e) =
+toNF sub env (ELam t (PVar _ n) e) =
   case eval $ toNF sub (Map.insert n LamVar env) e of
     [N _ x] -> let ty = toTy' sub t in [N ty $ lam ty $ body x]
     x -> error $ "lam is not fully supported: " ++ show x
