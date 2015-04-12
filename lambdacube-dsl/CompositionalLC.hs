@@ -267,7 +267,7 @@ infer penv exp = withRanges [getTag exp] $ addSubst <$> case exp of
     --      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
     --      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
     instTyping ty = do
-        let fv = growDefinedVars (instEnv ty) $ freeVars (monoEnv ty)         -- TODO: revise
+        let fv = growDefinedVars (instEnv ty) $ freeVars (typingType ty)         -- TODO: revise
         newVars <- replicateM (Set.size fv) (newVar C)
         let s = Map.fromList $ zip (Set.toList fv) newVars
         return (s, subst s ty)
