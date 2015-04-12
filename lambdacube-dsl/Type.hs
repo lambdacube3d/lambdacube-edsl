@@ -325,9 +325,10 @@ pattern TVertexOut a b = Ty (TVertexOut_ a b)
 pattern TVertexStream a b c = Ty (TVertexStream_ a b c)
 
 data Constraint a
-  = CEq a (TypeFun a)  -- CEq t f   ~~~  t ~ TFun f
-  | CClass Class a
-  | Split a a a
+  = CEq a (TypeFun a)   -- unification between a type and a fully applied type function; CEq t f:  t ~ f
+  | CUnify a a          -- unification between (non-type-function) types; CUnify t s:  t ~ s
+  | CClass Class a      -- class constraint
+  | Split a a a         -- Split x y z:  x, y, z are records; fields of x = disjoint union of the fields of y and z
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 infixr 7 ~>
@@ -338,6 +339,9 @@ cs ==> t = Typing mempty cs t
 
 infix 4 ~~
 (~~) = CEq
+
+infix 4 ~~~
+(~~~) = CUnify
 
 infix 9 @@
 (@@) = CClass

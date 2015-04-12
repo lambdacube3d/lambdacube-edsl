@@ -136,6 +136,8 @@ reduceConstraint x = case x of
       where
         noInstance = failure $ "no " ++ show c ++ " instance for " ++ show t
 
+    CUnify a b -> discard [[a, b]]
+
     CEq res f -> case f of
 
         TFMat (TV2F C) (TV2F C) -> reduced $ TM22F C
