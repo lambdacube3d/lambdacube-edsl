@@ -1,5 +1,4 @@
 module Backend.GL (
-    module Backend.GL.Mesh,
     -- Array, Buffer, Texture
     Array(..),
     ArrayType(..),
@@ -80,4 +79,3 @@ import Backend.GL.Type
 import Backend.GL.Backend
 import Backend.GL.Data
 import Backend.GL.Input
-import Backend.GL.Mesh
