@@ -9,7 +9,7 @@ module Type where
 
 import Data.Map (Map)
 import Data.Monoid
-import Data.Foldable
+import Data.Foldable hiding (foldr)
 import Data.Traversable
 import Data.ByteString (ByteString)
 import Control.Monad.Except
@@ -285,15 +285,18 @@ pattern TVertexStream a b c = TCon a "VertexStream" [b, c]
 
 pattern TPrimitiveStream a b c d e = Ty (TPrimitiveStream_ a b c d e)
 
+infixr 7 ~>, ~~>
+a ~> b = TArr a b
+
+(~~>) :: [Ty] -> Ty -> Ty
+args ~~> res = foldr (~>) res args
+
 data Constraint a
   = CEq a (TypeFun a)   -- unification between a type and a fully applied type function; CEq t f:  t ~ f
   | CUnify a a          -- unification between (non-type-function) types; CUnify t s:  t ~ s
   | CClass Class a      -- class constraint
   | Split a a a         -- Split x y z:  x, y, z are records; fields of x = disjoint union of the fields of y and z
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
-
-infixr 7 ~>
-a ~> b = TArr a b
 
 infix 6 ==>
 cs ==> t = Typing mempty cs t

@@ -40,25 +40,28 @@ data Exp
 toType :: Typing -> Type
 toType (Typing m i t) = ForAll [(n,Star) | n <- Set.toList $ freeVars t] t
 
-toCore :: AST.Exp Typing -> Exp
-toCore e = case e of
-  AST.ELit t a      -> ELit a
-  AST.ETuple t a    -> ETuple $ fmap toCore a
-  AST.EVar (Typing _ _ t) n -> EVar $ VarE n $ ForAll [] t
-  AST.ELet t (PVar _ n) a b  -> ELet (VarE n $ toType $ getTag a) (toCore a) (toCore b)
+toCore :: Subst -> AST.Exp (Subst, Typing) -> Exp
+toCore sub e = case e of
+  AST.ELit _ a      -> ELit a
+  AST.ETuple _ a    -> ETuple $ fmap toCore' a
+  AST.EVar (_, Typing _ _ t) n -> EVar $ VarE n $ ForAll [] t
+  AST.ELet _ (PVar _ n) a b  -> ELet (VarE n $ toType' $ getTag a) (toCore' a) (toCore' b)
   AST.ELam t (PVar _ n) a
-                    -> let ForAll tv _ = toType t
-                           lam = ELam (VarE n $ ForAll [] (TVar C "TODO"){-TODO-}) (toCore a)
+                    -> let ForAll tv _ = toType' t
+                           lam = ELam (VarE n $ ForAll [] (TVar C "TODO"){-TODO-}) (toCore' a)
                            tyLam (tv,k) a = ELam (VarT tv k) a
                        in foldr tyLam lam tv -- introduce additional type lambda parameter for polymorphic functions; insert new variable to Core Env
-  AST.ESubst _ s (AST.EApp t   f a)
-                    -> let ForAll tv _ = toType $ getTag f
+  AST.EApp _ f a
+                    -> let ForAll tv _ = toType' $ getTag f
                            tyApp ((tv,k):xs) = EApp (tyApp xs) $ EType $ ForAll [] $ Map.findWithDefault (TVar C tv) tv s
-                           tyApp [] = toCore f
-                       in EApp (tyApp tv) (toCore a) -- insert type applications
-  AST.ESubst _ _ e  -> toCore e
+                           tyApp [] = toCore' f
+                       in EApp (tyApp tv) (toCore' a) -- insert type applications
   _ -> error $ "toCore: " ++ show e
-
+ where
+    toCore' = toCore sub'
+    s = fst $ getTag e
+    sub' = s `composeSubst` sub
+    toType' (_, t) = toType $ subst sub' t
 
 -- test case
 idCoreLam = ELam (VarT "a" Star) $ ELam (VarE "x" $ ForAll [] $ TVar C "a") $ EVar $ VarE "x" $ ForAll [] $ TVar C "a"
@@ -68,5 +71,5 @@ idCore = ELet (VarE "id" $ ForAll [("t",Star)] $ TVar C "t" ~> TVar C "t") idCor
 test = do
   (src, Success e) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
-  putStrLn $ ppShow $ toCore $ either (error . ($ src)) id $ inference e
+  putStrLn $ ppShow $ toCore mempty $ either (error . ($ src)) id $ inference e
 

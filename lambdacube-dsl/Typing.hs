@@ -300,15 +300,12 @@ primFunMap = Map.fromList $ execWriter $ do
   "V2F"     --> TFloat C ~> TFloat C ~> TV2F C
   "V3F"     --> TFloat C ~> TFloat C ~> TFloat C ~> TV3F C
   "V4F"     --> TFloat C ~> TFloat C ~> TFloat C ~> TFloat C ~> TV4F C
-  "M22F"    --> TV2F C ~> TV2F C ~> TM22F C
-  "M23F"    --> TV2F C ~> TV2F C ~> TV2F C ~> TM23F C
-  "M24F"    --> TV2F C ~> TV2F C ~> TV2F C ~> TV2F C ~> TM24F C
-  "M32F"    --> TV3F C ~> TV3F C ~> TM32F C
-  "M33F"    --> TV3F C ~> TV3F C ~> TV3F C ~> TM33F C
-  "M34F"    --> TV3F C ~> TV3F C ~> TV3F C ~> TV3F C ~> TM34F C
-  "M42F"    --> TV4F C ~> TV4F C ~> TM42F C
-  "M43F"    --> TV4F C ~> TV4F C ~> TV4F C ~> TM43F C
-  "M44F"    --> TV4F C ~> TV4F C ~> TV4F C ~> TV4F C ~> TM44F C
+
+  -- "M22F" --> TV2F C ~> TV2F C ~> TM22F C       for M22F .. M44F
+  tell  [ ("M" ++ show i ++ show j ++ "F", newV $ replicate j (TVec i $ TFloat C) ~~> TMat i j (TFloat C))
+        | i <- [2..4], j <- [2..4]
+        ]
+
   -- Input declaration
   "Uni"     --> \t -> TInput C t ~> t
   "IBool"   --> TString C ~> TInput C (TBool  C)

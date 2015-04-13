@@ -207,7 +207,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
     inferPatTyping :: Pat Range -> TCM (Pat (Subst, Typing), TCM a -> TCM a)
     inferPatTyping p_@(Pat p) = local (id *** const [getTagP p_]) $ do
         p' <- T.mapM inferPatTyping p
-        (\(t, tr) -> (Pat $ setTagP t $ fst <$> p', tr . foldr (.) id (foldMap (sep . snd) p'))) <$> case p' of
+        (\(t, tr) -> (Pat $ setTagP t $ fst <$> p', foldr (.) tr $ map snd $ toList p')) <$> case p' of
             PLit_ _ n -> noTr $ noSubst $ inferLit n
             Wildcard_ _ -> noTr $ noSubst $ newV $ \t -> t :: Ty
             PVar_ _ n -> addTr (withTyping n . snd) $ noSubst $ newV $ \t -> Typing (Map.singleton n t) mempty t :: Typing
@@ -218,10 +218,9 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
             PRecord_ _ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
                 (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip fs tl] ==> v)
 
-    getTag' = sep . snd . getTag
-    getTagP' = sep . snd . getTagP . fst
+    getTag' = (:[]) . snd . getTag
+    getTagP' = (:[]) . snd . getTagP . fst
     noSubst = fmap ((,) mempty)
-    sep = (:[])
     noTr = addTr $ const id
     addTr tr m = (\x -> (x, tr x)) <$> m
 
