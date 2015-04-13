@@ -422,11 +422,6 @@ primFunMap = Map.fromList $ execWriter $ do
   "PointSize"           --> TFloat C ~> TPointSize C
   "ProgramPointSize"    -->             TPointSize C
 
-  {-
-    FragmentOut             ::                  FlatExp F a -> FragmentOut (ColorRepr a)
-    FragmentOutDepth        :: Exp F Float  ->  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
-    FragmentOutRastDepth    ::                  FlatExp F a -> FragmentOut (Depth Float :+: ColorRepr a)
-  -}
   "FragmentOut"         --> \a t -> [a ~~ TFColorRepr t] ==> t  ~> TFragmentOut C a
   "FragmentOutDepth"    --> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth $ TFloat C) a] ==> TFloat C ~> t
                                                                 ~> TFragmentOut C b
@@ -477,15 +472,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "Fetch"               --> \a t b -> [IsInputTuple @@ t, b ~~ TFFTRepr' t] ==> TString C ~> TFetchPrimitive C a ~> t ~> TVertexStream C a b
   "Transform"           --> \a b p -> (a ~> TVertexOut C b) ~> TVertexStream C p a ~> TPrimitiveStream C p (TNat 1) C b
   "Rasterize"           --> \a b c -> TRasterContext C a ~> TPrimitiveStream C a b C c ~> TFragmentStream C b c
-  {-
-    Accumulate      :: (GPU a, GPU (FTRepr' b), IsValidOutput b)    -- restriction: depth and stencil optional, arbitrary color component
-                    => AccumulationContext b
-                    -> FragmentFilter a
-                    -> (Exp F a -> FragmentOut (NoStencilRepr b))     -- fragment shader
-                    -> Exp Obj (FragmentStream layerCount a)
-                    -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
-                    -> Exp Obj (FrameBuffer layerCount (FTRepr' b))
-  -}
+
   "Accumulate"          --> \a b n t -> [IsValidOutput @@ b, t ~~ TFFTRepr' b] ==>
                            TAccumulationContext C b
                         ~> TFragmentFilter C a

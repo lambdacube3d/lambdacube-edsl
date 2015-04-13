@@ -204,13 +204,13 @@ inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
     inferPatTyping :: Pat Range -> TCM (Pat Typing, TCM a -> TCM a)
     inferPatTyping p_@(Pat p) = local (id *** const [getTagP p_]) $ do
         p' <- T.mapM inferPatTyping p
-        (\(t, tr) -> (Pat $ setTagP t $ fst <$> p', tr . foldr (.) id (foldMap ((:[]) . snd) p'))) <$> case p' of
+        (\(t, tr) -> (Pat $ setTagP t $ fst <$> p', tr . foldr (.) id (foldMap (sep . snd) p'))) <$> case p' of
             PLit_ _ n -> noTr $ inferLit n
             Wildcard_ _ -> noTr $ newV $ \t -> t :: Ty
             PVar_ _ n -> addTr (withTyping n) $ newV $ \t -> Typing (Map.singleton n t) mempty t :: Typing
             PTuple_ _ ps -> noTr $ snd <$> unifyTypings (map (sep . getTagP . fst) ps) (TTuple C)
             PCon_ _ n ps -> noTr $ do
-                (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
+                (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
                 snd <$> unifyTypings ([tn]: map (sep . getTagP . fst) ps) (\(tn: tl) v -> [tn ~~~ foldr (~>) v tl] ==> v)
             PRecord_ _ ps -> noTr $ snd <$> unifyTypings (map (sep . getTagP . fst . snd) ps)
                 (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip (map fst ps) tl] ==> v)
