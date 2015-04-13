@@ -175,15 +175,15 @@ inference e = runExcept $ fst <$>
 inferTyping :: Exp Range -> TCM (Exp (Subst, Typing))
 inferTyping exp = local (id *** const [getTag exp]) $ case exp of
     ELam _ p f -> do
-        (p, tr) <- inferPatTyping p
+        p_@(p, tr) <- inferPatTyping p
         tf <- tr $ inferTyping f
-        ty <- unifyTypings [[getTagP' p], [getTag' tf]] $ \[a, t] -> a ~> t
+        ty <- unifyTypings [getTagP' p_, getTag' tf] $ \[a, t] -> a ~> t
         return $ ELam ty p tf
     ELet _ p x e -> do              -- TODO: revise
         tx <- inferTyping x
-        (p, tr) <- inferPatTyping p
+        p_@(p, tr) <- inferPatTyping p
         te <- tr $ inferTyping e
-        ty <- unifyTypings [[getTagP' p, getTag' tx], [getTag' te]] $ \[_, te] -> te
+        ty <- unifyTypings [getTagP' p_ ++ getTag' tx, getTag' te] $ \[_, te] -> te
         return $ ELet ty p tx te
     ECase _ e cs -> do
         te <- inferTyping e
@@ -191,18 +191,18 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
             (p, tr) <- inferPatTyping p
             exp <- tr $ inferTyping exp
             return (p, exp)
-        ty <- unifyTypings [getTag' te: map (getTagP' . fst) cs, map (getTag' . snd) cs] $ \[_, x] -> x
+        ty <- unifyTypings [getTag' te ++ concatMap getTagP' cs, concatMap (getTag' . snd) cs] $ \[_, x] -> x
         return $ ECase ty te cs
     Exp e -> do
         e' <- T.mapM inferTyping e
         Exp . (\t -> setTag undefined t e') <$> case e' of
-            EApp_ _ tf ta -> unifyTypings [[getTag' tf], [getTag' ta]] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
-            EFieldProj_ _ fn -> (,) mempty <$> fieldProjType fn
-            ERecord_ _ trs -> unifyTypings (map (sep . getTag' . snd) trs) $ TRecord . Map.fromList . zip (map fst trs)
-            ETuple_ _ te -> unifyTypings (map (sep . getTag') te) $ TTuple C
-            ELit_ _ l -> (,) mempty <$> inferLit l
+            EApp_ _ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
+            EFieldProj_ _ fn -> noSubst $ fieldProjType fn
+            ERecord_ _ (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
+            ETuple_ _ te -> unifyTypings (map (getTag') te) $ TTuple C
+            ELit_ _ l -> noSubst $ inferLit l
             EVar_ _ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            ETyping_ _ e ty -> unifyTypings_ False [[getTag' e, ty]] $ \[ty] -> ty
+            ETyping_ _ e ty -> unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
   where
     inferPatTyping :: Pat Range -> TCM (Pat (Subst, Typing), TCM a -> TCM a)
     inferPatTyping p_@(Pat p) = local (id *** const [getTagP p_]) $ do
@@ -211,15 +211,15 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
             PLit_ _ n -> noTr $ noSubst $ inferLit n
             Wildcard_ _ -> noTr $ noSubst $ newV $ \t -> t :: Ty
             PVar_ _ n -> addTr (withTyping n . snd) $ noSubst $ newV $ \t -> Typing (Map.singleton n t) mempty t :: Typing
-            PTuple_ _ ps -> noTr $ unifyTypings (map (sep . getTagP' . fst) ps) (TTuple C)
+            PTuple_ _ ps -> noTr $ unifyTypings (map getTagP' ps) (TTuple C)
             PCon_ _ n ps -> noTr $ do
                 (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
-                unifyTypings ([tn]: map (sep . getTagP' . fst) ps) (\(tn: tl) v -> [tn ~~~ foldr (~>) v tl] ==> v)
-            PRecord_ _ ps -> noTr $ unifyTypings (map (sep . getTagP' . fst . snd) ps)
-                (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip (map fst ps) tl] ==> v)
+                unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ foldr (~>) v tl] ==> v)
+            PRecord_ _ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
+                (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip fs tl] ==> v)
 
-    getTag' = snd . getTag
-    getTagP' = snd . getTagP
+    getTag' = sep . snd . getTag
+    getTagP' = sep . snd . getTagP . fst
     noSubst = fmap ((,) mempty)
     sep = (:[])
     noTr = addTr $ const id
