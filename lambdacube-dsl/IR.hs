@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 module IR where
 
 import Data.Int
@@ -6,9 +7,9 @@ import Data.ByteString.Char8 (ByteString)
 import Data.Trie (Trie)
 import Data.Vector (Vector)
 
-data V2 a = V2 !a !a deriving (Eq,Ord,Show,Read)
-data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Read)
-data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Read)
+data V2 a = V2 !a !a deriving (Eq,Ord,Show,Read,Functor)
+data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Read,Functor)
+data V4 a = V4 !a !a !a !a deriving (Eq,Ord,Show,Read,Functor)
 
 -- matrices are stored in column major order
 type M22F = V2 V2F

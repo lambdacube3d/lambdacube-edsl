@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, PackageImports #-}
 
-import Graphics.Rendering.OpenGL.Raw.Core32 (glViewport,gl_LINE_SMOOTH,glEnable)
+import Graphics.Rendering.OpenGL.Raw.Core33 (glViewport,gl_LINE_SMOOTH,glEnable)
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Data.Monoid
 import Control.Monad
