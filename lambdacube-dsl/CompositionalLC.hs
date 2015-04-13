@@ -102,19 +102,19 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
 unifyTypings = unifyTypings_ True
 
 unifyTypings_
-    :: (NewVar a, NewVarRes a ~ Typing)
+    :: NewVar a
     => Bool         -- bidirectional unification
     -> [[Typing]]   -- unify each group
     -> ([Ty] -> a)  -- main typing types for each unified group -> result typing
     -> TCM (Subst, Typing)
 unifyTypings_ bidirectional ts f = do
-    t <- newV $ f $ map (typingType . head) ts
+    (s', t) <- newV $ f $ map (typingType . head) ts
     let ms = map monoEnv $ t: concat ts
     s <- unifyTypes bidirectional $ (map . map) typingType ts ++ unifyMaps ms
     (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints $ t: concat ts
     let ty = Typing (Map.unions $ subst s ms) i (subst s $ typingType t)
     ambiguityCheck ty
-    return (s, ty)
+    return (s <> s', ty)
   where
     groupByFst :: Ord a => [(a, b)] -> [[b]]
     groupByFst = unifyMaps . map (uncurry Map.singleton)
@@ -174,7 +174,7 @@ dependentVars ie s = cycle mempty s
 
 
 inference :: Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
-inference = inference_ $ PolyEnv $ fmap ((,) mempty) <$> primFunMap
+inference = inference_ $ PolyEnv primFunMap
 
 inference_ :: PolyEnv -> Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
 inference_ primFunMap e = runExcept $ fst <$>
@@ -207,7 +207,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
         e' <- T.mapM inferTyping e
         Exp . (\t -> setTag undefined t e') <$> case e' of
             EApp_ _ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
-            EFieldProj_ _ fn -> noSubst $ fieldProjType fn
+            EFieldProj_ _ fn -> fieldProjType fn
             ERecord_ _ (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
             ETuple_ _ te -> unifyTypings (map (getTag') te) $ TTuple C
             ELit_ _ l -> noSubst $ inferLit l
@@ -219,8 +219,8 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
         p' <- T.mapM (inferPatTyping polymorph) p
         (t, tr) <- case p' of
             PLit_ _ n -> noTr $ noSubst $ inferLit n
-            Wildcard_ _ -> noTr $ noSubst $ newV $ \t -> t :: Ty
-            PVar_ _ n -> addTr (\t -> Map.singleton n (snd t)) $ noSubst $ newV $ \t ->
+            Wildcard_ _ -> noTr $ newV $ \t -> t :: Ty
+            PVar_ _ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
                 if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t :: Typing
             PTuple_ _ ps -> noTr $ unifyTypings (map getTagP' ps) (TTuple C)
             PCon_ _ n ps -> noTr $ do

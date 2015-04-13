@@ -284,11 +284,7 @@ isPrimFun n = Map.member n primFunMap
     PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
 
-primFunMap' :: Map EName Typing
-primFunMap' = either (error "primFunMap'") id $ runExcept $ fst <$>
-    evalRWST (T.sequence primFunMap) (mempty, mempty) (mempty, ['b':show i | i <- [0..]])
-
-primFunMap :: Map EName (TCM Typing)
+primFunMap :: Map EName (TCM (Subst, Typing))
 primFunMap = Map.fromList $ execWriter $ do
   ["Tup", "Const"]  ---> \a -> a ~> a       -- temporary const constructor
   ["True", "False"] ---> TBool C
@@ -474,7 +470,7 @@ primFunMap = Map.fromList $ execWriter $ do
   forM_ [2..4] $ \i ->
       "PrimNoise" ++ show i  --> \d a b -> [a ~~ floatVecS d, b ~~ floatVecS (TNat i)] ==> a ~> b
 
-fieldProjType :: FName -> TCM Typing
+fieldProjType :: FName -> TCM (Subst, Typing)
 fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
 
 inferLit :: Lit -> TCM Typing
@@ -517,24 +513,17 @@ errorTCM = do
     in concat sl
 
 class NewVar a where
-    type NewVarRes a :: *
-    type NewVarRes a = a
-    newV :: a -> TCM (NewVarRes a)
+    newV_ :: Subst -> a -> TCM (Subst, Typing)
 
-instance NewVar (TCM a) where
-    type NewVarRes (TCM a) = a
-    newV = id
+newV = newV_ mempty
 
-instance NewVar Typing where newV = return
-instance NewVar (a, b) where newV = return
-
-instance NewVar Ty where
-    type NewVarRes Ty = Typing
-    newV t = return $ [] ==> t
-
+instance NewVar (TCM Typing)    where newV_ s = fmap $ (,) s
+instance NewVar Typing          where newV_ s t = return (s, t)
+instance NewVar Ty              where newV_ s t = return (s, [] ==> t)
 instance NewVar a => NewVar (Ty -> a) where
-    type NewVarRes (Ty -> a) = NewVarRes a
-    newV f = newVar C >>= newV . f
+    newV_ s f = do
+        v@(TVar _ n) <- newVar C
+        newV_ (Map.insert n v s) $ f v
 
 newVar :: Frequency -> TCM Ty
 newVar f = do
