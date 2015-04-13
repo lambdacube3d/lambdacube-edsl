@@ -189,12 +189,16 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
         tf <- withTyping tr $ inferTyping f
         ty <- unifyTypings [getTagP' p_, getTag' tf] $ \[a, t] -> a ~> t
         return $ ELam (id *** removeMonoVars (Map.keysSet tr) $ ty) p tf
-    ELet _ p x e -> do
+    ELet _ (PVar _ n) x e -> do
         tx <- inferTyping x
-        p_@(p, tr) <- inferPatTyping True p
-        (s, _) <- unifyTypings [getTagP' p_ ++ getTag' tx] $ \[te] -> te
-        te <- withTyping (subst s tr) $ inferTyping e
-        return $ ELet (s, head $ getTag' te) p tx te
+        te <- withTyping (Map.singleton n $ head $ getTag' tx) $ inferTyping e
+        return $ ELet (mempty, head $ getTag' te) (PVar (getTag tx) n) tx te
+    ELet _ p x e -> do          -- monomorph let; TODO?
+        tx <- inferTyping x
+        p_@(p, tr) <- inferPatTyping False p
+        te <- withTyping tr $ inferTyping e
+        ty <- unifyTypings [getTagP' p_ ++ getTag' tx, getTag' te] $ \[_, te] -> te
+        return $ ELet ty p tx te
     ECase _ e cs -> do
         te <- inferTyping e
         cs <- forM cs $ \(p, exp) -> do
