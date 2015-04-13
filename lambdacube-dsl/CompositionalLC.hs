@@ -9,6 +9,7 @@ module CompositionalLC
     ( inference
     , composeSubst
     , subst
+    , freeVars
     ) where
 
 import Data.Function

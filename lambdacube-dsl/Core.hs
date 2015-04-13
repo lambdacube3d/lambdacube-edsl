@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 module Core where
 
 import Data.Monoid
@@ -7,9 +8,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import CompositionalLC hiding (Exp(..))
 import qualified CompositionalLC as AST
-import Type
+import qualified Type as AST
+import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp)
+import Text.Trifecta (Result(..))
 
-import ParseTrifectaLC (parseLC)
+import Parser (parseLC_)
 import Text.Show.Pretty
 
 data Kind
@@ -35,22 +38,26 @@ data Exp
   deriving (Show,Eq,Ord)
 
 toType :: Typing -> Type
-toType (m,i,t) = ForAll [(n,Star) | n <- Set.toList $ freeVarsTy t] t
+toType (Typing m i t) = ForAll [(n,Star) | n <- Set.toList $ freeVars t] t
 
 toCore :: AST.Exp Typing -> Exp
 toCore e = case e of
   AST.ELit t a      -> ELit a
   AST.ETuple t a    -> ETuple $ fmap toCore a
-  AST.EVar (_,_,t) _ n -> EVar $ VarE n $ ForAll [] t
-  AST.ELet t n a b  -> ELet (VarE n $ toType $ getTag a) (toCore a) (toCore b)
-  AST.ELam t n a    -> let ForAll tv _ = toType t
+  AST.EVar (Typing _ _ t) n -> EVar $ VarE n $ ForAll [] t
+  AST.ELet t (PVar _ n) a b  -> ELet (VarE n $ toType $ getTag a) (toCore a) (toCore b)
+  AST.ELam t (PVar _ n) a
+                    -> let ForAll tv _ = toType t
                            lam = ELam (VarE n $ ForAll [] (TVar C "TODO"){-TODO-}) (toCore a)
                            tyLam (tv,k) a = ELam (VarT tv k) a
                        in foldr tyLam lam tv -- introduce additional type lambda parameter for polymorphic functions; insert new variable to Core Env
-  AST.EApp t s f a  -> let ForAll tv _ = toType $ getTag f
+  AST.ESubst _ s (AST.EApp t   f a)
+                    -> let ForAll tv _ = toType $ getTag f
                            tyApp ((tv,k):xs) = EApp (tyApp xs) $ EType $ ForAll [] $ Map.findWithDefault (TVar C tv) tv s
                            tyApp [] = toCore f
                        in EApp (tyApp tv) (toCore a) -- insert type applications
+  AST.ESubst _ _ e  -> toCore e
+  _ -> error $ "toCore: " ++ show e
 {-
   = ELit      a Lit
   | EPrimFun  a PrimFun
@@ -64,10 +71,12 @@ toCore e = case e of
 let id x = x
 in id 1
 -}
+{-
 idAST = AST.ELet (Map.fromList [],[],TInt C) "id" (
         AST.ELam (Map.fromList [],[],TArr (TVar C "t0") (TVar C "t0")) "x"
           (AST.EVar (Map.fromList [("x",TVar C "t0")],[],TVar C "t0") mempty "x"))
         (AST.EApp (Map.fromList [],[],TInt C) Map.empty (AST.EVar (Map.fromList [],[],TArr (TVar C "t2") (TVar C "t2")) mempty "id") (AST.ELit (Map.fromList [],[],TInt C) (LInt 1)))
+-}
 {-
 idCore = Let "id" (
           Lam "a" (Lam "x" (Var $ Id "x" (TyVarTy $ TyVar "a" Star))))
@@ -83,6 +92,6 @@ idCore = Let "id" (
          (App (App (Var $ Id "id" (ForAllTy (TyVar "a" Star) $ Arr (TyVarTy (TyVar "a" Star)) (TyVarTy $ TyVar "a" Star))) (Type Int)) (Lit $ LInt 1))
 -}
 test = do
-  Right e <- parseLC "gfx03.lc" -- "example01.lc"
+  (src, Success e) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
-  putStrLn $ ppShow $ toCore e
+  putStrLn $ ppShow $ toCore $ either (error . ($ src)) id $ inference e
