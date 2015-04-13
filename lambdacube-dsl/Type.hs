@@ -184,8 +184,8 @@ data Ty_ a
   | TWord_   Frequency
   | TInt_    Frequency
   | TFloat_  Frequency
-  | TVec_    Int a          -- invariant property: no TVar inside 'a'
-  | TMat_    Int Int a      -- invariant property: no TVar inside 'a'
+  | TVec_    Int a          -- invariant property: Int = 2,3,4;  a = Bool, Int, Word, Float
+  | TMat_    Int Int a      -- invariant property: Int = 2,3,4;  a = Float
 
   -- lambdacube types
   | TNat_    Int

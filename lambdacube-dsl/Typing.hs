@@ -248,12 +248,12 @@ instances = Map.fromList
     , item IsNumComponent [TFloat C, TInt C, TWord C, TV2F C, TV3F C, TV4F C]
     , item IsSigned     [TFloat C, TInt C]
     , item IsNum        [TFloat C, TInt C, TWord C]
-    , item IsFloating   [TFloat C, TV2F C, TV3F C, TV4F C, TM22F C, TM23F C, TM24F C, TM32F C, TM33F C, TM34F C, TM42F C, TM43F C, TM44F C]
+    , item IsFloating   $ [TFloat C, TV2F C, TV3F C, TV4F C] ++ matrices
     , item IsComponent  [TFloat C, TInt C, TWord C, TBool C, TV2F C, TV3F C, TV4F C]
     ]
   where
     item a b = (a, Set.fromList b)
-
+    matrices = [TMat i j (TFloat C) | i <- [2..4], j <- [2..4]]
 
 data InjType
     = ITMat | ITVec | ITVecScalar
@@ -327,15 +327,9 @@ primFunMap = Map.fromList $ execWriter $ do
   "IV2F"    --> TString C ~> TInput C (TV2F   C)
   "IV3F"    --> TString C ~> TInput C (TV3F   C)
   "IV4F"    --> TString C ~> TInput C (TV4F   C)
-  "IM22F"   --> TString C ~> TInput C (TM22F  C)
-  "IM23F"   --> TString C ~> TInput C (TM23F  C)
-  "IM24F"   --> TString C ~> TInput C (TM24F  C)
-  "IM32F"   --> TString C ~> TInput C (TM32F  C)
-  "IM33F"   --> TString C ~> TInput C (TM33F  C)
-  "IM34F"   --> TString C ~> TInput C (TM34F  C)
-  "IM42F"   --> TString C ~> TInput C (TM42F  C)
-  "IM43F"   --> TString C ~> TInput C (TM43F  C)
-  "IM44F"   --> TString C ~> TInput C (TM44F  C)
+
+  -- input matrices like IM22F
+  tell [("IM" ++ show i ++ show j ++ "F", newV $ TString C ~> TInput C (TMat i j (TFloat C))) | i <- [2..4], j <- [2..4]]
 
   ["Zero", "One", "SrcColor", "OneMinusSrcColor", "DstColor", "OneMinusDstColor", "SrcAlpha", "OneMinusSrcAlpha", "DstAlpha", "OneMinusDstAlpha", "ConstantColor", "OneMinusConstantColor", "ConstantAlpha", "OneMinusConstantAlpha", "SrcAlphaSaturate"]
                         ---> TBlendingFactor C
