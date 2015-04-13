@@ -240,7 +240,7 @@ lookat pos target up = translateBefore4 (neg pos) (orthogonal $ toOrthoUnsafe r)
     v = w &^ u
     r = transpose $ Mat3 u v w
 
-parseLC :: String -> IO (Either String (Exp Typing))
+parseLC :: String -> IO (Either String (Exp (Subst, Typing)))
 parseLC fname = do
   (src, res) <- parseLC_ fname
   case res of

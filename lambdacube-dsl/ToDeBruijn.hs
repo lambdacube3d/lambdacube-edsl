@@ -84,35 +84,41 @@ instance Show N where
   show _ = "N"
 
 data EnvVar
-  = LetVar (Exp Typing)
+  = LetVar (Exp (Subst, Typing))
   | LamVar
 
 type NFEnv = Map EName EnvVar
 -- TODO: add let
-toNF :: Subst -> NFEnv -> Exp Typing -> [NF]
+toNF :: Subst -> NFEnv -> Exp (Subst, Typing) -> [NF]
 toNF sub env (ELit t l) = [Arg l]
-toNF sub env (EApp t a b) = eval $ {-[App $ toTy (m,i,subst sub t)] `mappend` -} toNF sub env a `mappend` toNF sub env b
+toNF sub env (EApp t a b) = eval $ {-[App $ toTy (m,i,subst sub t)] `mappend` -} toNF sub' env a `mappend` toNF sub' env b
+  where sub' = addSubst t sub
 toNF sub env (ELet t (PVar _ n) a b) = --case toNF env a of -- TODO
   -- x@(N _:_) -> error $ "let is not fully supported: " ++ show x
   --x -> toNF (Map.insert n x env) b
-  toNF sub (Map.insert n (LetVar a) env) b
+  toNF sub' (Map.insert n (LetVar a) env) b
+  where sub' = addSubst t sub
 --toNF sub env (EPrimFun t f) = 
-toNF sub env (ESubst _ s e) = toNF (s `composeSubst` sub) env e
 toNF sub env (EVar t n)
   | isPrimFun n = [Fun n]
   | otherwise = case Map.lookup n env of
       Nothing -> error $ "unknown variable: " ++ n
-      Just (LetVar x) -> eval $ toNF sub env x
+      Just (LetVar x) -> eval $ toNF sub' env x
       Just LamVar     -> let ty = toTy' sub t in eval [N ty $ var ty 0 ""]
+  where sub' = addSubst t sub
 toNF sub env (ELam t (PVar _ n) e) =
-  case eval $ toNF sub (Map.insert n LamVar env) e of
+  case eval $ toNF sub' (Map.insert n LamVar env) e of
     [N _ x] -> let ty = toTy' sub t in [N ty $ lam ty $ body x]
     x -> error $ "lam is not fully supported: " ++ show x
+  where sub' = addSubst t sub
 toNF sub env (ETuple t []) = let ty = toTy' sub t in [N ty $ tup ty []]
-toNF sub env (ETuple t a) = [Tuple' (toTy' sub t) (fmap (eval . toNF sub env) a)]
+  where sub' = addSubst t sub
+toNF sub env (ETuple t a) = [Tuple' (toTy' sub' t) (fmap (eval . toNF sub' env) a)]
+  where sub' = addSubst t sub
 --toNF _ _ x = error $ "toNF error: " ++ show x
 
-toTy' s t = toTy $ subst s t
+toTy' s (_, t) = toTy $ subst s t
+addSubst (s, _) sub = s `composeSubst` sub
 
 eval :: [NF] -> [NF]
 -- Const and other temp construction

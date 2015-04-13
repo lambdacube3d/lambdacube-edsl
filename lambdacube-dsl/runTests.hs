@@ -18,7 +18,7 @@ import Parser hiding (main, parseLC)
 data ParseResult
   = ParseError String
   | TypeError String
-  | TypedExp (Exp Typing)
+  | TypedExp (Exp (Subst, Typing))
 
 main :: IO ()
 main = do

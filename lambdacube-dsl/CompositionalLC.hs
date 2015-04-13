@@ -168,61 +168,62 @@ dependentVars ie s = cycle mempty s
         a <-> b = (a --> b) <> (b --> a)
 
 
-inference :: Exp Range -> Either ErrorMsg (Exp Typing)
+inference :: Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
 inference e = runExcept $ fst <$>
     evalRWST (inferTyping e <* checkUnambError) (PolyEnv $ fmap ((,) mempty) <$> primFunMap, mempty) (mempty, 0)
 
-inferTyping :: Exp Range -> TCM (Exp Typing)
-inferTyping exp = local (id *** const [getTag exp]) $ addSubst <$> case exp of
+inferTyping :: Exp Range -> TCM (Exp (Subst, Typing))
+inferTyping exp = local (id *** const [getTag exp]) $ case exp of
     ELam _ p f -> do
         (p, tr) <- inferPatTyping p
         tf <- tr $ inferTyping f
-        (s, ty) <- unifyTypings [[getTagP p], [getTag tf]] $ \[a, t] -> a ~> t
-        return (s, ELam ty p tf)
+        ty <- unifyTypings [[getTagP' p], [getTag' tf]] $ \[a, t] -> a ~> t
+        return $ ELam ty p tf
     ELet _ p x e -> do              -- TODO: revise
         tx <- inferTyping x
         (p, tr) <- inferPatTyping p
         te <- tr $ inferTyping e
-        (s, ty) <- unifyTypings [[getTagP p, getTag tx], [getTag te]] $ \[_, te] -> te
-        return (s, ELet ty p tx te)
+        ty <- unifyTypings [[getTagP' p, getTag' tx], [getTag' te]] $ \[_, te] -> te
+        return $ ELet ty p tx te
     ECase _ e cs -> do
         te <- inferTyping e
         cs <- forM cs $ \(p, exp) -> do
             (p, tr) <- inferPatTyping p
             exp <- tr $ inferTyping exp
             return (p, exp)
-        (s, ty) <- unifyTypings [getTag te: map (getTagP . fst) cs, map (getTag . snd) cs] $ \[_, x] -> x
-        return (s, ECase ty te cs)
+        ty <- unifyTypings [getTag' te: map (getTagP' . fst) cs, map (getTag' . snd) cs] $ \[_, x] -> x
+        return $ ECase ty te cs
     Exp e -> do
         e' <- T.mapM inferTyping e
-        (id *** Exp . (\t -> setTag undefined t e')) <$> case e' of
-            EApp_ _ tf ta -> unifyTypings [[getTag tf], [getTag ta]] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
+        Exp . (\t -> setTag undefined t e') <$> case e' of
+            EApp_ _ tf ta -> unifyTypings [[getTag' tf], [getTag' ta]] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             EFieldProj_ _ fn -> (,) mempty <$> fieldProjType fn
-            ERecord_ _ trs -> unifyTypings (map (sep . getTag . snd) trs) $ TRecord . Map.fromList . zip (map fst trs)
-            ETuple_ _ te -> unifyTypings (map (sep . getTag) te) $ TTuple C
+            ERecord_ _ trs -> unifyTypings (map (sep . getTag' . snd) trs) $ TRecord . Map.fromList . zip (map fst trs)
+            ETuple_ _ te -> unifyTypings (map (sep . getTag') te) $ TTuple C
             ELit_ _ l -> (,) mempty <$> inferLit l
             EVar_ _ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            ETyping_ _ e ty -> unifyTypings_ False [[getTag e, ty]] $ \[ty] -> ty
+            ETyping_ _ e ty -> unifyTypings_ False [[getTag' e, ty]] $ \[ty] -> ty
   where
-    inferPatTyping :: Pat Range -> TCM (Pat Typing, TCM a -> TCM a)
+    inferPatTyping :: Pat Range -> TCM (Pat (Subst, Typing), TCM a -> TCM a)
     inferPatTyping p_@(Pat p) = local (id *** const [getTagP p_]) $ do
         p' <- T.mapM inferPatTyping p
         (\(t, tr) -> (Pat $ setTagP t $ fst <$> p', tr . foldr (.) id (foldMap (sep . snd) p'))) <$> case p' of
-            PLit_ _ n -> noTr $ inferLit n
-            Wildcard_ _ -> noTr $ newV $ \t -> t :: Ty
-            PVar_ _ n -> addTr (withTyping n) $ newV $ \t -> Typing (Map.singleton n t) mempty t :: Typing
-            PTuple_ _ ps -> noTr $ snd <$> unifyTypings (map (sep . getTagP . fst) ps) (TTuple C)
+            PLit_ _ n -> noTr $ noSubst $ inferLit n
+            Wildcard_ _ -> noTr $ noSubst $ newV $ \t -> t :: Ty
+            PVar_ _ n -> addTr (withTyping n . snd) $ noSubst $ newV $ \t -> Typing (Map.singleton n t) mempty t :: Typing
+            PTuple_ _ ps -> noTr $ unifyTypings (map (sep . getTagP' . fst) ps) (TTuple C)
             PCon_ _ n ps -> noTr $ do
                 (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
-                snd <$> unifyTypings ([tn]: map (sep . getTagP . fst) ps) (\(tn: tl) v -> [tn ~~~ foldr (~>) v tl] ==> v)
-            PRecord_ _ ps -> noTr $ snd <$> unifyTypings (map (sep . getTagP . fst . snd) ps)
+                unifyTypings ([tn]: map (sep . getTagP' . fst) ps) (\(tn: tl) v -> [tn ~~~ foldr (~>) v tl] ==> v)
+            PRecord_ _ ps -> noTr $ unifyTypings (map (sep . getTagP' . fst . snd) ps)
                 (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip (map fst ps) tl] ==> v)
 
+    getTag' = snd . getTag
+    getTagP' = snd . getTagP
+    noSubst = fmap ((,) mempty)
     sep = (:[])
     noTr = addTr $ const id
     addTr tr m = (\x -> (x, tr x)) <$> m
-
-    addSubst (s, t) = ESubst (getTag t) s t
 
 withTyping :: EName -> Typing -> TCM a -> TCM a
 withTyping n t m = do

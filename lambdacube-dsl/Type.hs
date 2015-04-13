@@ -104,7 +104,6 @@ data Exp_ a b
   | ERecord_   a [(FName, b)]
   | EFieldProj_ a FName
   | ETyping_   a b Typing
-  | ESubst_    a Subst b
 --  | EFix EName Exp
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
@@ -118,7 +117,6 @@ pattern ETuple a b = Exp (ETuple_ a b)
 pattern ERecord a b = Exp (ERecord_ a b)
 pattern EFieldProj a c = Exp (EFieldProj_ a c)
 pattern ETyping a b c = Exp (ETyping_ a b c)
-pattern ESubst a b c = Exp (ESubst_ a b c)
 
 getTag :: Exp a -> a
 getTag = \case
@@ -132,7 +130,6 @@ getTag = \case
     ERecord   r _ -> r
     EFieldProj r _ -> r
     ETyping   r _ _ -> r
-    ESubst    r _ _ -> r
 
 setTag :: (Pat x -> Pat a) -> a -> Exp_ x b -> Exp_ a b
 setTag f a = \case
@@ -146,7 +143,6 @@ setTag f a = \case
     ERecord_   _ x       -> ERecord_ a x
     EFieldProj_ _ x      -> EFieldProj_ a x
     ETyping_   _ x y     -> ETyping_ a x y
-    ESubst_    _ x y     -> ESubst_ a x y
 
 data Frequency -- frequency kind
   -- frequency values
