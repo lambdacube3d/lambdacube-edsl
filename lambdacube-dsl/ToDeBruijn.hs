@@ -427,30 +427,31 @@ noType = Unknown ""
 toTy :: Typing -> C.Ty
 toTy ty@(Typing m i t) = case t of
     TBool  _ -> Single C.Bool 
-    TV2B   _ -> Single C.V2B  
-    TV3B   _ -> Single C.V3B  
-    TV4B   _ -> Single C.V4B  
     TWord  _ -> Single C.Word 
-    TV2U   _ -> Single C.V2U  
-    TV3U   _ -> Single C.V3U  
-    TV4U   _ -> Single C.V4U  
     TInt   _ -> Single C.Int  
-    TV2I   _ -> Single C.V2I  
-    TV3I   _ -> Single C.V3I  
-    TV4I   _ -> Single C.V4I  
     TFloat _ -> Single C.Float
-    TV2F   _ -> Single C.V2F  
-    TV3F   _ -> Single C.V3F  
-    TV4F   _ -> Single C.V4F  
-    TM22F  _ -> Single C.M22F 
-    TM23F  _ -> Single C.M23F 
-    TM24F  _ -> Single C.M24F 
-    TM32F  _ -> Single C.M32F 
-    TM33F  _ -> Single C.M33F 
-    TM34F  _ -> Single C.M34F 
-    TM42F  _ -> Single C.M42F 
-    TM43F  _ -> Single C.M43F 
-    TM44F  _ -> Single C.M44F 
+    TVec 2 (TBool a) -> Single C.V2B
+    TVec 3 (TBool a) -> Single C.V3B
+    TVec 4 (TBool a) -> Single C.V4B
+    TVec 2 (TWord a) -> Single C.V2U
+    TVec 3 (TWord a) -> Single C.V3U
+    TVec 4 (TWord a) -> Single C.V4U
+    TVec 2 (TInt a) -> Single C.V2I
+    TVec 3 (TInt a) -> Single C.V3I
+    TVec 4 (TInt a) -> Single C.V4I
+    TVec 2 (TFloat a) -> Single C.V2F
+    TVec 3 (TFloat a) -> Single C.V3F
+    TVec 4 (TFloat a) -> Single C.V4F
+    TMat 2 2 (TFloat a) -> Single C.M22F
+    TMat 2 3 (TFloat a) -> Single C.M23F
+    TMat 2 4 (TFloat a) -> Single C.M24F
+    TMat 3 2 (TFloat a) -> Single C.M32F
+    TMat 3 3 (TFloat a) -> Single C.M33F
+    TMat 3 4 (TFloat a) -> Single C.M34F
+    TMat 4 2 (TFloat a) -> Single C.M42F
+    TMat 4 3 (TFloat a) -> Single C.M43F
+    TMat 4 4 (TFloat a) -> Single C.M44F
+
     TInterpolated _ t -> toTy $ Typing m i t
     t -> Unknown (show ty)
 {-

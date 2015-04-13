@@ -141,7 +141,7 @@ reduceConstraint x = case x of
     CEq res f -> case f of
 
         TFMat (TVec n t1) (TVec m t2) | t1 `elem` [TFloat C] && t1 == t2 -> reduced $ TMat n m t1
-        TFMat a b -> check (a `matches` [TV2F C, TV3F C, TV4F C] && b `matches` [TV2F C, TV3F C, TV4F C]) $ observe res $ \case
+        TFMat a b -> check (a `matches` floatVectors && b `matches` floatVectors) $ observe res $ \case
             TMat n m t -> keep [[a, TVec n t], [b, TVec m t]]
             _ -> fail "no instance"
 
@@ -245,15 +245,18 @@ instances :: Map Class (Set Ty)
 instances = Map.fromList
     [ item CNum         [TInt C, TFloat C]
     , item IsIntegral   [TInt C, TWord C]
-    , item IsNumComponent [TFloat C, TInt C, TWord C, TV2F C, TV3F C, TV4F C]
+    , item IsNumComponent $ [TFloat C, TInt C, TWord C] ++ floatVectors
     , item IsSigned     [TFloat C, TInt C]
     , item IsNum        [TFloat C, TInt C, TWord C]
-    , item IsFloating   $ [TFloat C, TV2F C, TV3F C, TV4F C] ++ matrices
-    , item IsComponent  [TFloat C, TInt C, TWord C, TBool C, TV2F C, TV3F C, TV4F C]
+    , item IsFloating   $ TFloat C: floatVectors ++ matrices
+    , item IsComponent  $ [TFloat C, TInt C, TWord C, TBool C] ++ floatVectors
     ]
   where
     item a b = (a, Set.fromList b)
     matrices = [TMat i j (TFloat C) | i <- [2..4], j <- [2..4]]
+
+vectors t = [TVec i t | i <- [2..4]]
+floatVectors = vectors $ TFloat C
 
 data InjType
     = ITMat | ITVec | ITVecScalar
@@ -287,20 +290,12 @@ primFunMap :: Map EName (TCM Typing)
 primFunMap = Map.fromList $ execWriter $ do
   ["Tup", "Const"]  ---> \a -> a ~> a       -- temporary const constructor
   ["True", "False"] ---> TBool C
-  -- Vector/Matrix
-  "V2B"     --> TBool C ~> TBool C ~> TV2B C
-  "V3B"     --> TBool C ~> TBool C ~> TBool C ~> TV3B C
-  "V4B"     --> TBool C ~> TBool C ~> TBool C ~> TBool C ~> TV4B C
-  "V2U"     --> TWord C ~> TWord C ~> TV2U C
-  "V3U"     --> TWord C ~> TWord C ~> TWord C ~> TV3U C
-  "V4U"     --> TWord C ~> TWord C ~> TWord C ~> TWord C ~> TV4U C
-  "V2I"     --> TInt C ~> TInt C ~> TV2I C
-  "V3I"     --> TInt C ~> TInt C ~> TInt C ~> TV3I C
-  "V4I"     --> TInt C ~> TInt C ~> TInt C ~> TInt C ~> TV4I C
-  "V2F"     --> TFloat C ~> TFloat C ~> TV2F C
-  "V3F"     --> TFloat C ~> TFloat C ~> TFloat C ~> TV3F C
-  "V4F"     --> TFloat C ~> TFloat C ~> TFloat C ~> TFloat C ~> TV4F C
 
+  -- "V2B" --> TBool C ~> TBool C ~> TV2B C       for various vector types
+  tell  [ ("V" ++ show i ++ tc, newV $ replicate i t ~~> TVec i t)
+        | i <- [2..4]
+        , (tc, t) <- [("F", TFloat C), ("I", TInt C), ("U", TWord C), ("B", TBool C)]
+        ]
   -- "M22F" --> TV2F C ~> TV2F C ~> TM22F C       for M22F .. M44F
   tell  [ ("M" ++ show i ++ show j ++ "F", newV $ replicate j (TVec i $ TFloat C) ~~> TMat i j (TFloat C))
         | i <- [2..4], j <- [2..4]
@@ -308,25 +303,16 @@ primFunMap = Map.fromList $ execWriter $ do
 
   -- Input declaration
   "Uni"     --> \t -> TInput C t ~> t
-  "IBool"   --> TString C ~> TInput C (TBool  C)
-  "IV2B"    --> TString C ~> TInput C (TV2B   C)
-  "IV3B"    --> TString C ~> TInput C (TV3B   C)
-  "IV4B"    --> TString C ~> TInput C (TV4B   C)
-  "IWord"   --> TString C ~> TInput C (TWord  C)
-  "IV2U"    --> TString C ~> TInput C (TV2U   C)
-  "IV3U"    --> TString C ~> TInput C (TV3U   C)
-  "IV4U"    --> TString C ~> TInput C (TV4U   C)
-  "IInt"    --> TString C ~> TInput C (TInt   C)
-  "IV2I"    --> TString C ~> TInput C (TV2I   C)
-  "IV3I"    --> TString C ~> TInput C (TV3I   C)
-  "IV4I"    --> TString C ~> TInput C (TV4I   C)
-  "IFloat"  --> TString C ~> TInput C (TFloat C)
-  "IV2F"    --> TString C ~> TInput C (TV2F   C)
-  "IV3F"    --> TString C ~> TInput C (TV3F   C)
-  "IV4F"    --> TString C ~> TInput C (TV4F   C)
-
-  -- input matrices like IM22F
-  tell [("IM" ++ show i ++ show j ++ "F", newV $ TString C ~> TInput C (TMat i j (TFloat C))) | i <- [2..4], j <- [2..4]]
+  -- like   "IBool" --> TString C ~> TInput C (TBool  C)
+  tell $ [ (name, newV $ TString C ~> TInput C t)
+         | (name, t) <-
+            [ ("IV" ++ show i ++ tc, TVec i t)
+            | i <- [2..4]
+            , (tc, t) <- [("F", TFloat C), ("I", TInt C), ("U", TWord C), ("B", TBool C)]
+            ]
+         ++ [("IFloat", TFloat C), ("IInt", TInt C), ("IWord", TWord C), ("IBool", TBool C)]
+         ++ [("IM" ++ show i ++ show j ++ "F", TMat i j (TFloat C)) | i <- [2..4], j <- [2..4]]
+         ]
 
   ["Zero", "One", "SrcColor", "OneMinusSrcColor", "DstColor", "OneMinusDstColor", "SrcAlpha", "OneMinusSrcAlpha", "DstAlpha", "OneMinusDstAlpha", "ConstantColor", "OneMinusConstantColor", "ConstantAlpha", "OneMinusConstantAlpha", "SrcAlphaSaturate"]
                         ---> TBlendingFactor C
@@ -362,7 +348,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "FragmentOutRastDepth"--> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth $ TFloat C) a] ==> t
                                                                 ~> TFragmentOut C b
 
-  "VertexOut"           --> \a t -> [t ~~ TFFTRepr' a] ==> TV4F C ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C t
+  "VertexOut"           --> \a t -> [t ~~ TFFTRepr' a] ==> TVec 4 (TFloat C) ~> TFloat C ~> TTuple C [] ~> a ~> TVertexOut C t
 
   ["LowerLeft", "UpperLeft"]
                         ---> TPointSpriteCoordOrigin C
@@ -398,7 +384,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "BlendLogicOp"        --> \t -> [IsIntegral @@ t] ==> TLogicOperation C ~> TBlending C t
   "Blend"               --> TTuple C [TBlendEquation C,TBlendEquation C]
                          ~> TTuple C [TTuple C [TBlendingFactor C,TBlendingFactor C],TTuple C [TBlendingFactor C,TBlendingFactor C]]
-                         ~> TV4F C ~>                                        TBlending C (TFloat C)
+                         ~> TVec 4 (TFloat C) ~>                             TBlending C (TFloat C)
   -- Fragment Filter
   "PassAll"             --> \t ->                   TFragmentFilter C t
   "Filter"              --> \t -> (t ~> TBool C) ~> TFragmentFilter C t

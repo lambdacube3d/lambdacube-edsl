@@ -229,29 +229,6 @@ pattern TPoint = TCon C "Point" []
 pattern TTriangleAdjacency = TCon C "TriangleAdjacency" []
 pattern TLineAdjacency = TCon C "LineAdjacency" []
 
--- Vector/Matrix
-pattern TV2B a = TVec 2 (TBool a)
-pattern TV3B a = TVec 3 (TBool a)
-pattern TV4B a = TVec 4 (TBool a)
-pattern TV2U a = TVec 2 (TWord a)
-pattern TV3U a = TVec 3 (TWord a)
-pattern TV4U a = TVec 4 (TWord a)
-pattern TV2I a = TVec 2 (TInt a)
-pattern TV3I a = TVec 3 (TInt a)
-pattern TV4I a = TVec 4 (TInt a)
-pattern TV2F a = TVec 2 (TFloat a)
-pattern TV3F a = TVec 3 (TFloat a)
-pattern TV4F a = TVec 4 (TFloat a)
-pattern TM22F a = TMat 2 2 (TFloat a)
-pattern TM23F a = TMat 2 3 (TFloat a)
-pattern TM24F a = TMat 2 4 (TFloat a)
-pattern TM32F a = TMat 3 2 (TFloat a)
-pattern TM33F a = TMat 3 3 (TFloat a)
-pattern TM34F a = TMat 3 4 (TFloat a)
-pattern TM42F a = TMat 4 2 (TFloat a)
-pattern TM43F a = TMat 4 3 (TFloat a)
-pattern TM44F a = TMat 4 4 (TFloat a)
-
 -- ADT
 pattern TCullMode a = TCon a "CullMode" []
 pattern TPolygonMode a = TCon a "PolygonMode" []
