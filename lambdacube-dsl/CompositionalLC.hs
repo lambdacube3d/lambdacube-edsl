@@ -172,24 +172,26 @@ inference :: Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
 inference e = runExcept $ fst <$>
     evalRWST (inferTyping e <* checkUnambError) (PolyEnv $ fmap ((,) mempty) <$> primFunMap, mempty) (mempty, 0)
 
+removeMonoVars vs (Typing me cs t) = Typing (foldr Map.delete me $ Set.toList vs) cs t
+
 inferTyping :: Exp Range -> TCM (Exp (Subst, Typing))
 inferTyping exp = local (id *** const [getTag exp]) $ case exp of
     ELam _ p f -> do
-        p_@(p, tr) <- inferPatTyping p
-        tf <- tr $ inferTyping f
+        p_@(p, tr) <- inferPatTyping False p
+        tf <- withTyping tr $ inferTyping f
         ty <- unifyTypings [getTagP' p_, getTag' tf] $ \[a, t] -> a ~> t
-        return $ ELam ty p tf
-    ELet _ p x e -> do              -- TODO: revise
+        return $ ELam (id *** removeMonoVars (Map.keysSet tr) $ ty) p tf
+    ELet _ p x e -> do
         tx <- inferTyping x
-        p_@(p, tr) <- inferPatTyping p
-        te <- tr $ inferTyping e
-        ty <- unifyTypings [getTagP' p_ ++ getTag' tx, getTag' te] $ \[_, te] -> te
-        return $ ELet ty p tx te
+        p_@(p, tr) <- inferPatTyping True p
+        (s, _) <- unifyTypings [getTagP' p_ ++ getTag' tx] $ \[te] -> te
+        te <- withTyping (subst s tr) $ inferTyping e
+        return $ ELet (s, head $ getTag' te) p tx te
     ECase _ e cs -> do
         te <- inferTyping e
         cs <- forM cs $ \(p, exp) -> do
-            (p, tr) <- inferPatTyping p
-            exp <- tr $ inferTyping exp
+            (p, tr) <- inferPatTyping False p
+            exp <- withTyping tr $ inferTyping exp
             return (p, exp)
         ty <- unifyTypings [getTag' te ++ concatMap getTagP' cs, concatMap (getTag' . snd) cs] $ \[_, x] -> x
         return $ ECase ty te cs
@@ -204,29 +206,36 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
             EVar_ _ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
             ETyping_ _ e ty -> unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
   where
-    inferPatTyping :: Pat Range -> TCM (Pat (Subst, Typing), TCM a -> TCM a)
-    inferPatTyping p_@(Pat p) = local (id *** const [getTagP p_]) $ do
-        p' <- T.mapM inferPatTyping p
-        (\(t, tr) -> (Pat $ setTagP t $ fst <$> p', foldr (.) tr $ map snd $ toList p')) <$> case p' of
+    inferPatTyping :: Bool -> Pat Range -> TCM (Pat (Subst, Typing), Map EName Typing)
+    inferPatTyping polymorph p_@(Pat p) = local (id *** const [getTagP p_]) $ do
+        p' <- T.mapM (inferPatTyping polymorph) p
+        (t, tr) <- case p' of
             PLit_ _ n -> noTr $ noSubst $ inferLit n
             Wildcard_ _ -> noTr $ noSubst $ newV $ \t -> t :: Ty
-            PVar_ _ n -> addTr (withTyping n . snd) $ noSubst $ newV $ \t -> Typing (Map.singleton n t) mempty t :: Typing
+            PVar_ _ n -> addTr (\t -> Map.singleton n (snd t)) $ noSubst $ newV $ \t ->
+                if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t :: Typing
             PTuple_ _ ps -> noTr $ unifyTypings (map getTagP' ps) (TTuple C)
             PCon_ _ n ps -> noTr $ do
                 (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
-                unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ foldr (~>) v tl] ==> v)
+                unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ tl ~~> v] ==> v)
             PRecord_ _ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
                 (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip fs tl] ==> v)
+        let trs = Map.unionsWith (++) . map ((:[]) <$>) $ tr: map snd (toList p')
+        tr <- case filter ((>1) . length . snd) $ Map.toList trs of
+            [] -> return $ Map.map head trs
+            ns -> throwErrorTCM $ "conflicting definitions for " ++ show (map fst ns)
+        return (Pat $ setTagP t $ fst <$> p', tr)
 
     getTag' = (:[]) . snd . getTag
     getTagP' = (:[]) . snd . getTagP . fst
     noSubst = fmap ((,) mempty)
-    noTr = addTr $ const id
+    noTr = addTr $ const mempty
     addTr tr m = (\x -> (x, tr x)) <$> m
 
-withTyping :: EName -> Typing -> TCM a -> TCM a
-withTyping n t m = do
+withTyping :: Map EName Typing -> TCM a -> TCM a
+withTyping ts m = do
     penv <- asks $ getPolyEnv . fst
-    if Map.member n penv
-        then throwErrorTCM $ "Variable name clash: " ++ n
-        else local ((<> PolyEnv (Map.singleton n (instantiateTyping t))) *** id) m
+    case toList $ Map.keysSet ts `Set.intersection` Map.keysSet penv of
+        [] -> local ((<> PolyEnv (Map.map instantiateTyping ts)) *** id) m
+        ks -> throwErrorTCM $ "Variable name clash: " ++ show ks
+
