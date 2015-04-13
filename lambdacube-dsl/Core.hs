@@ -27,6 +27,7 @@ type Type = Ty
 data Var
   = VarE EName Type
   | VarT EName -- Kind
+  | VarC (Constraint Ty)               -- constraint var
   deriving (Show,Eq,Ord)
 
 data Exp
@@ -37,19 +38,22 @@ data Exp
   | ELet     Var Exp Exp -- VarE only!
   | ETuple   [Exp]
   | EType    Ty
+  | EConstraint (Constraint Ty)  -- TODO
   deriving (Show,Eq,Ord)
 
 toCore :: Subst -> AST.Exp (Subst, Typing) -> Exp
 toCore sub e = case e of
   AST.ELit _ a      -> ELit a
   AST.ETuple _ a    -> ETuple $ fmap toCore' a
-  AST.EVar t n      -> foldl EApp (EVar $ VarE n $ toType $ snd t) $ map (EType {- . ([] ==>)-}) pv'
+  AST.EVar t n      -> foldl EApp (foldl EApp (EVar $ VarE n $ toType $ snd t) pv) cs
     where
-      pv' = subst sub' $ map (\n -> TVar C n) $ Map.keys $ fst t
+      cs = map EConstraint $ subst sub' $ constraints $ snd t
+      pv = map EType $ subst sub' $ map (\n -> TVar C n) $ Map.keys $ fst t
   AST.EApp t f a    -> EApp (toCore' f) (toCore' a)
-  AST.ELet _ (PVar _ n) a b  -> traceShow (n, pv) $ ELet (VarE n $ toType' $ getTag a) (pv --> toCore' a) (toCore' b)
+  AST.ELet _ (PVar _ n) a b  -> traceShow (n, pv) $ ELet (VarE n $ toType' $ getTag a) (pv --> ctr --> toCore' a) (toCore' b)
     where
-      pv = polyVars $ snd $ getTag a
+      ctr = map VarC $ constraints $ snd $ getTag a
+      pv = map VarT $ Set.toList $ polyVars $ snd $ getTag a
   AST.ELam t (PVar tn n) a -> ELam (VarE n $ toType' tn) $ toCore' a
   _ -> error $ "toCore: " ++ show e
  where
@@ -57,18 +61,19 @@ toCore sub e = case e of
     s = fst $ getTag e
     sub' = s `composeSubst` sub
     toType' (_, t) = toType $ subst sub' t
-    varT t = VarT t -- Star
-    pv --> x = foldr eLam x $ map varT $ Set.toList pv
+    infixr 9 -->
+    pv --> x = foldr eLam x pv
 
     toType :: Typing -> Type
-    toType ty = foldr Forall (typingType ty) $ Set.toList $ polyVars ty   -- TODO
+    toType ty = foldr Forall (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
 
 eLam (VarT n) (EApp e (EType (TVar C m))) | n == m = e  -- optimization
+eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization
 eLam vt x = ELam vt x
 
 test = do
   (src, r) <- parseLC_ "tests/accept/instantiate.lc" -- "gfx03.lc" -- "example01.lc"
-  (src, r) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
+--  (src, r) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
   case r of
     Success e -> putStrLn $ ppShow $ toCore mempty $ either (error . ($ src)) id $ inference e

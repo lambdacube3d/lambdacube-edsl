@@ -189,6 +189,7 @@ data Ty_ a
   | TCon_    Frequency TCName [a]     -- saturated type constructor application
   | TArr_    a a
   | Forall_ TName a
+  | TConstraintArg_ (Constraint a) a
   -- composit
   | TTuple_  Frequency [a]
   | TRecord_ (Map FName a)
@@ -227,6 +228,7 @@ pattern TVar a b = Ty (TVar_ a b)
 pattern TCon f a b = Ty (TCon_ f a b)
 pattern TArr a b = Ty (TArr_ a b)
 pattern Forall a b = Ty (Forall_ a b)
+pattern TConstraintArg a b = Ty (TConstraintArg_ a b)
 pattern TTuple a b = Ty (TTuple_ a b)
 pattern TRecord b = Ty (TRecord_ b)
 pattern TArray a b = Ty (TArray_ a b)
