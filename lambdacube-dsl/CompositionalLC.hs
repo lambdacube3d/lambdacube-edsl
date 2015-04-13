@@ -34,19 +34,6 @@ import Type
 import Typing
 
 
-class FreeVars a where freeVars :: a -> Set TName
-
-instance FreeVars Ty where
-    freeVars (TVar _ a) = Set.singleton a
-    freeVars (Ty x) = foldMap freeVars x
-
-instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
-instance FreeVars a => FreeVars (Typing_ a)         where freeVars = foldMap freeVars
-instance FreeVars a => FreeVars (TypeFun a)         where freeVars = foldMap freeVars
-instance FreeVars a => FreeVars (MonoEnv a)         where freeVars = foldMap freeVars
-instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap freeVars
-
-
 class Substitute a where subst :: Subst -> a -> a
 
 instance Substitute Ty where
@@ -112,7 +99,7 @@ unifyTypings_ bidirectional ts f = do
     let ms = map monoEnv $ t: concat ts
     s <- unifyTypes bidirectional $ (map . map) typingType ts ++ unifyMaps ms
     (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints $ t: concat ts
-    let ty = Typing (Map.unions $ subst s ms) i (subst s $ typingType t)
+    let ty = typing (Map.unions $ subst s ms) i (subst s $ typingType t)
     ambiguityCheck ty
     return (s <> s', ty)
   where
@@ -141,9 +128,6 @@ ambiguityCheck ty = do
     used = freeVars $ constraints ty
     defined = dependentVars (constraints ty) $ freeVars (monoEnv ty) <> freeVars (typingType ty)
 
-polyVars :: Typing -> Set TName
-polyVars ty = dependentVars (constraints ty) $ freeVars (typingType ty)  -- TODO: make it more precise if necessary
-
 -- complex example:
 --      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
 --      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
@@ -153,6 +137,10 @@ instantiateTyping ty = do
     newVars <- replicateM (Set.size fv) (newVar C)
     let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
     return (s, subst s ty)
+
+--calcPolyVars :: Typing -> Set TName
+typing me cs ty = Typing me cs ty $
+    dependentVars cs (freeVars ty) Set.\\ freeVars me  -- TODO: make it more precise if necessary
 
 -- compute dependent type vars in constraints
 -- Example:  dependentVars [(a, b) ~ F b c, d ~ F e] [c] == [a,b,c]
@@ -180,7 +168,7 @@ inference_ :: PolyEnv -> Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
 inference_ primFunMap e = runExcept $ fst <$>
     evalRWST (inferTyping e <* checkUnambError) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
 
-removeMonoVars vs (Typing me cs t) = Typing (foldr Map.delete me $ Set.toList vs) cs t
+removeMonoVars vs (Typing me cs t pvs) = Typing (foldr Map.delete me $ Set.toList vs) cs t pvs
 
 inferTyping :: Exp Range -> TCM (Exp (Subst, Typing))
 inferTyping exp = local (id *** const [getTag exp]) $ case exp of
@@ -225,7 +213,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
             PLit_ _ n -> noTr $ noSubst $ inferLit n
             Wildcard_ _ -> noTr $ newV $ \t -> t :: Ty
             PVar_ _ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
-                if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t :: Typing
+                if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t mempty :: Typing
             PTuple_ _ ps -> noTr $ unifyTypings (map getTagP' ps) (TTuple C)
             PCon_ _ n ps -> noTr $ do
                 (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n

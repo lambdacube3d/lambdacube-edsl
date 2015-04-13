@@ -61,17 +61,13 @@ toCore tvs sub e = case e of
     pv --> x = foldr ELam x $ map varT $ Set.toList pv
 
     toType :: Typing -> Type
-    toType ty@(Typing me cs t) = foldr Forall t $ Set.toList $ polyVars ty Set.\\ tvs
+    toType ty = foldr Forall (typingType ty) $ Set.toList $ polyVars ty Set.\\ tvs   -- TODO
 
-
--- test case
-{-
-idCoreLam = ELam (VarT "a" Star) $ ELam (VarE "x" $ ForAll [] $ TVar C "a") $ EVar $ VarE "x" $ ForAll [] $ TVar C "a"
-idCore = ELet (VarE "id" $ ForAll [("t",Star)] $ TVar C "t" ~> TVar C "t") idCoreLam $
-          EApp (EApp (EVar $ VarE "id" $ ForAll [("t",Star)] $ TVar C "t" ~> TVar C "t") (EType $ ForAll [] $ TInt C)) (ELit $ LInt 1)
--}
 test = do
-  (src, Success e) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
+  (src, r) <- parseLC_ "tests/accept/instantiate.lc" -- "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
-  putStrLn $ ppShow $ toCore mempty mempty $ either (error . ($ src)) id $ inference e
+  case r of
+    Success e -> putStrLn $ ppShow $ toCore mempty mempty $ either (error . ($ src)) id $ inference e
+    Failure m -> do
+      print m
 

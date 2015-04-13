@@ -10,6 +10,8 @@
 module Type where
 
 import Data.List
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid
@@ -37,6 +39,7 @@ data Typing_ a = Typing
     { monoEnv     :: MonoEnv a
     , constraints :: [Constraint a]
     , typingType  :: a
+    , polyVars    :: Set TName      -- subset of free vars; tells which free vars should be instantiated
     }
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 {-
@@ -296,7 +299,7 @@ data Constraint a
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 infix 6 ==>
-cs ==> t = Typing mempty cs t
+cs ==> t = Typing mempty cs t (freeVars cs <> freeVars t)
 
 infix 4 ~~
 (~~) = CEq
@@ -335,4 +338,16 @@ data TypeFun a
   | TFFragOps a
   | TFJoinTupleType a a
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+
+class FreeVars a where freeVars :: a -> Set TName
+
+instance FreeVars Ty where
+    freeVars (TVar _ a) = Set.singleton a
+    freeVars (Ty x) = foldMap freeVars x
+
+instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (Typing_ a)         where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (TypeFun a)         where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (MonoEnv a)         where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap freeVars
 
