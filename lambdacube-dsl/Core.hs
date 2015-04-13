@@ -1,6 +1,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 module Core where
 
+import Debug.Trace
 import Data.Monoid
 import Data.Maybe
 import Data.Map (Map)
@@ -38,36 +39,39 @@ data Exp
   | EType    Ty
   deriving (Show,Eq,Ord)
 
-toCore :: Set TName -> Subst -> AST.Exp (Subst, Typing) -> Exp
-toCore tvs sub e = case e of
+toCore :: Subst -> AST.Exp (Subst, Typing) -> Exp
+toCore sub e = case e of
   AST.ELit _ a      -> ELit a
   AST.ETuple _ a    -> ETuple $ fmap toCore' a
   AST.EVar t n      -> foldl EApp (EVar $ VarE n $ toType $ snd t) $ map (EType {- . ([] ==>)-}) pv'
     where
       pv' = subst sub' $ map (\n -> TVar C n) $ Map.keys $ fst t
   AST.EApp t f a    -> EApp (toCore' f) (toCore' a)
-  AST.ELet _ (PVar _ n) a b  -> ELet (VarE n $ toType' $ getTag a) (pv --> toCore'' (pv <> tvs) a) (toCore'' tvs b)
+  AST.ELet _ (PVar _ n) a b  -> traceShow (n, pv) $ ELet (VarE n $ toType' $ getTag a) (pv --> toCore' a) (toCore' b)
     where
       pv = polyVars $ snd $ getTag a
-  AST.ELam t (PVar tn n) a -> ELam (VarE n $ toType' tn) $ toCore'' tvs a
+  AST.ELam t (PVar tn n) a -> ELam (VarE n $ toType' tn) $ toCore' a
   _ -> error $ "toCore: " ++ show e
  where
-    toCore' = toCore'' tvs
-    toCore'' tvs = toCore tvs sub'
+    toCore' = toCore sub'
     s = fst $ getTag e
     sub' = s `composeSubst` sub
     toType' (_, t) = toType $ subst sub' t
     varT t = VarT t -- Star
-    pv --> x = foldr ELam x $ map varT $ Set.toList pv
+    pv --> x = foldr eLam x $ map varT $ Set.toList pv
 
     toType :: Typing -> Type
-    toType ty = foldr Forall (typingType ty) $ Set.toList $ polyVars ty Set.\\ tvs   -- TODO
+    toType ty = foldr Forall (typingType ty) $ Set.toList $ polyVars ty   -- TODO
+
+eLam (VarT n) (EApp e (EType (TVar C m))) | n == m = e  -- optimization
+eLam vt x = ELam vt x
 
 test = do
   (src, r) <- parseLC_ "tests/accept/instantiate.lc" -- "gfx03.lc" -- "example01.lc"
+  (src, r) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
   case r of
-    Success e -> putStrLn $ ppShow $ toCore mempty mempty $ either (error . ($ src)) id $ inference e
+    Success e -> putStrLn $ ppShow $ toCore mempty $ either (error . ($ src)) id $ inference e
     Failure m -> do
       print m
 

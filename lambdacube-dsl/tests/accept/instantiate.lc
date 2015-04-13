@@ -1,0 +1,1 @@
+let f = PrimAdd in f (V2F 1.0 2.0) (V2F 1.0 2.0)

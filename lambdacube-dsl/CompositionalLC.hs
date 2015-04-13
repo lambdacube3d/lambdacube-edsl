@@ -168,7 +168,7 @@ inference_ :: PolyEnv -> Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
 inference_ primFunMap e = runExcept $ fst <$>
     evalRWST (inferTyping e <* checkUnambError) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
 
-removeMonoVars vs (Typing me cs t pvs) = Typing (foldr Map.delete me $ Set.toList vs) cs t pvs
+removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 
 inferTyping :: Exp Range -> TCM (Exp (Subst, Typing))
 inferTyping exp = local (id *** const [getTag exp]) $ case exp of
