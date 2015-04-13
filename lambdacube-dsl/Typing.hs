@@ -13,6 +13,7 @@ import Data.Monoid
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Char8 (ByteString)
+import qualified Data.Traversable as T
 import Control.Monad.Except
 import Control.Monad.RWS
 import Control.Monad.Writer
@@ -145,21 +146,17 @@ reduceConstraint x = case x of
             TMat n m t -> keep [[a, TVec n t], [b, TVec m t]]
             _ -> fail "no instance"
 
-        TFVec (TNat n) ty | n `elem` [2,3,4] && ty `elem` [TNat 2, TNat 3, TNat 4] -> reduced $ TVec n ty
-        TFVec a b -> check (a `matches` [TNat 2, TNat 3, TNat 4] && b `matches` [TFloat C, TInt C, TWord C, TBool C])
-                     $ observe res $ \case
+        TFVec (TNat n) ty | n `elem` [2,3,4] && ty `elem` floatIntWordBool -> reduced $ TVec n ty
+        TFVec a b -> check (a `matches` nat234 && b `matches` floatIntWordBool) $ observe res $ \case
             TVec n t -> keep [[a, TNat n], [b, t]]
             _ -> fail "no instance"
 
         TFVecScalar a b -> case a of
             TNat 1 -> case b of
-                TVar{} | res `matches` [TFloat C, TInt C, TWord C, TBool C] -> keep [[b, res]]
-                b -> check (b `elem` [TFloat C, TInt C, TWord C, TBool C]) $ reduced b
-            TVar{} -> check (b `matches` [TFloat C, TInt C, TWord C, TBool C]) $ observe res $ \case
-                TFloat C -> keep [[a, TNat 1], [b, TFloat C]]
-                TInt C   -> keep [[a, TNat 1], [b, TInt C]]
-                TWord C  -> keep [[a, TNat 1], [b, TWord C]]
-                TBool C  -> keep [[a, TNat 1], [b, TBool C]]
+                TVar{} | res `matches` floatIntWordBool -> keep [[b, res]]
+                b -> check (b `elem` floatIntWordBool) $ reduced b
+            TVar{} -> check (b `matches` floatIntWordBool) $ observe res $ \case
+                t | t `elem` floatIntWordBool -> keep [[a, TNat 1], [b, t]]
                 _ -> like $ TFVec a b
             _ -> like $ TFVec a b
 
@@ -169,10 +166,7 @@ reduceConstraint x = case x of
             _ -> fail "no instance"
 
         TFMatVecScalarElem t -> observe t $ \case
-            TFloat C -> reduced $ TFloat C
-            TInt C   -> reduced $ TInt C
-            TWord C  -> reduced $ TWord C
-            TBool C  -> reduced $ TBool C
+            t | t `elem` floatIntWordBool -> reduced t
             t -> like $ TFMatVecElem t
 
         TFColorRepr ty -> observe ty $ \case
@@ -245,16 +239,19 @@ instances :: Map Class (Set Ty)
 instances = Map.fromList
     [ item CNum         [TInt C, TFloat C]
     , item IsIntegral   [TInt C, TWord C]
-    , item IsNumComponent $ [TFloat C, TInt C, TWord C] ++ floatVectors
+    , item IsNumComponent $ floatIntWord ++ floatVectors
     , item IsSigned     [TFloat C, TInt C]
-    , item IsNum        [TFloat C, TInt C, TWord C]
+    , item IsNum        floatIntWord
     , item IsFloating   $ TFloat C: floatVectors ++ matrices
-    , item IsComponent  $ [TFloat C, TInt C, TWord C, TBool C] ++ floatVectors
+    , item IsComponent  $ floatIntWordBool ++ floatVectors
     ]
   where
     item a b = (a, Set.fromList b)
-    matrices = [TMat i j (TFloat C) | i <- [2..4], j <- [2..4]]
 
+nat234 = [TNat i | i <-[2..4]]
+floatIntWord = [TFloat C, TInt C, TWord C]
+floatIntWordBool = [TFloat C, TInt C, TWord C, TBool C]
+matrices = [TMat i j (TFloat C) | i <- [2..4], j <- [2..4]]
 vectors t = [TVec i t | i <- [2..4]]
 floatVectors = vectors $ TFloat C
 
@@ -270,6 +267,7 @@ injType = \case
     _ -> Nothing
 
 vecS = TFVecScalar
+floatVecS d = vecS d (TFloat C)
 
 infix 0 --->, -->
 ss ---> m = tell [(s, newV m) | s <- ss]
@@ -286,33 +284,31 @@ isPrimFun n = Map.member n primFunMap
     PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
 
+primFunMapM :: TCM (Map EName Typing)
+primFunMapM = T.sequence primFunMap
+
 primFunMap :: Map EName (TCM Typing)
 primFunMap = Map.fromList $ execWriter $ do
   ["Tup", "Const"]  ---> \a -> a ~> a       -- temporary const constructor
   ["True", "False"] ---> TBool C
 
-  -- "V2B" --> TBool C ~> TBool C ~> TV2B C       for various vector types
-  tell  [ ("V" ++ show i ++ tc, newV $ replicate i t ~~> TVec i t)
-        | i <- [2..4]
-        , (tc, t) <- [("F", TFloat C), ("I", TInt C), ("U", TWord C), ("B", TBool C)]
-        ]
-  -- "M22F" --> TV2F C ~> TV2F C ~> TM22F C       for M22F .. M44F
-  tell  [ ("M" ++ show i ++ show j ++ "F", newV $ replicate j (TVec i $ TFloat C) ~~> TMat i j (TFloat C))
-        | i <- [2..4], j <- [2..4]
-        ]
+  forM_ [2..4] $ \i -> do
+    forM_ (zip ["F","I","U","B"] floatIntWordBool) $ \(tn, t) ->
+        "V" ++ show i ++ tn --> replicate i t ~~> TVec i t      -- like  "V2B" --> TBool C ~> TBool C ~> TV2B C
+    forM_ [2..4] $ \j ->
+        "M" ++ show i ++ show j ++ "F" --> replicate j (TVec i $ TFloat C) ~~> TMat i j (TFloat C)
+                                                                -- like  "M22F" --> TV2F C ~> TV2F C ~> TM22F C
 
   -- Input declaration
   "Uni"     --> \t -> TInput C t ~> t
-  -- like   "IBool" --> TString C ~> TInput C (TBool  C)
-  tell $ [ (name, newV $ TString C ~> TInput C t)
-         | (name, t) <-
-            [ ("IV" ++ show i ++ tc, TVec i t)
-            | i <- [2..4]
-            , (tc, t) <- [("F", TFloat C), ("I", TInt C), ("U", TWord C), ("B", TBool C)]
-            ]
-         ++ [("IFloat", TFloat C), ("IInt", TInt C), ("IWord", TWord C), ("IBool", TBool C)]
-         ++ [("IM" ++ show i ++ show j ++ "F", TMat i j (TFloat C)) | i <- [2..4], j <- [2..4]]
-         ]
+  forM_ (  zip ["IFloat", "IInt", "IWord", "IBool"] floatIntWordBool
+        ++ [("IM" ++ show i ++ show j ++ "F", TMat i j (TFloat C)) | i <- [2..4], j <- [2..4]]
+        ++ [ ("IV" ++ show i ++ tn, TVec i t)
+           | i <- [2..4]
+           , (tn, t) <- zip ["F","I","U","B"] floatIntWordBool
+           ]
+        ) $ \(name, t) ->
+    name --> TString C ~> TInput C t                            -- like  "IBool" --> TString C ~> TInput C (TBool  C)
 
   ["Zero", "One", "SrcColor", "OneMinusSrcColor", "DstColor", "OneMinusDstColor", "SrcAlpha", "OneMinusSrcAlpha", "DstAlpha", "OneMinusDstAlpha", "ConstantColor", "OneMinusConstantColor", "ConstantAlpha", "OneMinusConstantAlpha", "SrcAlphaSaturate"]
                         ---> TBlendingFactor C
@@ -423,39 +419,39 @@ primFunMap = Map.fromList $ execWriter $ do
   ["PrimAny", "PrimAll"]                ---> \d a   -> [a ~~ vecS d (TBool C)] ==> a ~> TBool C
   -- Angle, Trigonometry and Exponential Functions
   ["PrimACos", "PrimACosH", "PrimASin", "PrimASinH", "PrimATan", "PrimATanH", "PrimCos", "PrimCosH", "PrimDegrees", "PrimRadians", "PrimSin", "PrimSinH", "PrimTan", "PrimTanH", "PrimExp", "PrimLog", "PrimExp2", "PrimLog2", "PrimSqrt", "PrimInvSqrt"]
-                                        ---> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> a
-  ["PrimPow", "PrimATan2"]              ---> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a
+                                        ---> \d a   -> [a ~~ floatVecS d] ==> a ~> a
+  ["PrimPow", "PrimATan2"]              ---> \d a   -> [a ~~ floatVecS d] ==> a ~> a ~> a
   -- Common Functions
   ["PrimFloor", "PrimTrunc", "PrimRound", "PrimRoundEven", "PrimCeil", "PrimFract"]
-                                        ---> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+                                        ---> \d a   -> [a ~~ floatVecS d] ==> a ~> a
   ["PrimMin", "PrimMax"]                ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a
   ["PrimMinS", "PrimMaxS"]              ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> a
-  ["PrimIsNan", "PrimIsInf"]            ---> \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS d (TBool C)] ==> a ~> b
+  ["PrimIsNan", "PrimIsInf"]            ---> \d a b -> [a ~~ floatVecS d, b ~~ vecS d (TBool C)] ==> a ~> b
   ["PrimAbs", "PrimSign"]               ---> \d a t -> [IsSigned @@ t, a ~~ vecS d t] ==> a ~> a
-  "PrimModF"            --> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> TTuple C [a,a]
+  "PrimModF"            --> \d a   -> [a ~~ floatVecS d] ==> a ~> TTuple C [a, a]
   "PrimClamp"           --> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a ~> a
   "PrimClampS"          --> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> t ~> a
-  "PrimMix"             --> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimMixS"            --> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> TFloat C ~> a
-  "PrimMixB"            --> \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS d (TBool C)] ==> a ~> a ~> b ~> a
+  "PrimMix"             --> \d a   -> [a ~~ floatVecS d] ==> a ~> a ~> a ~> a
+  "PrimMixS"            --> \d a   -> [a ~~ floatVecS d] ==> a ~> a ~> TFloat C ~> a
+  "PrimMixB"            --> \d a b -> [a ~~ floatVecS d, b ~~ vecS d (TBool C)] ==> a ~> a ~> b ~> a
   "PrimStep"            --> \d a   -> [a ~~ TFVec d (TFloat C)] ==> a ~> a ~> a
-  "PrimStepS"           --> \d a   -> [a ~~ vecS d (TFloat C)] ==> TFloat C ~> a ~> a
+  "PrimStepS"           --> \d a   -> [a ~~ floatVecS d] ==> TFloat C ~> a ~> a
   "PrimSmoothStep"      --> \d a   -> [a ~~ TFVec d (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimSmoothStepS"     --> \d a   -> [a ~~ vecS d (TFloat C)] ==> TFloat C ~> TFloat C ~> a ~> a
+  "PrimSmoothStepS"     --> \d a   -> [a ~~ floatVecS d] ==> TFloat C ~> TFloat C ~> a ~> a
   -- Integer/Float Conversion Functions
-  "PrimFloatBitsToInt"  --> \d fv iv -> [fv ~~ vecS d (TFloat C), iv ~~ vecS d (TInt C)]  ==> fv ~> iv
-  "PrimFloatBitsToUInt" --> \d fv uv -> [fv ~~ vecS d (TFloat C), uv ~~ vecS d (TWord C)] ==> fv ~> uv
-  "PrimIntBitsToFloat"  --> \d fv iv -> [fv ~~ vecS d (TFloat C), iv ~~ vecS d (TInt C)]  ==> iv ~> fv
-  "PrimUIntBitsToFloat" --> \d fv uv -> [fv ~~ vecS d (TFloat C), uv ~~ vecS d (TWord C)] ==> uv ~> fv
+  "PrimFloatBitsToInt"  --> \d fv iv -> [fv ~~ floatVecS d, iv ~~ vecS d (TInt C)]  ==> fv ~> iv
+  "PrimFloatBitsToUInt" --> \d fv uv -> [fv ~~ floatVecS d, uv ~~ vecS d (TWord C)] ==> fv ~> uv
+  "PrimIntBitsToFloat"  --> \d fv iv -> [fv ~~ floatVecS d, iv ~~ vecS d (TInt C)]  ==> iv ~> fv
+  "PrimUIntBitsToFloat" --> \d fv uv -> [fv ~~ floatVecS d, uv ~~ vecS d (TWord C)] ==> uv ~> fv
   -- Geometric Functions
-  "PrimLength"          --> \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> TFloat C
+  "PrimLength"          --> \d a -> [a ~~ floatVecS d] ==> a ~> TFloat C
   ["PrimDistance", "PrimDot"]
-                        ---> \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> TFloat C
-  "PrimCross"           --> \a    -> [a ~~ vecS (TNat 3) (TFloat C)] ==> a ~> a ~> a
-  "PrimNormalize"       --> \d a  -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+                        ---> \d a -> [a ~~ floatVecS d] ==> a ~> a ~> TFloat C
+  "PrimCross"           --> \a    -> [a ~~ floatVecS (TNat 3)] ==> a ~> a ~> a
+  "PrimNormalize"       --> \d a  -> [a ~~ floatVecS d] ==> a ~> a
   ["PrimFaceForward", "PrimRefract"]
-                        ---> \d a -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a ~> a
-  "PrimReflect"         --> \d a  -> [a ~~ vecS d (TFloat C)] ==> a ~> a ~> a
+                        ---> \d a -> [a ~~ floatVecS d] ==> a ~> a ~> a ~> a
+  "PrimReflect"         --> \d a  -> [a ~~ floatVecS d] ==> a ~> a ~> a
   -- Matrix Functions
   "PrimTranspose"       --> \a b h w -> [a ~~ TFMat h w, b ~~ TFMat w h] ==> a ~> b
   "PrimDeterminant"     --> \m s   -> [m ~~ TFMat s s] ==> m ~> TFloat C
@@ -471,12 +467,11 @@ primFunMap = Map.fromList $ execWriter $ do
                         ---> \a t  -> [t ~~ TFMatVecScalarElem a] ==> a ~> a ~> TBool C
   -- Fragment Processing Functions
   ["PrimDFdx", "PrimDFdy", "PrimFWidth"]
-                        ---> \d a  -> [a ~~ vecS d (TFloat C)] ==> a ~> a
+                        ---> \d a  -> [a ~~ floatVecS d] ==> a ~> a
   -- Noise Functions
-  "PrimNoise1"          --> \d a   -> [a ~~ vecS d (TFloat C)] ==> a ~> TFloat C
-  "PrimNoise2"          --> \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS (TNat 2) (TFloat C)] ==> a ~> b
-  "PrimNoise3"          --> \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS (TNat 3) (TFloat C)] ==> a ~> b
-  "PrimNoise4"          --> \d a b -> [a ~~ vecS d (TFloat C), b ~~ vecS (TNat 4) (TFloat C)] ==> a ~> b
+  "PrimNoise1"          --> \d a   -> [a ~~ floatVecS d] ==> a ~> TFloat C
+  forM_ [2..4] $ \i ->
+      "PrimNoise" ++ show i  --> \d a b -> [a ~~ floatVecS d, b ~~ floatVecS (TNat i)] ==> a ~> b
 
 fieldProjType :: FName -> TCM Typing
 fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
