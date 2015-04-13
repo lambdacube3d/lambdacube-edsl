@@ -284,8 +284,9 @@ isPrimFun n = Map.member n primFunMap
     PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
 
-primFunMapM :: TCM (Map EName Typing)
-primFunMapM = T.sequence primFunMap
+primFunMap' :: Map EName Typing
+primFunMap' = either (error "primFunMap'") id $ runExcept $ fst <$>
+    evalRWST (T.sequence primFunMap) (mempty, mempty) (mempty, ['b':show i | i <- [0..]])
 
 primFunMap :: Map EName (TCM Typing)
 primFunMap = Map.fromList $ execWriter $ do
@@ -537,6 +538,6 @@ instance NewVar a => NewVar (Ty -> a) where
 
 newVar :: Frequency -> TCM Ty
 newVar f = do
-  (d, n) <- get
-  put (d, n+1)
-  return $ TVar f $ 't':show n
+  (d, n: ns) <- get
+  put (d, ns)
+  return $ TVar f n

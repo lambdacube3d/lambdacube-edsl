@@ -5,9 +5,13 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Type where
 
+import Data.List
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Monoid
 import Data.Foldable hiding (foldr)
 import Data.Traversable
@@ -35,14 +39,28 @@ data Typing_ a = Typing
     , typingType  :: a
     }
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+{-
+instance Show Typing where
+    show (Typing me cs t) = sh me' " |- " $ sh cs' " => " t'
+      where
+        sh "" _ x = x
+        sh a b x = a ++ b ++ x
 
+        t' = show t
+        cs' | null cs = ""
+            | otherwise = "(" ++ intercalate ", " (map show cs) ++ ")"
+        me' = case Map.toList me of
+            [] -> ""
+            xs -> "[" ++ intercalate ", " (map f xs) ++ "]"
+        f (n, t) = n ++ " :: " ++ show t
+-}
 type Range = (Delta, Delta)
 
 type ErrorMsg = ByteString -> String    -- complete source -> message
 
 -- type checking monad
 type TCM =
-    RWST (PolyEnv, [Range]) () ([Maybe ErrorMsg], Int) -- (poly env, stack of ranges) (unamb check results, typevar counter)
+    RWST (PolyEnv, [Range]) () ([Maybe ErrorMsg], [TName]) -- (poly env, stack of ranges) (unamb check results, typevar names)
     (Except ErrorMsg)
 
 data Lit
@@ -167,6 +185,7 @@ data Ty_ a
   = TVar_    Frequency TName
   | TCon_    Frequency TCName [a]     -- saturated type constructor application
   | TArr_    a a
+  | Forall_ TName a
   -- composit
   | TTuple_  Frequency [a]
   | TRecord_ (Map FName a)
@@ -204,6 +223,7 @@ data Ty_ a
 pattern TVar a b = Ty (TVar_ a b)
 pattern TCon f a b = Ty (TCon_ f a b)
 pattern TArr a b = Ty (TArr_ a b)
+pattern Forall a b = Ty (Forall_ a b)
 pattern TTuple a b = Ty (TTuple_ a b)
 pattern TRecord b = Ty (TRecord_ b)
 pattern TArray a b = Ty (TArray_ a b)

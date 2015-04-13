@@ -6,10 +6,12 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeFamilies #-}
 module CompositionalLC
-    ( inference
+    ( inference, inference_
     , composeSubst
     , subst
     , freeVars
+    , polyVars
+    , instantiateTyping
     ) where
 
 import Data.Function
@@ -139,12 +141,15 @@ ambiguityCheck ty = do
     used = freeVars $ constraints ty
     defined = dependentVars (constraints ty) $ freeVars (monoEnv ty) <> freeVars (typingType ty)
 
+polyVars :: Typing -> Set TName
+polyVars ty = dependentVars (constraints ty) $ freeVars (typingType ty)  -- TODO: make it more precise if necessary
+
 -- complex example:
 --      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
 --      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
 instantiateTyping :: Typing -> TCM (Subst, Typing)
 instantiateTyping ty = do
-    let fv = dependentVars (constraints ty) $ freeVars (typingType ty)  -- TODO: make it more precise if necessary
+    let fv = polyVars ty
     newVars <- replicateM (Set.size fv) (newVar C)
     let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
     return (s, subst s ty)
@@ -169,8 +174,11 @@ dependentVars ie s = cycle mempty s
 
 
 inference :: Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
-inference e = runExcept $ fst <$>
-    evalRWST (inferTyping e <* checkUnambError) (PolyEnv $ fmap ((,) mempty) <$> primFunMap, mempty) (mempty, 0)
+inference = inference_ $ PolyEnv $ fmap ((,) mempty) <$> primFunMap
+
+inference_ :: PolyEnv -> Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
+inference_ primFunMap e = runExcept $ fst <$>
+    evalRWST (inferTyping e <* checkUnambError) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
 
 removeMonoVars vs (Typing me cs t) = Typing (foldr Map.delete me $ Set.toList vs) cs t
 
@@ -236,6 +244,6 @@ withTyping :: Map EName Typing -> TCM a -> TCM a
 withTyping ts m = do
     penv <- asks $ getPolyEnv . fst
     case toList $ Map.keysSet ts `Set.intersection` Map.keysSet penv of
-        [] -> local ((<> PolyEnv (Map.map instantiateTyping ts)) *** id) m
+        [] -> local ((<> PolyEnv (instantiateTyping <$> ts)) *** id) m
         ks -> throwErrorTCM $ "Variable name clash: " ++ show ks
 
