@@ -90,6 +90,8 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
         unifyTy (TTuple f1 t1) (TTuple f2 t2) = sequence_ $ zipWith uni t1 t2
         unifyTy (TCon f1 n1 t1) (TCon f2 n2 t2) | n1 == n2 = sequence_ $ zipWith uni t1 t2
         unifyTy (TArr a1 b1) (TArr a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy (TVec a1 b1) (TVec a2 b2) | a1 == a2 = uni b1 b2
+        unifyTy (TMat a1 b1 c1) (TMat a2 b2 c2) | a1 == a2 && b1 == b2 = uni c1 c2
         unifyTy (TPrimitiveStream f1 a1 b1 g1 c1) (TPrimitiveStream f2 a2 b2 g2 c2) = uni a1 a2 >> uni b1 b2 >> uni c1 c2
         unifyTy a b
           | a == b = return ()

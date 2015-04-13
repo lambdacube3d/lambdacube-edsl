@@ -140,53 +140,15 @@ reduceConstraint x = case x of
 
     CEq res f -> case f of
 
-        TFMat (TV2F C) (TV2F C) -> reduced $ TM22F C
-        TFMat (TV2F C) (TV3F C) -> reduced $ TM23F C
-        TFMat (TV2F C) (TV4F C) -> reduced $ TM24F C
-        TFMat (TV3F C) (TV2F C) -> reduced $ TM32F C
-        TFMat (TV3F C) (TV3F C) -> reduced $ TM33F C
-        TFMat (TV3F C) (TV4F C) -> reduced $ TM34F C
-        TFMat (TV4F C) (TV2F C) -> reduced $ TM42F C
-        TFMat (TV4F C) (TV3F C) -> reduced $ TM43F C
-        TFMat (TV4F C) (TV4F C) -> reduced $ TM44F C
+        TFMat (TVec n t1) (TVec m t2) | t1 `elem` [TFloat C] && t1 == t2 -> reduced $ TMat n m t1
         TFMat a b -> check (a `matches` [TV2F C, TV3F C, TV4F C] && b `matches` [TV2F C, TV3F C, TV4F C]) $ observe res $ \case
-            TM22F C -> keep [[a, TV2F C], [b, TV2F C]]
-            TM23F C -> keep [[a, TV2F C], [b, TV3F C]]
-            TM24F C -> keep [[a, TV2F C], [b, TV4F C]]
-            TM32F C -> keep [[a, TV3F C], [b, TV2F C]]
-            TM33F C -> keep [[a, TV3F C], [b, TV3F C]]
-            TM34F C -> keep [[a, TV3F C], [b, TV4F C]]
-            TM42F C -> keep [[a, TV4F C], [b, TV2F C]]
-            TM43F C -> keep [[a, TV4F C], [b, TV3F C]]
-            TM44F C -> keep [[a, TV4F C], [b, TV4F C]]
+            TMat n m t -> keep [[a, TVec n t], [b, TVec m t]]
             _ -> fail "no instance"
 
-        TFVec (TNat 2) (TFloat C) -> reduced $ TV2F C
-        TFVec (TNat 3) (TFloat C) -> reduced $ TV3F C
-        TFVec (TNat 4) (TFloat C) -> reduced $ TV4F C
-        TFVec (TNat 2) (TInt C)   -> reduced $ TV2I C
-        TFVec (TNat 3) (TInt C)   -> reduced $ TV3I C
-        TFVec (TNat 4) (TInt C)   -> reduced $ TV4I C
-        TFVec (TNat 2) (TWord C)  -> reduced $ TV2U C
-        TFVec (TNat 3) (TWord C)  -> reduced $ TV3U C
-        TFVec (TNat 4) (TWord C)  -> reduced $ TV4U C
-        TFVec (TNat 2) (TBool C)  -> reduced $ TV2B C
-        TFVec (TNat 3) (TBool C)  -> reduced $ TV3B C
-        TFVec (TNat 4) (TBool C)  -> reduced $ TV4B C
+        TFVec (TNat n) ty | n `elem` [2,3,4] && ty `elem` [TNat 2, TNat 3, TNat 4] -> reduced $ TVec n ty
         TFVec a b -> check (a `matches` [TNat 2, TNat 3, TNat 4] && b `matches` [TFloat C, TInt C, TWord C, TBool C])
                      $ observe res $ \case
-            TV2F C -> keep [[a, TNat 2], [b, TFloat C]]
-            TV3F C -> keep [[a, TNat 3], [b, TFloat C]]
-            TV4F C -> keep [[a, TNat 4], [b, TFloat C]]
-            TV2I C -> keep [[a, TNat 2], [b, TInt C]]
-            TV3I C -> keep [[a, TNat 3], [b, TInt C]]
-            TV4I C -> keep [[a, TNat 4], [b, TInt C]]
-            TV2U C -> keep [[a, TNat 2], [b, TWord C]]
-            TV3U C -> keep [[a, TNat 3], [b, TWord C]]
-            TV4U C -> keep [[a, TNat 4], [b, TWord C]]
-            TV2B C -> keep [[a, TNat 2], [b, TBool C]]
-            TV3B C -> keep [[a, TNat 3], [b, TBool C]]
-            TV4B C -> keep [[a, TNat 4], [b, TBool C]]
+            TVec n t -> keep [[a, TNat n], [b, t]]
             _ -> fail "no instance"
 
         TFVecScalar a b -> case a of
@@ -202,27 +164,8 @@ reduceConstraint x = case x of
             _ -> like $ TFVec a b
 
         TFMatVecElem t -> observe t $ \case
-            TV2F C  -> reduced $ TFloat C
-            TV3F C  -> reduced $ TFloat C
-            TV4F C  -> reduced $ TFloat C
-            TV2I C  -> reduced $ TInt C
-            TV3I C  -> reduced $ TInt C
-            TV4I C  -> reduced $ TInt C
-            TV2U C  -> reduced $ TWord C
-            TV3U C  -> reduced $ TWord C
-            TV4U C  -> reduced $ TWord C
-            TV2B C  -> reduced $ TBool C
-            TV3B C  -> reduced $ TBool C
-            TV4B C  -> reduced $ TBool C
-            TM22F C -> reduced $ TFloat C
-            TM23F C -> reduced $ TFloat C
-            TM24F C -> reduced $ TFloat C
-            TM32F C -> reduced $ TFloat C
-            TM33F C -> reduced $ TFloat C
-            TM34F C -> reduced $ TFloat C
-            TM42F C -> reduced $ TFloat C
-            TM43F C -> reduced $ TFloat C
-            TM44F C -> reduced $ TFloat C
+            TVec n t -> reduced t
+            TMat _ _ t -> reduced t
             _ -> fail "no instance"
 
         TFMatVecScalarElem t -> observe t $ \case

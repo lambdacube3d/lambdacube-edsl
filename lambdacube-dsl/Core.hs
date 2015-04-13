@@ -19,7 +19,7 @@ data Kind
   = Star
   deriving (Show,Eq,Ord)
 
-data Type = ForAll [(TName,Kind)] Ty
+data Type = ForAll [(TName,Kind)] Ty    -- TODO
   deriving (Show,Eq,Ord)
 
 data Var
@@ -58,40 +58,15 @@ toCore e = case e of
                        in EApp (tyApp tv) (toCore a) -- insert type applications
   AST.ESubst _ _ e  -> toCore e
   _ -> error $ "toCore: " ++ show e
-{-
-  = ELit      a Lit
-  | EPrimFun  a PrimFun
-  | EVar      a EName
-  | EApp      a (Exp a) (Exp a)
-  | ELam      a EName (Exp a)
-  | ELet      a EName (Exp a) (Exp a)
-  | ETuple    a [Exp a]
--}
-{-
-let id x = x
-in id 1
--}
-{-
-idAST = AST.ELet (Map.fromList [],[],TInt C) "id" (
-        AST.ELam (Map.fromList [],[],TArr (TVar C "t0") (TVar C "t0")) "x"
-          (AST.EVar (Map.fromList [("x",TVar C "t0")],[],TVar C "t0") mempty "x"))
-        (AST.EApp (Map.fromList [],[],TInt C) Map.empty (AST.EVar (Map.fromList [],[],TArr (TVar C "t2") (TVar C "t2")) mempty "id") (AST.ELit (Map.fromList [],[],TInt C) (LInt 1)))
--}
-{-
-idCore = Let "id" (
-          Lam "a" (Lam "x" (Var $ Id "x" (TyVarTy $ TyVar "a" Star))))
-         (App (App (Var $ Id "id" (ForAllTy (TyVar "a" Star) $ Arr (TyVarTy (TyVar "a" Star)) (TyVarTy $ TyVar "a" Star))) (Type Int)) (Lit $ LInt 1))
--}
 
+
+-- test case
 idCoreLam = ELam (VarT "a" Star) $ ELam (VarE "x" $ ForAll [] $ TVar C "a") $ EVar $ VarE "x" $ ForAll [] $ TVar C "a"
 idCore = ELet (VarE "id" $ ForAll [("t",Star)] $ TVar C "t" ~> TVar C "t") idCoreLam $
           EApp (EApp (EVar $ VarE "id" $ ForAll [("t",Star)] $ TVar C "t" ~> TVar C "t") (EType $ ForAll [] $ TInt C)) (ELit $ LInt 1)
-{-
-idCore = Let "id" (
-          Lam "a" (Lam "x" (Var $ Id "x" (TyVarTy $ TyVar "a" Star))))
-         (App (App (Var $ Id "id" (ForAllTy (TyVar "a" Star) $ Arr (TyVarTy (TyVar "a" Star)) (TyVarTy $ TyVar "a" Star))) (Type Int)) (Lit $ LInt 1))
--}
+
 test = do
   (src, Success e) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
   putStrLn $ ppShow $ toCore $ either (error . ($ src)) id $ inference e
+
