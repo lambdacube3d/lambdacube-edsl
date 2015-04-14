@@ -3,6 +3,8 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module ToDeBruijn
     ( toNF
+    , eval
+    , toTy
     , compile
     , NF (N)
     ) where
@@ -124,7 +126,7 @@ toNF sub env (ETuple t a) = [Tuple' (toTy' sub' t) (fmap (eval . toNF sub' env) 
   where sub' = addSubst t sub
 --toNF _ _ x = error $ "toNF error: " ++ show x
 
-toTy' s (_, t) = toTy $ subst s t
+toTy' s (_, t) = toTy $ typingType $ subst s t
 addSubst (s, _) sub = s `composeSubst` sub
 
 eval :: [NF] -> [NF]
@@ -431,8 +433,8 @@ eval l = l
 noType = Unknown ""
 
 -- TODO: use constraints
-toTy :: Typing -> C.Ty
-toTy ty = case typingType ty of
+toTy :: Ty -> C.Ty
+toTy ty = case ty of
     TBool  _ -> Single C.Bool 
     TWord  _ -> Single C.Word 
     TInt   _ -> Single C.Int  
@@ -459,8 +461,9 @@ toTy ty = case typingType ty of
     TMat 4 3 (TFloat a) -> Single C.M43F
     TMat 4 4 (TFloat a) -> Single C.M44F
 
-    TInterpolated _ t -> toTy $ typing (monoEnv ty) (constraints ty) t
+    TInterpolated _ t -> toTy t
     t -> Unknown (show ty)
+
 {-
 data InputType
     = Bool
