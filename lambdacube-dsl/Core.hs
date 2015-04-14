@@ -60,12 +60,15 @@ reduce s m e = case e of
         (ELam (VarE v _) e) -> reduce s (Map.insert v x m) e
         (ELam (VarT v) e) -> case r x of
             EType x -> reduce (s `composeSubst` Map.singleton v x) m e
+        (EVar (VarE v (Forall tv t))) -> case r x of
+            EType t' -> EVar $ VarE v $ subst (Map.singleton tv t') t
         e -> case r x of
-            EType x -> e --reduce (s `composeSubst` Map.singleton v x) m e
+--            EType x -> e --reduce (s `composeSubst` Map.singleton v x) m e
 --            EType t ->
             EConstraint _ -> e
             x -> EApp e x
     ETuple es -> ETuple $ map r es
+--    ELam v@(VarE n t) e -> ELam v $ reduce (s `composeSubst` Map.singleton n t) m e
     ELam v e -> ELam v $ r e
     ELit{} -> e
     EType t -> EType $ subst s t
@@ -77,7 +80,7 @@ toCore :: Subst -> AST.Exp (Subst, Typing) -> Exp
 toCore sub e = case e of
   AST.ELit _ a      -> ELit a
   AST.ETuple _ a    -> ETuple $ fmap toCore' a
-  AST.EVar t n      -> foldl EApp (foldl EApp (EVar $ VarE n $ toType $ snd t) pv) cs
+  AST.EVar t n      -> foldl EApp (foldl EApp (EVar $ VarE n $ toType $ subst sub' $ snd t) pv) cs
     where
       cs = map EConstraint $ subst sub' $ constraints $ snd t
       pv = map EType $ subst sub' $ map (\n -> TVar C n) $ Map.keys $ fst t
@@ -110,6 +113,7 @@ compile x = case comp . reduce mempty mempty . toCore mempty $ x of
 
 pattern Va x <- VarE x _
 pattern A0 x <- EVar (Va x)
+pattern A0t x t <- EVar (VarE x t)
 pattern A1 f x <- EApp (A0 f) x
 pattern A2 f x y <- EApp (A1 f x) y
 pattern A3 f x y z <- EApp (A2 f x y) z
@@ -117,6 +121,13 @@ pattern A4 f x y z v <- EApp (A3 f x y z) v
 pattern A5 f x y z v w <-  EApp (A4 f x y z v) w
 
 noType = Unknown ""
+
+tyOf :: Exp -> Ty
+tyOf (EVar (VarE _ t)) = t
+tyOf (EApp (tyOf -> TArr _ t) _) = t
+tyOf e = error $ "tyOf " ++ ppShow e
+
+tyOf' = toTy . tyOf
 
 comp :: Exp -> [N]
 comp x = case x of
@@ -128,23 +139,22 @@ comp x = case x of
     A2 "Rasterize" x (f -> [y]) -> [rasterize (compRC x) y]
     A2 "Transform" (f -> [a]) (f -> [b]) -> [transform a b]
     A4 "VertexOut" (f -> [a]) b (f -> c) (f -> d) -> [vertexOut a (const_ (Single C.Float) (VFloat $ realToFrac $ compLF b)) c d]
-    A2 "PrimMul" (f -> [a]) (f -> [b]) -> [primApp t C.PrimMul  $ tup (C.Tuple [t,v]) [a, b]]
-        where t = Unknown "1"; v = Unknown "2" {-!-}
-    A2 "PrimMulMatVec" (f -> [a]) (f -> [b]) -> [primApp (Unknown "3"){-!-} C.PrimMulMatVec $ tup (Unknown "4") [a, b]]
+    A2 "PrimMul" av@(f -> [a]) bv@(f -> [b]) -> [primApp t C.PrimMul  $ tup (C.Tuple [t,v]) [a, b]]
+        where t = tyOf' av; v = tyOf' bv
+    A2 "PrimMulMatVec" (f -> [a]) bv@(f -> [b]) -> [primApp (tyOf' bv) C.PrimMulMatVec $ tup noType [a, b]]
     A3 "Fetch" (ELit (LString a)) (compFetchPrimitive -> b) (compInput -> (c,t{-!-})) -> [fetch (pack a) b [(c,V4F)]]
     A1 "FrameBuffer" (compImg -> i) -> [frameBuffer i]
     A1 "Const" v -> [const_ t $ compValue v]
-        where t = (Unknown "5")
+        where t = tyOf' v
     A1 "Smooth" (f -> [a]) -> [smooth a]
     A1 "Uni" (compInput -> (n, t)) -> [uni t n]
     ETuple [] -> []
     ELam (VarE _ t) (f -> [x]) -> [lam (toTy t) $ body x]
---    A0 "v" -> [var ty 0 ""] where ty = (Unknown "6")
+    A0t "v" t -> [var ty 0 ""] where ty = toTy t
     x -> error $ "comp " ++ ppShow x
   where
     f :: Exp -> [N]
     f = comp
-
 
 compValue x = case x of
     A4 "V4F" (ELit (LFloat x)) (ELit (LFloat y)) (ELit (LFloat z)) (ELit (LFloat w)) -> VV4F (V4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))
@@ -214,8 +224,9 @@ compFrag x = case x of
     x -> error $ "compFrag " ++ ppShow x
 
 
-test = test_ $ putStrLn . ppShow
-test' = test_ $ \x -> head (comp x) `seq` print "ok"
+test = test'' >>= putStrLn
+test'' = test_ $ return . ppShow . reduce mempty mempty
+test' = test_ $ \x -> head (comp $ reduce mempty mempty x) `seq` print "ok"
 
 test_ f = do
   (src, r) <- parseLC_ "gfx03.lc" -- "gfx03.lc" -- "example01.lc"
@@ -224,7 +235,7 @@ test_ f = do
   putStrLn "====================="
   case r of
     Success e -> do
-        (f $ reduce mempty mempty $ toCore mempty $ either (error . ($ src)) id $ inference e) 
+        (f $ toCore mempty $ either (error . ($ src)) id $ inference e) 
     Failure m -> do
       error $ show m
 

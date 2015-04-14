@@ -20,8 +20,8 @@ import Codec.Image.STB hiding (Image)
 
 import Type
 import CompositionalLC hiding (test)
-import ToDeBruijn (compile)
---import Core (compile)
+--import ToDeBruijn (compile)
+import Core (compile)
 import Parser hiding (main, parseLC)
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
