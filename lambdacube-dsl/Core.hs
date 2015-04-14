@@ -1,7 +1,14 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Core where
 
+import Data.Foldable (Foldable)
+import qualified Data.Foldable as F
+import Data.Traversable
 import Control.DeepSeq
 import Data.ByteString.Char8 (pack)
 import Debug.Trace
@@ -15,7 +22,7 @@ import Control.Applicative
 import CompositionalLC hiding (Exp(..))
 import qualified CompositionalLC as AST
 import qualified Type as AST
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp)
+import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp, Exp_ (..), Pat, PVar, PLit, PTuple)
 import Text.Trifecta (Result(..))
 
 import LambdaCube.Core.DeBruijn hiding (Exp,N)
@@ -40,17 +47,46 @@ data Var
   | VarC (Constraint Ty)               -- constraint var
   deriving (Show,Eq,Ord)
 
-data Exp
-  = ELit     Lit
-  | EVar     Var
-  | EApp     Exp Exp
-  | ELam     Var Exp
-  | ELet     Var Exp Exp -- VarE only!
-  | ETuple   [Exp]
-  | EType    Ty
-  | EConstraint (Constraint Ty)  -- TODO
+data Pat
+  = PLit     Lit
+  | PVar     Var
+  | PCon EName Type [Pat]
+  | PTuple   [Pat]
   deriving (Show,Eq,Ord)
 
+newtype Exp = Exp (Exp_ Exp)
+  deriving (Show,Eq,Ord)
+
+dummyType = TVar C ""
+
+stripTypes :: Exp -> Exp
+stripTypes e = case e of
+    EVar (VarE n _) -> EVar $ VarE n dummyType
+    Exp e -> Exp $ stripTypes <$> e
+
+data Exp_ a
+  = ELit_     Lit
+  | EVar_     Var
+  | EApp_     a a
+  | ELam_     Var a
+  | ELet_     Var a a -- VarE only!
+  | ETuple_   [a]
+  | EType_    Ty
+  | EConstraint_ (Constraint Ty)  -- TODO: wittnesses here if needed
+  | ECase_    a [(Pat, a)]
+  deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+
+pattern ELit a = Exp (ELit_ a)
+pattern EVar a = Exp (EVar_ a)
+pattern EApp a b = Exp (EApp_ a b)
+pattern ELam a b = Exp (ELam_ a b)
+pattern ELet a b c = Exp (ELet_ a b c)
+pattern ECase a b = Exp (ECase_ a b)
+pattern ETuple a = Exp (ETuple_ a)
+--pattern ERecord a b = Exp (ERecord_ a b)
+--pattern EFieldProj a c = Exp (EFieldProj_ a c)
+pattern EType a = Exp (EType_ a)
+pattern EConstraint a = Exp (EConstraint_ a)
 
 reduce :: Subst -> Map EName Exp -> Exp -> Exp
 reduce s m e = case e of
@@ -85,11 +121,11 @@ toCore sub e = case e of
       cs = map EConstraint $ subst sub' $ constraints $ snd t
       pv = map EType $ subst sub' $ map (\n -> TVar C n) $ Map.keys $ fst t
   AST.EApp t f a    -> EApp (toCore' f) (toCore' a)
-  AST.ELet _ (PVar _ n) a b  -> ELet (VarE n $ toType' $ getTag a) (pv --> ctr --> toCore' a) (toCore' b)
+  AST.ELet _ (AST.PVar _ n) a b  -> ELet (VarE n $ toType' $ getTag a) (pv --> ctr --> toCore' a) (toCore' b)
     where
       ctr = map VarC $ constraints $ snd $ getTag a
       pv = map VarT $ Set.toList $ polyVars $ snd $ getTag a
-  AST.ELam t (PVar tn n) a -> ELam (VarE n $ toType' tn) $ toCore' a
+  AST.ELam t (AST.PVar tn n) a -> ELam (VarE n $ toType' tn) $ toCore' a
   _ -> error $ "toCore: " ++ show e
  where
     toCore' = toCore sub'
@@ -127,6 +163,7 @@ tyOf (EVar (VarE _ t)) = t
 tyOf (EApp (tyOf -> TArr _ t) _) = t
 tyOf e = error $ "tyOf " ++ ppShow e
 
+tyOf' :: Exp -> C.Ty
 tyOf' = toTy . tyOf
 
 comp :: Exp -> [N]
@@ -223,9 +260,12 @@ compFrag x = case x of
     A2 "ColorOp" (compBlending -> b) (compValue -> v) -> ColorOp b v
     x -> error $ "compFrag " ++ ppShow x
 
+showStrippedReducedTest = test'' (stripTypes . reduce mempty mempty) >>= writeFile "testStripped.tmp"
+showReducedTest = test'' (reduce mempty mempty) >>= writeFile "test.tmp"
+showUnreducedTest = test'' id >>= writeFile "testUnreduced.tmp"
 
-test = test'' >>= putStrLn
-test'' = test_ $ return . ppShow . reduce mempty mempty
+test = test'' (reduce mempty mempty) >>= putStrLn
+test'' f = test_ $ return . ppShow . f
 test' = test_ $ \x -> head (comp $ reduce mempty mempty x) `seq` print "ok"
 
 test_ f = do

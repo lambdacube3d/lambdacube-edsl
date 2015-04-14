@@ -525,6 +525,7 @@ instance NewVar a => NewVar (Ty -> a) where
         v@(TVar _ n) <- newVar C
         newV_ (Map.insert n v s) $ f v
 
+-- don't use this, use newV instead
 newVar :: Frequency -> TCM Ty
 newVar f = do
   (d, n: ns) <- get
