@@ -12,6 +12,7 @@ module CompositionalLC
     , freeVars
     , polyVars
     , instantiateTyping
+    , typing
     ) where
 
 import Data.Function

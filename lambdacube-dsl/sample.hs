@@ -20,8 +20,8 @@ import Codec.Image.STB hiding (Image)
 
 import Type
 import CompositionalLC hiding (test)
-import ToDeBruijn
---import ParseTrifectaLC
+import ToDeBruijn (compile)
+--import Core (compile)
 import Parser hiding (main, parseLC)
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
@@ -119,10 +119,10 @@ rendererFromDSL :: String -> IO (Maybe Renderer)
 rendererFromDSL fname = do
   lcAST' <- parseLC fname
   case lcAST' of
-    Right lcAST -> case toNF mempty mempty lcAST of
-        [N _ lcNet] -> Just <$> compileRendererFromCore lcNet
-        a -> do
-          putStrLn $ "rendererFromDSL error: " ++ show a
+    Right lcAST -> case compile lcAST of
+        Right lcNet -> Just <$> compileRendererFromCore lcNet
+        Left e -> do
+          putStrLn $ "rendererFromDSL error: " ++ e
           return Nothing
     Left a -> putStrLn a >> return Nothing
 main :: IO ()

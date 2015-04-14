@@ -3,6 +3,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module ToDeBruijn
     ( toNF
+    , compile
     , NF (N)
     ) where
 
@@ -88,6 +89,12 @@ data EnvVar
   | LamVar
 
 type NFEnv = Map EName EnvVar
+
+compile :: Exp (Subst, Typing) -> Either String LambdaCube.Core.DeBruijn.N
+compile lcAST = case toNF mempty mempty lcAST of
+        [N _ lcNet] -> Right lcNet
+        a -> Left $ show a
+
 -- TODO: add let
 toNF :: Subst -> NFEnv -> Exp (Subst, Typing) -> [NF]
 toNF sub env (ELit t l) = [Arg l]
@@ -425,7 +432,7 @@ noType = Unknown ""
 
 -- TODO: use constraints
 toTy :: Typing -> C.Ty
-toTy ty@(Typing m i t) = case t of
+toTy ty = case typingType ty of
     TBool  _ -> Single C.Bool 
     TWord  _ -> Single C.Word 
     TInt   _ -> Single C.Int  
@@ -452,7 +459,7 @@ toTy ty@(Typing m i t) = case t of
     TMat 4 3 (TFloat a) -> Single C.M43F
     TMat 4 4 (TFloat a) -> Single C.M44F
 
-    TInterpolated _ t -> toTy $ Typing m i t
+    TInterpolated _ t -> toTy $ typing (monoEnv ty) (constraints ty) t
     t -> Unknown (show ty)
 {-
 data InputType
