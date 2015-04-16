@@ -51,6 +51,7 @@ lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
       , "type", "data"
       , "forall"
       , "infix", "infixl", "infixr"
+      , "deriving"
       ]
 
 keyword :: String -> P ()
@@ -66,13 +67,13 @@ typeConstraint = void_ $ do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "type constraint must start with capital letter"
 
-typeConstructor :: P ()
-typeConstructor = void_ $ do
+typeConstructor :: P String
+typeConstructor = do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "type name must start with capital letter"
 
-typeVar :: P ()
-typeVar = void_ $ do
+typeVar :: P String
+typeVar = do
   i <- ident lcIdents
   if isUpper $ head i then fail "type variable name must start with lower case letter" else return i
 
@@ -94,17 +95,35 @@ moduleName = void_ $ do
   l <- sepBy1 (ident lcIdents) dot
   when (any (isLower . head) l) $ fail "module name must start with capital letter"
 
-moduleDef :: P ()
-moduleDef = void_ $ do
+moduleDef :: P Module
+moduleDef = do
   optional $ do
     keyword "module"
     moduleName
     optional $ parens (commaSep varId)
     keyword "where"
-  localAbsoluteIndentation $ do
+  defs <- localAbsoluteIndentation $ do
     many importDef
     -- TODO: unordered definitions
-    many $ choice [dataDef,try typeSignature,typeSynonym,typeClassDef,void_ $ try valueDef,fixityDef,typeClassInstanceDef]
+    many $ choice
+        [ DDataDef <$> dataDef
+        , TypeSig <$> try typeSignature
+        , undef "typeSyn" $ typeSynonym
+        , undef "class" $ typeClassDef
+        , (\(r, (r', n), e) -> ValueDef (n, e)) <$> try valueDef_
+        , undef "fixity" fixityDef
+        , undef "instance" typeClassInstanceDef
+        ]
+  return $ Module
+      { moduleImports = ()
+      , moduleExports = ()
+      , typeAliases   = ()
+      , definitions   = [d | ValueDef d <- defs]
+      , dataDefs      = [d | DDataDef d <- defs]
+      , typeClasses   = ()
+      , instances     = ()
+      }
+
 
 importDef :: P ()
 importDef = void_ $ do
@@ -119,17 +138,17 @@ typeSynonym = void_ $ do
     typeConstructor
     many typeVar
     operator "="
-    typeExp
+    void_ typeExp
 
 typeSignature :: P ()
 typeSignature = void_ $ do
   varId
   localIndentation Gt $ do
     operator "::"
-    typeExp
+    optional (operator "!") <* void_ typeExp
 
 typePattern :: P ()
-typePattern = choice [try typeVar, typeConstructor, void_ $ parens ((typeConstructor <* some typePattern) <|> typePattern)]
+typePattern = choice [void_ (try typeVar), void_ typeConstructor, void_ $ parens ((void_ typeConstructor <* some typePattern) <|> typePattern)]
 
 tcExp :: P ()
 tcExp = void_ $ try $ do
@@ -137,31 +156,47 @@ tcExp = void_ $ try $ do
   tyC <|> (void_ $ parens (sepBy1 tyC comma))
   operator "=>"
 
-typeExp :: P ()
+typeExp :: P Ty
 typeExp = do
   optional (keyword "forall" >> some typeVar >> operator ".")
   optional (tcExp <?> "type context")
   ty
 
-dataDef :: P ()
+dataDef :: P DataDef
 dataDef = do
   keyword "data"
   localIndentation Gt $ do
-  typeConstructor
-  many typeVar
-  let dataConDef = typeConstructor <* many typeExp
-  operator "=" *> dataConDef
-  many (operator "|" *> dataConDef)
-  return ()
+  tc <- typeConstructor
+  tvs <- many typeVar
+  let dataConDef = do
+        tc <- typeConstructor
+        tys <-   braces (sepBy (varId *> keyword "::" *> optional (operator "!") *> typeExp) comma)
+            <|>  many (optional (operator "!") *> typeExp)
+        return $ ConDef tc tys
+  operator "="
+  ds <- sepBy dataConDef $ operator "|"
+  derivingStm
+  return $ DataDef tc tvs ds
 
-typeRecord :: P ()
-typeRecord = void_ $ do
-  braces (commaSep1 typeSignature >> optional (operator "|" >> typeVar))
+derivingStm = optional $ keyword "deriving" <* (void_ typeConstructor <|> void_ (parens $ sepBy typeConstructor comma))
 
-ty = chainl1 (void_ $ some typeAtom) (do operator "->"; return const)
+typeRecord :: P Ty
+typeRecord = undef "trec" $ do
+  braces (commaSep1 typeSignature >> optional (operator "|" >> void_ typeVar))
 
-typeAtom :: P ()
-typeAtom = typeRecord <|> try typeVar <|> typeConstructor <|> (parens ty) <|> brackets ty-- <|> (do typeAtom; operator "->"; typeAtom)
+tApp :: Ty -> Ty -> Ty
+tApp (TCon f c xs) y = TCon f c $ xs ++ [y]
+
+ty :: P Ty
+ty = chainr1 (foldl1 tApp <$> some typeAtom) (do operator "->"; return $ TArr)
+
+typeAtom :: P Ty
+typeAtom = typeRecord
+    <|> TVar C <$> (try typeVar)
+    <|> try (parens $ pure $ TCon C "()" [])
+    <|> TCon C <$> typeConstructor <*> pure []
+    <|> TTuple C <$> (parens $ sepBy ty comma)
+    <|> TCon C "[]" . (:[]) <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
 
 typeClassDef :: P ()
 typeClassDef = void_ $ do
@@ -194,20 +229,23 @@ fixityDef = void_ $ do
     natural
     ident lcOps :: P String
 
-undef = (const undefined <$>)
+undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
 valuePattern :: P (Exp Range)
 valuePattern
-    =   try (undef $ operator "_")
-    <|> (try $ undef $ var *> operator "@" *> valuePattern)
+    =   try (undef "_" $ operator "_")
+    <|> (try $ undef "@" $ var *> operator "@" *> valuePattern)
     <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position
-    <|> (undef $ try dataConstructor)
+    <|> (undef "data Constr" $ try dataConstructor)
     <|> try pat
  where
-  pat = parens ((try $ undef $ dataConstructor *> some valuePattern) <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position)
+  pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePattern) <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position)
 
 valueDef :: P (Exp Range -> Exp Range)
-valueDef = do
+valueDef = (\(r, (r', n), e) -> ELet r (PVar r' n) e) <$> valueDef_
+
+valueDef_ :: P (Range, (Range, String), Exp Range)
+valueDef_ = do
   p1 <- position
   n <- varId
   p1' <- position
@@ -220,7 +258,7 @@ valueDef = do
     keyword "where"
     localIndentation Gt $ localAbsoluteIndentation $ some valueDef
   p2 <- position
-  return $ \e -> ELet (p1,p2) (PVar (p1,p1') n) (foldr (args (p1,p2)) d a) e
+  return ((p1,p2), ((p1,p1'), n), foldr (args (p1,p2)) d a)
   where
     args r (EVar r' n) e = ELam r (PVar r' n) e
 
@@ -233,6 +271,7 @@ expression = application <$> some (
   exp listExp <|>
   exp ((\p1 l p2 -> ELit (p1,p2) l) <$> position <*> literalExp <*> position) <|>
   exp recordExp <|>
+  exp recordExp' <|>
   exp recordFieldProjection <|>
   exp lambda <|>
   exp ifthenelse <|>
@@ -247,7 +286,7 @@ expression = application <$> some (
   gt = localIndentation Gt
 
   exp :: P (Exp Range) -> P (Exp Range)
-  exp p = try (p <* optional (operator "::" *> typeExp))
+  exp p = try (p <* optional (operator "::" *> void_ typeExp))
 
   tuple :: P (Exp Range)
   tuple = (\p1 (v, vs) p2 -> if null vs then v else ETuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> expression <*> some (comma *> expression)) <*> position
@@ -259,10 +298,10 @@ expression = application <$> some (
   lambda = (\p1 (EVar r n: _ {-TODO-}) e p2 -> ELam (p1,p2) (PVar r n) e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
 
   ifthenelse :: P (Exp Range)
-  ifthenelse = undef $ keyword "if" *> (gt $ expression *> keyword "then" *> gt expression *> keyword "else" *> gt expression)
+  ifthenelse = undef "if" $ keyword "if" *> (gt $ expression *> keyword "then" *> gt expression *> keyword "else" *> gt expression)
 
   caseof :: P (Exp Range)
-  caseof = undef $ do
+  caseof = undef "case" $ do
     let casePat = valuePattern *> operator "->" *> (localIndentation Gt $ expression)
     localIndentation Ge $ do
       l <- keyword "case" *> expression *> keyword "of" <* (localIndentation Gt $ localAbsoluteIndentation $ some casePat) -- WORKS
@@ -278,38 +317,44 @@ expression = application <$> some (
   recordExp :: P (Exp Range)
   recordExp = (\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* colon <*> expression) comma) <*> position
 
+  recordExp' :: P (Exp Range)
+  recordExp' = dataConstructor *> ((\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma) <*> position)
+
   recordFieldProjection :: P (Exp Range)
   recordFieldProjection = try ((\p1 r p f p2 -> EApp (p1,p2) (EFieldProj (p,p2) f) (EVar (p1,p) r)) <$> position <*> var <*> position <* dot <*> var <*> position)
 
   literalExp :: P Lit
   literalExp =
-      LFloat <$> {-try-} double <|>
+      LFloat <$> try double <|>
       LInt <$> integer <|>
       LChar <$> charLiteral <|>
       LString <$> stringLiteral <|>
       LNat . fromIntegral <$ operator "#" <*> integer
 
   listExp :: P (Exp Range)
-  listExp = undef $ brackets $ commaSep expression
+  listExp = foldr cons nil <$> (brackets $ commaSep expression)
+    where
+      nil = EVar mempty "[]"
+      cons a b = EApp mempty (EApp mempty (EVar mempty ":") a) b
 
 indentState = mkIndentationState 0 infIndentation True Ge
 
 test = parseLC "syntax02.lc"
 
-parseLC :: String -> IO (Either String ())
+parseLC :: String -> IO (Either String Module)
 parseLC fname = do
   src <- BS.readFile fname
   case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> moduleDef <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
     Failure m -> do
       print m
       return (Left $ show m)
-    Success e -> print "Parsed" >> (return $ Right ())
+    Success e -> print "Parsed" >> (return $ Right e)
 
 parseLC_ :: String -> IO (BS.ByteString, Result (Exp Range))
 parseLC_ fname = do
   src <- BS.readFile fname
   return (src, parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expression <* eof) indentState) (Directed (pack fname) 0 0 0 0) src)
-main = test
+--main = test
 
 -- AST
 data Module
@@ -317,13 +362,24 @@ data Module
   { moduleImports :: ()
   , moduleExports :: ()
   , typeAliases   :: ()
-  , definitions   :: ()
+  , definitions   :: [ValueDef]
+  , dataDefs      :: [DataDef]
   , typeClasses   :: ()
   , instances     :: ()
   }
+    deriving (Show)
 
 data Definition
-  = Definition -- name, maybe type, maybe fixity, expression
+  = ValueDef ValueDef
+  | TypeSig ()
+  | DDataDef DataDef
+    deriving (Show)
+
+type ValueDef = (String, Exp Range)
+data DataDef = DataDef String [String] [ConDef]
+    deriving (Show)
+data ConDef = ConDef EName [Ty]
+    deriving (Show)
 
 data Expression -- record, list, tuple, literal, var, application, lambda, ifthenelse, letin, caseof, dataconstructor
   = Expression
