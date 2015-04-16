@@ -9,10 +9,10 @@ import Text.Trifecta (Result (..))
 import System.Environment
 import System.Directory
 import System.FilePath
+import System.IO
 
 import Type
 import CompositionalLC hiding (test)
---import ParseTrifectaLC
 import Parser hiding (main, parseLC)
 
 data ParseResult
@@ -22,8 +22,10 @@ data ParseResult
 
 main :: IO ()
 main = do
+  hSetBuffering stdout NoBuffering
   let acceptPath = "./tests/accept/"
       rejectPath = "./tests/reject/"
+      errorFileName lc = dropExtension lc ++ ".error"
 
   args <- getArgs
   let (verboseFlags,samplesToAccept) = partition (== "-v") args
@@ -35,12 +37,36 @@ main = do
       return (map (acceptPath ++) toAccept,map (rejectPath ++) toReject)
     _ -> return (samplesToAccept,[])
 
+  let checkErrorMsg msg n e = doesFileExist ef >>= \b -> case b of
+        False -> writeFile ef e >> ok
+        True -> do
+            e' <- readFile ef
+            if e == e' then ok else do
+                putStrLn $ "Error message of reject test " ++ n ++ " has changed."
+                putStrLn "Old message: "
+                putStrLn e
+                putStrLn "-------------------------------------------"
+                putStrLn "New message: "
+                putStrLn e'
+                putStrLn "-------------------------------------------"
+                putStr "Accept new error message (y/n)? "
+                c <- getChar
+                if c `elem` "yY\n" then do
+                        writeFile ef e
+                        putStrLn "Accepted."
+                    else putStrLn "Not Accepted."
+        
+        where
+            ef = errorFileName n
+            ok = putStrLn $ " * OK - " ++ n ++ " " ++ msg ++ " " ++ if verbose then e else []
+
+
   putStrLn $ "Catching errors (must get an error)"
   forM_ testToReject $ \n -> do
     result <- parseLC n
     case result of
-      ParseError e -> putStrLn $ " * OK - " ++ n ++ " parse error " ++ if verbose then e else []
-      TypeError e -> putStrLn $ " * OK - " ++ n ++ " type error " ++ if verbose then e else []
+      ParseError e -> checkErrorMsg "parse error" n e
+      TypeError e -> checkErrorMsg "type error" n e
       TypedExp _ -> putStrLn $ " # FAIL - " ++ n ++ " failed to catch error"
 
   putStrLn $ "Checking valid pipelines"
