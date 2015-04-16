@@ -74,96 +74,71 @@ data Lit
   | LNat    Int
   deriving (Show,Eq,Ord)
 
-newtype Pat a = Pat (Pat_ a (Pat a))
+data Pat a = Pat a (Pat_ (Pat a))
   deriving (Show,Eq,Ord)
 
-data Pat_ a b
-  = PLit_ a Lit
-  | PVar_ a EName
-  | PCon_ a EName [b]
-  | PTuple_ a [b]
-  | PRecord_ a [(FName, b)]
-  | Wildcard_ a
+data Pat_ b
+  = PLit_ Lit
+  | PVar_ EName
+  | PCon_ EName [b]
+  | PTuple_ [b]
+  | PRecord_ [(FName, b)]
+  | Wildcard_
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
-pattern PLit a b = Pat (PLit_ a b)
-pattern PVar a b = Pat (PVar_ a b)
-pattern PCon a b c = Pat (PCon_ a b c)
-pattern PTuple a b = Pat (PTuple_ a b)
-pattern PRecord a b = Pat (PRecord_ a b)
-pattern Wildcard a = Pat (Wildcard_ a)
+pattern PVar a b = Pat a (PVar_ b)
+pattern PLit a b = Pat a (PLit_ b)
+pattern PCon a b c = Pat a (PCon_ b c)
+pattern PTuple a b = Pat a (PTuple_ b)
+pattern PRecord a b = Pat a (PRecord_ b)
+pattern Wildcard a = Pat a Wildcard_
 
 getTagP :: Pat a -> a
-getTagP = \case
-    PLit      a x       -> a
-    PVar      a x       -> a
-    PCon      a n x     -> a
-    PTuple    a x       -> a
-    PRecord   a x       -> a
-    Wildcard  a         -> a
+getTagP (Pat a _) = a
 
-setTagP :: a -> Pat_ x b -> Pat_ a b
-setTagP a = \case
-    PLit_      _ x       -> PLit_ a x
-    PVar_      _ x       -> PVar_ a x
-    PCon_      _ n x     -> PCon_ a n x
-    PTuple_    _ x       -> PTuple_ a x
-    PRecord_   _ x       -> PRecord_ a x
-    Wildcard_  _         -> Wildcard_ a
-
-newtype Exp a = Exp (Exp_ a (Exp a))
+data Exp a = Exp a (Exp_ a (Exp a))
   deriving (Show,Eq,Ord)
 
 data Exp_ a b
-  = ELit_      a Lit
-  | EVar_      a EName
-  | EApp_      a b b
-  | ELam_      a (Pat a) b
-  | ELet_      a (Pat a) b b
-  | ECase_     a b [(Pat a, b)]
-  | ETuple_    a [b]
-  | ERecord_   a [(FName, b)]
-  | EFieldProj_ a FName
-  | ETyping_   a b Typing
+  = ELit_      Lit
+  | EVar_      EName
+  | EApp_      b b
+  | ELam_      (Pat a) b
+  | ELet_      (Pat a) b b
+  | ECase_     b [(Pat a, b)]
+  | ETuple_    [b]
+  | ERecord_   [(FName, b)]
+  | EFieldProj_ FName
+  | ETyping_   b Typing
 --  | EFix EName Exp
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
-pattern ELit a b = Exp (ELit_ a b)
-pattern EVar a b = Exp (EVar_ a b)
-pattern EApp a b c = Exp (EApp_ a b c)
-pattern ELam a b c = Exp (ELam_ a b c)
-pattern ELet a b c d = Exp (ELet_ a b c d)
-pattern ECase a b c = Exp (ECase_ a b c)
-pattern ETuple a b = Exp (ETuple_ a b)
-pattern ERecord a b = Exp (ERecord_ a b)
-pattern EFieldProj a c = Exp (EFieldProj_ a c)
-pattern ETyping a b c = Exp (ETyping_ a b c)
+pattern ELit a b = Exp a (ELit_ b)
+pattern EVar a b = Exp a (EVar_ b)
+pattern EApp a b c = Exp a (EApp_ b c)
+pattern ELam a b c = Exp a (ELam_ b c)
+pattern ELet a b c d = Exp a (ELet_ b c d)
+pattern ECase a b c = Exp a (ECase_ b c)
+pattern ETuple a b = Exp a (ETuple_ b)
+pattern ERecord a b = Exp a (ERecord_ b)
+pattern EFieldProj a c = Exp a (EFieldProj_ c)
+pattern ETyping a b c = Exp a (ETyping_ b c)
 
 getTag :: Exp a -> a
-getTag = \case
-    ELit      r _ -> r
-    EVar      r _ -> r
-    EApp      r _ _ -> r
-    ELam      r _ _ -> r
-    ELet      r _ _ _ -> r
-    ECase     r _ _ -> r
-    ETuple    r _ -> r
-    ERecord   r _ -> r
-    EFieldProj r _ -> r
-    ETyping   r _ _ -> r
+getTag (Exp a _) = a
 
-setTag :: (Pat x -> Pat a) -> a -> Exp_ x b -> Exp_ a b
-setTag f a = \case
-    ELit_      _ x       -> ELit_ a x
-    EVar_      _ x       -> EVar_ a x
-    EApp_      _ x y     -> EApp_ a x y
-    ELam_      _ x y     -> ELam_ a (f x) y
-    ELet_      _ x y z   -> ELet_ a (f x) y z
-    ECase_     _ x y     -> ECase_ a x (map (f *** id) y)
-    ETuple_    _ x       -> ETuple_ a x
-    ERecord_   _ x       -> ERecord_ a x
-    EFieldProj_ _ x      -> EFieldProj_ a x
-    ETyping_   _ x y     -> ETyping_ a x y
+setTag :: (Pat x -> Pat a) -> Exp_ x b -> Exp_ a b
+setTag f = \case
+    ELit_      x       -> ELit_ x
+    EVar_      x       -> EVar_ x
+    EApp_      x y     -> EApp_ x y
+    ELam_      x y     -> ELam_ (f x) y
+    ELet_      x y z   -> ELet_ (f x) y z
+    ECase_     x y     -> ECase_ x (map (f *** id) y)
+    ETuple_    x       -> ETuple_ x
+    ERecord_   x       -> ERecord_ x
+    EFieldProj_ x      -> EFieldProj_ x
+    ETyping_   x y     -> ETyping_ x y
 
 data Frequency -- frequency kind
   -- frequency values

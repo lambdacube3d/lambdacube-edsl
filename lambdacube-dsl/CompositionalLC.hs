@@ -196,36 +196,36 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
             return (p, exp)
         ty <- unifyTypings [getTag' te ++ concatMap getTagP' cs, concatMap (getTag' . snd) cs] $ \[_, x] -> x
         return $ ECase ty te cs
-    Exp e -> do
+    Exp _ e -> do
         e' <- T.mapM inferTyping e
-        Exp . (\t -> setTag undefined t e') <$> case e' of
-            EApp_ _ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
-            EFieldProj_ _ fn -> fieldProjType fn
-            ERecord_ _ (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
-            ETuple_ _ te -> unifyTypings (map (getTag') te) $ TTuple C
-            ELit_ _ l -> noSubst $ inferLit l
-            EVar_ _ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            ETyping_ _ e ty -> unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
+        (\t -> Exp t $ setTag undefined e') <$> case e' of
+            EApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
+            EFieldProj_ fn -> fieldProjType fn
+            ERecord_ (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
+            ETuple_ te -> unifyTypings (map (getTag') te) $ TTuple C
+            ELit_ l -> noSubst $ inferLit l
+            EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
+            ETyping_ e ty -> unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
   where
     inferPatTyping :: Bool -> Pat Range -> TCM (Pat (Subst, Typing), Map EName Typing)
-    inferPatTyping polymorph p_@(Pat p) = local (id *** const [getTagP p_]) $ do
+    inferPatTyping polymorph p_@(Pat pt p) = local (id *** const [pt]) $ do
         p' <- T.mapM (inferPatTyping polymorph) p
         (t, tr) <- case p' of
-            PLit_ _ n -> noTr $ noSubst $ inferLit n
-            Wildcard_ _ -> noTr $ newV $ \t -> t :: Ty
-            PVar_ _ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
+            PLit_ n -> noTr $ noSubst $ inferLit n
+            Wildcard_ -> noTr $ newV $ \t -> t :: Ty
+            PVar_ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
                 if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t mempty :: Typing
-            PTuple_ _ ps -> noTr $ unifyTypings (map getTagP' ps) (TTuple C)
-            PCon_ _ n ps -> noTr $ do
+            PTuple_ ps -> noTr $ unifyTypings (map getTagP' ps) (TTuple C)
+            PCon_ n ps -> noTr $ do
                 (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
                 unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ tl ~~> v] ==> v)
-            PRecord_ _ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
+            PRecord_ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
                 (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip fs tl] ==> v)
         let trs = Map.unionsWith (++) . map ((:[]) <$>) $ tr: map snd (toList p')
         tr <- case filter ((>1) . length . snd) $ Map.toList trs of
             [] -> return $ Map.map head trs
             ns -> throwErrorTCM $ "conflicting definitions for " ++ show (map fst ns)
-        return (Pat $ setTagP t $ fst <$> p', tr)
+        return (Pat t $ fst <$> p', tr)
 
     getTag' = (:[]) . snd . getTag
     getTagP' = (:[]) . snd . getTagP . fst
