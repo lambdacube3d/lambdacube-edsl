@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings, PackageImports #-}
 
-import Graphics.Rendering.OpenGL.Raw.Core33 (glViewport,gl_LINE_SMOOTH,glEnable)
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Data.Monoid
 import Control.Monad
@@ -131,9 +130,7 @@ main = do
     let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
 
     n <- getArgs
-
     gpuCube <- compileMesh myCube
-    glEnable gl_LINE_SMOOTH
 
     let setup = do
           renderer <- rendererFromDSL $ case n of
@@ -148,14 +145,15 @@ main = do
           return renderer
     --let cm  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
     let cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
-        pm  = perspective 0.1 100 (pi/4) (1024 / 768)
         loop renderer = do
+            (w,h) <- getWindowSize win
             let uniformMap      = uniformSetter renderer
                 texture         = uniformFTexture2D "myTextureSampler" uniformMap
                 mvp             = uniformM44F "MVP" uniformMap
-                setWindowSize   = setScreenSize renderer
+                pm              = perspective 0.1 100 (pi/4) (fromIntegral w / fromIntegral h)
 
-            setWindowSize 1024 768
+            setScreenSize renderer (fromIntegral w) (fromIntegral h)
+
             Just t <- getTime
             let angle = pi / 24 * realToFrac t
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
@@ -201,9 +199,6 @@ initWindow title width height = do
       ]
     Just win <- createWindow width height title Nothing Nothing
     makeContextCurrent $ Just win
-
-    setWindowSizeCallback win $ Just $ \_ w h -> do
-        glViewport 0 0 (fromIntegral w) (fromIntegral h)
 
     return win
 
