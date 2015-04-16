@@ -158,6 +158,9 @@ type Nat = Ty
 newtype Ty = Ty (Ty_ Ty)
   deriving (Show,Eq,Ord)
 
+data Ty' a = Ty' a (Ty_ (Ty' a))
+  deriving (Show,Eq,Ord)
+
 data Ty_ a
   -- star kind
   = TVar_    Frequency TName

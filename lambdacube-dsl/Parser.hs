@@ -11,7 +11,7 @@ import Text.Parser.Token.Style
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import Text.Trifecta
 import Text.Trifecta.Delta
-import Text.Trifecta.Indentation as I
+import Text.Trifecta.Indentation (IndentationRel (Ge, Gt), localIndentation, localAbsoluteIndentation, mkIndentationState, infIndentation, IndentationParserT, evalIndentationParserT)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.HashSet as HashSet
 
@@ -207,7 +207,7 @@ typeClassDef = void_ $ do
     typeVar
     optional $ do
       keyword "where"
-      localIndentation Gt $ localAbsoluteIndentation $ do
+      localAbsoluteIndentation $ do
         many typeSignature
 
 typeClassInstanceDef :: P ()
@@ -219,7 +219,7 @@ typeClassInstanceDef = void_ $ do
     typePattern
     optional $ do
       keyword "where"
-      localIndentation Gt $ localAbsoluteIndentation $ do
+      localAbsoluteIndentation $ do
         many valueDef
 
 fixityDef :: P ()
@@ -249,16 +249,15 @@ valueDef_ = do
   p1 <- position
   n <- varId
   p1' <- position
-  (a, d) <- localIndentation Gt $ do
+  localIndentation Gt $ do
     a <- many valuePattern
     operator "="
     d <- expression
-    return (a, d)
-  optional $ localIndentation Gt $ do
-    keyword "where"
-    localIndentation Gt $ localAbsoluteIndentation $ some valueDef
-  p2 <- position
-  return ((p1,p2), ((p1,p1'), n), foldr (args (p1,p2)) d a)
+    optional $ do
+      keyword "where"
+      localAbsoluteIndentation $ some valueDef
+    p2 <- position
+    return ((p1,p2), ((p1,p1'), n), foldr (args (p1,p2)) d a)
   where
     args r (EVar r' n) e = ELam r (PVar r' n) e
 
@@ -276,17 +275,17 @@ expression = application <$> some (
   exp lambda <|>
   exp ifthenelse <|>
   exp caseof <|>
-  exp letin <|>
+  exp' letin <|>
   (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
   (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> dataConstructor <*> position <|> -- TODO: distinct data constructors
   exp unit <|>
   exp tuple <|>
   parens expression)    -- TODO: tuple aready handles parens
  where
-  gt = localIndentation Gt
-
   exp :: P (Exp Range) -> P (Exp Range)
   exp p = try (p <* optional (operator "::" *> void_ typeExp))
+
+  exp' p = p <* optional (operator "::" *> void_ typeExp)
 
   tuple :: P (Exp Range)
   tuple = (\p1 (v, vs) p2 -> if null vs then v else ETuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> expression <*> some (comma *> expression)) <*> position
@@ -298,20 +297,22 @@ expression = application <$> some (
   lambda = (\p1 (EVar r n: _ {-TODO-}) e p2 -> ELam (p1,p2) (PVar r n) e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
 
   ifthenelse :: P (Exp Range)
-  ifthenelse = undef "if" $ keyword "if" *> (gt $ expression *> keyword "then" *> gt expression *> keyword "else" *> gt expression)
+  ifthenelse = undef "if" $ keyword "if" *> (expression *> keyword "then" *> expression *> keyword "else" *> expression)
 
   caseof :: P (Exp Range)
   caseof = undef "case" $ do
-    let casePat = valuePattern *> operator "->" *> (localIndentation Gt $ expression)
-    localIndentation Ge $ do
-      l <- keyword "case" *> expression *> keyword "of" <* (localIndentation Gt $ localAbsoluteIndentation $ some casePat) -- WORKS
-      return ()
+    keyword "case"
+    expression
+    keyword "of"
+    localAbsoluteIndentation $ some $
+        valuePattern *> operator "->" *> localIndentation Gt expression
 
   letin :: P (Exp Range)
   letin = do
-    localIndentation Ge $ do
-      l <- keyword "let" *> (localIndentation Gt $ localAbsoluteIndentation $ some valueDef) -- WORKS
-      a <- keyword "in" *> (localIndentation Gt expression)
+      keyword "let"
+      l <- localIndentation Ge $ localAbsoluteIndentation (some valueDef)
+      keyword "in"
+      a <- expression
       return $ foldr ($) a l
 
   recordExp :: P (Exp Range)
@@ -338,6 +339,7 @@ expression = application <$> some (
       cons a b = EApp mempty (EApp mempty (EVar mempty ":") a) b
 
 indentState = mkIndentationState 0 infIndentation True Ge
+indentState' = mkIndentationState 0 infIndentation False Ge
 
 test = parseLC "syntax02.lc"
 
@@ -353,7 +355,7 @@ parseLC fname = do
 parseLC_ :: String -> IO (BS.ByteString, Result (Exp Range))
 parseLC_ fname = do
   src <- BS.readFile fname
-  return (src, parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expression <* eof) indentState) (Directed (pack fname) 0 0 0 0) src)
+  return (src, parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expression <* eof) indentState') (Directed (pack fname) 0 0 0 0) src)
 --main = test
 
 -- AST
