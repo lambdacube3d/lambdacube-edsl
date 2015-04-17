@@ -113,7 +113,7 @@ moduleDef = do
         , TypeSig <$> try' "type signature" typeSignature
         , undef "typeSyn" $ typeSynonym
         , undef "class" $ typeClassDef
-        , (\(r, (r', n), e) -> ValueDef (n, e)) <$> try' "definition" valueDef_
+        , (\(r, p, e) -> ValueDef (p, e)) <$> (valueDef_ <|> patternDef_)
         , undef "fixity" fixityDef
         , undef "instance" typeClassInstanceDef
         ]
@@ -131,8 +131,15 @@ moduleDef = do
 importDef :: P ()
 importDef = void_ $ do
   keyword "import"
+  optional $ keyword "qualified"
   moduleName
-  optional $ parens (commaSep varId)
+  let importlist = parens (commaSep (varId <|> dataConstructor))
+  optional $
+        (keyword "hiding" >> importlist)
+    <|> importlist
+  optional $ do
+    keyword "as"
+    moduleName
 
 typeSynonym :: P ()
 typeSynonym = void_ $ do
@@ -236,35 +243,59 @@ fixityDef = void_ $ do
 
 undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
-valuePattern :: P (Exp Range)
+valuePattern :: P (Pat Range)
 valuePattern
     =   undef "_" (operator "_")
     <|> (try $ undef "@" $ var *> operator "@" *> valuePattern)
-    <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position
-    <|> (undef "data Constr" $ try dataConstructor)
+    <|> (\p1 v p2 -> PVar (p1,p2) v) <$> position <*> var <*> position
+    <|> ((\c -> PCon mempty c []) <$> try dataConstructor)
     <|> try pat
  where
-  pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePattern) <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position)
+  pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePattern) <|> (\p1 v p2 -> PVar (p1,p2) v) <$> position <*> var <*> position)
+
+appP :: [Pat Range] -> Pat Range
+appP (PCon r n xs: ps) = PCon r n $ xs ++ ps
+
 
 valueDef :: P (Exp Range -> Exp Range)
-valueDef = (\(r, (r', n), e) -> ELet r (PVar r' n) e) <$> valueDef_
+valueDef = (\(r, p, e) -> ELet r p e) <$> (valueDef_ <|> patternDef_)
 
-valueDef_ :: P (Range, (Range, String), Exp Range)
+valueDef_ :: P (Range, Pat Range, Exp Range)
 valueDef_ = do
   p1 <- position
-  n <- varId
-  p1' <- position
+  (n, p1', a) <- try' "definition" $ do
+      n <- varId
+      p1' <- position
+      localIndentation Gt $ do
+        a <- many valuePattern
+        operator "="
+        return (n, p1', a)
   localIndentation Gt $ do
-    a <- many valuePattern
-    operator "="
     d <- expression
     optional $ do
       keyword "where"
       localAbsoluteIndentation $ some valueDef
     p2 <- position
-    return ((p1,p2), ((p1,p1'), n), foldr (args (p1,p2)) d a)
+    return ((p1,p2), PVar (p1,p1') n, foldr (args (p1,p2)) d a)
   where
-    args r (EVar r' n) e = ELam r (PVar r' n) e
+    args r p e = ELam r p e
+
+patternDef_ :: P (Range, Pat Range, Exp Range)
+patternDef_ = do
+  p1 <- position
+  (n, p1') <- try' "node definition" $ do
+      n <- appP <$> many valuePattern
+      p1' <- position
+      localIndentation Gt $ do
+        operator "="
+        return (n, p1')
+  localIndentation Gt $ do
+    d <- expression
+    optional $ do
+      keyword "where"
+      localAbsoluteIndentation $ some valueDef
+    p2 <- position
+    return ((p1,p2), n, d)
 
 application :: [Exp Range] -> Exp Range
 application [e] = e
@@ -299,7 +330,7 @@ expression = application <$> some (
   unit = (\p1 p2 -> ETuple (p1,p2) []) <$> position <* parens (pure ()) <*> position
 
   lambda :: P (Exp Range)
-  lambda = (\p1 (EVar r n: _ {-TODO-}) e p2 -> ELam (p1,p2) (PVar r n) e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
+  lambda = (\p1 (p: _ {-TODO-}) e p2 -> ELam (p1,p2) p e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
 
   ifthenelse :: P (Exp Range)
   ifthenelse = undef "if" $ keyword "if" *> (expression *> keyword "then" *> expression *> keyword "else" *> expression)
@@ -335,7 +366,7 @@ expression = application <$> some (
       LInt <$> integer <|>
       LChar <$> charLiteral <|>
       LString <$> stringLiteral <|>
-      LNat . fromIntegral <$ operator "#" <*> integer
+      (LNat . fromIntegral <$ operator "#" <*> integer) <?> "type level nat"
 
   listExp :: P (Exp Range)
   listExp = foldr cons nil <$> (brackets $ commaSep expression)

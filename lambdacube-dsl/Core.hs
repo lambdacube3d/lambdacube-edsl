@@ -303,7 +303,7 @@ parseAndToCoreMain fname = do
         Left m    -> do
           return $ Left $ m src
 
-getMain m = case [e | ("main", e) <- definitions m] of
+getMain m = case [e | (AST.PVar _ "main", e) <- definitions m] of
     [e] -> e
     [] -> error "main not found"
     _ -> error "multiple main found"

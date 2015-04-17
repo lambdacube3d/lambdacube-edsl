@@ -178,9 +178,9 @@ inference_ primFunMap m = runExcept $ fst <$>
         definitions <- mapM inferDef definitions
         return Module{..}
 
-    inferDef (n, e) = do
+    inferDef (PVar _ n, e) = do
         e <- inferTyping e <* checkUnambError
-        return (n, e)
+        return (PVar undefined n, e)
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 

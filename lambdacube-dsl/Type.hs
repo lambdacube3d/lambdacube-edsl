@@ -365,7 +365,7 @@ data Module a
   }
     deriving (Show)
 
-type ValueDef a = (String, Exp a)
+type ValueDef a = (Pat a, Exp a)
 data DataDef a = DataDef String [String] [ConDef a]
     deriving (Show)
 data ConDef a = ConDef EName [Ty' a]
