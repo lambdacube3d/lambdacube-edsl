@@ -45,7 +45,7 @@ iff x y b = if b then x else y
   type family NoStencilRepr a :: *
     type instance NoStencilRepr ZZ = ZZ
     type instance NoStencilRepr (Stencil a :+: b) = NoStencilRepr b
-    type instance NoStencilRepr (Color a :+: b) =olor a :+: NoStencilRepr b
+    type instance NoStencilRepr (Color a :+: b) = Color a :+: NoStencilRepr b
     type instance NoStencilRepr (Depth a :+: b) = Depth a :+: NoStencilRepr b
 -}
 
@@ -253,7 +253,7 @@ floatIntWord = [TFloat, TInt, TWord]
 floatIntWordBool = [TFloat, TInt, TWord, TBool]
 matrices = [TMat i j TFloat | i <- [2..4], j <- [2..4]]
 vectors t = [TVec i t | i <- [2..4]]
-floatVectors = vectors $ TFloat
+floatVectors = vectors TFloat
 
 data InjType
     = ITMat | ITVec | ITVecScalar
@@ -267,7 +267,7 @@ injType = \case
     _ -> Nothing
 
 vecS = TFVecScalar
-floatVecS d = vecS d (TFloat)
+floatVecS d = vecS d TFloat
 
 infix 0 --->, -->, ---->
 ss ---> m = tell [(s, newV m) | s <- ss]
@@ -306,13 +306,13 @@ primFunMap = Map.fromList $ execWriter $ do
     forM_ (zip ["F","I","U","B"] floatIntWordBool) $ \(tn, t) ->
         "V" ++ show i ++ tn --> replicate i t ~~> TVec i t      -- like  "V2B" --> TBool ~> TBool ~> TV2B
     forM_ [2..4] $ \j ->
-        "M" ++ show i ++ show j ++ "F" --> replicate j (TVec i $ TFloat) ~~> TMat i j (TFloat)
+        "M" ++ show i ++ show j ++ "F" --> replicate j (TVec i TFloat) ~~> TMat i j TFloat
                                                                 -- like  "M22F" --> TV2F ~> TV2F ~> TM22F
 
   -- Input declaration
   "Uni"     --> \t -> TInput t ~> t
   forM_ (  zip ["IFloat", "IInt", "IWord", "IBool"] floatIntWordBool
-        ++ [("IM" ++ show i ++ show j ++ "F", TMat i j (TFloat)) | i <- [2..4], j <- [2..4]]
+        ++ [("IM" ++ show i ++ show j ++ "F", TMat i j TFloat) | i <- [2..4], j <- [2..4]]
         ++ [ ("IV" ++ show i ++ tn, TVec i t)
            | i <- [2..4]
            , (tn, t) <- zip ["F","I","U","B"] floatIntWordBool
@@ -349,12 +349,12 @@ primFunMap = Map.fromList $ execWriter $ do
   "ProgramPointSize"    -->           TPointSize
 
   "FragmentOut"         --> \a t -> [a ~~ TFColorRepr t] ==> t  ~> TFragmentOut a
-  "FragmentOutDepth"    --> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth $ TFloat) a] ==> TFloat ~> t
+  "FragmentOutDepth"    --> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth TFloat) a] ==> TFloat ~> t
                                                                 ~> TFragmentOut b
-  "FragmentOutRastDepth"--> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth $ TFloat) a] ==> t
+  "FragmentOutRastDepth"--> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth TFloat) a] ==> t
                                                                 ~> TFragmentOut b
 
-  "VertexOut"           --> \a t -> [t ~~ TFFTRepr' a] ==> TVec 4 (TFloat) ~> TFloat ~> TTuple [] ~> a ~> TVertexOut t
+  "VertexOut"           --> \a t -> [t ~~ TFFTRepr' a] ==> TVec 4 TFloat ~> TFloat ~> TTuple [] ~> a ~> TVertexOut t
 
   ["LowerLeft", "UpperLeft"]
                         ---> TPointSpriteCoordOrigin
@@ -373,8 +373,8 @@ primFunMap = Map.fromList $ execWriter $ do
 
   "ColorImage"          --> \a d color t -> [IsTypeLevelNatural @@ a, IsNum @@ t, color ~~ vecS d t] ==> a ~> color
                                                                              ~> TImage a (Color color)
-  "DepthImage"          --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TFloat  ~> TImage a (Depth $ TFloat)
-  "StencilImage"        --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TInt    ~> TImage a (Stencil $ TInt)
+  "DepthImage"          --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TFloat  ~> TImage a (Depth TFloat)
+  "StencilImage"        --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TInt    ~> TImage a (Stencil TInt)
 
   ["Smooth", "NoPerspective"]
                         ---> \t -> [IsFloating @@ t] ==> t ~> TInterpolated t
@@ -382,7 +382,7 @@ primFunMap = Map.fromList $ execWriter $ do
 
   "ColorOp"             --> \d mask c color -> [mask ~~ vecS d TBool, color ~~ vecS d c, IsNum @@ c] ==> TBlending c ~> mask
                                                             ~> TFragmentOperation (Color color)
-  "DepthOp"             --> TComparisonFunction ~> TBool    ~> TFragmentOperation (Depth $ TFloat)
+  "DepthOp"             --> TComparisonFunction ~> TBool    ~> TFragmentOperation (Depth TFloat)
     -- "StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
 
   -- Blending
@@ -390,7 +390,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "BlendLogicOp"        --> \t -> [IsIntegral @@ t] ==> TLogicOperation ~> TBlending t
   "Blend"               --> TTuple [TBlendEquation,TBlendEquation]
                          ~> TTuple [TTuple [TBlendingFactor,TBlendingFactor],TTuple [TBlendingFactor,TBlendingFactor]]
-                         ~> TVec 4 (TFloat) ~>                             TBlending (TFloat)
+                         ~> TVec 4 TFloat ~>                             TBlending TFloat
   -- Fragment Filter
   "PassAll"             --> \t ->                 TFragmentFilter t
   "Filter"              --> \t -> (t ~> TBool) ~> TFragmentFilter t
@@ -421,7 +421,7 @@ primFunMap = Map.fromList $ execWriter $ do
   ["PrimBAnd", "PrimBOr", "PrimBXor"]   ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> a ~> a
   ["PrimBAndS", "PrimBOrS", "PrimBXorS"]---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> t ~> a
   ["PrimBNot"]                          ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> a
-  ["PrimBShiftL", "PrimBShiftR"]        ---> \d a b t -> [IsIntegral @@ t, a ~~ vecS d t, b ~~ vecS d (TWord)] ==> a ~> b ~> a
+  ["PrimBShiftL", "PrimBShiftR"]        ---> \d a b t -> [IsIntegral @@ t, a ~~ vecS d t, b ~~ vecS d TWord] ==> a ~> b ~> a
   ["PrimBShiftLS", "PrimBShiftRS"]      ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> TWord ~> a
   -- Logic Functions
   ["PrimAnd", "PrimOr", "PrimXor"]      ---> TBool ~> TBool ~> TBool
@@ -444,15 +444,15 @@ primFunMap = Map.fromList $ execWriter $ do
   "PrimMix"             --> \d a   -> [a ~~ floatVecS d] ==> a ~> a ~> a ~> a
   "PrimMixS"            --> \d a   -> [a ~~ floatVecS d] ==> a ~> a ~> TFloat ~> a
   "PrimMixB"            --> \d a b -> [a ~~ floatVecS d, b ~~ vecS d TBool] ==> a ~> a ~> b ~> a
-  "PrimStep"            --> \d a   -> [a ~~ TFVec d (TFloat)] ==> a ~> a ~> a
+  "PrimStep"            --> \d a   -> [a ~~ TFVec d TFloat] ==> a ~> a ~> a
   "PrimStepS"           --> \d a   -> [a ~~ floatVecS d] ==> TFloat ~> a ~> a
-  "PrimSmoothStep"      --> \d a   -> [a ~~ TFVec d (TFloat)] ==> a ~> a ~> a ~> a
+  "PrimSmoothStep"      --> \d a   -> [a ~~ TFVec d TFloat] ==> a ~> a ~> a ~> a
   "PrimSmoothStepS"     --> \d a   -> [a ~~ floatVecS d] ==> TFloat ~> TFloat ~> a ~> a
   -- Integer/Floatonversion Functions
-  "PrimFloatBitsToInt"  --> \d fv iv -> [fv ~~ floatVecS d, iv ~~ vecS d (TInt)]  ==> fv ~> iv
-  "PrimFloatBitsToUInt" --> \d fv uv -> [fv ~~ floatVecS d, uv ~~ vecS d (TWord)] ==> fv ~> uv
-  "PrimIntBitsToFloat"  --> \d fv iv -> [fv ~~ floatVecS d, iv ~~ vecS d (TInt)]  ==> iv ~> fv
-  "PrimUIntBitsToFloat" --> \d fv uv -> [fv ~~ floatVecS d, uv ~~ vecS d (TWord)] ==> uv ~> fv
+  "PrimFloatBitsToInt"  --> \d fv iv -> [fv ~~ floatVecS d, iv ~~ vecS d TInt]  ==> fv ~> iv
+  "PrimFloatBitsToUInt" --> \d fv uv -> [fv ~~ floatVecS d, uv ~~ vecS d TWord] ==> fv ~> uv
+  "PrimIntBitsToFloat"  --> \d fv iv -> [fv ~~ floatVecS d, iv ~~ vecS d TInt]  ==> iv ~> fv
+  "PrimUIntBitsToFloat" --> \d fv uv -> [fv ~~ floatVecS d, uv ~~ vecS d TWord] ==> uv ~> fv
   -- Geometric Functions
   "PrimLength"          --> \d a -> [a ~~ floatVecS d] ==> a ~> TFloat
   ["PrimDistance", "PrimDot"]
@@ -491,10 +491,10 @@ inferLit a = case a of
   LInt _ -> do
     --t <- newVar
     --return (mempty,[(CNum,t)],t) -- ????
-    ty $ TInt
-  LChar   _ -> ty $ TChar
-  LFloat  _ -> ty $ TFloat
-  LString _ -> ty $ TString
+    ty TInt
+  LChar   _ -> ty TChar
+  LFloat  _ -> ty TFloat
+  LString _ -> ty TString
   LNat i    -> ty $ TNat i
  where
   ty t = return $ [] ==> t

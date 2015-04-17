@@ -82,7 +82,7 @@ parseLC' fname = do
   res <- parseLC fname
   case res of
     Left m -> do
-      return $ ParseError $ show m
+      return $ ParseError m
     Right (src, e) -> do
       case inference e of
         Right t   -> do
