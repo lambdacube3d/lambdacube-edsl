@@ -289,8 +289,8 @@ primFunMap :: Map EName (TCM (Subst, Typing))
 primFunMap = Map.fromList $ execWriter $ do
 
   -- kind of type constructors
-  ["Char", "String", "Bool", "Word", "Int", "Float"] ----> Star
-  ["Detph", "Stencil", "Color"] ----> Star ~> Star
+  ["()", "Char", "String", "Bool", "Word", "Int", "Float"] ----> Star
+  ["[]", "Maybe", "Detph", "Stencil", "Color"] ----> Star ~> Star
   ["Triangle", "Line", "Point", "TriangleAdjacency", "LineAdjacency"] ----> Star
   ["CullMode", "PolygonMode", "PolygonOffset", "ProvokingVertex", "FrontFace", "PointSize", "BlendingFactor", "BlendEquation", "LogicOperation", "StencilOperation", "ComparisonFunction", "PointSpriteCoordOrigin"] ----> Star
   -- TODO: more precise kinds

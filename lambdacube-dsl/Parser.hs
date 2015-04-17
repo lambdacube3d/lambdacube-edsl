@@ -159,7 +159,7 @@ tcExp = void_ $ try $ do
   tyC <|> (void_ $ parens (sepBy1 tyC comma))
   operator "=>"
 
-typeExp :: P Ty
+typeExp :: P TyR
 typeExp = do
   optional (keyword "forall" >> some typeVar >> operator ".")
   optional (tcExp <?> "type context")
@@ -183,23 +183,25 @@ dataDef = do
 
 derivingStm = optional $ keyword "deriving" <* (void_ typeConstructor <|> void_ (parens $ sepBy typeConstructor comma))
 
-typeRecord :: P Ty
+typeRecord :: P TyR
 typeRecord = undef "trec" $ do
   braces (commaSep1 typeSignature >> optional (operator "|" >> void_ typeVar))
 
-tApp :: Ty -> Ty -> Ty
-tApp = TApp
+type TyR = Ty' Range
 
-ty :: P Ty
-ty = chainr1 (foldl1 tApp <$> some typeAtom) (do operator "->"; return $ TArr)
+tApp :: TyR -> TyR -> TyR
+tApp a b = Ty' mempty $ TApp_ a b
 
-typeAtom :: P Ty
+ty :: P TyR
+ty = chainr1 (foldl1 tApp <$> some typeAtom) (do operator "->"; return $ \a b -> Ty' mempty $ TArr_ a b)
+
+typeAtom :: P TyR
 typeAtom = typeRecord
-    <|> TVar C <$> (try typeVar)
-    <|> try (parens $ pure $ TCon0 C "()")
-    <|> TCon0 C <$> typeConstructor
-    <|> TTuple C <$> (parens $ sepBy ty comma)
-    <|> TCon1 C "[]" <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
+    <|> Ty' mempty . TVar_ C <$> (try typeVar)
+    <|> try (parens $ pure $ Ty' mempty $ TCon_ C "()")
+    <|> Ty' mempty . TCon_ C <$> typeConstructor
+    <|> Ty' mempty . TTuple_ C <$> (parens $ sepBy ty comma)
+    <|> Ty' mempty . TApp_ (Ty' mempty (TCon_ C "[]")) <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
 
 typeClassDef :: P ()
 typeClassDef = void_ $ do
@@ -383,7 +385,7 @@ data Definition
 type ValueDef = (String, Exp Range)
 data DataDef = DataDef String [String] [ConDef]
     deriving (Show)
-data ConDef = ConDef EName [Ty]
+data ConDef = ConDef EName [TyR]
     deriving (Show)
 
 data Expression -- record, list, tuple, literal, var, application, lambda, ifthenelse, letin, caseof, dataconstructor

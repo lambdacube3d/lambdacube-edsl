@@ -35,7 +35,8 @@ newtype PolyEnv = PolyEnv { getPolyEnv :: Map EName (TCM (Subst, Typing)) }
     deriving Monoid
 type Typing = Typing_ Ty
 
-data Typing_ a = Typing
+data Typing_ a
+  = Typing
     { monoEnv     :: MonoEnv a
     , constraints :: [Constraint a]
     , typingType  :: a
@@ -155,7 +156,9 @@ type Semantic = Ty
 type PrimitiveType = Ty
 type Nat = Ty
 
-newtype Ty = Ty (Ty_ Ty)
+data Ty
+    = StarToStar !Int
+    | Ty_ Ty (Ty_ Ty)
   deriving (Show,Eq,Ord)
 
 data Ty' a = Ty' a (Ty_ (Ty' a))
@@ -167,6 +170,10 @@ data Ty_ a
   -- kinds
   = Star_       -- type of types
   | NatKind_    -- type of TNat
+  -- constraint kinds
+  | ClassCK_
+  | EqCK_ a a
+  | TFunCK_ a
   --
   | TVar_    Frequency TName
   | TApp_    a a
@@ -177,7 +184,6 @@ data Ty_ a
   -- composit
   | TTuple_  Frequency [a]
   | TRecord_ (Map FName a)
-  | TArray_  Frequency a
   -- type families are placed in constraints
   -- | TFun    (TypeFun a)
 
@@ -201,20 +207,25 @@ data Ty_ a
 -}
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
+pattern StarT = StarToStar 0
+pattern StarStar = StarToStar 1
+pattern Ty a = Ty_ StarT a
+
 pattern Star = Ty Star_
+pattern NatKind = Ty NatKind_
 pattern TVar a b = Ty (TVar_ a b)
-pattern TApp a b = Ty (TApp_ a b)
+pattern TApp k a b = Ty_ k (TApp_ a b)
+pattern TCon k f a = Ty_ k (TCon_ f a)
 pattern TCon0 f a = Ty (TCon_ f a)
-pattern TCon1 f a b = TApp (TCon0 f a) b
-pattern TCon2 f a b c = TApp (TCon1 f a b) c
+pattern TCon1 f a b = TApp StarT (TCon StarStar f a) b
+pattern TCon2 f a b c = TApp StarT (TApp StarStar (TCon (StarToStar 2) f a) b) c
 pattern TArr a b = Ty (TArr_ a b)
 pattern Forall a b = Ty (Forall_ a b)
 pattern TConstraintArg a b = Ty (TConstraintArg_ a b)
 pattern TTuple a b = Ty (TTuple_ a b)
 pattern TRecord b = Ty (TRecord_ b)
-pattern TArray a b = Ty (TArray_ a b)
 
-pattern TNat a = Ty (TNat_ a)
+pattern TNat a = Ty_ NatKind (TNat_ a)
 pattern TVec a b = Ty (TVec_ a b)
 pattern TMat a b c = Ty (TMat_ a b c)
 
@@ -225,6 +236,7 @@ pattern TBool a = TCon0 a "Bool"
 pattern TWord a = TCon0 a "Word"
 pattern TInt a = TCon0 a "Int"
 pattern TFloat a = TCon0 a "Float"
+pattern TArray a b = TCon1 a "Array" b
 
 -- Semantic
 pattern Depth a = TCon1 C "Depth" a
@@ -328,8 +340,10 @@ data TypeFun a
 class FreeVars a where freeVars :: a -> Set TName
 
 instance FreeVars Ty where
-    freeVars (TVar _ a) = Set.singleton a
-    freeVars (Ty x) = foldMap freeVars x
+    freeVars = \case
+        TVar _ a -> Set.singleton a
+        Ty_ k x -> freeVars k `mappend` foldMap freeVars x
+        StarToStar _ -> mempty
 
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (Typing_ a)         where freeVars = foldMap freeVars

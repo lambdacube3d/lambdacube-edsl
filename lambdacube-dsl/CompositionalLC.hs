@@ -39,8 +39,9 @@ class Substitute a where subst :: Subst -> a -> a
 
 instance Substitute Ty where
     subst st ty | Map.null st = ty -- optimization
-    subst st tv@(TVar _ a) = fromMaybe tv $ Map.lookup a st
-    subst st (Ty t) = Ty $ subst st <$> t
+    subst st (Ty_ k tv@(TVar_ _ a)) = fromMaybe (Ty_ (subst st k) tv) $ Map.lookup a st
+    subst st (Ty_ k t) = Ty_ (subst st k) $ subst st <$> t
+    subst _ (StarToStar n) = StarToStar n
 
 instance Substitute a => Substitute [a]                 where subst = fmap . subst
 instance Substitute a => Substitute (Typing_ a)         where subst = fmap . subst
@@ -63,7 +64,8 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
         subst1 _ t = t
 
         singSubst n t (TVar _ a) | a == n = t
-        singSubst n t (Ty ty) = Ty $ singSubst n t <$> ty
+        singSubst n t (Ty_ k ty) = Ty_ (singSubst n t k) $ singSubst n t <$> ty
+        singSubst _ _ (StarToStar n) = StarToStar n
 
         -- make single tvar substitution; check infinite types
         bindVar n t = do
@@ -80,7 +82,7 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
         unifyTy _ (TVar _ u) | bidirectional = bindVar u a
         unifyTy (TCon0 _ u) (TCon0 _ v) | u == v = return ()
         unifyTy (TTuple f1 t1) (TTuple f2 t2) = sequence_ $ zipWith uni t1 t2
-        unifyTy (TApp a1 b1) (TApp a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy (TApp k1 a1 b1) (TApp k2 a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TArr a1 b1) (TArr a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TVec a1 b1) (TVec a2 b2) | a1 == a2 = uni b1 b2
         unifyTy (TMat a1 b1 c1) (TMat a2 b2 c2) | a1 == a2 && b1 == b2 = uni c1 c2
@@ -183,7 +185,10 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     _ -> do
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
+            TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ -> return (mempty, [] ==> Star)
+            TVec_ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
+            TMat_ _ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             TVar_ C n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
