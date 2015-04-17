@@ -269,9 +269,10 @@ injType = \case
 vecS = TFVecScalar
 floatVecS d = vecS d (TFloat C)
 
-infix 0 --->, -->
+infix 0 --->, -->, ---->
 ss ---> m = tell [(s, newV m) | s <- ss]
 s --> m = [s] ---> m
+ss ----> m = map ('\'':) ss ---> m
 
 isPrimFun n = Map.member n primFunMap
 {-
@@ -286,6 +287,18 @@ isPrimFun n = Map.member n primFunMap
 
 primFunMap :: Map EName (TCM (Subst, Typing))
 primFunMap = Map.fromList $ execWriter $ do
+
+  -- kind of type constructors
+  ["Char", "String", "Bool", "Word", "Int", "Float"] ----> Star
+  ["Detph", "Stencil", "Color"] ----> Star ~> Star
+  ["Triangle", "Line", "Point", "TriangleAdjacency", "LineAdjacency"] ----> Star
+  ["CullMode", "PolygonMode", "PolygonOffset", "ProvokingVertex", "FrontFace", "PointSize", "BlendingFactor", "BlendEquation", "LogicOperation", "StencilOperation", "ComparisonFunction", "PointSpriteCoordOrigin"] ----> Star
+  -- TODO: more precise kinds
+  ["Output"] ----> Star
+  ["AccumulationContext", "Blending", "FetchPrimitive", "FragmentFilter", "FragmentOperation", "FragmentOut", "Input", "Interpolated", "RasterContext", "VertexOut"] ----> Star ~> Star
+  ["FragmentStream", "FrameBuffer", "Image", "VertexStream"] ----> Star ~> Star ~> Star
+
+
   ["Tup", "Const"]  ---> \a -> a ~> a       -- temporary const constructor
   ["True", "False"] ---> TBool C
 
