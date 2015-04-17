@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Core where
 
+import Control.Monad.State
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as F
 import Data.Traversable
@@ -30,10 +31,14 @@ import LambdaCube.Core.DeBruijn (N())
 import LambdaCube.Core.Type hiding (Ty)
 import qualified LambdaCube.Core.PrimFun as C
 import qualified LambdaCube.Core.Type as C
+import qualified Data.Vector as V
 
 import Parser (parseLC)
+
 import ToDeBruijn hiding (compile)
 import Text.Show.Pretty
+
+import qualified IR as IR
 
 data Kind
   = Star
@@ -156,6 +161,7 @@ pattern A3 f x y z <- EApp (A2 f x y) z
 pattern A4 f x y z v <- EApp (A3 f x y z) v
 pattern A5 f x y z v w <-  EApp (A4 f x y z v) w
 
+-- Core to DeBruijn
 noType = Unknown ""
 
 tyOf :: Exp -> Ty
@@ -216,7 +222,7 @@ compInput x = case x of
     x -> error $ "compInput " ++ show x
 
 compImg x = case x of
-    ETuple [a, b] -> [head $ compImg a, head $ compImg b] {-!!-} 
+    ETuple a -> concatMap compImg a
     A2 "DepthImage" (ELit (LNat i)) (ELit (LFloat a)) -> [DepthImage i (realToFrac a)]
     A2 "ColorImage" (ELit (LNat i)) _ -> [ColorImage i (VV4F (V4 0.5 0.0 0.4 1.0))]
     x -> error $ "compImg " ++ ppShow x
@@ -260,13 +266,19 @@ compFrag x = case x of
     A2 "ColorOp" (compBlending -> b) (compValue -> v) -> ColorOp b v
     x -> error $ "compFrag " ++ ppShow x
 
+test' = test_ $ \x -> head (comp $ reduce mempty mempty x) `seq` print "ok"
+----
+
 showStrippedReducedTest = test'' (stripTypes . reduce mempty mempty) >>= writeFile "testStripped.tmp"
 showReducedTest = test'' (reduce mempty mempty) >>= writeFile "test.tmp"
 showUnreducedTest = test'' id >>= writeFile "testUnreduced.tmp"
 
+emptyPipeline = IR.Pipeline mempty mempty mempty mempty mempty mempty
+testCompile = test'' (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
+testCompile' = test_ $ return . (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
+
 test = test'' (reduce mempty mempty) >>= putStrLn
 test'' f = test_ $ return . ppShow . f
-test' = test_ $ \x -> head (comp $ reduce mempty mempty x) `seq` print "ok"
 
 test_ f = do
   r <- parseAndToCoreMain "gfx03.lc" -- "gfx03.lc" -- "example01.lc"
@@ -296,3 +308,76 @@ getMain m = case [e | ("main", e) <- definitions m] of
     [] -> error "main not found"
     _ -> error "multiple main found"
 
+type CG = State IR.Pipeline
+
+imageToSemantic :: IR.Image -> (IR.ImageSemantic, IR.Value)
+imageToSemantic a = case a of
+  IR.DepthImage _ v   -> (IR.Depth, IR.VFloat v)
+  IR.StencilImage _ v -> (IR.Stencil, IR.VInt v)
+  IR.ColorImage _ v   -> (IR.Color, v)
+
+newRenderTarget :: [IR.Image] -> CG IR.RenderTargetName
+newRenderTarget a = do
+  tv <- gets IR.targets
+  let t = IR.RenderTarget [(s,Just (IR.Framebuffer s)) | i <- a, let s = fst (imageToSemantic i)]
+  modify (\s -> s {IR.targets = tv `V.snoc` t})
+  return $ V.length tv
+
+compilePipeline :: Exp -> CG ()
+compilePipeline e = do
+  c <- getCommands e
+  modify (\s -> s {IR.commands = c})
+
+getSlot :: Exp -> CG IR.SlotName
+getSlot (A3 "Fetch" (ELit (LString slot)) prim attrs) = return 0
+
+getProgram :: IR.SlotName -> Exp -> Exp -> CG IR.ProgramName
+getProgram slot vert frag = return 0
+
+getCommands :: Exp -> CG [IR.Command]
+getCommands e = case e of
+  A5 "Accumulate" actx ffilter frag (A2 "Rasterize" rctx (A2 "Transform" vert input)) fbuf -> do
+    slot <- getSlot input
+    prog <- getProgram slot vert frag
+    (<>) <$> getCommands fbuf <*> pure [IR.SetRasterContext (compRC' rctx), IR.SetProgram prog, IR.RenderSlot slot]-- TODO [IR.SetAccumulationContext (IR.AccumulationContext Nothing [])]
+  A1 "FrameBuffer" a -> do
+    let i = compImg' a
+    rt <- newRenderTarget i
+    pure [IR.SetRenderTarget rt, IR.ClearRenderTarget (map imageToSemantic i)]
+  Exp e -> F.foldrM (\a b -> (<> b) <$> getCommands a) [] e
+
+compFetchPrimitive' x = case x of
+    A0 "Triangles" -> IR.Triangles
+    x -> error $ "compFetchPrimitive' " ++ show x
+
+compImg' x = case x of
+  ETuple a -> concatMap compImg' a
+  A2 "DepthImage" (ELit (LNat i)) (ELit (LFloat a)) -> [IR.DepthImage i (realToFrac a)]
+  A2 "ColorImage" (ELit (LNat i)) a -> [IR.ColorImage i (compValue' a)]
+  x -> error $ "compImg' " ++ ppShow x
+
+compValue' x = case x of
+  ELit (LFloat a) -> IR.VFloat $ realToFrac a
+  ELit (LInt a) -> IR.VInt $ fromIntegral a
+  A4 "V4F" (ELit (LFloat a)) (ELit (LFloat b)) (ELit (LFloat c)) (ELit (LFloat d)) -> IR.VV4F $ IR.V4 (realToFrac a) (realToFrac b) (realToFrac c) (realToFrac d)
+  x -> error $ "compValue' " ++ ppShow x
+
+compRC' x = case x of
+    A4 "TriangleCtx" a b c d -> IR.TriangleCtx (compCM' a) (compPM' b) (compPO' c) (compPV' d)
+    x -> error $ "compRC' " ++ show x
+
+compCM' x = case x of
+    A0 "CullNone" -> IR.CullNone
+    x -> error $ "compCM' " ++ show x
+
+compPM' x = case x of
+    A0 "PolygonFill" -> IR.PolygonFill
+    x -> error $ "compPM' " ++ show x
+
+compPO' x = case x of
+    A0 "NoOffset" -> IR.NoOffset
+    x -> error $ "compPO' " ++ show x
+
+compPV' x = case x of
+    A0 "FirstVertex" -> IR.FirstVertex
+    x -> error $ "compPV " ++ show x

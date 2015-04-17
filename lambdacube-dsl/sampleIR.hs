@@ -20,7 +20,7 @@ import Codec.Image.STB hiding (Image)
 --import Type
 --import CompositionalLC hiding (test)
 --import ToDeBruijn (compile)
---import Core (compile)
+import Core (testCompile')
 --import Parser hiding (main, parseLC)
 --import Text.Trifecta (Result (..))
 
@@ -137,6 +137,7 @@ main = do
 
     gpuCube <- compileMesh myCube
 
+    {-
     let bakedPPL = -- TEMP!!!
           Pipeline
           { textures  = mempty
@@ -146,6 +147,8 @@ main = do
           , IR.slots  = mempty
           , commands  = [SetRenderTarget 0,ClearRenderTarget [(Color,VFloat 1)]]
           }
+    -}
+    bakedPPL <- testCompile'
 
     let inputSchema = schemaFromPipeline bakedPPL
     pplInput <- mkGLPipelineInput inputSchema
