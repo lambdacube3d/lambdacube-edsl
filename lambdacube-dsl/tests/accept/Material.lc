@@ -71,7 +71,18 @@ data CommonAttrs
 
 defaultCommonAttrs :: CommonAttrs
 defaultCommonAttrs = CommonAttrs
-    { caSkyParms        = a
+    { caSkyParms        = ()
+    , caFogParms        = ()
+    , caPortal          = False
+    , caSort            = 0
+    , caEntityMergable  = False
+    , caFogOnly         = False
+    , caCull            = CT_FrontSided
+    , caDeformVertexes  = []
+    , caNoMipMaps       = False
+    , caPolygonOffset   = False
+    , caStages          = []
+    , caIsSky           = False
     }
 
 data RGBGen
