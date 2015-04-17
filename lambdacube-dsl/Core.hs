@@ -31,7 +31,7 @@ import LambdaCube.Core.Type hiding (Ty)
 import qualified LambdaCube.Core.PrimFun as C
 import qualified LambdaCube.Core.Type as C
 
-import Parser (parseLC_)
+import Parser (parseLC)
 import ToDeBruijn hiding (compile)
 import Text.Show.Pretty
 
@@ -142,8 +142,8 @@ eLam (VarT n) (EApp e (EType (TVar m))) | n == m = e  -- optimization
 eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization
 eLam vt x = ELam vt x
 
-compile :: AST.Exp (Subst, Typing) -> Either String LambdaCube.Core.DeBruijn.N
-compile x = case comp . reduce mempty mempty . toCore mempty $ x of
+compile :: Exp -> Either String LambdaCube.Core.DeBruijn.N
+compile x = case comp . reduce mempty mempty $ x of
     [n] -> Right n
     ns -> Left $ show ns
 
@@ -269,13 +269,30 @@ test'' f = test_ $ return . ppShow . f
 test' = test_ $ \x -> head (comp $ reduce mempty mempty x) `seq` print "ok"
 
 test_ f = do
-  (src, r) <- parseLC_ "gfx03.lc" -- "gfx03.lc" -- "example01.lc"
+  r <- parseAndToCoreMain "gfx03.lc" -- "gfx03.lc" -- "example01.lc"
 --  (src, r) <- parseLC_ "tests/accept/instantiate.lc" -- "gfx03.lc" -- "example01.lc"
 --  (src, r) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
   case r of
-    Success e -> do
-        (f $ toCore mempty $ either (error . ($ src)) id $ inference e) 
-    Failure m -> do
+    Right e -> f e
+    Left m -> do
       error $ show m
+
+parseAndToCoreMain :: String -> IO (Either String Exp)
+parseAndToCoreMain fname = do
+  res <- parseLC fname
+  case res of
+    Left m -> do
+      return (Left $ show m)
+    Right (src, e) -> do
+      case inference e of
+        Right t   -> do
+          return $ Right $ toCore mempty $ getMain t
+        Left m    -> do
+          return $ Left $ m src
+
+getMain m = case [e | ("main", e) <- definitions m] of
+    [e] -> e
+    [] -> error "main not found"
+    _ -> error "multiple main found"
 

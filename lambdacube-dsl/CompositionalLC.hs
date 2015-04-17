@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RecordWildCards #-}
 module CompositionalLC
     ( inference, inference_
     , composeSubst
@@ -165,12 +166,21 @@ dependentVars ie s = cycle mempty s
         a <-> b = (a --> b) <> (b --> a)
 
 
-inference :: Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
+inference :: Module Range -> Either ErrorMsg (Module (Subst, Typing))
 inference = inference_ $ PolyEnv primFunMap
 
-inference_ :: PolyEnv -> Exp Range -> Either ErrorMsg (Exp (Subst, Typing))
-inference_ primFunMap e = runExcept $ fst <$>
-    evalRWST (inferTyping e <* checkUnambError) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
+inference_ :: PolyEnv -> Module Range -> Either ErrorMsg (Module (Subst, Typing))
+inference_ primFunMap m = runExcept $ fst <$>
+    evalRWST (inferModule m) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
+  where
+    inferModule Module{..} = do
+        dataDefs <- return [] -- TODO mapM inferDataDef dataDefs
+        definitions <- mapM inferDef definitions
+        return Module{..}
+
+    inferDef (n, e) = do
+        e <- inferTyping e <* checkUnambError
+        return (n, e)
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 

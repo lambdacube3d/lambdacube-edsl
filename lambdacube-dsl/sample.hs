@@ -20,8 +20,8 @@ import Codec.Image.STB hiding (Image)
 import Type
 import CompositionalLC hiding (test)
 --import ToDeBruijn (compile)
-import Core (compile)
-import Parser hiding (main, parseLC)
+import Core
+import Parser
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
 --  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
@@ -116,9 +116,9 @@ myCube = Mesh
 
 rendererFromDSL :: String -> IO (Maybe Renderer)
 rendererFromDSL fname = do
-  lcAST' <- parseLC fname
+  lcAST' <- parseAndToCoreMain fname
   case lcAST' of
-    Right lcAST -> case compile lcAST of
+    Right lcAST -> case compile $ reduce mempty mempty lcAST of
         Right lcNet -> Just <$> compileRendererFromCore lcNet
         Left e -> do
           putStrLn $ "rendererFromDSL error: " ++ e
@@ -235,22 +235,3 @@ lookat pos target up = translateBefore4 (neg pos) (orthogonal $ toOrthoUnsafe r)
     v = w &^ u
     r = transpose $ Mat3 u v w
 
-parseLC :: String -> IO (Either String (Exp (Subst, Typing)))
-parseLC fname = do
-  (src, res) <- parseLC_ fname
-  case res of
-    Failure m -> do
-      print m
-      return (Left $ show m)
-    Success e -> do
-      --let r = render s
-      --print $ pretty $ delta r
-      --print $ pretty r
-      --putStrLn $ ppShow e
-      case inference e of
-        Right t   -> do
-          --putStrLn $ ppShow t
-          return (Right t)
-        Left m    -> do
-          putStrLn $ "error: " ++ m src
-          return (Left $ m src)

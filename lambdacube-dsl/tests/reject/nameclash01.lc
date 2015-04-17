@@ -1,2 +1,3 @@
-let FrameBuffer = FrameBuffer (ColorImage #1 1.0)
-in ScreenOut FrameBuffer
+main =
+    let FrameBuffer = FrameBuffer (ColorImage #1 1.0)
+    in ScreenOut FrameBuffer

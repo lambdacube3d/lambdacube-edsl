@@ -1,4 +1,4 @@
-let
+main = let
   blendFun x = Blend x ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
   blend'' = blendFun (FuncAdd,FuncAdd)
   blend = Blend (FuncAdd,FuncAdd) ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
@@ -21,4 +21,4 @@ let
   fragmentShader' v = FragmentOutRastDepth (Const (V4F 1.0 0.4 0.0 0.2))
   fragmentShader v  = FragmentOutRastDepth (PrimMul v (Const (V4F 1.0 0.4 0.0 0.2)))
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
-in ScreenOut frame
+ in ScreenOut frame

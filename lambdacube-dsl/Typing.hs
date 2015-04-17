@@ -133,7 +133,7 @@ reduceConstraint x = case x of
                 | otherwise -> noInstance
             _ -> discard []
 
-        _ -> maybe noInstance (iff (discard []) noInstance . Set.member t) $ Map.lookup c instances
+        _ -> maybe noInstance (iff (discard []) noInstance . Set.member t) $ Map.lookup c builtinInstances
       where
         noInstance = failure $ "no " ++ show c ++ " instance for " ++ show t
 
@@ -235,8 +235,8 @@ reduceConstraint x = case x of
     observe TVar{} _ = nothing
     observe x f = f x
 
-instances :: Map Class (Set Ty)
-instances = Map.fromList
+builtinInstances :: Map Class (Set Ty)
+builtinInstances = Map.fromList
     [ item CNum         [TInt, TFloat]
     , item IsIntegral   [TInt, TWord]
     , item IsNumComponent $ floatIntWord ++ floatVectors

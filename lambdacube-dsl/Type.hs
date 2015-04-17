@@ -351,3 +351,34 @@ instance FreeVars a => FreeVars (TypeFun a)         where freeVars = foldMap fre
 instance FreeVars a => FreeVars (MonoEnv a)         where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap freeVars
 
+
+-- AST
+data Module a
+  = Module
+  { moduleImports :: ()
+  , moduleExports :: ()
+  , typeAliases   :: ()
+  , definitions   :: [ValueDef a]
+  , dataDefs      :: [DataDef a]
+  , typeClasses   :: ()
+  , instances     :: ()
+  }
+    deriving (Show)
+
+type ValueDef a = (String, Exp a)
+data DataDef a = DataDef String [String] [ConDef a]
+    deriving (Show)
+data ConDef a = ConDef EName [Ty' a]
+    deriving (Show)
+
+data Expression -- record, list, tuple, literal, var, application, lambda, ifthenelse, letin, caseof, dataconstructor
+  = Expression
+
+--data Type
+--  = Type
+
+data TypeClassDefinition
+  = TypeClassDefinition -- name, [base class], [type signature (declaration)]
+
+data TypeClassInstance -- name, type, [definition]
+  = TypeClassInstance

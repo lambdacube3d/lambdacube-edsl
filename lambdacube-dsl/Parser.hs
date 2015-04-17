@@ -98,7 +98,7 @@ moduleName = void_ $ do
   l <- sepBy1 (ident lcIdents) dot
   when (any (isLower . head) l) $ fail "module name must start with capital letter"
 
-moduleDef :: P Module
+moduleDef :: P (Module Range)
 moduleDef = do
   optional $ do
     keyword "module"
@@ -165,7 +165,7 @@ typeExp = do
   optional (tcExp <?> "type context")
   ty
 
-dataDef :: P DataDef
+dataDef :: P (DataDef Range)
 dataDef = do
   keyword "data"
   localIndentation Gt $ do
@@ -348,54 +348,16 @@ indentState' = mkIndentationState 0 infIndentation False Ge
 
 test = parseLC "syntax02.lc"
 
-parseLC :: String -> IO (Either String Module)
+parseLC :: String -> IO (Either String (BS.ByteString, Module Range))
 parseLC fname = do
   src <- BS.readFile fname
   case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> moduleDef <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
-    Failure m -> do
-      print m
-      return (Left $ show m)
-    Success e -> print "Parsed" >> (return $ Right e)
+    Failure m -> return $ Left $ show m
+    Success e -> return $ Right (src, e)
 
-parseLC_ :: String -> IO (BS.ByteString, Result (Exp Range))
-parseLC_ fname = do
-  src <- BS.readFile fname
-  return (src, parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> expression <* eof) indentState') (Directed (pack fname) 0 0 0 0) src)
---main = test
-
--- AST
-data Module
-  = Module
-  { moduleImports :: ()
-  , moduleExports :: ()
-  , typeAliases   :: ()
-  , definitions   :: [ValueDef]
-  , dataDefs      :: [DataDef]
-  , typeClasses   :: ()
-  , instances     :: ()
-  }
-    deriving (Show)
-
-data Definition
-  = ValueDef ValueDef
+data Definition a
+  = ValueDef (ValueDef a)
   | TypeSig ()
-  | DDataDef DataDef
+  | DDataDef (DataDef a)
     deriving (Show)
 
-type ValueDef = (String, Exp Range)
-data DataDef = DataDef String [String] [ConDef]
-    deriving (Show)
-data ConDef = ConDef EName [TyR]
-    deriving (Show)
-
-data Expression -- record, list, tuple, literal, var, application, lambda, ifthenelse, letin, caseof, dataconstructor
-  = Expression
-
-data Type
-  = Type
-
-data TypeClassDefinition
-  = TypeClassDefinition -- name, [base class], [type signature (declaration)]
-
-data TypeClassInstance -- name, type, [definition]
-  = TypeClassInstance

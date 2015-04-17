@@ -1,4 +1,4 @@
-let
+main = let
   emptyFB           = FrameBuffer (ColorImage #1 (V4F 0.0 0.0 0.4 1.0))
   rasterCtx         = TriangleCtx CullNone PolygonFill NoOffset LastVertex
   fragmentCtx       = AccumulationContext (ColorOp NoBlending (V4B True True True True))
@@ -8,4 +8,4 @@ let
   fragmentStream    = Rasterize rasterCtx primitiveStream
   fragmentShader v  = FragmentOut v --(V4F 1.0 0.0 0.0 1.0)
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
-in ScreenOut frame
+ in ScreenOut frame

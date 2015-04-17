@@ -1,4 +1,4 @@
-let
+main = let
   blendFun x = Blend x ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
   blend'' = blendFun (FuncAdd,FuncAdd)
   blend = Blend (FuncAdd,FuncAdd) ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
@@ -23,4 +23,4 @@ let
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
   record = {fieldA: 1.0, fieldB: frame, fieldC: blendFun}
   field = record.fieldA
-in ScreenOut record.fieldA
+ in ScreenOut record.fieldA

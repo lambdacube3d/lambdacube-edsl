@@ -12,13 +12,13 @@ import System.FilePath
 import System.IO
 
 import Type
-import CompositionalLC hiding (test)
-import Parser hiding (main, parseLC)
+import CompositionalLC
+import Parser
 
 data ParseResult
   = ParseError String
   | TypeError String
-  | TypedExp (Exp (Subst, Typing))
+  | TypedExp (Module (Subst, Typing))
 
 main :: IO ()
 main = do
@@ -63,7 +63,7 @@ main = do
 
   putStrLn $ "Catching errors (must get an error)"
   forM_ testToReject $ \n -> do
-    result <- parseLC n
+    result <- parseLC' n
     case result of
       ParseError e -> checkErrorMsg "parse error" n e
       TypeError e -> checkErrorMsg "type error" n e
@@ -71,21 +71,22 @@ main = do
 
   putStrLn $ "Checking valid pipelines"
   forM_ testToAccept $ \n -> do
-    result <- parseLC n
+    result <- parseLC' n
     case result of
       ParseError e -> putStrLn $ " # FAIL - " ++ n ++ " parse error: " ++ e
       TypeError e -> putStrLn $ " # FAIL - " ++ n ++ " type error: " ++ e
       TypedExp _ -> putStrLn $ " * OK - " ++ n
 
-parseLC :: String -> IO ParseResult
-parseLC fname = do
-  (src, res) <- parseLC_ fname
+parseLC' :: String -> IO ParseResult
+parseLC' fname = do
+  res <- parseLC fname
   case res of
-    Failure m -> do
-      return (ParseError $ show m)
-    Success e -> do
+    Left m -> do
+      return $ ParseError $ show m
+    Right (src, e) -> do
       case inference e of
         Right t   -> do
-          return (TypedExp t)
+          return $ TypedExp t
         Left m    -> do
-          return (TypeError $ m src)
+          return $ TypeError $ m src
+
