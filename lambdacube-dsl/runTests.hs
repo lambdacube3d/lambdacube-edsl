@@ -23,6 +23,7 @@ data ParseResult
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
+  hSetBuffering stdin NoBuffering
   let acceptPath = "./tests/accept/"
       rejectPath = "./tests/reject/"
       errorFileName lc = dropExtension lc ++ ".error"
@@ -42,7 +43,7 @@ main = do
         True -> do
             e' <- readFile ef
             if e == e' then ok else do
-                putStrLn $ "Error message of reject test " ++ n ++ " has changed."
+                putStrLn $ "Error message of " ++ n ++ " has changed."
                 putStrLn "Old message: "
                 putStrLn e
                 putStrLn "-------------------------------------------"
@@ -53,9 +54,8 @@ main = do
                 c <- getChar
                 if c `elem` "yY\n" then do
                         writeFile ef e
-                        putStrLn "Accepted."
-                    else putStrLn "Not Accepted."
-        
+                        putStrLn " Accepted."
+                    else putStrLn " Not Accepted."
         where
             ef = errorFileName n
             ok = putStrLn $ " * OK - " ++ n ++ " " ++ msg ++ " " ++ if verbose then e else []
