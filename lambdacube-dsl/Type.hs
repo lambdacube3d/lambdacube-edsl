@@ -161,10 +161,13 @@ newtype Ty = Ty (Ty_ Ty)
 data Ty' a = Ty' a (Ty_ (Ty' a))
   deriving (Show,Eq,Ord)
 
+getTagT (Ty' k _) = k
+
 data Ty_ a
-  -- star kind
-  = TVar_    Frequency TName
-  | TCon_    Frequency TCName [a]     -- saturated type constructor application
+  = Star_       -- type of types
+  | TVar_    Frequency TName
+  | TApp_    a a
+  | TCon_    Frequency TCName
   | TArr_    a a
   | Forall_ TName a
   | TConstraintArg_ (Constraint a) a
@@ -202,8 +205,12 @@ data Ty_ a
 -}
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
+pattern Star = Ty Star_
 pattern TVar a b = Ty (TVar_ a b)
-pattern TCon f a b = Ty (TCon_ f a b)
+pattern TApp a b = Ty (TApp_ a b)
+pattern TCon0 f a = Ty (TCon_ f a)
+pattern TCon1 f a b = TApp (TCon0 f a) b
+pattern TCon2 f a b c = TApp (TCon1 f a b) c
 pattern TArr a b = Ty (TArr_ a b)
 pattern Forall a b = Ty (Forall_ a b)
 pattern TConstraintArg a b = Ty (TConstraintArg_ a b)
@@ -221,47 +228,47 @@ pattern TVec a b = Ty (TVec_ a b)
 pattern TMat a b c = Ty (TMat_ a b c)
 
 -- Semantic
-pattern Depth a = TCon C "Depth" [a]
-pattern Stencil a = TCon C "Stencil" [a]
-pattern Color a = TCon C "Color" [a]
+pattern Depth a = TCon1 C "Depth" a
+pattern Stencil a = TCon1 C "Stencil" a
+pattern Color a = TCon1 C "Color" a
 
 -- PrimitiveType
-pattern TTriangle = TCon C "Triangle" []
-pattern TLine = TCon C "Line" []
-pattern TPoint = TCon C "Point" []
-pattern TTriangleAdjacency = TCon C "TriangleAdjacency" []
-pattern TLineAdjacency = TCon C "LineAdjacency" []
+pattern TTriangle = TCon0 C "Triangle"
+pattern TLine = TCon0 C "Line"
+pattern TPoint = TCon0 C "Point"
+pattern TTriangleAdjacency = TCon0 C "TriangleAdjacency"
+pattern TLineAdjacency = TCon0 C "LineAdjacency"
 
 -- ADT
-pattern TCullMode a = TCon a "CullMode" []
-pattern TPolygonMode a = TCon a "PolygonMode" []
-pattern TPolygonOffset a = TCon a "PolygonOffset" []
-pattern TProvokingVertex a = TCon a "ProvokingVertex" []
-pattern TFrontFace a = TCon a "FrontFace" []
-pattern TPointSize a = TCon a "PointSize" []
-pattern TBlendingFactor a = TCon a "BlendingFactor" []
-pattern TBlendEquation a = TCon a "BlendEquation" []
-pattern TLogicOperation a = TCon a "LogicOperation" []
-pattern TStencilOperation a = TCon a "StencilOperation" []
-pattern TComparisonFunction a = TCon a "ComparisonFunction" []
-pattern TPointSpriteCoordOrigin a = TCon a "PointSpriteCoordOrigin" []
+pattern TCullMode a = TCon0 a "CullMode"
+pattern TPolygonMode a = TCon0 a "PolygonMode"
+pattern TPolygonOffset a = TCon0 a "PolygonOffset"
+pattern TProvokingVertex a = TCon0 a "ProvokingVertex"
+pattern TFrontFace a = TCon0 a "FrontFace"
+pattern TPointSize a = TCon0 a "PointSize"
+pattern TBlendingFactor a = TCon0 a "BlendingFactor"
+pattern TBlendEquation a = TCon0 a "BlendEquation"
+pattern TLogicOperation a = TCon0 a "LogicOperation"
+pattern TStencilOperation a = TCon0 a "StencilOperation"
+pattern TComparisonFunction a = TCon0 a "ComparisonFunction"
+pattern TPointSpriteCoordOrigin a = TCon0 a "PointSpriteCoordOrigin"
 
 -- GADT
-pattern TAccumulationContext a b = TCon a "AccumulationContext" [b]
-pattern TBlending a b = TCon a "Blending" [b]
-pattern TFetchPrimitive a b = TCon a "FetchPrimitive" [b]
-pattern TFragmentFilter a b = TCon a "FragmentFilter" [b]
-pattern TFragmentOperation a b = TCon a "FragmentOperation" [b]
-pattern TFragmentOut a b = TCon a "FragmentOut" [b]
-pattern TFragmentStream a b c = TCon a "FragmentStream" [b, c]
-pattern TFrameBuffer a b c = TCon a "FrameBuffer" [b, c]
-pattern TImage a b c = TCon a "Image" [b, c]
-pattern TInput a b = TCon a "Input" [b]
-pattern TInterpolated a b = TCon a "Interpolated" [b]
-pattern TOutput a = TCon a "Output" []
-pattern TRasterContext a b = TCon a "RasterContext" [b]
-pattern TVertexOut a b = TCon a "VertexOut" [b]
-pattern TVertexStream a b c = TCon a "VertexStream" [b, c]
+pattern TAccumulationContext a b = TCon1 a "AccumulationContext" b
+pattern TBlending a b = TCon1 a "Blending" b
+pattern TFetchPrimitive a b = TCon1 a "FetchPrimitive" b
+pattern TFragmentFilter a b = TCon1 a "FragmentFilter" b
+pattern TFragmentOperation a b = TCon1 a "FragmentOperation" b
+pattern TFragmentOut a b = TCon1 a "FragmentOut" b
+pattern TFragmentStream a b c = TCon2 a "FragmentStream" b c
+pattern TFrameBuffer a b c = TCon2 a "FrameBuffer" b c
+pattern TImage a b c = TCon2 a "Image" b c
+pattern TInput a b = TCon1 a "Input" b
+pattern TInterpolated a b = TCon1 a "Interpolated" b
+pattern TOutput a = TCon0 a "Output"
+pattern TRasterContext a b = TCon1 a "RasterContext" b
+pattern TVertexOut a b = TCon1 a "VertexOut" b
+pattern TVertexStream a b c = TCon2 a "VertexStream" b c
 
 pattern TPrimitiveStream a b c d e = Ty (TPrimitiveStream_ a b c d e)
 

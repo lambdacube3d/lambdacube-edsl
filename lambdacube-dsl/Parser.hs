@@ -188,7 +188,7 @@ typeRecord = undef "trec" $ do
   braces (commaSep1 typeSignature >> optional (operator "|" >> void_ typeVar))
 
 tApp :: Ty -> Ty -> Ty
-tApp (TCon f c xs) y = TCon f c $ xs ++ [y]
+tApp = TApp
 
 ty :: P Ty
 ty = chainr1 (foldl1 tApp <$> some typeAtom) (do operator "->"; return $ TArr)
@@ -196,10 +196,10 @@ ty = chainr1 (foldl1 tApp <$> some typeAtom) (do operator "->"; return $ TArr)
 typeAtom :: P Ty
 typeAtom = typeRecord
     <|> TVar C <$> (try typeVar)
-    <|> try (parens $ pure $ TCon C "()" [])
-    <|> TCon C <$> typeConstructor <*> pure []
+    <|> try (parens $ pure $ TCon0 C "()")
+    <|> TCon0 C <$> typeConstructor
     <|> TTuple C <$> (parens $ sepBy ty comma)
-    <|> TCon C "[]" . (:[]) <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
+    <|> TCon1 C "[]" <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
 
 typeClassDef :: P ()
 typeClassDef = void_ $ do

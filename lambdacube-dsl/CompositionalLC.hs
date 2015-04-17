@@ -74,11 +74,13 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
                 else put $ Map.insert n t' $ singSubst n t' <$> s
 
         unifyTy :: Ty -> Ty -> StateT Subst TCM ()
+        unifyTy Star Star = return ()
         unifyTy (TVar _ u) (TVar _ v) | u == v = return ()
         unifyTy (TVar _ u) _ = bindVar u b
         unifyTy _ (TVar _ u) | bidirectional = bindVar u a
+        unifyTy (TCon0 _ u) (TCon0 _ v) | u == v = return ()
         unifyTy (TTuple f1 t1) (TTuple f2 t2) = sequence_ $ zipWith uni t1 t2
-        unifyTy (TCon f1 n1 t1) (TCon f2 n2 t2) | n1 == n2 = sequence_ $ zipWith uni t1 t2
+        unifyTy (TApp a1 b1) (TApp a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TArr a1 b1) (TArr a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TVec a1 b1) (TVec a2 b2) | a1 == a2 = uni b1 b2
         unifyTy (TMat a1 b1 c1) (TMat a2 b2 c2) | a1 == a2 && b1 == b2 = uni c1 c2
@@ -171,24 +173,42 @@ inference_ primFunMap e = runExcept $ fst <$>
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 
+inferKind :: Ty' Range -> TCM (Ty' (Subst, Typing))
+inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
+    Forall_ n t -> do
+        let n' = '\'':n
+        tf <- withTyping (Map.singleton n' star) $ inferKind t
+        ty <- unifyTypings [[star], getTag' tf] $ \[a, t] -> a ~> t
+        return $ Ty' (id *** removeMonoVars (Set.singleton n) $ ty) $ Forall_ n tf
+    _ -> do
+        ty' <- T.mapM inferKind ty
+        (\t -> Ty' t ty') <$> case ty' of
+            Star_ -> return (mempty, [] ==> Star)
+            TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
+            TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
+            TVar_ C n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
+  where
+    getTag' = (:[]) . snd . getTagT
+    star = [] ==> Star
+
 inferTyping :: Exp Range -> TCM (Exp (Subst, Typing))
-inferTyping exp = local (id *** const [getTag exp]) $ case exp of
-    ELam _ p f -> do
+inferTyping (Exp r e) = local (id *** const [r]) $ case e of
+    ELam_ p f -> do
         p_@(p, tr) <- inferPatTyping False p
         tf <- withTyping tr $ inferTyping f
         ty <- unifyTypings [getTagP' p_, getTag' tf] $ \[a, t] -> a ~> t
         return $ ELam (id *** removeMonoVars (Map.keysSet tr) $ ty) p tf
-    ELet _ (PVar _ n) x e -> do
+    ELet_ (PVar _ n) x e -> do
         tx <- inferTyping x
         te <- withTyping (Map.singleton n $ head $ getTag' tx) $ inferTyping e
         return $ ELet (mempty, head $ getTag' te) (PVar (getTag tx) n) tx te
-    ELet _ p x e -> do          -- monomorph let; TODO?
+    ELet_ p x e -> do          -- monomorph let; TODO?
         tx <- inferTyping x
         p_@(p, tr) <- inferPatTyping False p
         te <- withTyping tr $ inferTyping e
         ty <- unifyTypings [getTagP' p_ ++ getTag' tx, getTag' te] $ \[_, te] -> te
         return $ ELet ty p tx te
-    ECase _ e cs -> do
+    ECase_ e cs -> do
         te <- inferTyping e
         cs <- forM cs $ \(p, exp) -> do
             (p, tr) <- inferPatTyping False p
@@ -196,7 +216,7 @@ inferTyping exp = local (id *** const [getTag exp]) $ case exp of
             return (p, exp)
         ty <- unifyTypings [getTag' te ++ concatMap getTagP' cs, concatMap (getTag' . snd) cs] $ \[_, x] -> x
         return $ ECase ty te cs
-    Exp _ e -> do
+    _ -> do
         e' <- T.mapM inferTyping e
         (\t -> Exp t $ setTag undefined e') <$> case e' of
             EApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
