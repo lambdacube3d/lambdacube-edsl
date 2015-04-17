@@ -72,18 +72,21 @@ typeConstructor = do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "type name must start with capital letter"
 
+-- see http://blog.ezyang.com/2014/05/parsec-try-a-or-b-considered-harmful/comment-page-1/#comment-6602
+try' s m = try m <?> s
+
 typeVar :: P String
-typeVar = do
+typeVar = try' "type variable" $ do
   i <- ident lcIdents
   if isUpper $ head i then fail "type variable name must start with lower case letter" else return i
 
 dataConstructor :: P String
-dataConstructor = try $ do
+dataConstructor = try' "data constructor" $ do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "data constructor must start with capital letter"
 
 var :: P String
-var = try $ do
+var = try' "variable" $ do
   i <- ident lcIdents
   if isUpper $ head i then fail "variable name must start with lower case letter" else return i
 
@@ -107,10 +110,10 @@ moduleDef = do
     -- TODO: unordered definitions
     many $ choice
         [ DDataDef <$> dataDef
-        , TypeSig <$> try typeSignature
+        , TypeSig <$> try' "type signature" typeSignature
         , undef "typeSyn" $ typeSynonym
         , undef "class" $ typeClassDef
-        , (\(r, (r', n), e) -> ValueDef (n, e)) <$> try valueDef_
+        , (\(r, (r', n), e) -> ValueDef (n, e)) <$> try' "definition" valueDef_
         , undef "fixity" fixityDef
         , undef "instance" typeClassInstanceDef
         ]
@@ -233,7 +236,7 @@ undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
 valuePattern :: P (Exp Range)
 valuePattern
-    =   try (undef "_" $ operator "_")
+    =   undef "_" (operator "_")
     <|> (try $ undef "@" $ var *> operator "@" *> valuePattern)
     <|> (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position
     <|> (undef "data Constr" $ try dataConstructor)
