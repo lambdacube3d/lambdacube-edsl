@@ -197,11 +197,11 @@ ty = chainr1 (foldl1 tApp <$> some typeAtom) (do operator "->"; return $ \a b ->
 
 typeAtom :: P TyR
 typeAtom = typeRecord
-    <|> Ty' mempty . TVar_ C <$> (try typeVar)
-    <|> try (parens $ pure $ Ty' mempty $ TCon_ C "()")
-    <|> Ty' mempty . TCon_ C <$> typeConstructor
-    <|> Ty' mempty . TTuple_ C <$> (parens $ sepBy ty comma)
-    <|> Ty' mempty . TApp_ (Ty' mempty (TCon_ C "[]")) <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
+    <|> Ty' mempty . TVar_ <$> (try typeVar)
+    <|> try (parens $ pure $ Ty' mempty $ TCon_ "()")
+    <|> Ty' mempty . TCon_ <$> typeConstructor
+    <|> Ty' mempty . TTuple_ <$> (parens $ sepBy ty comma)
+    <|> Ty' mempty . TApp_ (Ty' mempty (TCon_ "[]")) <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
 
 typeClassDef :: P ()
 typeClassDef = void_ $ do

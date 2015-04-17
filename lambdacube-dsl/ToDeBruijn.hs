@@ -435,33 +435,33 @@ noType = Unknown ""
 -- TODO: use constraints
 toTy :: Ty -> C.Ty
 toTy ty = case ty of
-    TBool  _ -> Single C.Bool 
-    TWord  _ -> Single C.Word 
-    TInt   _ -> Single C.Int  
-    TFloat _ -> Single C.Float
-    TVec 2 (TBool a) -> Single C.V2B
-    TVec 3 (TBool a) -> Single C.V3B
-    TVec 4 (TBool a) -> Single C.V4B
-    TVec 2 (TWord a) -> Single C.V2U
-    TVec 3 (TWord a) -> Single C.V3U
-    TVec 4 (TWord a) -> Single C.V4U
-    TVec 2 (TInt a) -> Single C.V2I
-    TVec 3 (TInt a) -> Single C.V3I
-    TVec 4 (TInt a) -> Single C.V4I
-    TVec 2 (TFloat a) -> Single C.V2F
-    TVec 3 (TFloat a) -> Single C.V3F
-    TVec 4 (TFloat a) -> Single C.V4F
-    TMat 2 2 (TFloat a) -> Single C.M22F
-    TMat 2 3 (TFloat a) -> Single C.M23F
-    TMat 2 4 (TFloat a) -> Single C.M24F
-    TMat 3 2 (TFloat a) -> Single C.M32F
-    TMat 3 3 (TFloat a) -> Single C.M33F
-    TMat 3 4 (TFloat a) -> Single C.M34F
-    TMat 4 2 (TFloat a) -> Single C.M42F
-    TMat 4 3 (TFloat a) -> Single C.M43F
-    TMat 4 4 (TFloat a) -> Single C.M44F
+    TBool  -> Single C.Bool 
+    TWord  -> Single C.Word 
+    TInt   -> Single C.Int  
+    TFloat -> Single C.Float
+    TVec 2 (TBool) -> Single C.V2B
+    TVec 3 (TBool) -> Single C.V3B
+    TVec 4 (TBool) -> Single C.V4B
+    TVec 2 (TWord) -> Single C.V2U
+    TVec 3 (TWord) -> Single C.V3U
+    TVec 4 (TWord) -> Single C.V4U
+    TVec 2 (TInt) -> Single C.V2I
+    TVec 3 (TInt) -> Single C.V3I
+    TVec 4 (TInt) -> Single C.V4I
+    TVec 2 (TFloat) -> Single C.V2F
+    TVec 3 (TFloat) -> Single C.V3F
+    TVec 4 (TFloat) -> Single C.V4F
+    TMat 2 2 (TFloat) -> Single C.M22F
+    TMat 2 3 (TFloat) -> Single C.M23F
+    TMat 2 4 (TFloat) -> Single C.M24F
+    TMat 3 2 (TFloat) -> Single C.M32F
+    TMat 3 3 (TFloat) -> Single C.M33F
+    TMat 3 4 (TFloat) -> Single C.M34F
+    TMat 4 2 (TFloat) -> Single C.M42F
+    TMat 4 3 (TFloat) -> Single C.M43F
+    TMat 4 4 (TFloat) -> Single C.M44F
 
-    TInterpolated _ t -> toTy t
+    TInterpolated t -> toTy t
     t -> Unknown (show ty)
 
 {-

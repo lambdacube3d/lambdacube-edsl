@@ -57,7 +57,7 @@ data Pat
 newtype Exp = Exp (Exp_ Exp)
   deriving (Show,Eq,Ord)
 
-dummyType = TVar C ""
+dummyType = TVar ""
 
 stripTypes :: Exp -> Exp
 stripTypes e = case e of
@@ -119,7 +119,7 @@ toCore sub e = case e of
   AST.EVar t n      -> foldl EApp (foldl EApp (EVar $ VarE n $ toType $ subst sub' $ snd t) pv) cs
     where
       cs = map EConstraint $ subst sub' $ constraints $ snd t
-      pv = map EType $ subst sub' $ map (\n -> TVar C n) $ Map.keys $ fst t
+      pv = map EType $ subst sub' $ map (\n -> TVar n) $ Map.keys $ fst t
   AST.EApp t f a    -> EApp (toCore' f) (toCore' a)
   AST.ELet _ (AST.PVar _ n) a b  -> ELet (VarE n $ toType' $ getTag a) (pv --> ctr --> toCore' a) (toCore' b)
     where
@@ -138,7 +138,7 @@ toCore sub e = case e of
     toType :: Typing -> Type
     toType ty = foldr Forall (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
 
-eLam (VarT n) (EApp e (EType (TVar C m))) | n == m = e  -- optimization
+eLam (VarT n) (EApp e (EType (TVar m))) | n == m = e  -- optimization
 eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization
 eLam vt x = ELam vt x
 

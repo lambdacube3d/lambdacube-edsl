@@ -39,9 +39,9 @@ class Substitute a where subst :: Subst -> a -> a
 
 instance Substitute Ty where
     subst st ty | Map.null st = ty -- optimization
-    subst st (Ty_ k tv@(TVar_ _ a)) = fromMaybe (Ty_ (subst st k) tv) $ Map.lookup a st
+    subst st (Ty_ k tv@(TVar_ a)) = fromMaybe (Ty_ (subst st k) tv) $ Map.lookup a st
     subst st (Ty_ k t) = Ty_ (subst st k) $ subst st <$> t
-    subst _ (StarToStar n) = StarToStar n
+    subst _ (StarToStar f n) = StarToStar f n
 
 instance Substitute a => Substitute [a]                 where subst = fmap . subst
 instance Substitute a => Substitute (Typing_ a)         where subst = fmap . subst
@@ -60,12 +60,12 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
     uni :: Ty -> Ty -> StateT Subst TCM ()
     uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
       where
-        subst1 s tv@(TVar _ a) = fromMaybe tv $ Map.lookup a s
+        subst1 s tv@(TVar a) = fromMaybe tv $ Map.lookup a s
         subst1 _ t = t
 
-        singSubst n t (TVar _ a) | a == n = t
+        singSubst n t (TVar a) | a == n = t
         singSubst n t (Ty_ k ty) = Ty_ (singSubst n t k) $ singSubst n t <$> ty
-        singSubst _ _ (StarToStar n) = StarToStar n
+        singSubst _ _ (StarToStar f n) = StarToStar f n
 
         -- make single tvar substitution; check infinite types
         bindVar n t = do
@@ -77,16 +77,15 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
 
         unifyTy :: Ty -> Ty -> StateT Subst TCM ()
         unifyTy Star Star = return ()
-        unifyTy (TVar _ u) (TVar _ v) | u == v = return ()
-        unifyTy (TVar _ u) _ = bindVar u b
-        unifyTy _ (TVar _ u) | bidirectional = bindVar u a
-        unifyTy (TCon0 _ u) (TCon0 _ v) | u == v = return ()
-        unifyTy (TTuple f1 t1) (TTuple f2 t2) = sequence_ $ zipWith uni t1 t2
+        unifyTy (TVar u) (TVar v) | u == v = return ()
+        unifyTy (TVar u) _ = bindVar u b
+        unifyTy _ (TVar u) | bidirectional = bindVar u a
+        unifyTy (TCon0 u) (TCon0 v) | u == v = return ()
+        unifyTy (TTuple t1) (TTuple t2) = sequence_ $ zipWith uni t1 t2
         unifyTy (TApp k1 a1 b1) (TApp k2 a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TArr a1 b1) (TArr a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TVec a1 b1) (TVec a2 b2) | a1 == a2 = uni b1 b2
         unifyTy (TMat a1 b1 c1) (TMat a2 b2 c2) | a1 == a2 && b1 == b2 = uni c1 c2
-        unifyTy (TPrimitiveStream f1 a1 b1 g1 c1) (TPrimitiveStream f2 a2 b2 g2 c2) = uni a1 a2 >> uni b1 b2 >> uni c1 c2
         unifyTy a b
           | a == b = return ()
           | otherwise = lift $ throwErrorTCM $ "can not unify " ++ show a ++ " with " ++ show b
@@ -186,12 +185,12 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
             TNat_ _ -> return (mempty, [] ==> NatKind)
-            Star_ -> return (mempty, [] ==> Star)
+            Star_ C -> return (mempty, [] ==> Star)
             TVec_ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TMat_ _ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
-            TVar_ C n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
+            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
   where
     getTag' = (:[]) . snd . getTagT
     star = [] ==> Star
@@ -227,7 +226,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             EApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             EFieldProj_ fn -> fieldProjType fn
             ERecord_ (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
-            ETuple_ te -> unifyTypings (map (getTag') te) $ TTuple C
+            ETuple_ te -> unifyTypings (map (getTag') te) TTuple
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
             ETyping_ e ty -> unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
@@ -240,7 +239,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             Wildcard_ -> noTr $ newV $ \t -> t :: Ty
             PVar_ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
                 if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t mempty :: Typing
-            PTuple_ ps -> noTr $ unifyTypings (map getTagP' ps) (TTuple C)
+            PTuple_ ps -> noTr $ unifyTypings (map getTagP' ps) TTuple
             PCon_ n ps -> noTr $ do
                 (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
                 unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ tl ~~> v] ==> v)
