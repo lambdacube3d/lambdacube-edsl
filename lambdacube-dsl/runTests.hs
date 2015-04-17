@@ -15,11 +15,6 @@ import Type
 import CompositionalLC
 import Parser
 
-data ParseResult
-  = ParseError String
-  | TypeError String
-  | TypedExp (Module (Subst, Typing))
-
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
@@ -38,7 +33,7 @@ main = do
       return (map (acceptPath ++) toAccept,map (rejectPath ++) toReject)
     _ -> return (samplesToAccept,[])
 
-  let checkErrorMsg msg n e = doesFileExist ef >>= \b -> case b of
+  let checkErrorMsg n e = doesFileExist ef >>= \b -> case b of
         False -> writeFile ef e >> ok
         True -> do
             e' <- readFile ef
@@ -58,35 +53,29 @@ main = do
                     else putStrLn " Not Accepted."
         where
             ef = errorFileName n
-            ok = putStrLn $ " * OK - " ++ n ++ " " ++ msg ++ " " ++ if verbose then e else []
+            ok = putStrLn $ " * OK - " ++ n ++ " " ++ if verbose then e else []
 
 
   putStrLn $ "Catching errors (must get an error)"
   forM_ testToReject $ \n -> do
     result <- parseLC' n
     case result of
-      ParseError e -> checkErrorMsg "parse error" n e
-      TypeError e -> checkErrorMsg "type error" n e
-      TypedExp _ -> putStrLn $ " # FAIL - " ++ n ++ " failed to catch error"
+      Just e -> checkErrorMsg n e
+      Nothing -> putStrLn $ " # FAIL - " ++ n ++ " failed to catch error"
 
   putStrLn $ "Checking valid pipelines"
   forM_ testToAccept $ \n -> do
     result <- parseLC' n
-    case result of
-      ParseError e -> putStrLn $ " # FAIL - " ++ n ++ " parse error: " ++ e
-      TypeError e -> putStrLn $ " # FAIL - " ++ n ++ " type error: " ++ e
-      TypedExp _ -> putStrLn $ " * OK - " ++ n
+    putStrLn $ case result of
+      Just e -> " # FAIL - " ++ n ++ "\n" ++ e
+      Nothing -> " * OK - " ++ n
 
-parseLC' :: String -> IO ParseResult
+parseLC' :: String -> IO (Maybe String)
 parseLC' fname = do
   res <- parseLC fname
-  case res of
-    Left m -> do
-      return $ ParseError m
-    Right (src, e) -> do
-      case inference e of
-        Right t   -> do
-          return $ TypedExp t
-        Left m    -> do
-          return $ TypeError $ m src
+  return $ case res of
+    Left m -> Just m
+    Right (src, e) -> case inference e of
+        Right _   -> Nothing
+        Left m    -> Just $ m src
 
