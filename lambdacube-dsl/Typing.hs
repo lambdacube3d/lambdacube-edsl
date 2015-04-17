@@ -201,7 +201,6 @@ reduceConstraint x = case x of
         TFJoinTupleType (TTuple l) r -> reduced $ TTuple (l ++ [r])
         TFJoinTupleType l r -> reduced $ TTuple [l,r]
 
-        _ -> nothing
       where
         like f = reduceConstraint (CEq res f)
         reduced t = discard [[res, t]]
