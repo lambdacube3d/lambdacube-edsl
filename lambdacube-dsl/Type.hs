@@ -164,7 +164,10 @@ data Ty' a = Ty' a (Ty_ (Ty' a))
 getTagT (Ty' k _) = k
 
 data Ty_ a
+  -- kinds
   = Star_       -- type of types
+  | NatKind_    -- type of TNat
+  --
   | TVar_    Frequency TName
   | TApp_    a a
   | TCon_    Frequency TCName
@@ -177,18 +180,11 @@ data Ty_ a
   | TArray_  Frequency a
   -- type families are placed in constraints
   -- | TFun    (TypeFun a)
-  -- primitive types
-  | TChar_   Frequency
-  | TString_ Frequency
-  | TBool_   Frequency
-  | TWord_   Frequency
-  | TInt_    Frequency
-  | TFloat_  Frequency
-  | TVec_    Int a          -- invariant property: Int = 2,3,4;  a = Bool, Int, Word, Float
-  | TMat_    Int Int a      -- invariant property: Int = 2,3,4;  a = Float
 
   -- lambdacube types
   | TNat_    Int
+  | TVec_    Int a          -- invariant property: Int = 2,3,4;  a = Bool, Int, Word, Float
+  | TMat_    Int Int a      -- invariant property: Int = 2,3,4;  a = Float
 
   -- GADT/special (two frequencies)
   | TPrimitiveStream_      Frequency a{-PrimitiveType-} a{-Nat-} Frequency a -- ???
@@ -217,15 +213,18 @@ pattern TConstraintArg a b = Ty (TConstraintArg_ a b)
 pattern TTuple a b = Ty (TTuple_ a b)
 pattern TRecord b = Ty (TRecord_ b)
 pattern TArray a b = Ty (TArray_ a b)
-pattern TChar a = Ty (TChar_ a)
-pattern TString a = Ty (TString_ a)
-pattern TBool a = Ty (TBool_ a)
-pattern TWord a = Ty (TWord_ a)
-pattern TInt a = Ty (TInt_ a)
-pattern TFloat a = Ty (TFloat_ a)
+
 pattern TNat a = Ty (TNat_ a)
 pattern TVec a b = Ty (TVec_ a b)
 pattern TMat a b c = Ty (TMat_ a b c)
+
+-- basic types
+pattern TChar a = TCon0 a "Char"
+pattern TString a = TCon0 a "String"
+pattern TBool a = TCon0 a "Bool"
+pattern TWord a = TCon0 a "Word"
+pattern TInt a = TCon0 a "Int"
+pattern TFloat a = TCon0 a "Float"
 
 -- Semantic
 pattern Depth a = TCon1 C "Depth" a
