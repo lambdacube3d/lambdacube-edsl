@@ -136,7 +136,7 @@ main = do
     let setup = do
           renderer <- rendererFromDSL $ case n of
             [fn]  -> fn
-            _     -> "gfx03.lc"
+            _     -> "tests/accept/gfx03.lc"
           case renderer of
             Nothing -> return ()
             Just r  -> do

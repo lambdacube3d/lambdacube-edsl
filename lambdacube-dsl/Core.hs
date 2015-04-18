@@ -157,7 +157,7 @@ test = test'' (reduce mempty mempty) >>= putStrLn
 test'' f = test_ $ return . ppShow . f
 
 test_ f = do
-  r <- parseAndToCoreMain "gfx03.lc" -- "gfx03.lc" -- "example01.lc"
+  r <- parseAndToCoreMain "tests/accept/gfx03.lc" -- "gfx03.lc" -- "example01.lc"
 --  (src, r) <- parseLC_ "tests/accept/instantiate.lc" -- "gfx03.lc" -- "example01.lc"
 --  (src, r) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
   putStrLn "====================="
