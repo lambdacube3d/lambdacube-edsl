@@ -21,6 +21,7 @@ import Type
 import CompositionalLC hiding (test)
 --import ToDeBruijn (compile)
 import Core
+import CoreToDeBruijn
 import Parser
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
