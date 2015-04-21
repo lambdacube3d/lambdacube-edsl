@@ -568,7 +568,12 @@ fromGLUniformType _ = error "Failed fromGLType"
 printShaderLog :: GLuint -> IO ()
 printShaderLog o = do
     i <- glGetShaderiv1 gl_INFO_LOG_LENGTH o
-    allocaArray (fromIntegral i) $! \ps -> glGetShaderInfoLog o (fromIntegral i) nullPtr ps >> SB.packCString (castPtr ps) >>= SB.putStr
+    when (i > 0) $
+      alloca $ \sizePtr -> allocaArray (fromIntegral i) $! \ps -> do
+        glGetShaderInfoLog o (fromIntegral i) sizePtr ps
+        size <- peek sizePtr
+        log <- SB.packCStringLen (castPtr ps, fromIntegral size)
+        SB.putStrLn log
 
 glGetShaderiv1 :: GLenum -> GLuint -> IO GLint
 glGetShaderiv1 pname o = alloca $! \pi -> glGetShaderiv o pname pi >> peek pi
@@ -579,7 +584,12 @@ glGetProgramiv1 pname o = alloca $! \pi -> glGetProgramiv o pname pi >> peek pi
 printProgramLog :: GLuint -> IO ()
 printProgramLog o = do
     i <- glGetProgramiv1 gl_INFO_LOG_LENGTH o
-    allocaArray (fromIntegral i) $! \ps -> glGetProgramInfoLog o (fromIntegral i) nullPtr ps >> SB.packCString (castPtr ps) >>= SB.putStr
+    when (i > 0) $
+      alloca $ \sizePtr -> allocaArray (fromIntegral i) $! \ps -> do
+        glGetProgramInfoLog o (fromIntegral i) sizePtr ps
+        size <- peek sizePtr
+        log <- SB.packCStringLen (castPtr ps, fromIntegral size)
+        SB.putStrLn log
 
 compileShader :: GLuint -> [ByteString] -> IO ()
 compileShader o srcl = withMany SB.useAsCString srcl $! \l -> withArray l $! \p -> do

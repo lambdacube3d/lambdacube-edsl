@@ -562,8 +562,8 @@ renderSlot cmds = forM_ cmds $ \cmd -> do
         GLSetVertexAttrib idx val                       -> do
                                                             glDisableVertexAttribArray idx
                                                             setVertexAttrib idx val
-    isOk <- checkGL
-    putStrLn $ SB.unpack isOk ++ " - " ++ show cmd
+    --isOk <- checkGL
+    --putStrLn $ SB.unpack isOk ++ " - " ++ show cmd
 
 renderPipeline :: GLPipeline -> IO ()
 renderPipeline glp = do
@@ -598,20 +598,20 @@ renderPipeline glp = do
                                                     Nothing -> putStrLn "Warning: No pipeline input!" >> return ()
                                                     Just ic -> do
                                                         GLSlot _ objs _ <- readIORef (slotVector (icInput ic) ! (icSlotMapPipelineToInput ic ! slotIdx))
-                                                        putStrLn $ "Rendering " ++ show (V.length objs) ++ " objects"
+                                                        --putStrLn $ "Rendering " ++ show (V.length objs) ++ " objects"
                                                         V.forM_ objs $ \(_,obj) -> do
                                                             enabled <- readIORef $ objEnabled obj
                                                             when enabled $ do
                                                                 cmd <- readIORef $ objCommands obj
-                                                                putStrLn "Render object"
+                                                                --putStrLn "Render object"
                                                                 renderSlot ((cmd ! icId ic) ! progIdx)
             {-
             GLSetSampler
             GLSaveImage
             GLLoadImage
             -}
-        isOk <- checkGL
-        putStrLn $ SB.unpack isOk ++ " - " ++ show cmd
+        --isOk <- checkGL
+        --putStrLn $ SB.unpack isOk ++ " - " ++ show cmd
 
 data CGState
     = CGState
