@@ -2,23 +2,21 @@
 {-# LANGUAGE PatternSynonyms #-}
 module Parser where
 
-import Control.Applicative
 import Data.ByteString.Char8 (unpack,pack)
 import Data.Char
 import Data.Monoid
+import Control.Applicative
+import Control.Monad
 import Text.Parser.Expression
 import Text.Parser.Token.Style
+import Text.Parser.LookAhead
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 import Text.Trifecta
 import Text.Trifecta.Delta
 import Text.Trifecta.Indentation (IndentationRel (Ge, Gt), localIndentation, localAbsoluteIndentation, mkIndentationState, infIndentation, IndentationParserT, evalIndentationParserT)
+import Text.Show.Pretty
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.HashSet as HashSet
-
-import Text.Show.Pretty
-
-import Control.Monad
-import Text.Parser.LookAhead
 
 import Type
 
@@ -171,7 +169,7 @@ typeSignature = void_ $ do
     localIndentation Gt $ do
       operator "::"
   localIndentation Gt $ do
-    optional (operator "!") <* void_ typeExp
+    optional (operator "!") <* typeExp
 
 typePattern :: P ()
 typePattern = choice [void_ (try typeVar), void_ typeConstructor, void_ $ parens ((void_ typeConstructor <* some typePattern) <|> typePattern)]
@@ -269,9 +267,6 @@ fixityDef = void_ $ do
 
 undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
---valuePatterns :: P (Pat Range)
---valuePatterns = 
-
 valuePattern :: P (Pat Range)
 valuePattern
     =   appP <$> some valuePatternAtom
@@ -281,7 +276,7 @@ appP (PCon r n xs: ps) = PCon r n $ xs ++ ps
 
 valuePatternAtom :: P (Pat Range)
 valuePatternAtom
-    =   undef "_" (operator "_")
+    =   addPos Pat (const Wildcard_ <$> operator "_")
     <|> (try $ undef "@" $ var *> operator "@" *> valuePatternAtom)
     <|> addPos PVar var
     <|> addPos (\p c -> PCon p c []) (try dataConstructor)
@@ -424,9 +419,6 @@ expressionAtom =
       cons a b = eApp (eApp (EVar mempty{-TODO-} ":") a) b
 
 indentState = mkIndentationState 0 infIndentation True Ge
-indentState' = mkIndentationState 0 infIndentation False Ge
-
-test = parseLC "syntax02.lc"
 
 parseLC :: String -> IO (Either String (BS.ByteString, Module Range))
 parseLC fname = do
