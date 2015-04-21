@@ -152,11 +152,12 @@ main = do
 
     let inputSchema = schemaFromPipeline bakedPPL
     pplInput <- mkGLPipelineInput inputSchema
-    -- TODO addMesh pplInput "stream" gpuCube []
+    addMesh pplInput "stream" gpuCube []
     let setup = do
-          let ppl = bakedPPL
+          ppl <- testCompile'
           renderer <- allocPipeline ppl
           setPipelineInput renderer (Just pplInput)
+          sortSlotObjects pplInput
           {-
           renderer <- rendererFromDSL $ case n of
             [fn]  -> fn
