@@ -175,12 +175,19 @@ inference_ primFunMap m = runExcept $ fst <$>
   where
     inferModule Module{..} = do
         dataDefs <- return [] -- TODO mapM inferDataDef dataDefs
-        definitions <- mapM inferDef definitions
+        definitions <- inferDefs definitions
         return Module{..}
+
+    inferDefs [] = return []
+    inferDefs (d:ds) = do
+        (d, f) <- inferDef d
+        ds <- f $ inferDefs ds
+        return (d: ds)
 
     inferDef (PVar _ n, e) = do
         e <- inferTyping e <* checkUnambError
-        return (PVar undefined n, e)
+        let f = withTyping $ Map.singleton n $ snd . getTag $ e
+        return ((PVar undefined n, e), f)
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 
