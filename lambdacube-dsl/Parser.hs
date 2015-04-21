@@ -72,6 +72,11 @@ typeConstructor = do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "type name must start with capital letter"
 
+upperCaseIdent :: P String
+upperCaseIdent = do
+  i <- ident lcIdents
+  if isUpper $ head i then return i else fail "upper case ident expected"
+
 -- see http://blog.ezyang.com/2014/05/parsec-try-a-or-b-considered-harmful/comment-page-1/#comment-6602
 try' s m = try m <?> s
 
@@ -89,6 +94,15 @@ var :: P String
 var = try' "variable" $ do
   i <- ident lcIdents
   if isUpper $ head i then fail "variable name must start with lower case letter" else return i
+
+-- qualified variable
+qVar :: P String    -- TODO
+qVar = var <|> runUnspaced (try $ sepBy (Unspaced upperCaseIdent) (Unspaced dot) *> Unspaced dot *> Unspaced var)
+
+operator' :: P String
+operator' = try' "operator" $ do
+  i <- ident lcOps
+  if head i == ':' then fail "operator cannot start with ':'" else return i
 
 varId :: P String
 varId = var <|> parens (ident lcOps :: P String)
@@ -110,7 +124,7 @@ moduleDef = do
     -- TODO: unordered definitions
     many $ choice
         [ DDataDef <$> dataDef
-        , TypeSig <$> try' "type signature" typeSignature
+        , TypeSig <$> typeSignature
         , undef "typeSyn" $ typeSynonym
         , undef "class" $ typeClassDef
         , (\(r, p, e) -> ValueDef (p, e)) <$> valueDef_
@@ -152,9 +166,11 @@ typeSynonym = void_ $ do
 
 typeSignature :: P ()
 typeSignature = void_ $ do
-  varId
+  try' "type signature" $ do
+    varId
+    localIndentation Gt $ do
+      operator "::"
   localIndentation Gt $ do
-    operator "::"
     optional (operator "!") <* void_ typeExp
 
 typePattern :: P ()
@@ -206,6 +222,7 @@ typeAtom :: P TyR
 typeAtom = typeRecord
     <|> Ty' mempty . TVar_ <$> (try typeVar)
     <|> try (parens $ pure $ Ty' mempty $ TCon_ "()")
+    <|> Ty' mempty . TNat_ . fromIntegral <$> natural
     <|> Ty' mempty . TCon_ <$> typeConstructor
     <|> Ty' mempty . TTuple_ <$> (parens $ sepBy ty comma)
     <|> Ty' mempty . TApp_ (Ty' mempty (TCon_ "[]")) <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
@@ -243,19 +260,33 @@ fixityDef = void_ $ do
 
 undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
+--valuePatterns :: P (Pat Range)
+--valuePatterns = 
+
 valuePattern :: P (Pat Range)
 valuePattern
-    =   undef "_" (operator "_")
-    <|> (try $ undef "@" $ var *> operator "@" *> valuePattern)
-    <|> (\p1 v p2 -> PVar (p1,p2) v) <$> position <*> var <*> position
-    <|> ((\c -> PCon mempty c []) <$> try dataConstructor)
-    <|> try pat
- where
-  pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePattern) <|> (\p1 v p2 -> PVar (p1,p2) v) <$> position <*> var <*> position)
+    =   appP <$> some valuePatternAtom
 
 appP :: [Pat Range] -> Pat Range
 appP (PCon r n xs: ps) = PCon r n $ xs ++ ps
 
+valuePatternAtom :: P (Pat Range)
+valuePatternAtom
+    =   undef "_" (operator "_")
+    <|> (try $ undef "@" $ var *> operator "@" *> valuePatternAtom)
+    <|> (\p1 v p2 -> PVar (p1,p2) v) <$> position <*> var <*> position
+    <|> ((\c -> PCon mempty c []) <$> try dataConstructor)
+    <|> tuplePattern
+    <|> recordPat
+    <|> pat
+ where
+  tuplePattern :: P (Pat Range)
+  tuplePattern = try' "tuple" $ (\p1 (v, vs) p2 -> PTuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> valuePattern <*> some (comma *> valuePattern)) <*> position
+
+  recordPat :: P (Pat Range)
+  recordPat = (\p1 v p2 -> PRecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* colon <*> valuePattern) comma) <*> position
+
+  pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePatternAtom) <|> (\p1 v p2 -> PVar (p1,p2) v) <$> position <*> var <*> position)
 
 valueDef :: P (Exp Range -> Exp Range)
 valueDef = (\(r, p, e) -> ELet r p e) <$> valueDef_
@@ -268,14 +299,14 @@ valueDef_ = do
       n <- varId
       p1' <- position
       localIndentation Gt $ do
-        a <- many valuePattern
+        a <- many valuePatternAtom
         operator "="
         let args r p e = ELam r p e
         return (PVar (p1,p1') n, \d p2 -> foldr (args (p1,p2)) d a)
     )
    <|>
     try' "node definition" (do
-      n <- appP <$> many valuePattern
+      n <- valuePattern
       p1' <- position
       localIndentation Gt $ do
         operator "="
@@ -285,7 +316,7 @@ valueDef_ = do
     d <- expression
     optional $ do
       keyword "where"
-      localIndentation Ge $ localAbsoluteIndentation $ some valueDef
+      localIndentation Ge $ localAbsoluteIndentation $ some (valueDef <|> undef "ts" typeSignature)
     p2 <- position
     return ((p1,p2), n, f d p2)
 
@@ -300,12 +331,13 @@ expression = do
       caseof <|>
       letin <|>
       lambda <|>
-      application <$> some expressionAtom
+      (\e -> application [EVar mempty "negate", e]) <$> (operator "-" *> expressionOpAtom) <|> -- TODO
+      expressionOpAtom
   optional (operator "::" *> void_ typeExp)  -- TODO
   return e
  where
   lambda :: P (Exp Range)
-  lambda = (\p1 (p: _ {-TODO-}) e p2 -> ELam (p1,p2) p e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
+  lambda = (\p1 (p: _ {-TODO-}) e p2 -> ELam (p1,p2) p e) <$> position <* operator "\\" <*> many valuePatternAtom <* operator "->" <*> expression <*> position
 
   ifthenelse :: P (Exp Range)
   ifthenelse = undef "if" $ keyword "if" *> (expression *> keyword "then" *> expression *> keyword "else" *> expression)
@@ -316,7 +348,7 @@ expression = do
     expression
     keyword "of"
     localIndentation Ge $ localAbsoluteIndentation $ some $
-        valuePattern *> operator "->" *> localIndentation Gt expression
+        valuePattern *> localIndentation Gt rhs
 
   letin :: P (Exp Range)
   letin = do
@@ -326,6 +358,21 @@ expression = do
       a <- expression
       return $ foldr ($) a l
 
+rhs = x
+  <|> undef "guards" (many $ operator "|" *> expression *> x)
+  where
+    x = operator "->" *> expression
+
+expressionOpAtom :: P (Exp Range)
+expressionOpAtom = do
+    e <- application <$> some expressionAtom
+    f e <$> try op <*> expression <|> return e
+  where
+    f e op e' = application [EVar mempty op, e, e']
+
+    op = ident lcOps
+        <|> runUnspaced (Unspaced (operator "`") *> Unspaced var <* Unspaced (operator "`"))
+
 expressionAtom :: P (Exp Range)
 expressionAtom =
   listExp <|>
@@ -333,7 +380,7 @@ expressionAtom =
   recordExp <|>
   recordExp' <|>
   recordFieldProjection <|>
-  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
+  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> qVar <*> position <|>
   (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> dataConstructor <*> position <|> -- TODO: distinct data constructors
   unit <|>
   try tuple <|>
@@ -357,7 +404,7 @@ expressionAtom =
   literalExp :: P Lit
   literalExp =
       LFloat <$> try double <|>
-      LInt <$> integer <|>
+      LInt <$> try integer <|>
       LChar <$> charLiteral <|>
       LString <$> stringLiteral <|>
       (LNat . fromIntegral <$ operator "#" <*> integer) <?> "type level nat"
