@@ -289,14 +289,17 @@ primFunMap = Map.fromList $ execWriter $ do
 
   -- kind of type constructors
   ["()", "Char", "String", "Bool", "Word", "Int", "Float"] ----> Star
-  ["[]", "Maybe", "Detph", "Stencil", "Color"] ----> Star ~> Star
+  ["[]", "Detph", "Stencil", "Color"] ----> Star ~> Star
   ["Triangle", "Line", "Point", "TriangleAdjacency", "LineAdjacency"] ----> Star
   ["CullMode", "PolygonMode", "PolygonOffset", "ProvokingVertex", "FrontFace", "PointSize", "BlendingFactor", "BlendEquation", "LogicOperation", "StencilOperation", "ComparisonFunction", "PointSpriteCoordOrigin"] ----> Star
   -- TODO: more precise kinds
   ["Output"] ----> Star
   ["AccumulationContext", "Blending", "FetchPrimitive", "FragmentFilter", "FragmentOperation", "FragmentOut", "Input", "Interpolated", "RasterContext", "VertexOut"] ----> Star ~> Star
   ["FragmentStream", "FrameBuffer", "Image", "VertexStream"] ----> Star ~> Star ~> Star
+  ["Vec"] ----> NatKind ~> Star ~> Star
 
+
+  "[]" --> \a -> TList a
 
   ["Tup", "Const"]  ---> \a -> a ~> a       -- temporary const constructor
   ["True", "False"] ---> TBool

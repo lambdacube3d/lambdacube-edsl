@@ -122,15 +122,15 @@ moduleDef = do
   defs <- localAbsoluteIndentation $ do
     many importDef
     -- TODO: unordered definitions
-    many $ choice
-        [ DDataDef <$> dataDef
-        , TypeSig <$> typeSignature
-        , undef "typeSyn" $ typeSynonym
-        , undef "class" $ typeClassDef
-        , (\(r, p, e) -> ValueDef (p, e)) <$> valueDef_
-        , undef "fixity" fixityDef
-        , undef "instance" typeClassInstanceDef
-        ]
+    concat <$> many (choice
+        [ (:[]) . DDataDef <$> dataDef
+        , (:[]) . TypeSig <$> typeSignature
+        , const [] <$> typeSynonym
+        , const [] <$> typeClassDef
+        , (\(r, p, e) -> [ValueDef (p, e)]) <$> valueDef_
+        , const [] <$> fixityDef
+        , const [] <$> typeClassInstanceDef
+        ])
   return $ Module
       { moduleImports = ()
       , moduleExports = ()
@@ -212,20 +212,33 @@ typeRecord = undef "trec" $ do
 
 type TyR = Ty' Range
 
-tApp :: TyR -> TyR -> TyR
-tApp a b = Ty' mempty $ TApp_ a b
-
 ty :: P TyR
-ty = chainr1 (foldl1 tApp <$> some typeAtom) (do operator "->"; return $ \a b -> Ty' mempty $ TArr_ a b)
+ty = do
+    p1 <- position
+    t <- typeAtom
+    f p1 t
+  where
+    f p1 t = do
+        a <- typeAtom
+        p2 <- position
+        f p1 $ Ty' (p1, p2) $ TApp_ t a
+      <|> return t
+
+addPos f m = do
+    p1 <- position
+    a <- m
+    p2 <- position
+    return $ f (p1, p2) a
 
 typeAtom :: P TyR
 typeAtom = typeRecord
-    <|> Ty' mempty . TVar_ <$> (try typeVar)
-    <|> try (parens $ pure $ Ty' mempty $ TCon_ "()")
-    <|> Ty' mempty . TNat_ . fromIntegral <$> natural
-    <|> Ty' mempty . TCon_ <$> typeConstructor
-    <|> Ty' mempty . TTuple_ <$> (parens $ sepBy ty comma)
-    <|> Ty' mempty . TApp_ (Ty' mempty (TCon_ "[]")) <$> (brackets ty)-- <|> (do typeAtom; operator "->"; typeAtom)
+    <|> addPos Ty' (TVar_ <$> try typeVar)
+    <|> try (addPos Ty' $ parens $ pure $ TCon_ "()")
+    <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
+    <|> addPos Ty' (TCon_ <$> typeConstructor)
+    <|> addPos Ty' (TTuple_ <$> (parens $ sepBy ty comma))
+    <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "[]")) (brackets ty)
+-- <|> (do typeAtom; operator "->"; typeAtom)
 
 typeClassDef :: P ()
 typeClassDef = void_ $ do
@@ -322,7 +335,7 @@ valueDef_ = do
 
 application :: [Exp Range] -> Exp Range
 application [e] = e
-application es = EApp (mempty,mempty){-undefined-}{-TODO-} (application $ init es) (last es)
+application es = EApp mempty (application $ init es) (last es)
 
 expression :: P (Exp Range)
 expression = do

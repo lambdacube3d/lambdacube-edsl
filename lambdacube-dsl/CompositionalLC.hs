@@ -31,6 +31,7 @@ import Control.Monad.State
 import Control.Monad.RWS
 import Control.Monad.Writer
 import Control.Arrow
+import Text.Show.Pretty
 
 import Type
 import Typing
@@ -89,7 +90,7 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
         unifyTy (TMat a1 b1 c1) (TMat a2 b2 c2) | a1 == a2 && b1 == b2 = uni c1 c2
         unifyTy a b
           | a == b = return ()
-          | otherwise = lift $ throwErrorTCM $ "can not unify " ++ show a ++ " with " ++ show b
+          | otherwise = lift $ throwErrorTCM $ "cannot unify " ++ ppShow a ++ "\n with " ++ ppShow b
 
 unifyTypings = unifyTypings_ True
 
@@ -169,14 +170,25 @@ dependentVars ie s = cycle mempty s
 inference :: Module Range -> Either ErrorMsg (Module (Subst, Typing))
 inference = inference_ $ PolyEnv primFunMap
 
+primed = ('\'':)
+
 inference_ :: PolyEnv -> Module Range -> Either ErrorMsg (Module (Subst, Typing))
 inference_ primFunMap m = runExcept $ fst <$>
     evalRWST (inferModule m) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
   where
-    inferModule Module{..} = do
-        dataDefs <- return [] -- TODO mapM inferDataDef dataDefs
-        definitions <- inferDefs definitions
+    inferModule Module{..} = withTyping (Map.fromList tyConKinds) $ do
+        dataDefs <- mapM inferDataDef dataDefs
+        let tyConTypes =
+                [ (cn, [] ==> foldr (~>) res (map (typingType{-TODO-} . snd . getTagT) tys))
+                | DataDef n vs cs <- dataDefs
+                , let k = foldr (~>) Star (replicate (length vs) Star)
+                      res = foldr (~>) (Ty_ k $ TCon_ n) $ map (Ty_ Star . TVar_) vs
+                , ConDef cn tys <- cs
+                ]
+        definitions <- withTyping (Map.fromList tyConTypes) $ inferDefs definitions
         return Module{..}
+      where
+        tyConKinds = [(primed n, [] ==> foldr (~>) Star (replicate (length vs) Star)) | DataDef n vs _ <- dataDefs]
 
     inferDefs [] = return []
     inferDefs (d:ds) = do
@@ -184,6 +196,20 @@ inference_ primFunMap m = runExcept $ fst <$>
         ds <- f $ inferDefs ds
         return (d: ds)
 
+    inferDataDef (DataDef con vars cdefs) = do
+        cdefs <- withTyping (Map.fromList [(primed v, [] ==> Star) | v <- vars]) $ mapM inferConDef cdefs
+        return $ DataDef con vars cdefs
+
+    inferConDef (ConDef n tys) = do
+        tys <- mapM inferKind tys
+        return $ ConDef n tys
+{-
+    add
+    {-
+    data DataDef a = DataDef String [String] [ConDef a]
+    data ConDef a = ConDef EName [Ty' a]
+    -}
+-}
     inferDef (PVar _ n, e) = do
         e <- inferTyping e <* checkUnambError
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
@@ -203,11 +229,14 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
         (\t -> Ty' t ty') <$> case ty' of
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)
+            TTuple_ ts -> unifyTypings (map ((star:) . getTag') ts) $ \_ -> Star
             TVec_ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TMat_ _ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
-            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
+            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Type variable " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
+            TCon_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Type constructor " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
+            x -> error $ " inferKind: " ++ show x
   where
     getTag' = (:[]) . snd . getTagT
     star = [] ==> Star

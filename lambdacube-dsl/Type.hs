@@ -238,6 +238,8 @@ pattern TWord = TCon0 "Word"
 pattern TInt = TCon0 "Int"
 pattern TFloat = TCon0 "Float"
 pattern TArray b = TCon1 "Array" b
+pattern TList a = TCon1 "[]" a
+pattern TMaybe a = TCon1 "Maybe" a
 
 -- Semantic
 pattern Depth a = TCon1 "Depth" a

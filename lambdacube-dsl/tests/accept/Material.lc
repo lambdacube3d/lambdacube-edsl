@@ -1,18 +1,18 @@
 module Material where
 
 -- import Data.Vect
--- import Data.ByteString (ByteString)
--- import qualified Data.ByteString.Char8 as SB
+-- import Data.String (String)
+-- import qualified Data.String.Char8 as SB
 
 identityLight :: Float
 identityLight = 1
 
 data Entity
     = Entity
-    { eAmbientLight     :: Vec4
-    , eDirectedLight    :: Vec4
-    , eLightDir         :: Vec3
-    , eShaderRGBA       :: Vec4
+    { eAmbientLight     :: Vec 4 Float
+    , eDirectedLight    :: Vec 4 Float
+    , eLightDir         :: Vec 3 Float
+    , eShaderRGBA       :: Vec 4 Float
     }
 
 data WaveType
@@ -30,7 +30,7 @@ data Deform
     = D_AutoSprite
     | D_AutoSprite2
     | D_Bulge !Float !Float !Float
-    | D_Move !Vec3 !Wave
+    | D_Move !(Vec 3 Float) !Wave
     | D_Normal !Float !Float
     | D_ProjectionShadow
     | D_Text0
@@ -115,7 +115,7 @@ data TCGen
     = TG_Base
     | TG_Lightmap
     | TG_Environment -- TODO, check: RB_CalcEnvironmentTexCoords
-    | TG_Vector !Vec3 !Vec3
+    | TG_Vector !(Vec 3 Float) !(Vec 3 Float)
     | TG_Undefined  -- FIXME: HACK!!
     deriving Show
 
@@ -130,9 +130,9 @@ data TCMod
     deriving Show
 
 data StageTexture
-    = ST_Map        !ByteString
-    | ST_ClampMap   !ByteString
-    | ST_AnimMap    !Float ![ByteString]
+    = ST_Map        !String
+    | ST_ClampMap   !String
+    | ST_AnimMap    !Float ![String]
     | ST_Lightmap
     | ST_WhiteImage
     deriving (Show, Eq, Ord)
@@ -148,7 +148,7 @@ data DepthFunction
     | D_Lequal
     deriving Show
 
-data Blending
+data Blending'
     = B_DstAlpha
     | B_DstColor
     | B_One
@@ -164,7 +164,7 @@ data Blending
 
 data StageAttrs
     = StageAttrs
-    { saBlend       :: !(Maybe (Blending,Blending))
+    { saBlend       :: !(Maybe (Blending', Blending'))
     , saRGBGen      :: !RGBGen
     , saAlphaGen    :: !AlphaGen
     , saTCGen       :: !TCGen
@@ -178,6 +178,11 @@ data StageAttrs
     , saDepthMaskExplicit   :: Bool
     }
     deriving Show
+
+data Maybe a
+    = Nothing
+    | Just a
+    deriving (Eq, Ord, Show)
 
 defaultStageAttrs :: StageAttrs
 defaultStageAttrs = StageAttrs
