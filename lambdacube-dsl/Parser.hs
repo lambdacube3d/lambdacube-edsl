@@ -127,7 +127,7 @@ moduleDef = do
         , (:[]) . TypeSig <$> typeSignature
         , const [] <$> typeSynonym
         , const [] <$> typeClassDef
-        , (\(r, p, e) -> [ValueDef (p, e)]) <$> valueDef_
+        , (\(p, e) -> [ValueDef (p, e)]) <$> valueDef_
         , const [] <$> fixityDef
         , const [] <$> typeClassInstanceDef
         ])
@@ -213,15 +213,11 @@ typeRecord = undef "trec" $ do
 type TyR = Ty' Range
 
 ty :: P TyR
-ty = do
-    p1 <- position
-    t <- typeAtom
-    f p1 t
+ty = typeAtom >>= f
   where
-    f p1 t = do
+    f t = do
         a <- typeAtom
-        p2 <- position
-        f p1 $ Ty' (p1, p2) $ TApp_ t a
+        f $ Ty' (fst $ getTagT t, snd $ getTagT a) $ TApp_ t a
       <|> return t
 
 addPos f m = do
@@ -287,55 +283,53 @@ valuePatternAtom :: P (Pat Range)
 valuePatternAtom
     =   undef "_" (operator "_")
     <|> (try $ undef "@" $ var *> operator "@" *> valuePatternAtom)
-    <|> (\p1 v p2 -> PVar (p1,p2) v) <$> position <*> var <*> position
-    <|> ((\c -> PCon mempty c []) <$> try dataConstructor)
+    <|> addPos PVar var
+    <|> addPos (\p c -> PCon p c []) (try dataConstructor)
     <|> tuplePattern
     <|> recordPat
     <|> pat
  where
   tuplePattern :: P (Pat Range)
-  tuplePattern = try' "tuple" $ (\p1 (v, vs) p2 -> PTuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> valuePattern <*> some (comma *> valuePattern)) <*> position
+  tuplePattern = try' "tuple" $ addPos PTuple $ parens ((:) <$> valuePattern <*> some (comma *> valuePattern))
 
   recordPat :: P (Pat Range)
-  recordPat = (\p1 v p2 -> PRecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* colon <*> valuePattern) comma) <*> position
+  recordPat = addPos PRecord $ braces (sepBy ((,) <$> var <* colon <*> valuePattern) comma)
 
-  pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePatternAtom) <|> (\p1 v p2 -> PVar (p1,p2) v) <$> position <*> var <*> position)
+  pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePatternAtom) <|> addPos PVar var)
 
 valueDef :: P (Exp Range -> Exp Range)
-valueDef = (\(r, p, e) -> ELet r p e) <$> valueDef_
+valueDef = (\(p, e) -> ELet (fst $ getTagP $ p, snd $ getTag e) p e) <$> valueDef_
 
-valueDef_ :: P (Range, Pat Range, Exp Range)
+valueDef_ :: P (Pat Range, Exp Range)
 valueDef_ = do
-  p1 <- position
   (n, f) <- 
     try' "definition" (do
-      n <- varId
-      p1' <- position
+      n <- addPos PVar varId
       localIndentation Gt $ do
         a <- many valuePatternAtom
         operator "="
-        let args r p e = ELam r p e
-        return (PVar (p1,p1') n, \d p2 -> foldr (args (p1,p2)) d a)
+        let args p e = ELam (fst $ getTagP p, snd $ getTag e) p e
+        return (n, \d -> foldr args d a)
     )
    <|>
     try' "node definition" (do
       n <- valuePattern
-      p1' <- position
       localIndentation Gt $ do
         operator "="
-        return (n, \d _ -> d)
+        return (n, id)
     )
   localIndentation Gt $ do
     d <- expression
     optional $ do
       keyword "where"
       localIndentation Ge $ localAbsoluteIndentation $ some (valueDef <|> undef "ts" typeSignature)
-    p2 <- position
-    return ((p1,p2), n, f d p2)
+    return (n, f d)
 
 application :: [Exp Range] -> Exp Range
 application [e] = e
-application es = EApp mempty (application $ init es) (last es)
+application es = eApp (application $ init es) (last es)
+
+eApp a b = EApp (fst $ getTag a, snd $ getTag b) a b
 
 expression :: P (Exp Range)
 expression = do
@@ -344,13 +338,13 @@ expression = do
       caseof <|>
       letin <|>
       lambda <|>
-      (\e -> application [EVar mempty "negate", e]) <$> (operator "-" *> expressionOpAtom) <|> -- TODO
+      eApp <$> addPos EVar (const "negate" <$> operator "-") <*> expressionOpAtom <|> -- TODO: precedence
       expressionOpAtom
   optional (operator "::" *> void_ typeExp)  -- TODO
   return e
  where
   lambda :: P (Exp Range)
-  lambda = (\p1 (p: _ {-TODO-}) e p2 -> ELam (p1,p2) p e) <$> position <* operator "\\" <*> many valuePatternAtom <* operator "->" <*> expression <*> position
+  lambda = addPos (\r (p: _ {-TODO-}, e) -> ELam r p e) $ operator "\\" *> ((,) <$> many valuePatternAtom <* operator "->" <*> expression)
 
   ifthenelse :: P (Exp Range)
   ifthenelse = undef "if" $ keyword "if" *> (expression *> keyword "then" *> expression *> keyword "else" *> expression)
@@ -381,38 +375,39 @@ expressionOpAtom = do
     e <- application <$> some expressionAtom
     f e <$> try op <*> expression <|> return e
   where
-    f e op e' = application [EVar mempty op, e, e']
+    f e op e' = application [op, e, e']
 
-    op = ident lcOps
+    op = addPos EVar $
+            ident lcOps
         <|> runUnspaced (Unspaced (operator "`") *> Unspaced var <* Unspaced (operator "`"))
 
 expressionAtom :: P (Exp Range)
 expressionAtom =
   listExp <|>
-  ((\p1 l p2 -> ELit (p1,p2) l) <$> position <*> literalExp <*> position) <|>
+  addPos ELit literalExp <|>
   recordExp <|>
   recordExp' <|>
   recordFieldProjection <|>
-  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> qVar <*> position <|>
-  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> dataConstructor <*> position <|> -- TODO: distinct data constructors
+  addPos EVar qVar <|>
+  addPos EVar dataConstructor <|>
   unit <|>
   try tuple <|>
   parens expression
  where
   tuple :: P (Exp Range)
-  tuple = (\p1 (v, vs) p2 -> if null vs then v else ETuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> expression <*> some (comma *> expression)) <*> position
+  tuple = addPos ETuple $ parens $ (:) <$> expression <*> some (comma *> expression)
 
   unit :: P (Exp Range)
-  unit = try $ (\p1 p2 -> ETuple (p1,p2) []) <$> position <* parens (pure ()) <*> position
+  unit = try $ addPos ETuple $ parens $ pure []
 
   recordExp :: P (Exp Range)
-  recordExp = (\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* colon <*> expression) comma) <*> position
+  recordExp = addPos ERecord $ braces $ sepBy ((,) <$> var <* colon <*> expression) comma
 
   recordExp' :: P (Exp Range)
-  recordExp' = try $ dataConstructor *> ((\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma) <*> position)
+  recordExp' = try $ dataConstructor {-TODO-} *> addPos ERecord (braces $ sepBy ((,) <$> var <* keyword "=" <*> expression) comma)
 
   recordFieldProjection :: P (Exp Range)
-  recordFieldProjection = try $ (\p1 r p f p2 -> EApp (p1,p2) (EFieldProj (p,p2) f) (EVar (p1,p) r)) <$> position <*> var <*> position <* dot <*> var <*> position
+  recordFieldProjection = try $ addPos (uncurry . flip . EApp) $ (,) <$> addPos EVar var <*> addPos EFieldProj (dot *> var)
 
   literalExp :: P Lit
   literalExp =
@@ -423,10 +418,10 @@ expressionAtom =
       (LNat . fromIntegral <$ operator "#" <*> integer) <?> "type level nat"
 
   listExp :: P (Exp Range)
-  listExp = foldr cons nil <$> (brackets $ commaSep expression)
+  listExp = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep expression
     where
-      nil = EVar mempty "[]"
-      cons a b = EApp mempty (EApp mempty (EVar mempty ":") a) b
+      nil (p1, p2) = EVar (p2 {- - 1 -}, p2) "[]"
+      cons a b = eApp (eApp (EVar mempty{-TODO-} ":") a) b
 
 indentState = mkIndentationState 0 infIndentation True Ge
 indentState' = mkIndentationState 0 infIndentation False Ge
