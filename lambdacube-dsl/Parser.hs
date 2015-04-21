@@ -113,7 +113,7 @@ moduleDef = do
         , TypeSig <$> try' "type signature" typeSignature
         , undef "typeSyn" $ typeSynonym
         , undef "class" $ typeClassDef
-        , (\(r, p, e) -> ValueDef (p, e)) <$> (valueDef_ <|> patternDef_)
+        , (\(r, p, e) -> ValueDef (p, e)) <$> valueDef_
         , undef "fixity" fixityDef
         , undef "instance" typeClassInstanceDef
         ]
@@ -258,77 +258,52 @@ appP (PCon r n xs: ps) = PCon r n $ xs ++ ps
 
 
 valueDef :: P (Exp Range -> Exp Range)
-valueDef = (\(r, p, e) -> ELet r p e) <$> (valueDef_ <|> patternDef_)
+valueDef = (\(r, p, e) -> ELet r p e) <$> valueDef_
 
 valueDef_ :: P (Range, Pat Range, Exp Range)
 valueDef_ = do
   p1 <- position
-  (n, p1', a) <- try' "definition" $ do
+  (n, f) <- 
+    try' "definition" (do
       n <- varId
       p1' <- position
       localIndentation Gt $ do
         a <- many valuePattern
         operator "="
-        return (n, p1', a)
-  localIndentation Gt $ do
-    d <- expression
-    optional $ do
-      keyword "where"
-      localAbsoluteIndentation $ some valueDef
-    p2 <- position
-    return ((p1,p2), PVar (p1,p1') n, foldr (args (p1,p2)) d a)
-  where
-    args r p e = ELam r p e
-
-patternDef_ :: P (Range, Pat Range, Exp Range)
-patternDef_ = do
-  p1 <- position
-  (n, p1') <- try' "node definition" $ do
+        let args r p e = ELam r p e
+        return (PVar (p1,p1') n, \d p2 -> foldr (args (p1,p2)) d a)
+    )
+   <|>
+    try' "node definition" (do
       n <- appP <$> many valuePattern
       p1' <- position
       localIndentation Gt $ do
         operator "="
-        return (n, p1')
+        return (n, \d _ -> d)
+    )
   localIndentation Gt $ do
     d <- expression
     optional $ do
       keyword "where"
-      localAbsoluteIndentation $ some valueDef
+      localIndentation Ge $ localAbsoluteIndentation $ some valueDef
     p2 <- position
-    return ((p1,p2), n, d)
+    return ((p1,p2), n, f d p2)
 
 application :: [Exp Range] -> Exp Range
 application [e] = e
 application es = EApp (mempty,mempty){-undefined-}{-TODO-} (application $ init es) (last es)
 
 expression :: P (Exp Range)
-expression = application <$> some (
-  exp listExp <|>
-  exp ((\p1 l p2 -> ELit (p1,p2) l) <$> position <*> literalExp <*> position) <|>
-  exp recordExp <|>
-  exp recordExp' <|>
-  exp recordFieldProjection <|>
-  exp lambda <|>
-  exp ifthenelse <|>
-  exp caseof <|>
-  exp' letin <|>
-  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
-  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> dataConstructor <*> position <|> -- TODO: distinct data constructors
-  exp unit <|>
-  exp tuple <|>
-  parens expression)    -- TODO: tuple aready handles parens
+expression = do
+  e <-
+      ifthenelse <|>
+      caseof <|>
+      letin <|>
+      lambda <|>
+      application <$> some expressionAtom
+  optional (operator "::" *> void_ typeExp)  -- TODO
+  return e
  where
-  exp :: P (Exp Range) -> P (Exp Range)
-  exp p = try (p <* optional (operator "::" *> void_ typeExp))
-
-  exp' p = p <* optional (operator "::" *> void_ typeExp)
-
-  tuple :: P (Exp Range)
-  tuple = (\p1 (v, vs) p2 -> if null vs then v else ETuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> expression <*> some (comma *> expression)) <*> position
-
-  unit :: P (Exp Range)
-  unit = (\p1 p2 -> ETuple (p1,p2) []) <$> position <* parens (pure ()) <*> position
-
   lambda :: P (Exp Range)
   lambda = (\p1 (p: _ {-TODO-}) e p2 -> ELam (p1,p2) p e) <$> position <* operator "\\" <*> many valuePattern <* operator "->" <*> expression <*> position
 
@@ -340,7 +315,7 @@ expression = application <$> some (
     keyword "case"
     expression
     keyword "of"
-    localAbsoluteIndentation $ some $
+    localIndentation Ge $ localAbsoluteIndentation $ some $
         valuePattern *> operator "->" *> localIndentation Gt expression
 
   letin :: P (Exp Range)
@@ -351,14 +326,33 @@ expression = application <$> some (
       a <- expression
       return $ foldr ($) a l
 
+expressionAtom :: P (Exp Range)
+expressionAtom =
+  listExp <|>
+  ((\p1 l p2 -> ELit (p1,p2) l) <$> position <*> literalExp <*> position) <|>
+  recordExp <|>
+  recordExp' <|>
+  recordFieldProjection <|>
+  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> var <*> position <|>
+  (\p1 v p2 -> EVar (p1,p2) v) <$> position <*> dataConstructor <*> position <|> -- TODO: distinct data constructors
+  unit <|>
+  try tuple <|>
+  parens expression
+ where
+  tuple :: P (Exp Range)
+  tuple = (\p1 (v, vs) p2 -> if null vs then v else ETuple (p1,p2) (v:vs)) <$> position <*> parens ((,) <$> expression <*> some (comma *> expression)) <*> position
+
+  unit :: P (Exp Range)
+  unit = try $ (\p1 p2 -> ETuple (p1,p2) []) <$> position <* parens (pure ()) <*> position
+
   recordExp :: P (Exp Range)
   recordExp = (\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* colon <*> expression) comma) <*> position
 
   recordExp' :: P (Exp Range)
-  recordExp' = dataConstructor *> ((\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma) <*> position)
+  recordExp' = try $ dataConstructor *> ((\p1 v p2 -> ERecord (p1,p2) v) <$> position <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma) <*> position)
 
   recordFieldProjection :: P (Exp Range)
-  recordFieldProjection = try ((\p1 r p f p2 -> EApp (p1,p2) (EFieldProj (p,p2) f) (EVar (p1,p) r)) <$> position <*> var <*> position <* dot <*> var <*> position)
+  recordFieldProjection = try $ (\p1 r p f p2 -> EApp (p1,p2) (EFieldProj (p,p2) f) (EVar (p1,p) r)) <$> position <*> var <*> position <* dot <*> var <*> position
 
   literalExp :: P Lit
   literalExp =

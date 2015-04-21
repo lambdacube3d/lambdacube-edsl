@@ -17,7 +17,7 @@ fun a@(B a@(C c)) = let
     where
       a = c ()
   p = A c
-  r = case (a (A c a) q) of
+  r = case a (A c a) q of
         _ -> ()
         _ -> ()
  in (a,c)
