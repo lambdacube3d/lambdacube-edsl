@@ -92,10 +92,12 @@ reduce s m e = case e of
             EType x -> reduce (s `composeSubst` Map.singleton v x) m e
         (EVar (VarE v (Forall tv t))) -> case r x of
             EType t' -> EVar $ VarE v $ subst (Map.singleton tv t') t
+        (EVar (VarE v (TConstraintArg t ty))) -> case r x of
+            EConstraint t' -> EVar $ VarE v $ {- subst (Map.singleton t t') -} ty    -- TODO: unification of constraints
         e -> case r x of
 --            EType x -> e --reduce (s `composeSubst` Map.singleton v x) m e
 --            EType t ->
-            EConstraint _ -> e
+--            EConstraint _ -> e
             x -> EApp e x
     ETuple es -> ETuple $ map r es
 --    ELam v@(VarE n t) e -> ELam v $ reduce (s `composeSubst` Map.singleton n t) m e
