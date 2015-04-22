@@ -4,7 +4,7 @@ import Data.List
 import Control.Applicative
 import Control.Monad
 
-import Text.Trifecta (Result (..))
+--import Text.Trifecta (Result (..))
 
 import System.Environment
 import System.Directory
@@ -14,6 +14,7 @@ import System.IO
 import Type
 import CompositionalLC
 import Parser
+import Typing (primFunMap)
 
 main :: IO ()
 main = do
@@ -40,10 +41,10 @@ main = do
             if e == e' then ok else do
                 putStrLn $ "Error message of " ++ n ++ " has changed."
                 putStrLn "Old message: "
-                putStrLn e
+                putStrLn e'
                 putStrLn "-------------------------------------------"
                 putStrLn "New message: "
-                putStrLn e'
+                putStrLn e
                 putStrLn "-------------------------------------------"
                 putStr "Accept new error message (y/n)? "
                 c <- getChar
@@ -60,22 +61,30 @@ main = do
   forM_ testToReject $ \n -> do
     result <- parseLC' n
     case result of
-      Just e -> checkErrorMsg n e
-      Nothing -> putStrLn $ " # FAIL - " ++ n ++ " failed to catch error"
+      Left e -> checkErrorMsg n e
+      _ -> putStrLn $ " # FAIL - " ++ n ++ " failed to catch error"
 
   putStrLn $ "Checking valid pipelines"
   forM_ testToAccept $ \n -> do
     result <- parseLC' n
     putStrLn $ case result of
-      Just e -> " # FAIL - " ++ n ++ "\n" ++ e
-      Nothing -> " * OK - " ++ n
+      Left e -> " # FAIL - " ++ n ++ "\n" ++ e
+      _ -> " * OK - " ++ n
 
-parseLC' :: String -> IO (Maybe String)
+parseLC' :: String -> IO (Either String (Module (Subst, Typing)))
 parseLC' fname = do
+ b <- doesFileExist fname
+ if not b then return $ Left $ "can't find module " ++ fname
+ else do
   res <- parseLC fname
-  return $ case res of
-    Left m -> Just m
-    Right (src, e) -> case inference e of
-        Right _   -> Nothing
-        Left m    -> Just $ m src
+  case res of
+    Left m -> return $ Left m
+    Right (src, e) -> do
+      ms <- mapM (parseLC' . ("./tests/accept/" ++) . (++ ".lc") . qData) $ moduleImports e
+      return $ case joinPolyEnvs . (PolyEnv primFunMap:) . map exportEnv <$> sequence ms of
+        Left m -> Left m
+        Right (Left m) -> Left m
+        Right (Right env) -> case inference_ env e of
+            Right x   -> Right x
+            Left m    -> Left $ m src
 

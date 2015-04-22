@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings, PackageImports #-}
+module SampleIR where
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
 import Data.Monoid

@@ -1,9 +1,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 module Parser where
 
 import Data.ByteString.Char8 (unpack,pack)
 import Data.Char
+import Data.List
 import Data.Monoid
 import Control.Applicative
 import Control.Monad
@@ -105,10 +107,19 @@ operator' = try' "operator" $ do
 varId :: P String
 varId = var <|> parens (ident lcOps :: P String)
 
-moduleName :: P ()
-moduleName = void_ $ do
+--------------------------------------------------------------------------------
+
+data Definition a
+  = ValueDef (ValueDef a)
+  | TypeSig ()
+  | DDataDef (DataDef a)
+    deriving (Show)
+
+moduleName :: P (Q Name)
+moduleName = do
   l <- sepBy1 (ident lcIdents) dot
   when (any (isLower . head) l) $ fail "module name must start with capital letter"
+  return $ Q (init l) (last l)
 
 moduleDef :: P (Module Range)
 moduleDef = do
@@ -117,20 +128,20 @@ moduleDef = do
     moduleName
     optional $ parens (commaSep varId)
     keyword "where"
-  defs <- localAbsoluteIndentation $ do
-    many importDef
+  localAbsoluteIndentation $ do
+    idefs <- many importDef
     -- TODO: unordered definitions
-    concat <$> many (choice
+    defs <- groupDefinitions . concat <$> many (choice
         [ (:[]) . DDataDef <$> dataDef
         , (:[]) . TypeSig <$> typeSignature
         , const [] <$> typeSynonym
         , const [] <$> typeClassDef
-        , (\(p, e) -> [ValueDef (p, e)]) <$> valueDef_
+        , (:[]) <$> valueDef
         , const [] <$> fixityDef
         , const [] <$> typeClassInstanceDef
         ])
-  return $ Module
-      { moduleImports = ()
+    return $ Module
+      { moduleImports = idefs
       , moduleExports = ()
       , typeAliases   = ()
       , definitions   = [d | ValueDef d <- defs]
@@ -140,11 +151,11 @@ moduleDef = do
       }
 
 
-importDef :: P ()
-importDef = void_ $ do
+importDef :: P (Q Name)
+importDef = do
   keyword "import"
   optional $ keyword "qualified"
-  moduleName
+  n <- moduleName
   let importlist = parens (commaSep (varId <|> dataConstructor))
   optional $
         (keyword "hiding" >> importlist)
@@ -152,6 +163,7 @@ importDef = void_ $ do
   optional $ do
     keyword "as"
     moduleName
+  return n
 
 typeSynonym :: P ()
 typeSynonym = void_ $ do
@@ -300,11 +312,8 @@ valuePatternAtom
 
   pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePatternAtom) <|> addPos PVar var)
 
-valueDef :: P (Exp Range -> Exp Range)
-valueDef = (\(p, e) -> ELet (p <-> e) p e) <$> valueDef_
-
-valueDef_ :: P (Pat Range, Exp Range)
-valueDef_ = do
+valueDef :: P (Definition Range)
+valueDef = do
   (n, f) <- 
     try' "definition" (do
       n <- addPos PVar varId
@@ -323,10 +332,13 @@ valueDef_ = do
     )
   localIndentation Gt $ do
     d <- expression
-    optional $ do
-      keyword "where"
-      localIndentation Ge $ localAbsoluteIndentation $ some (valueDef <|> undef "ts" typeSignature)
-    return (n, f d)
+    let e = f d
+    do
+        do
+          keyword "where"
+          l <- localIndentation Ge $ localAbsoluteIndentation $ some (valueDef <|> undef "ts" typeSignature)
+          return (ValueDef (n, eLets l e))
+      <|> return (ValueDef (n, e))
 
 application :: [Exp Range] -> Exp Range
 application [e] = e
@@ -350,7 +362,8 @@ expression = do
   lambda = addPos (\r (p: _ {-TODO-}, e) -> ELam r p e) $ operator "\\" *> ((,) <$> many valuePatternAtom <* operator "->" <*> expression)
 
   ifthenelse :: P (Exp Range)
-  ifthenelse = undef "if" $ keyword "if" *> (expression *> keyword "then" *> expression *> keyword "else" *> expression)
+  ifthenelse = addPos (\r (a, b, c) -> eApp (eApp (eApp (EVar r "ifThenElse") a) b) c) $
+        (,,) <$ keyword "if" <*> expression <* keyword "then" <*> expression <* keyword "else" <*> expression
 
   caseof :: P (Exp Range)
   caseof = undef "case" $ do
@@ -363,10 +376,30 @@ expression = do
   letin :: P (Exp Range)
   letin = do
       keyword "let"
-      l <- localIndentation Ge $ localAbsoluteIndentation (some valueDef)
+      l <- localIndentation Ge $ localAbsoluteIndentation $ some valueDef
       keyword "in"
       a <- expression
-      return $ foldr ($) a l
+      return $ eLets l a
+
+eLets l a = foldr ($) a . map eLet $ groupDefinitions l
+  where
+    eLet (ValueDef (a, b)) = ELet (a <-> b) a b
+
+groupDefinitions = concatMap g . groupBy f
+  where
+    f (h -> Just x) (h -> Just y) = x == y
+    f _ _ = False
+
+    h (ValueDef (p, _)) = name p
+    h _ = Nothing
+
+    name (PVar _ n) = Just n
+    name _ = Nothing
+
+    g xs@(ValueDef (p, _): _) = [ValueDef (p, foldr1 eAlt [e | ValueDef (_, e) <- xs])]
+    g xs = xs
+
+    eAlt a b = Exp (a <-> b) $ EAlt_ a b
 
 rhs = x
   <|> undef "guards" (many $ operator "|" *> expression *> x)
@@ -434,10 +467,4 @@ parseLC fname = do
   case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> moduleDef <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
     Failure m -> return $ Left $ show m
     Success e -> return $ Right (src, e)
-
-data Definition a
-  = ValueDef (ValueDef a)
-  | TypeSig ()
-  | DDataDef (DataDef a)
-    deriving (Show)
 

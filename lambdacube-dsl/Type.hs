@@ -28,6 +28,7 @@ type TName = String
 type TCName = String    -- type constructor name; if this turns out to be slow use Int or ADT instead of String
 type EName = String
 type FName = String
+type MName = String     -- module name
 
 type Subst = Map TName Ty
 type MonoEnv a = Map EName a
@@ -109,6 +110,8 @@ data Exp_ a b
   | EFieldProj_ FName
   | ETyping_   b Typing
 --  | EFix EName Exp
+  | EAlt_      b b  -- function alternatives
+  | ENext_     -- go to next alternative
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 pattern ELit a b = Exp a (ELit_ b)
@@ -346,10 +349,14 @@ instance FreeVars a => FreeVars (MonoEnv a)         where freeVars = foldMap fre
 instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap freeVars
 
 
+-- qualified things
+data Q a = Q {qualifier :: [String], qData :: a} -- | UQ a
+    deriving (Show)
+
 -- AST
 data Module a
   = Module
-  { moduleImports :: ()
+  { moduleImports :: [Q MName]
   , moduleExports :: ()
   , typeAliases   :: ()
   , definitions   :: [ValueDef a]
@@ -364,12 +371,6 @@ data DataDef a = DataDef String [String] [ConDef a]
     deriving (Show)
 data ConDef a = ConDef EName [Ty' a]
     deriving (Show)
-
-data Expression -- record, list, tuple, literal, var, application, lambda, ifthenelse, letin, caseof, dataconstructor
-  = Expression
-
---data Type
---  = Type
 
 data TypeClassDefinition
   = TypeClassDefinition -- name, [base class], [type signature (declaration)]

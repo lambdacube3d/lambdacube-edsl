@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators, OverloadedStrings, DataKinds #-}
 module Graphics where
-
+{-
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as SB
 import Data.List
@@ -8,10 +8,13 @@ import Data.Digest.CRC32
 import Data.Maybe
 import Data.Vect
 import LambdaCube.GL
-
+-}
 import Material hiding (Blending)
 
-import Debug.Trace
+--import Debug.Trace
+
+ifThenElse True a b = a
+ifThenElse False a b = b
 
 -- specialized snoc
 v3v4 :: Vec 3 Float -> Vec 4 Float

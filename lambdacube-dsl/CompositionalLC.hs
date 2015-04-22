@@ -14,6 +14,8 @@ module CompositionalLC
     , polyVars
     , instantiateTyping
     , typing
+    , joinPolyEnvs
+    , exportEnv
     ) where
 
 import Data.Function
@@ -176,19 +178,10 @@ inference_ :: PolyEnv -> Module Range -> Either ErrorMsg (Module (Subst, Typing)
 inference_ primFunMap m = runExcept $ fst <$>
     evalRWST (inferModule m) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
   where
-    inferModule Module{..} = withTyping (Map.fromList tyConKinds) $ do
+    inferModule Module{..} = withTyping (Map.fromList $ tyConKinds dataDefs) $ do
         dataDefs <- mapM inferDataDef dataDefs
-        let tyConTypes =
-                [ (cn, [] ==> foldr (~>) res (map (typingType{-TODO-} . snd . getTag) tys))
-                | DataDef n vs cs <- dataDefs
-                , let k = foldr (~>) Star (replicate (length vs) Star)
-                      res = foldr (~>) (Ty_ k $ TCon_ n) $ map (Ty_ Star . TVar_) vs
-                , ConDef cn tys <- cs
-                ]
-        definitions <- withTyping (Map.fromList tyConTypes) $ inferDefs definitions
+        definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs definitions
         return Module{..}
-      where
-        tyConKinds = [(primed n, [] ==> foldr (~>) Star (replicate (length vs) Star)) | DataDef n vs _ <- dataDefs]
 
     inferDefs [] = return []
     inferDefs (d:ds) = do
@@ -203,17 +196,36 @@ inference_ primFunMap m = runExcept $ fst <$>
     inferConDef (ConDef n tys) = do
         tys <- mapM inferKind tys
         return $ ConDef n tys
-{-
-    add
-    {-
-    data DataDef a = DataDef String [String] [ConDef a]
-    data ConDef a = ConDef EName [Ty' a]
-    -}
--}
+
     inferDef (PVar _ n, e) = do
         e <- inferTyping e <* checkUnambError
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
         return ((PVar undefined n, e), f)
+
+tyConTypes dataDefs =
+    [ (cn, [] ==> foldr (~>) res (map (typingType{-TODO-} . snd . getTag) tys))
+    | DataDef n vs cs <- dataDefs
+    , let k = foldr (~>) Star (replicate (length vs) Star)
+          res = foldr (~>) (Ty_ k $ TCon_ n) $ map (Ty_ Star . TVar_) vs
+    , ConDef cn tys <- cs
+    ]
+
+tyConKinds dataDefs = [(primed n, [] ==> foldr (~>) Star (replicate (length vs) Star)) | DataDef n vs _ <- dataDefs]
+
+exportEnv :: Module (Subst, Typing) -> PolyEnv
+exportEnv Module{..}
+    = PolyEnv $ fmap instantiateTyping $ Map.fromList $
+            [(n, snd $ getTag e) | (PVar _ n, e) <- definitions]
+        ++  tyConKinds dataDefs
+        ++  tyConTypes dataDefs
+
+joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
+    [] -> Right $ PolyEnv $ head <$> ms
+    xss -> Left $ "Definition clash: " ++ show (map fst xss)
+  where
+    isSing [_] = True
+    isSing _ = False
+    ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv e <- ps]
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 
@@ -276,6 +288,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
             ETyping_ e ty -> unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
+            EAlt_ a b -> unifyTypings [getTag' a ++ getTag' b] $ \[x] -> x
   where
     inferPatTyping :: Bool -> Pat Range -> TCM (Pat (Subst, Typing), Map EName Typing)
     inferPatTyping polymorph p_@(Pat pt p) = local (id *** const [pt]) $ do
