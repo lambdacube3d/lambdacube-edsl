@@ -19,6 +19,7 @@ import qualified Data.Set as Set
 import qualified Type as AST
 import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp, Exp_ (..), Pat, PVar, PLit, PTuple)
 import Core
+import CoreToGLSL
 import qualified IR as IR
 
 type CG = State IR.Pipeline
@@ -62,35 +63,16 @@ getSlot (A3 "Fetch" (ELit (LString slotName)) prim attrs) = do
 
 getProgram :: IR.SlotName -> Exp -> Exp -> CG IR.ProgramName
 getProgram slot vert frag = do
-  let prg = IR.Program
+  let (vertOut,vertSrc) = genVertexGLSL vert
+      fragSrc = genFragmentGLSL vertOut frag
+      prg = IR.Program
         { IR.programUniforms    = T.fromList $ Set.toList $ getUniforms vert <> getUniforms frag -- uniform input (value based uniforms only / no textures)
-        , IR.programStreams     = T.fromList [("position",("position",IR.V4F))] -- :: Trie (ByteString,InputType)  -- vertex shader input attribute name -> (slot attribute name, attribute type)
+        , IR.programStreams     = T.fromList [("v",("position",IR.V4F))] -- :: Trie (ByteString,InputType)  -- vertex shader input attribute name -> (slot attribute name, attribute type)
         , IR.programInTextures  = T.empty -- :: Trie InputType               -- all textures (uniform textures and render textures) referenced by the program
         , IR.programOutput      = [("f0",IR.V4F)] -- TODO
-        , IR.vertexShader       = pack $ unlines
-          [ "#version 330 core"
-          , "uniform mat4 MVP;"
-          , "in vec4 position;"
-          , "smooth out vec4 v0;"
-          , "void main ()"
-          , "{ vec4 val11 = MVP * position;"
-          , "  float val12 = 1.0;"
-          , "  gl_Position = val11;"
-          , "  gl_PointSize = val12;"
-          , "  v0 = position;"
-          , "}"
-          ]
+        , IR.vertexShader       = trace vertSrc $ pack vertSrc
         , IR.geometryShader     = mempty -- :: Maybe ByteString
-        , IR.fragmentShader     = trace (ppShow frag) $ pack $ unlines
-          [ "#version 330 core"
-          , "smooth in vec4 v0;"
-          , "out vec4 f0;"
-          , "void main ()"
-          , "{ vec4 val3 = vec4 (1.0, 0.4, 0.0, 0.2);"
-          , "  vec4 val5 = v0 * val3;"
-          , "  f0 = val5;"
-          , "}"
-          ]
+        , IR.fragmentShader     = trace fragSrc $ pack fragSrc
         }
   pv <- gets IR.programs
   modify (\s -> s {IR.programs = pv `V.snoc` prg})
