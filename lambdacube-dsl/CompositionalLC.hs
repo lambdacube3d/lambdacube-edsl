@@ -80,11 +80,12 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
                 else put $ Map.insert n t' $ singSubst n t' <$> s
 
         unifyTy :: Ty -> Ty -> StateT Subst TCM ()
+        unifyTy (StarToStar C 0) Star = return () -- TODO: generalize
         unifyTy Star Star = return ()
         unifyTy (TVar u) (TVar v) | u == v = return ()
         unifyTy (TVar u) _ = bindVar u b
         unifyTy _ (TVar u) | bidirectional = bindVar u a
-        unifyTy (TCon0 u) (TCon0 v) | u == v = return ()
+        unifyTy (TCon k u) (TCon k' v) | u == v = uni k k' --return ()
         unifyTy (TTuple t1) (TTuple t2) = sequence_ $ zipWith uni t1 t2
         unifyTy (TApp k1 a1 b1) (TApp k2 a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy (TArr a1 b1) (TArr a2 b2) = uni a1 a2 >> uni b1 b2
@@ -180,7 +181,7 @@ inference_ primFunMap m = runExcept $ fst <$>
   where
     inferModule Module{..} = withTyping (Map.fromList $ tyConKinds dataDefs) $ do
         dataDefs <- mapM inferDataDef dataDefs
-        definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs definitions
+        definitions <- withTyping (Map.fromList $ tyConTypes dataDefs ++ selectorTypes dataDefs) $ inferDefs definitions
         return Module{..}
 
     inferDefs [] = return []
@@ -194,16 +195,30 @@ inference_ primFunMap m = runExcept $ fst <$>
         return $ DataDef con vars cdefs
 
     inferConDef (ConDef n tys) = do
-        tys <- mapM inferKind tys
+        tys <- mapM inferFieldKind tys
         return $ ConDef n tys
+
+    inferFieldKind (FieldTy mn t) = do
+        t <- inferKind t
+        return $ FieldTy mn t
 
     inferDef (PVar _ n, e) = do
         e <- inferTyping e <* checkUnambError
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
         return ((PVar undefined n, e), f)
 
+selectorTypes :: [DataDef (Subst, Typing)] -> [(EName, Typing)]
+selectorTypes dataDefs =
+    [ (sel, [] ==> res ~> convTy t)
+    | DataDef n vs cs <- dataDefs
+    , let k = foldr (~>) Star (replicate (length vs) Star)
+          res = foldr (~>) (Ty_ k $ TCon_ n) $ map (Ty_ Star . TVar_) vs
+    , ConDef cn tys <- cs
+    , FieldTy (Just sel) t <- tys
+    ]
+
 tyConTypes dataDefs =
-    [ (cn, [] ==> foldr (~>) res (map (typingType{-TODO-} . snd . getTag) tys))
+    [ (cn, [] ==> foldr (~>) res (map (typingType{-TODO-} . snd . getTag . fieldType) tys))
     | DataDef n vs cs <- dataDefs
     , let k = foldr (~>) Star (replicate (length vs) Star)
           res = foldr (~>) (Ty_ k $ TCon_ n) $ map (Ty_ Star . TVar_) vs
@@ -218,6 +233,7 @@ exportEnv Module{..}
             [(n, snd $ getTag e) | (PVar _ n, e) <- definitions]
         ++  tyConKinds dataDefs
         ++  tyConTypes dataDefs
+        ++  selectorTypes dataDefs
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     [] -> Right $ PolyEnv $ head <$> ms
@@ -228,6 +244,10 @@ joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv e <- ps]
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
+
+inferKind' (Typing me cs t _) = do
+    t <- inferKind t
+    return $ typing mempty{-TODO-} []{-TODO-} $ convTy t
 
 inferKind :: Ty' Range -> TCM (Ty' (Subst, Typing))
 inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
@@ -280,14 +300,16 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
         return $ ECase ty te cs
     _ -> do
         e' <- T.mapM inferTyping e
-        (\t -> Exp t $ setTag undefined e') <$> case e' of
+        (\t -> Exp t $ setTag undefined undefined e') <$> case e' of
             EApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             EFieldProj_ fn -> fieldProjType fn
             ERecord_ (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
             ETuple_ te -> unifyTypings (map (getTag') te) TTuple
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            ETyping_ e ty -> unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
+            ETyping_ e ty -> do
+                ty <- inferKind' ty
+                unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
             EAlt_ a b -> unifyTypings [getTag' a ++ getTag' b] $ \[x] -> x
   where
     inferPatTyping :: Bool -> Pat Range -> TCM (Pat (Subst, Typing), Map EName Typing)

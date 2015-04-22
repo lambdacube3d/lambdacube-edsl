@@ -21,6 +21,7 @@ import Data.ByteString (ByteString)
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.RWS
+import Control.Applicative
 import Control.Arrow
 import Text.Trifecta.Delta (Delta)
 
@@ -85,6 +86,7 @@ data Pat_ b
   | PCon_ EName [b]
   | PTuple_ [b]
   | PRecord_ [(FName, b)]
+  | PAt_ EName b
   | Wildcard_
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
@@ -108,7 +110,7 @@ data Exp_ a b
   | ETuple_    [b]
   | ERecord_   [(FName, b)]
   | EFieldProj_ FName
-  | ETyping_   b Typing
+  | ETyping_   b (Typing_ (Ty' a))
 --  | EFix EName Exp
   | EAlt_      b b  -- function alternatives
   | ENext_     -- go to next alternative
@@ -125,8 +127,8 @@ pattern ERecord a b = Exp a (ERecord_ b)
 pattern EFieldProj a c = Exp a (EFieldProj_ c)
 pattern ETyping a b c = Exp a (ETyping_ b c)
 
-setTag :: (Pat x -> Pat a) -> Exp_ x b -> Exp_ a b
-setTag f = \case
+setTag :: (Ty' x -> Ty' a) -> (Pat x -> Pat a) -> Exp_ x b -> Exp_ a b
+setTag tf f = \case
     ELit_      x       -> ELit_ x
     EVar_      x       -> EVar_ x
     EApp_      x y     -> EApp_ x y
@@ -136,7 +138,7 @@ setTag f = \case
     ETuple_    x       -> ETuple_ x
     ERecord_   x       -> ERecord_ x
     EFieldProj_ x      -> EFieldProj_ x
-    ETyping_   x y     -> ETyping_ x y
+    ETyping_   x y     -> ETyping_ x $ tf <$> y
 
 data Frequency -- frequency kind
   -- frequency values
@@ -160,6 +162,12 @@ data Ty
 
 data Ty' a = Ty' a (Ty_ (Ty' a))
   deriving (Show,Eq,Ord)
+
+ty_ :: Ty -> Ty_ Ty -> Ty
+ty_ = Ty_ --Star (StarToStar
+
+convTy :: Ty' (Subst, Typing) -> Ty
+convTy (Ty' (_, k) t) = ty_ (typingType{-TODO-} k) $ convTy <$> t
 
 data Ty_ a
   -- kinds
@@ -206,12 +214,12 @@ pattern StarT = StarToStar C 0
 pattern StarStar = StarToStar C 1
 pattern Ty a = Ty_ StarT a
 
-pattern Star = Ty (Star_ C)
+pattern Star = StarT --Ty (Star_ C)
 pattern NatKind = Ty NatKind_
 pattern TVar b = Ty (TVar_ b)
 pattern TApp k a b = Ty_ k (TApp_ a b)
 pattern TCon k a = Ty_ k (TCon_ a)
-pattern TCon0 a = Ty (TCon_ a)
+pattern TCon0 a = TCon StarT a
 pattern TCon1 a b = TApp StarT (TCon StarStar a) b
 pattern TCon2 a b c = TApp StarT (TApp StarStar (TCon (StarToStar C 2) a) b) c
 pattern TCon3 a b c d = TApp StarT (TApp StarStar (TApp (StarToStar C 2) (TCon (StarToStar C 3) a) b) c) d
@@ -336,9 +344,15 @@ data TypeFun a
 
 class FreeVars a where freeVars :: a -> Set TName
 
+instance FreeVars a => FreeVars (Ty_ a) where
+    freeVars = \case
+        TVar_ a -> Set.singleton a
+        x -> foldMap freeVars x
+instance {-FreeVars a => -}FreeVars (Ty' a) where
+    freeVars = \case
+        Ty' k x -> {-freeVars k `mappend` -} foldMap freeVars x
 instance FreeVars Ty where
     freeVars = \case
-        TVar a -> Set.singleton a
         Ty_ k x -> freeVars k `mappend` foldMap freeVars x
         StarToStar _ _ -> mempty
 
@@ -369,7 +383,10 @@ data Module a
 type ValueDef a = (Pat a, Exp a)
 data DataDef a = DataDef String [String] [ConDef a]
     deriving (Show)
-data ConDef a = ConDef EName [Ty' a]
+data ConDef a = ConDef EName [FieldTy (Ty' a)]
+    deriving (Show)
+data FieldTy a
+    = FieldTy {fieldName :: Maybe EName, fieldType :: a}
     deriving (Show)
 
 data TypeClassDefinition

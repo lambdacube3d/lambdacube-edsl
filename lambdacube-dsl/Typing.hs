@@ -303,6 +303,8 @@ primFunMap = Map.fromList $ execWriter $ do
   "V4" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> a ~> TVec 4 a
   "[]" --> \a -> TList a
   "$" --> \a b -> (a ~> b) ~> a ~> b
+  "negate" --> \a -> [IsNum @@ a] ==> a ~> a
+  "fromInt" --> \a -> [IsNum @@ a] ==> TInt ~> a
 
   -- temporary?
   ["Tup", "Const", "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"]  ---> \a -> a ~> a

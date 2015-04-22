@@ -52,12 +52,6 @@ mkAccumulationContext sa = AccumulationContext Nothing (DepthOp depthFunc depthW
     depthFunc   = case saDepthFunc sa of
         D_Equal     -> Equal
         D_Lequal    -> Lequal
-    blend       = case saBlend sa of
-        Nothing     -> NoBlending
-        Just (src,dst)  -> Blend (FuncAdd,FuncAdd) ((srcF,dstF),(srcF,dstF)) zero'
-          where
-            srcF    = cvt src
-            dstF    = cvt dst
     cvt b = case b of
         B_DstAlpha          -> DstAlpha
         B_DstColor          -> DstColor
@@ -70,6 +64,12 @@ mkAccumulationContext sa = AccumulationContext Nothing (DepthOp depthFunc depthW
         B_SrcAlphaSaturate  -> SrcAlphaSaturate
         B_SrcColor          -> SrcColor
         B_Zero              -> Zero
+    blend       = case saBlend sa of
+        Nothing     -> NoBlending
+        Just (src,dst)  -> Blend (FuncAdd,FuncAdd) ((srcF,dstF),(srcF,dstF)) zero'
+          where
+            srcF    = cvt src
+            dstF    = cvt dst
 
 {-
 data CommonAttrs
