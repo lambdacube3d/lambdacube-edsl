@@ -574,7 +574,7 @@ renderPipeline glp = do
             GLSetAccumulationContext aCtx   -> setupAccumulationContext aCtx
             GLSetRenderTarget rt bufs       -> do
                                                 -- set target viewport
-                                                when (rt == 0) $ do -- screen out
+                                               when (rt == 0) $ do -- screen out
                                                 ic' <- readIORef $ glInput glp
                                                 case ic' of
                                                     Nothing -> return ()

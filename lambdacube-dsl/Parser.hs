@@ -188,8 +188,8 @@ typeExp = do
 
 dataDef :: P (DataDef Range)
 dataDef = do
-  keyword "data"
-  localIndentation Gt $ do
+ keyword "data"
+ localIndentation Gt $ do
   tc <- typeConstructor
   tvs <- many typeVar
   let dataConDef = do
