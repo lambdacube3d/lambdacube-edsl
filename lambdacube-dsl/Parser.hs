@@ -211,11 +211,20 @@ typeRecord = undef "trec" $ do
 type TyR = Ty' Range
 
 ty :: P TyR
-ty = typeAtom >>= f
+ty = foldr1 tArr <$> sepBy1 tyApp (operator "->")
+  where
+    tArr t a = Ty' (t <-> a) $ TArr_ t a
+
+-- compose ranges through getTag
+infixl 9 <->
+a <-> b = (fst $ getTag a, snd $ getTag b)
+
+tyApp :: P TyR
+tyApp = typeAtom >>= f
   where
     f t = do
         a <- typeAtom
-        f $ Ty' (fst $ getTagT t, snd $ getTagT a) $ TApp_ t a
+        f $ Ty' (t <-> a) $ TApp_ t a
       <|> return t
 
 addPos f m = do
@@ -230,9 +239,8 @@ typeAtom = typeRecord
     <|> try (addPos Ty' $ parens $ pure $ TCon_ "()")
     <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
     <|> addPos Ty' (TCon_ <$> typeConstructor)
-    <|> addPos Ty' (TTuple_ <$> (parens $ sepBy ty comma))
+    <|> addPos Ty' (TTuple_ <$> parens (sepBy ty comma))
     <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "[]")) (brackets ty)
--- <|> (do typeAtom; operator "->"; typeAtom)
 
 typeClassDef :: P ()
 typeClassDef = void_ $ do
@@ -293,7 +301,7 @@ valuePatternAtom
   pat = parens ((try $ undef "data Const 2" $ dataConstructor *> some valuePatternAtom) <|> addPos PVar var)
 
 valueDef :: P (Exp Range -> Exp Range)
-valueDef = (\(p, e) -> ELet (fst $ getTagP $ p, snd $ getTag e) p e) <$> valueDef_
+valueDef = (\(p, e) -> ELet (p <-> e) p e) <$> valueDef_
 
 valueDef_ :: P (Pat Range, Exp Range)
 valueDef_ = do
@@ -303,7 +311,7 @@ valueDef_ = do
       localIndentation Gt $ do
         a <- many valuePatternAtom
         operator "="
-        let args p e = ELam (fst $ getTagP p, snd $ getTag e) p e
+        let args p e = ELam (p <-> e) p e
         return (n, \d -> foldr args d a)
     )
    <|>
@@ -324,7 +332,7 @@ application :: [Exp Range] -> Exp Range
 application [e] = e
 application es = eApp (application $ init es) (last es)
 
-eApp a b = EApp (fst $ getTag a, snd $ getTag b) a b
+eApp a b = EApp (a <-> b) a b
 
 expression :: P (Exp Range)
 expression = do

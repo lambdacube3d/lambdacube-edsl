@@ -179,7 +179,7 @@ inference_ primFunMap m = runExcept $ fst <$>
     inferModule Module{..} = withTyping (Map.fromList tyConKinds) $ do
         dataDefs <- mapM inferDataDef dataDefs
         let tyConTypes =
-                [ (cn, [] ==> foldr (~>) res (map (typingType{-TODO-} . snd . getTagT) tys))
+                [ (cn, [] ==> foldr (~>) res (map (typingType{-TODO-} . snd . getTag) tys))
                 | DataDef n vs cs <- dataDefs
                 , let k = foldr (~>) Star (replicate (length vs) Star)
                       res = foldr (~>) (Ty_ k $ TCon_ n) $ map (Ty_ Star . TVar_) vs
@@ -238,7 +238,7 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
             TCon_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Type constructor " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
             x -> error $ " inferKind: " ++ show x
   where
-    getTag' = (:[]) . snd . getTagT
+    getTag' = (:[]) . snd . getTag
     star = [] ==> Star
 
 inferTyping :: Exp Range -> TCM (Exp (Subst, Typing))
@@ -298,7 +298,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
         return (Pat t $ fst <$> p', tr)
 
     getTag' = (:[]) . snd . getTag
-    getTagP' = (:[]) . snd . getTagP . fst
+    getTagP' = (:[]) . snd . getTag . fst
     noSubst = fmap ((,) mempty)
     noTr = addTr $ const mempty
     addTr tr m = (\x -> (x, tr x)) <$> m

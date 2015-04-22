@@ -94,9 +94,6 @@ pattern PTuple a b = Pat a (PTuple_ b)
 pattern PRecord a b = Pat a (PRecord_ b)
 pattern Wildcard a = Pat a Wildcard_
 
-getTagP :: Pat a -> a
-getTagP (Pat a _) = a
-
 data Exp a = Exp a (Exp_ a (Exp a))
   deriving (Show,Eq,Ord)
 
@@ -124,9 +121,6 @@ pattern ETuple a b = Exp a (ETuple_ b)
 pattern ERecord a b = Exp a (ERecord_ b)
 pattern EFieldProj a c = Exp a (EFieldProj_ c)
 pattern ETyping a b c = Exp a (ETyping_ b c)
-
-getTag :: Exp a -> a
-getTag (Exp a _) = a
 
 setTag :: (Pat x -> Pat a) -> Exp_ x b -> Exp_ a b
 setTag f = \case
@@ -163,8 +157,6 @@ data Ty
 
 data Ty' a = Ty' a (Ty_ (Ty' a))
   deriving (Show,Eq,Ord)
-
-getTagT (Ty' k _) = k
 
 data Ty_ a
   -- kinds
@@ -384,3 +376,11 @@ data TypeClassDefinition
 
 data TypeClassInstance -- name, type, [definition]
   = TypeClassInstance
+
+
+class GetTag c where getTag :: c a -> a
+
+instance GetTag Exp where getTag (Exp a _) = a
+instance GetTag Ty' where getTag (Ty' k _) = k
+instance GetTag Pat where getTag (Pat a _) = a
+
