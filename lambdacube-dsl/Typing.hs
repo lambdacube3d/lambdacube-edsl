@@ -298,10 +298,15 @@ primFunMap = Map.fromList $ execWriter $ do
   ["FragmentStream", "FrameBuffer", "Image", "VertexStream"] ----> Star ~> Star ~> Star
   ["Vec"] ----> NatKind ~> Star ~> Star
 
-
+  "V2" --> \a -> [IsComponent @@ a] ==> a ~> a ~> TVec 2 a
+  "V3" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> TVec 3 a
+  "V4" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> a ~> TVec 4 a
   "[]" --> \a -> TList a
+  "$" --> \a b -> (a ~> b) ~> a ~> b
 
-  ["Tup", "Const"]  ---> \a -> a ~> a       -- temporary const constructor
+  -- temporary?
+  ["Tup", "Const", "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"]  ---> \a -> a ~> a
+
   ["True", "False"] ---> TBool
 
   forM_ [2..4] $ \i -> do
