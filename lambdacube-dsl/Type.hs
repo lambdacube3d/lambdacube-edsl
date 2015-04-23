@@ -348,13 +348,14 @@ instance FreeVars a => FreeVars (Ty_ a) where
     freeVars = \case
         TVar_ a -> Set.singleton a
         x -> foldMap freeVars x
-instance {-FreeVars a => -}FreeVars (Ty' a) where
+instance FreeVars a => FreeVars (Ty' a) where
     freeVars = \case
-        Ty' k x -> {-freeVars k `mappend` -} foldMap freeVars x
+        Ty' k x -> freeVars k `mappend` foldMap freeVars x
 instance FreeVars Ty where
     freeVars = \case
         Ty_ k x -> freeVars k `mappend` foldMap freeVars x
         StarToStar _ _ -> mempty
+instance FreeVars Range where freeVars = mempty -- TODO: eliminate
 
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (Typing_ a)         where freeVars = foldMap freeVars
