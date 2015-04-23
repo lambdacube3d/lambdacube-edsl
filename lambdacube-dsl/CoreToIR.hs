@@ -24,7 +24,6 @@ import qualified IR as IR
 
 type CG = State IR.Pipeline
 
-
 emptyPipeline = IR.Pipeline mempty mempty mempty mempty mempty mempty
 testCompile = test'' (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
 testCompile' = test_ $ return . (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
@@ -56,10 +55,11 @@ mergeSlot a b = a
 
 getSlot :: Exp -> CG IR.SlotName
 getSlot (A3 "Fetch" (ELit (LString slotName)) prim attrs) = do
-  let slot = IR.Slot
+  let input = compInput attrs
+      slot = IR.Slot
         { IR.slotName       = slotName
         , IR.slotUniforms   = mempty
-        , IR.slotStreams    = Map.fromList (compInput attrs)
+        , IR.slotStreams    = Map.fromList input
         , IR.slotPrimitive  = compFetchPrimitive prim
         , IR.slotPrograms   = []
         }
@@ -89,12 +89,12 @@ getProgram slot vert frag = do
   let (vertOut,vertSrc) = genVertexGLSL vert
       fragSrc = genFragmentGLSL vertOut frag
       prg = IR.Program
-        { IR.programUniforms    = Map.fromList $ Set.toList $ getUniforms vert <> getUniforms frag -- uniform input (value based uniforms only / no textures)
-        , IR.programStreams     = Map.fromList [("v",("position",IR.V4F))] -- :: Trie (ByteString,InputType)  -- vertex shader input attribute name -> (slot attribute name, attribute type)
-        , IR.programInTextures  = mempty -- :: Trie InputType               -- all textures (uniform textures and render textures) referenced by the program
+        { IR.programUniforms    = Map.fromList $ Set.toList $ getUniforms vert <> getUniforms frag
+        , IR.programStreams     = Map.fromList [("v",("position",IR.V4F))] -- TODO
+        , IR.programInTextures  = mempty -- TODO
         , IR.programOutput      = [("f0",IR.V4F)] -- TODO
         , IR.vertexShader       = trace vertSrc vertSrc
-        , IR.geometryShader     = mempty -- :: Maybe ByteString
+        , IR.geometryShader     = mempty -- TODO
         , IR.fragmentShader     = trace fragSrc fragSrc
         }
   pv <- gets IR.programs
