@@ -350,10 +350,10 @@ instance FreeVars a => FreeVars (Ty_ a) where
         x -> foldMap freeVars x
 instance FreeVars a => FreeVars (Ty' a) where
     freeVars = \case
-        Ty' k x -> freeVars k `mappend` foldMap freeVars x
+        Ty' k x -> freeVars k `mappend` freeVars x
 instance FreeVars Ty where
     freeVars = \case
-        Ty_ k x -> freeVars k `mappend` foldMap freeVars x
+        Ty_ k x -> freeVars k `mappend` freeVars x
         StarToStar _ _ -> mempty
 instance FreeVars Range where freeVars = mempty -- TODO: eliminate
 
