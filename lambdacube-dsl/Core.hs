@@ -95,14 +95,15 @@ reduce s m e = case e of
         EVar (VarE v (TConstraintArg t ty)) -> case r x of
             EConstraint t'
                | t == t' -> EVar $ VarE v ty
-               | otherwise -> error "unification of constraints are not yet implemented"
+               | otherwise -> error "unification of constraints is not yet implemented"
+            e -> error $ "reduce constr: " ++ show e
         e -> EApp e $ r x
     ETuple es -> ETuple $ map r es
 --    ELam v@(VarE n t) e -> ELam v $ reduce (s `composeSubst` Map.singleton n t) m e
     ELam v e -> ELam v $ r e
     ELit{} -> e
     EType t -> EType $ subst s t
-    EConstraint{} -> e
+    EConstraint c -> EConstraint $ subst s c
   where
     r = reduce s m
 
@@ -113,7 +114,7 @@ toCore sub e = case e of
   AST.EVar t n      -> foldl EApp (foldl EApp (EVar $ VarE n $ toType $ subst sub' $ snd t) pv) cs
     where
       cs = map EConstraint $ subst sub' $ constraints $ snd t
-      pv = map EType $ subst sub' $ map (\n -> TVar n) $ Map.keys $ fst t
+      pv = map EType $ subst sub' $ map TVar $ Map.keys $ fst t
   AST.EApp t f a    -> EApp (toCore' f) (toCore' a)
   AST.ELet _ (AST.PVar _ n) a b  -> ELet (VarE n $ toType' $ getTag a) (pv --> ctr --> toCore' a) (toCore' b)
     where
