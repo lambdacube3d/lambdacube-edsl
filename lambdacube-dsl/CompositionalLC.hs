@@ -84,7 +84,7 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
 
         -- TODO: generalize this or normalize kinds
         unifyTy (StarToStar 0) Star = return ()
-        unifyTy (StarToStar 1) (TArr Star Star) = return ()
+        unifyTy (StarToStar 1) (TArr a b) = uni Star a >> uni Star b
         unifyTy (TArr Star Star) StarStar = return ()
 
         unifyTy Star Star = return ()
@@ -301,9 +301,10 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
     ECase_ e cs -> do
         te <- inferTyping e
         cs <- forM cs $ \(p, exp) -> do
-            (p, tr) <- inferPatTyping False p
-            exp <- withTyping tr $ inferTyping exp
-            return (p, exp)
+            (Pat pt p, tr) <- inferPatTyping False p
+            Exp t exp <- withTyping tr $ inferTyping exp
+            let del = id *** removeMonoVars (Map.keysSet tr)
+            return (Pat (del pt) p, Exp (del t) exp)
         ty <- unifyTypings [getTag' te ++ concatMap getTagP' cs, concatMap (getTag' . snd) cs] $ \[_, x] -> x
         return $ ECase ty te cs
     _ -> do
@@ -323,6 +324,8 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
                 ty <- inferKind' ty
                 unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
             EAlt_ a b -> unifyTypings [getTag' a ++ getTag' b] $ \[x] -> x
+            ENext_ -> newV $ \t -> t :: Ty          -- TODO
+            x -> error $ "inferTyping: " ++ ppShow x
   where
     inferPatTyping :: Bool -> Pat Range -> TCM (Pat (Subst, Typing), Map EName Typing)
     inferPatTyping polymorph p_@(Pat pt p) = local (id *** const [pt]) $ do
@@ -332,12 +335,14 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             Wildcard_ -> noTr $ newV $ \t -> t :: Ty
             PVar_ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
                 if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t mempty :: Typing
+            PAt_ n p -> addTr (\t -> Map.singleton n (snd t)) $ newV $ snd . getTag . fst $ p
             PTuple_ ps -> noTr $ unifyTypings (map getTagP' ps) TTuple
             PCon_ n ps -> noTr $ do
                 (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
                 unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ tl ~~> v] ==> v)
             PRecord_ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
                 (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip fs tl] ==> v)
+--            x -> error $ "inferPatTyping: " ++ ppShow x
         let trs = Map.unionsWith (++) . map ((:[]) <$>) $ tr: map snd (toList p')
         tr <- case filter ((>1) . length . snd) $ Map.toList trs of
             [] -> return $ Map.map head trs

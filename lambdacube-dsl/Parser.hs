@@ -97,7 +97,7 @@ var = try' "variable" $ do
 
 -- qualified variable
 qVar :: P String    -- TODO
-qVar = var <|> runUnspaced (try $ sepBy (Unspaced upperCaseIdent) (Unspaced dot) *> Unspaced dot *> Unspaced var)
+qVar = var <|> runUnspaced (try $ sepBy (Unspaced upperCaseIdent) dot *> dot *> Unspaced var)
 
 operator' :: P String
 operator' = try' "operator" $ do
@@ -232,8 +232,8 @@ ty = foldr1 tArr <$> sepBy1 tyApp (operator "->")
 infixl 9 <->
 a <-> b = ord (fst $ getTag a, snd $ getTag b)
   where
-    ord (a, b) | a > b = (b, a)
-               | otherwise = (a, b)
+    ord t@(x, y) | x > y = (fst $ getTag b, snd $ getTag a)
+                 | otherwise = t
 
 tyApp :: P TyR
 tyApp = typeAtom >>= f
@@ -429,13 +429,14 @@ eTyping a b = ETyping (a <-> typingType{-!-} b) a b
 expressionOpAtom :: P (Exp Range)
 expressionOpAtom = do
     e <- application <$> some expressionAtom
-    f e <$> try op <*> expression <|> return e
+    f e <$> op <*> expression  <|>  return e
   where
     f e op e' = application [op, e, e']
 
     op = addPos EVar $
             ident lcOps
-        <|> runUnspaced (Unspaced (operator "`") *> Unspaced var <* Unspaced (operator "`"))
+        <|> try (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
+        <|> (dot *> pure ".")
 
 expressionAtom :: P (Exp Range)
 expressionAtom =
@@ -463,7 +464,8 @@ expressionAtom =
   recordExp' = try $ addPos (uncurry . ENamedRecord) ((,) <$> dataConstructor <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma))
 
   recordFieldProjection :: P (Exp Range)
-  recordFieldProjection = try $ addPos (uncurry . flip . EApp) $ (,) <$> addPos EVar var <*> addPos EFieldProj (dot *> var)
+  recordFieldProjection = try $ flip eApp <$> addPos EVar var <*>
+        addPos EFieldProj (runUnspaced $ dot *> Unspaced var)
 
   eLit p l@LInt{} = eApp (EVar p "fromInt") $ ELit p l
   eLit p l = ELit p l

@@ -25,6 +25,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Text.Trifecta.Delta
 import Text.Trifecta hiding (err)
+import Text.Show.Pretty
 
 import Type
 
@@ -136,7 +137,7 @@ reduceConstraint x = case x of
 
         _ -> maybe noInstance (iff (discard []) noInstance . Set.member t) $ Map.lookup c builtinInstances
       where
-        noInstance = failure $ "no " ++ show c ++ " instance for " ++ show t
+        noInstance = failure $ "no " ++ show c ++ " instance for " ++ ppShow t
 
     CUnify a b -> discard [[a, b]]
 
@@ -148,7 +149,7 @@ reduceConstraint x = case x of
             _ -> fail "no instance"
 
         TFVec (TNat n) ty | n `elem` [2,3,4] && ty `elem` floatIntWordBool -> reduced $ TVec n ty
-        TFVec a b -> check (a `matches` nat234 && b `matches` floatIntWordBool) $ observe res $ \case
+        TFVec a b -> check (a `matches` nat234 {- && b `matches` floatIntWordBool -- FIXME -}) $ observe res $ \case
             TVec n t -> keep [[a, TNat n], [b, t]]
             _ -> fail "no instance"
 
@@ -205,8 +206,8 @@ reduceConstraint x = case x of
       where
         like f = reduceConstraint (CEq res f)
         reduced t = discard [[res, t]]
-        check b m = if b then m else fail "no instance"
-        fail = failure . (("error during reduction of " ++ show res ++ " ~ " ++ show f ++ "  ") ++)
+        check b m = if b then m else fail "no instance (1)"
+        fail = failure . (("error during reduction of " ++ ppShow res ++ "\n ~ " ++ ppShow f ++ "  ") ++)
 
         reduce' = Just . Just
         nothing' = Just Nothing
@@ -239,7 +240,7 @@ builtinInstances :: Map Class (Set Ty)
 builtinInstances = Map.fromList
     [ item CNum         [TInt, TFloat]
     , item IsIntegral   [TInt, TWord]
-    , item IsComponent  $ floatIntWordBool ++ floatVectors
+    , item IsComponent  $ floatIntWordBool ++ floatVectors -- ++ vectors TBool
     , item IsNumComponent $ floatIntWord ++ floatVectors
     , item IsSigned     [TFloat, TInt]
     , item IsNum        floatIntWord
@@ -290,13 +291,14 @@ primFunMap = Map.fromList $ execWriter $ do
 
   -- kind of type constructors
   ["()", "Char", "String", "Bool", "Word", "Int", "Float"] ----> Star
-  ["[]", "Detph", "Stencil", "Color"] ----> Star ~> Star
+  ["[]", "Depth", "Stencil", "Color"] ----> Star ~> Star
   ["Triangle", "Line", "Point", "TriangleAdjacency", "LineAdjacency"] ----> Star
   ["CullMode", "PolygonMode", "PolygonOffset", "ProvokingVertex", "FrontFace", "PointSize", "BlendingFactor", "BlendEquation", "LogicOperation", "StencilOperation", "ComparisonFunction", "PointSpriteCoordOrigin"] ----> Star
   -- TODO: more precise kinds
   ["Output"] ----> Star
   ["AccumulationContext", "Blending", "FetchPrimitive", "FragmentFilter", "FragmentOperation", "FragmentOut", "Input", "Interpolated", "RasterContext", "VertexOut"] ----> Star ~> Star
-  ["FragmentStream", "FrameBuffer", "Image", "VertexStream"] ----> Star ~> Star ~> Star
+  ["FragmentStream", "Image", "VertexStream"] ----> Star ~> Star ~> Star
+  ["FrameBuffer"] ----> NatKind ~> Star ~> Star
   ["Vec"] ----> NatKind ~> Star ~> Star
 
   "V2" --> \a -> [IsComponent @@ a] ==> a ~> a ~> TVec 2 a
@@ -306,8 +308,14 @@ primFunMap = Map.fromList $ execWriter $ do
   "$" --> \a b -> (a ~> b) ~> a ~> b
   "negate" --> \a -> [IsNum @@ a] ==> a ~> a
   "fromInt" --> \a -> [IsNum @@ a] ==> TInt ~> a
-  ["zero'", "one'"] ---> \a -> [IsComponent @@ a] ==> (a :: Ty)
+  ["zero'", "one'"] ---> \a -> {- [IsComponent @@ a] ==> -- TODO -} (a :: Ty)
   "texture'" --> TUnit ~> TVec 2 TFloat ~> TVec 4 TFloat
+  "toMat" --> \v m a b i j x -> [m ~~ TFMat a b, a ~~ TFVec i x, b ~~ TFVec j x, v ~~ TFVec j a] ==> v ~> m
+        -- Vec 2 (Vec 4 Float) ~> Mat 4 2 Float
+  "." --> \a b c -> (b ~> c) ~> (a ~> b) ~> a ~> c
+  "foldl'" --> \a b -> (b ~> a ~> b) ~> b ~> TList a ~> b
+  "sortBy" --> \a -> (a ~> a ~> TCon0 "Ordering") ~> TList a ~> TList a
+  "compare" --> \a -> [IsNum @@ a] ==> a ~> a ~> TCon0 "Ordering"
 
   -- temporary?
   ["Tup", "Const", "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"]  ---> \a -> a ~> a
@@ -366,7 +374,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "FragmentOutRastDepth"--> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth TFloat) a] ==> t
                                                                 ~> TFragmentOut b
 
-  "VertexOut"           --> \a t -> [t ~~ TFFTRepr' a] ==> TVec 4 TFloat ~> TFloat ~> TTuple [] ~> a ~> TVertexOut t
+  "VertexOut"           --> \a t -> [t ~~ TFFTRepr' a] ==> TVec 4 TFloat ~> TFloat ~> TTuple []{-TODO-} ~> a ~> TVertexOut t
 
   ["LowerLeft", "UpperLeft"]
                         ---> TPointSpriteCoordOrigin
