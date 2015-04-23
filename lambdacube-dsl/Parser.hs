@@ -100,7 +100,7 @@ var = try' "variable" $ do
 
 -- qualified variable
 qVar :: P String    -- TODO
-qVar = var <|> runUnspaced (try $ sepBy (Unspaced upperCaseIdent) dot *> dot *> Unspaced var)
+qVar = var <|> runUnspaced (try' "qualified var" $ sepBy (Unspaced upperCaseIdent) dot *> dot *> Unspaced var)
 
 operator' :: P String
 operator' = try' "operator" $ do
@@ -190,10 +190,10 @@ typeSignature = TypeSig <$> do
     optional (operator "!") *> typeExp
   return (n, t)
 
-typePattern :: P ()
-typePattern = choice [void_ (try typeVar), void_ typeConstructor, void_ $ parens ((void_ typeConstructor <* some typePattern) <|> typePattern)]
+typePattern :: P ()  -- TODO
+typePattern = choice [void_ (try' "type var" typeVar), void_ typeConstructor, void_ $ parens ((void_ typeConstructor <* some typePattern) <|> typePattern)]
 
-tcExp :: P ()
+tcExp :: P ()   -- TODO
 tcExp = void_ $ try $ do
   let tyC = void_ $ typeConstraint >> typePattern
   tyC <|> (void_ $ parens (sepBy1 tyC comma))
@@ -257,7 +257,7 @@ addPos f m = do
 
 typeAtom :: P TyR
 typeAtom = typeRecord
-    <|> addPos Ty' (TVar_ <$> try typeVar)
+    <|> addPos Ty' (TVar_ <$> try' "type var" typeVar)
     <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
     <|> addPos Ty' (TCon_ <$> typeConstructor)
     <|> addPos tTuple (parens (sepBy ty comma))
@@ -315,7 +315,7 @@ appP xs = error $ "appP: " ++ ppShow xs
 valuePatternAtom :: P (Pat Range)
 valuePatternAtom
     =   addPos Pat (const Wildcard_ <$> operator "_")
-    <|> addPos Pat (PAt_ <$> try (var <* operator "@") <*> valuePatternAtom)
+    <|> addPos Pat (PAt_ <$> try' "at pattern" (var <* operator "@") <*> valuePatternAtom)
     <|> addPos PVar var
     <|> addPos (\p c -> PCon p c []) (try dataConstructor)
     <|> tuplePattern
@@ -457,7 +457,7 @@ expressionOpAtom = do
 
     op = addPos eVar $
             ident lcOps
-        <|> try (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
+        <|> try' "backquote operator" (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
         <|> (dot *> pure ".")
 
 expressionAtom :: P ExpR
@@ -469,15 +469,10 @@ expressionAtom =
   recordFieldProjection <|>
   addPos eVar qVar <|>
   addPos eVar dataConstructor <|>
-  unit <|>
-  try tuple <|>
-  parens expression
+  tuple
  where
   tuple :: P ExpR
-  tuple = addPos eTuple $ parens $ (:) <$> expression <*> some (comma *> expression)
-
-  unit :: P ExpR
-  unit = try $ addPos eTuple $ parens $ pure []
+  tuple = addPos eTuple $ parens $ sepBy expression comma
 
   recordExp :: P ExpR
   recordExp = addPos eRecord $ braces $ sepBy ((,) <$> var <* colon <*> expression) comma
@@ -506,6 +501,7 @@ expressionAtom =
       nil (p1, p2) = eVar (p2 {- - 1 -}, p2) "[]"
       cons a b = eApp (eApp (eVar mempty{-TODO-} ":") a) b
 
+eTuple _ [x] ps = x ps
 eTuple p xs ps = ETuple p $ map ($ ps) xs
 eRecord p xs ps = ERecord p (map (id *** ($ ps)) xs)
 eNamedRecord p n xs ps = ENamedRecord p n (map (id *** ($ ps)) xs)
