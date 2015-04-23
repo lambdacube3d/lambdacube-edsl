@@ -211,7 +211,7 @@ inference_ primFunMap m = runExcept $ fst <$>
     inferDef (PVar _ n, e) = do
         e <- inferTyping e <* checkUnambError
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
-        return ((PVar undefined n, e), f)
+        return ((PVar (error "inferDef") n, e), f)
 
 selectorTypes :: [DataDef (Subst, Typing)] -> [(EName, Typing)]
 selectorTypes dataDefs =
@@ -298,6 +298,11 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
         te <- withTyping tr $ inferTyping e
         ty <- unifyTypings [getTagP' p_ ++ getTag' tx, getTag' te] $ \[_, te] -> te
         return $ ELet ty p tx te
+    ETyping_ e ty -> do
+        te@(Exp _ e') <- inferTyping e
+        ty <- inferKind' ty
+        t <- unifyTypings_ False [getTag' te ++ [ty]] $ \[ty] -> ty
+        return $ Exp t e' -- t <$ te -- ETyping t te $ error "inferTyping TODO" -- _ ty
     ECase_ e cs -> do
         te <- inferTyping e
         cs <- forM cs $ \(p, exp) -> do
@@ -309,7 +314,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
         return $ ECase ty te cs
     _ -> do
         e' <- T.mapM inferTyping e
-        (\t -> Exp t $ setTag undefined undefined e') <$> case e' of
+        (\t -> Exp t $ setTag (error "e1") (error "e2") e') <$> case e' of
             EApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             EFieldProj_ fn -> fieldProjType fn
             ERecord_ Nothing (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
@@ -320,9 +325,6 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             ETuple_ te -> unifyTypings (map (getTag') te) TTuple
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            ETyping_ e ty -> do
-                ty <- inferKind' ty
-                unifyTypings_ False [getTag' e ++ [ty]] $ \[ty] -> ty
             EAlt_ a b -> unifyTypings [getTag' a ++ getTag' b] $ \[x] -> x
             ENext_ -> newV $ \t -> t :: Ty          -- TODO
             x -> error $ "inferTyping: " ++ ppShow x

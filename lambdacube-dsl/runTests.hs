@@ -63,7 +63,7 @@ main = do
   putStrLn $ "Catching errors (must get an error)"
   forM_ testToReject $ \n -> do
     putStr $ " # " ++ n ++ " ... "
-    result <- typeCheckLC "./tests/reject" n
+    result <- runMM "./tests/reject" $ typeCheckLC n
     case result of
       Left e -> checkErrorMsg n e
       _ -> putStrLn $ "\n!FAIL - failed to catch error"
@@ -71,10 +71,10 @@ main = do
   putStrLn $ "Checking valid pipelines"
   forM_ testToAccept $ \n -> do
     putStr $ " # " ++ n ++ " ... "
-    result <- either Left (Right . fmap (reduce mempty mempty . toCore mempty) . getMain) <$> typeCheckLC "./tests/accept" n
+    result <- runMM "./tests/accept" $ fmap (reduce mempty mempty . toCore mempty) <$> getDef_ n "main"
     let ef = okFileName n
     case result of
       Left e -> putStrLn $ "\n!FAIL\n" ++ e
-      Right (Left x) -> writeFile ef (ppShow x) >> putStrLn "OK (no main)"
-      Right (Right x) -> writeFile ef (ppShow x) >> putStrLn "OK"
+      Right Nothing -> putStrLn "OK (no main)"
+      Right (Just x) -> writeFile ef (ppShow x) >> putStrLn "OK"
 

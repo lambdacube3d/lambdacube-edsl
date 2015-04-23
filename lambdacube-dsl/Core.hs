@@ -7,6 +7,8 @@
 module Core where
 
 import Control.Monad.State
+import Control.Monad.Reader
+import Control.Monad.Except
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as F
 import Data.Traversable
@@ -14,6 +16,7 @@ import Control.DeepSeq
 import Debug.Trace
 import Data.Monoid
 import Data.Maybe
+import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -165,38 +168,60 @@ showUnreducedTest = test'' id >>= writeFile "testUnreduced.tmp"
 test = test'' (reduce mempty mempty) >>= putStrLn
 test'' f = test_ $ ppShow . f
 
-test_ f = either error f <$> parseAndToCoreMain "./tests/accept" "gfx03" -- "example01"
+test_ f = either error f <$> runMM "./tests/accept" (parseAndToCoreMain "gfx03") -- "example01"
 
-reducedMain :: FilePath -> String -> IO (Either String Exp)
-reducedMain path fname = fmap (reduce mempty mempty) <$> parseAndToCoreMain path fname
+reducedMain :: FilePath -> MName -> IO (Either String Exp)
+reducedMain path fname =
+    runMM path $ reduce mempty mempty <$> parseAndToCoreMain fname
 
-parseAndToCoreMain :: FilePath -> String -> IO (Either String Exp)
-parseAndToCoreMain path fname =
-  either Left (either Left (Right . toCore mempty) . getMain) <$> typeCheckLC path fname
+runMM path = runExceptT . flip evalStateT mempty . flip runReaderT path
 
-typeCheckLC :: FilePath -> String -> IO (Either String (Module (Subst, Typing)))
-typeCheckLC path mname = do
- let fname = lcModuleFile path mname
- b <- doesFileExist fname
- if not b then return $ Left $ "can't find module " ++ fname
- else do
-  res <- parseLC fname
-  case res of
-    Left m -> return $ Left m
-    Right (src, e) -> do
-      ms <- mapM (typeCheckLC path . qData) $ moduleImports e
-      return $ case joinPolyEnvs . (PolyEnv primFunMap:) . map exportEnv <$> sequence ms of
-        Left m -> Left m
-        Right (Left m) -> Left m
-        Right (Right env) -> case inference_ env e of
-            Right x   -> Right x
-            Left m    -> Left $ m src
+parseAndToCoreMain :: MName -> MM Exp
+parseAndToCoreMain m = toCore mempty <$> getDef m "main"
+
+type Modules = [(MName, Module (Subst, Typing))]
+
+type MM = ReaderT FilePath (StateT Modules (ExceptT String IO))
+
+typeCheckLC :: MName -> MM (Module (Subst, Typing))
+typeCheckLC mname = do
+ c <- gets $ lookup mname
+ case c of
+    Just m -> return m
+    _ -> do
+     fname <- asks $ flip lcModuleFile mname
+     b <- liftIO $ doesFileExist fname
+     if not b then throwError $ "can't find module " ++ fname
+     else do
+      res <- liftIO $ parseLC fname
+      case res of
+        Left m -> throwError m
+        Right (src, e) -> do
+          ms <- mapM (typeCheckLC . qData) $ moduleImports e
+          case joinPolyEnvs $ PolyEnv primFunMap: map exportEnv ms of
+            Left m -> throwError m
+            Right env -> case inference_ env e of
+                Left m    -> throwError $ m src
+                Right x   -> do
+                    modify ((mname, x):)
+                    return x
 
 lcModuleFile path n = path </> (n ++ ".lc")
 
-getMain :: Module (Subst, Typing) -> Either String (AST.Exp (Subst, Typing))
-getMain m = case [e | (AST.PVar _ "main", e) <- definitions m] of
-    [e] -> Right e
-    [] -> Left "main not found"
-    _ -> Left "multiple main found"
+getDef :: MName -> EName -> MM (AST.Exp (Subst, Typing))
+getDef m d = do
+    maybe (throwError $ d ++ " is not defined in " ++ m) return =<< getDef_ m d
+
+getDef_ :: MName -> EName -> MM (Maybe (AST.Exp (Subst, Typing)))
+getDef_ m d = do
+    typeCheckLC m
+    ms <- get
+    case [ buildLet (concatMap (definitions . snd) (reverse dss) ++ reverse ps) e
+         | ((m', defs): dss) <- tails ms, m' == m, ((AST.PVar _ d', e):ps) <- tails $ reverse $ definitions defs, d' == d] of
+        [e] -> return $ Just e
+        [] -> return Nothing
+
+buildLet :: [(AST.Pat (Subst, Typing), AST.Exp (Subst, Typing))] -> AST.Exp (Subst, Typing) -> AST.Exp (Subst, Typing)
+buildLet es e = foldr (\(p, e) x -> AST.ELet (getTag e) p e x) e es
+
 
