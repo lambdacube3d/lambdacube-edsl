@@ -6,7 +6,7 @@ module CoreToGLSL where
 
 import Debug.Trace
 import Text.Show.Pretty (ppShow)
-import "prettyclass" Text.PrettyPrint.HughesPJClass (pPrint)
+import "pretty" Text.PrettyPrint.HughesPJClass (pPrint)
 
 import Data.List
 import Data.Set (Set)
@@ -113,6 +113,8 @@ genGLSLSubst s e = case e of
   EVar (VarE a _) -> [Map.findWithDefault a a s]
   A1 "Uni" (A1 _ (ELString s)) -> [s]
   A1 "Smooth" a -> genGLSLSubst s a
+  A1 "Flat" a -> genGLSLSubst s a
+  A1 "NoPerspecitve" a -> genGLSLSubst s a
   A1 "Const" a -> genGLSLSubst s a
   A4 "V4F" a b c d -> functionCall s "vec4" [a,b,c,d]
   --ETuple a -> ["*TUPLE*"]
