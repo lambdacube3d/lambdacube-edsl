@@ -10,6 +10,7 @@ import System.Environment
 import System.Directory
 import System.FilePath
 import System.IO
+--import Prelude
 
 import Type
 import CompositionalLC
@@ -48,7 +49,7 @@ main = do
                 putStrLn "-------------------------------------------"
                 putStr "Accept new error message (y/n)? "
                 c <- getChar
-                if c `elem` "yY\n" then do
+                if c `elem` ("yY\n" :: String) then do
                         writeFile ef e
                         putStrLn " Accepted."
                     else putStrLn " Not Accepted."

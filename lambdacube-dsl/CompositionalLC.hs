@@ -6,6 +6,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-} -- for ghc-7.10.1
 module CompositionalLC
     ( inference, inference_
     , composeSubst
