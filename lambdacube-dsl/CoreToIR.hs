@@ -26,7 +26,7 @@ type CG = State IR.Pipeline
 
 emptyPipeline = IR.Pipeline mempty mempty mempty mempty mempty mempty
 testCompile = test'' (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
-testCompile' = test_ $ return . (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
+testCompile' = test_ $ (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
 run = testCompile >>= putStrLn
 
 imageToSemantic :: IR.Image -> (IR.ImageSemantic, IR.Value)
