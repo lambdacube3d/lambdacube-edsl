@@ -12,6 +12,7 @@ import Foreign
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable as SV
 
 --import Control.DeepSeq
 
@@ -54,7 +55,7 @@ import Graphics.Rendering.OpenGL.Raw.Core33
     )
 
 import Data.Word
-import Data.Bitmap.Pure
+import Codec.Picture
 
 import Backend.GL.Type
 import Backend.GL.Util
@@ -94,12 +95,18 @@ arrayType buf arrIdx = arrType $! bufArrays buf V.! arrIdx
 -- Texture
 
 -- FIXME: Temporary implemenation
-compileTexture2DRGBAF :: Bool -> Bool -> Bitmap Word8 -> IO TextureData
+compileTexture2DRGBAF :: Bool -> Bool -> DynamicImage -> IO TextureData
 compileTexture2DRGBAF isMip isClamped bitmap = do
     glPixelStorei gl_UNPACK_ALIGNMENT 1
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     glBindTexture gl_TEXTURE_2D to
     let (width,height) = bitmapSize bitmap
+        bitmapSize (ImageRGB8 (Image w h _)) = (w,h)
+        bitmapSize (ImageRGBA8 (Image w h _)) = (w,h)
+        bitmapSize _ = error "unsupported image type :("
+        withBitmap (ImageRGB8 (Image w h v)) f = SV.unsafeWith v $ f (w,h) 3 0
+        withBitmap (ImageRGBA8 (Image w h v)) f = SV.unsafeWith v $ f (w,h) 4 0
+        withBitmap _ _ = error "unsupported image type :("
         wrapMode = case isClamped of
             True    -> gl_CLAMP_TO_EDGE
             False   -> gl_REPEAT

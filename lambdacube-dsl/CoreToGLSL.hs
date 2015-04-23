@@ -1,10 +1,12 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE FlexibleContexts #-}
 module CoreToGLSL where
 
 import Debug.Trace
 import Text.Show.Pretty (ppShow)
-import Text.PrettyPrint.HughesPJClass (pPrint)
+import "prettyclass" Text.PrettyPrint.HughesPJClass (pPrint)
 
 import Data.List
 import Data.Set (Set)

@@ -16,7 +16,7 @@ import IR as IR
 
 import System.Environment
 
-import Codec.Image.STB hiding (Image)
+--import Codec.Image.STB hiding (Image)
 
 --import Type
 --import CompositionalLC hiding (test)
