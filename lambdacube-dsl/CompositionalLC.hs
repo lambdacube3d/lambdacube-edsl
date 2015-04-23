@@ -45,7 +45,7 @@ instance Substitute Ty where
     subst st ty | Map.null st = ty -- optimization
     subst st (Ty_ k tv@(TVar_ a)) = fromMaybe (Ty_ (subst st k) tv) $ Map.lookup a st
     subst st (Ty_ k t) = Ty_ (subst st k) $ subst st <$> t
-    subst _ (StarToStar f n) = StarToStar f n
+    subst _ (StarToStar n) = StarToStar n
 
 instance Substitute a => Substitute [a]                 where subst = fmap . subst
 instance Substitute a => Substitute (Typing_ a)         where subst = fmap . subst
@@ -69,7 +69,7 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
 
         singSubst n t (TVar a) | a == n = t
         singSubst n t (Ty_ k ty) = Ty_ (singSubst n t k) $ singSubst n t <$> ty
-        singSubst _ _ (StarToStar f n) = StarToStar f n
+        singSubst _ _ (StarToStar n) = StarToStar n
 
         -- make single tvar substitution; check infinite types
         bindVar n t = do
@@ -80,7 +80,7 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
                 else put $ Map.insert n t' $ singSubst n t' <$> s
 
         unifyTy :: Ty -> Ty -> StateT Subst TCM ()
-        unifyTy (StarToStar C 0) Star = return () -- TODO: generalize
+        unifyTy (StarToStar 0) Star = return () -- TODO: generalize
         unifyTy Star Star = return ()
         unifyTy (TVar u) (TVar v) | u == v = return ()
         unifyTy (TVar u) _ = bindVar u b

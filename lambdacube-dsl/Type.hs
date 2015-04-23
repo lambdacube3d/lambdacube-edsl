@@ -97,20 +97,20 @@ pattern PTuple a b = Pat a (PTuple_ b)
 pattern PRecord a b = Pat a (PRecord_ b)
 pattern Wildcard a = Pat a Wildcard_
 
-data Exp a = Exp a (Exp_ a (Exp a))
+data Exp a = Exp a (Exp_ (Typing_ (Ty' a)) (Pat a) (Exp a))
   deriving (Show,Eq,Ord)
 
-data Exp_ a b
+data Exp_ t p b
   = ELit_      Lit
   | EVar_      EName
   | EApp_      b b
-  | ELam_      (Pat a) b
-  | ELet_      (Pat a) b b
-  | ECase_     b [(Pat a, b)]
+  | ELam_      p b
+  | ELet_      p b b
+  | ECase_     b [(p, b)]
   | ETuple_    [b]
   | ERecord_   [(FName, b)]
   | EFieldProj_ FName
-  | ETyping_   b (Typing_ (Ty' a))
+  | ETyping_   b t
 --  | EFix EName Exp
   | EAlt_      b b  -- function alternatives
   | ENext_     -- go to next alternative
@@ -127,7 +127,7 @@ pattern ERecord a b = Exp a (ERecord_ b)
 pattern EFieldProj a c = Exp a (EFieldProj_ c)
 pattern ETyping a b c = Exp a (ETyping_ b c)
 
-setTag :: (Ty' x -> Ty' a) -> (Pat x -> Pat a) -> Exp_ x b -> Exp_ a b
+setTag :: (t -> t') -> (p -> p') -> Exp_ t p b -> Exp_ t' p' b
 setTag tf f = \case
     ELit_      x       -> ELit_ x
     EVar_      x       -> EVar_ x
@@ -138,7 +138,7 @@ setTag tf f = \case
     ETuple_    x       -> ETuple_ x
     ERecord_   x       -> ERecord_ x
     EFieldProj_ x      -> EFieldProj_ x
-    ETyping_   x y     -> ETyping_ x $ tf <$> y
+    ETyping_   x y     -> ETyping_ x $ tf y
 
 data Frequency -- frequency kind
   -- frequency values
@@ -156,7 +156,7 @@ type PrimitiveType = Ty
 type Nat = Ty
 
 data Ty
-    = StarToStar Frequency !Int
+    = StarToStar !Int
     | Ty_ Ty (Ty_ Ty)
   deriving (Show,Eq,Ord)
 
@@ -210,19 +210,18 @@ data Ty_ a
 -}
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
-pattern StarT = StarToStar C 0
-pattern StarStar = StarToStar C 1
-pattern Ty a = Ty_ StarT a
+pattern Star = StarToStar 0
+pattern StarStar = StarToStar 1
+pattern Ty a = Ty_ Star a
 
-pattern Star = StarT --Ty (Star_ C)
 pattern NatKind = Ty NatKind_
 pattern TVar b = Ty (TVar_ b)
 pattern TApp k a b = Ty_ k (TApp_ a b)
 pattern TCon k a = Ty_ k (TCon_ a)
-pattern TCon0 a = TCon StarT a
-pattern TCon1 a b = TApp StarT (TCon StarStar a) b
-pattern TCon2 a b c = TApp StarT (TApp StarStar (TCon (StarToStar C 2) a) b) c
-pattern TCon3 a b c d = TApp StarT (TApp StarStar (TApp (StarToStar C 2) (TCon (StarToStar C 3) a) b) c) d
+pattern TCon0 a = TCon Star a
+pattern TCon1 a b = TApp Star (TCon StarStar a) b
+pattern TCon2 a b c = TApp Star (TApp StarStar (TCon (StarToStar 2) a) b) c
+pattern TCon3 a b c d = TApp Star (TApp StarStar (TApp (StarToStar 2) (TCon (StarToStar 3) a) b) c) d
 pattern TArr a b = Ty (TArr_ a b)
 pattern Forall a b = Ty (Forall_ a b)
 pattern TConstraintArg a b = Ty (TConstraintArg_ a b)
@@ -354,7 +353,7 @@ instance FreeVars a => FreeVars (Ty' a) where
 instance FreeVars Ty where
     freeVars = \case
         Ty_ k x -> freeVars k `mappend` freeVars x
-        StarToStar _ _ -> mempty
+        StarToStar _ -> mempty
 instance FreeVars Range where freeVars = mempty -- TODO: eliminate
 
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
