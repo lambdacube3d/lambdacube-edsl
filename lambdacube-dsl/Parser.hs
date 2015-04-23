@@ -389,8 +389,12 @@ expression = do
       lambda <|>
       eApp <$> addPos eVar (const "negate" <$> operator "-") <*> expressionOpAtom <|> -- TODO: precedence
       expressionOpAtom
-  optional (operator "::" *> void_ typeExp)  -- TODO
-  return e
+  do
+      do
+        operator "::"
+        t <- typeExp
+        return $ eTyping e $ [] ==> t
+    <|> return e
  where
   lambda :: P ExpR
   lambda = (\(ps, e) -> foldr eLam e ps) <$> (operator "\\" *> ((,) <$> many valuePatternAtom <* operator "->" <*> expression))
