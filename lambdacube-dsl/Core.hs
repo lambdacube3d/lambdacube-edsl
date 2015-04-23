@@ -24,9 +24,12 @@ import qualified CompositionalLC as AST
 import qualified Type as AST
 import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp, Exp_ (..), Pat, PVar, PLit, PTuple)
 import Text.Trifecta (Result(..))
+import System.Directory
+import System.FilePath
 
 import Text.Show.Pretty
 import Parser (parseLC)
+import Typing (primFunMap)
 
 data Kind
   = Star
@@ -159,33 +162,40 @@ showReducedTest = test'' (reduce mempty mempty) >>= writeFile "test.tmp"
 showUnreducedTest = test'' id >>= writeFile "testUnreduced.tmp"
 
 test = test'' (reduce mempty mempty) >>= putStrLn
-test'' f = test_ $ return . ppShow . f
+test'' f = test_ $ ppShow . f
 
-test_ f = do
-  r <- parseAndToCoreMain "tests/accept/gfx03.lc" -- "gfx03.lc" -- "example01.lc"
---  (src, r) <- parseLC_ "tests/accept/instantiate.lc" -- "gfx03.lc" -- "example01.lc"
---  (src, r) <- parseLC_ "tests/accept/id.lc" -- "gfx03.lc" -- "example01.lc"
-  putStrLn "====================="
-  case r of
-    Right e -> f e
-    Left m -> do
-      error $ show m
+test_ f = either error f <$> parseAndToCoreMain "./tests/accept" "gfx03" -- "example01"
 
-parseAndToCoreMain :: String -> IO (Either String Exp)
-parseAndToCoreMain fname = do
+reducedMain :: FilePath -> String -> IO (Either String Exp)
+reducedMain path fname = fmap (reduce mempty mempty) <$> parseAndToCoreMain path fname
+
+parseAndToCoreMain :: FilePath -> String -> IO (Either String Exp)
+parseAndToCoreMain path fname =
+  either Left (either Left (Right . toCore mempty) . getMain) <$> typeCheckLC path fname
+
+typeCheckLC :: FilePath -> String -> IO (Either String (Module (Subst, Typing)))
+typeCheckLC path mname = do
+ let fname = lcModuleFile path mname
+ b <- doesFileExist fname
+ if not b then return $ Left $ "can't find module " ++ fname
+ else do
   res <- parseLC fname
   case res of
-    Left m -> do
-      return (Left $ show m)
+    Left m -> return $ Left m
     Right (src, e) -> do
-      case inference e of
-        Right t   -> do
-          return $ Right $ toCore mempty $ getMain t
-        Left m    -> do
-          return $ Left $ m src
+      ms <- mapM (typeCheckLC path . qData) $ moduleImports e
+      return $ case joinPolyEnvs . (PolyEnv primFunMap:) . map exportEnv <$> sequence ms of
+        Left m -> Left m
+        Right (Left m) -> Left m
+        Right (Right env) -> case inference_ env e of
+            Right x   -> Right x
+            Left m    -> Left $ m src
 
+lcModuleFile path n = path </> (n ++ ".lc")
+
+getMain :: Module (Subst, Typing) -> Either String (AST.Exp (Subst, Typing))
 getMain m = case [e | (AST.PVar _ "main", e) <- definitions m] of
-    [e] -> e
-    [] -> error "main not found"
-    _ -> error "multiple main found"
+    [e] -> Right e
+    [] -> Left "main not found"
+    _ -> Left "multiple main found"
 

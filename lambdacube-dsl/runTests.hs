@@ -14,15 +14,15 @@ import System.IO
 
 import Type
 import CompositionalLC
+import Core
 import Parser
-import Typing (primFunMap)
 
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
   hSetBuffering stdin NoBuffering
-  let acceptPath = "./tests/accept/"
-      rejectPath = "./tests/reject/"
+  let acceptPath = "./tests/accept"
+      rejectPath = "./tests/reject"
       errorFileName lc = dropExtension lc ++ ".error"
 
   args <- getArgs
@@ -32,7 +32,7 @@ main = do
     [] -> do
       toAccept <- filter (\n -> ".lc" == takeExtension n) <$> getDirectoryContents acceptPath
       toReject <- filter (\n -> ".lc" == takeExtension n) <$> getDirectoryContents rejectPath
-      return (map (acceptPath ++) toAccept,map (rejectPath ++) toReject)
+      return (map dropExtension toAccept,map dropExtension toReject)
     _ -> return (samplesToAccept,[])
 
   let checkErrorMsg n e = doesFileExist ef >>= \b -> case b of
@@ -60,32 +60,16 @@ main = do
 
   putStrLn $ "Catching errors (must get an error)"
   forM_ testToReject $ \n -> do
-    result <- parseLC' n
+    result <- typeCheckLC "./tests/reject" n
     case result of
       Left e -> checkErrorMsg n e
       _ -> putStrLn $ " # FAIL - " ++ n ++ " failed to catch error"
 
   putStrLn $ "Checking valid pipelines"
   forM_ testToAccept $ \n -> do
-    result <- parseLC' n
+    result <- either Left (Right . fmap (toCore mempty) . getMain) <$> typeCheckLC "./tests/accept" n
     putStrLn $ case result of
       Left e -> " # FAIL - " ++ n ++ "\n" ++ e
-      _ -> " * OK - " ++ n
-
-parseLC' :: String -> IO (Either String (Module (Subst, Typing)))
-parseLC' fname = do
- b <- doesFileExist fname
- if not b then return $ Left $ "can't find module " ++ fname
- else do
-  res <- parseLC fname
-  case res of
-    Left m -> return $ Left m
-    Right (src, e) -> do
-      ms <- mapM (parseLC' . ("./tests/accept/" ++) . (++ ".lc") . qData) $ moduleImports e
-      return $ case joinPolyEnvs . (PolyEnv primFunMap:) . map exportEnv <$> sequence ms of
-        Left m -> Left m
-        Right (Left m) -> Left m
-        Right (Right env) -> case inference_ env e of
-            Right x   -> Right x
-            Left m    -> Left $ m src
+      Right (Left _) -> " * OK (no main) - " ++ n
+      Right (Right x) -> {- length (show x) `seq` -} (" * OK - " ++ n)
 
