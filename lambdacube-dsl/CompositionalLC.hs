@@ -80,7 +80,11 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
                 else put $ Map.insert n t' $ singSubst n t' <$> s
 
         unifyTy :: Ty -> Ty -> StateT Subst TCM ()
-        unifyTy (StarToStar 0) Star = return () -- TODO: generalize
+
+        -- TODO: generalize
+        unifyTy (StarToStar 0) Star = return ()
+        unifyTy (TArr Star Star) StarStar = return ()
+
         unifyTy Star Star = return ()
         unifyTy (TVar u) (TVar v) | u == v = return ()
         unifyTy (TVar u) _ = bindVar u b
@@ -209,19 +213,22 @@ inference_ primFunMap m = runExcept $ fst <$>
 
 selectorTypes :: [DataDef (Subst, Typing)] -> [(EName, Typing)]
 selectorTypes dataDefs =
-    [ (sel, [] ==> res ~> convTy t)
-    | DataDef n vs cs <- dataDefs
-    , let k = foldr (~>) Star (replicate (length vs) Star)
-          res = foldr (~>) (Ty_ k $ TCon_ n) $ map (Ty_ Star . TVar_) vs
+    [ (sel, [] ==> tyConResTy d ~> convTy t)
+    | d@(DataDef n vs cs) <- dataDefs
     , ConDef cn tys <- cs
     , FieldTy (Just sel) t <- tys
     ]
 
+tyConResTy (DataDef n vs cs)
+    = foldl app (Ty_ k $ TCon_ n) $ zip [i-1,i-2..] $ map (Ty_ Star . TVar_) vs
+  where
+    app x (i, y) = TApp (StarToStar i) x y
+    k = StarToStar i
+    i = length vs
+
 tyConTypes dataDefs =
-    [ (cn, [] ==> foldr (~>) res (map (typingType{-TODO-} . snd . getTag . fieldType) tys))
-    | DataDef n vs cs <- dataDefs
-    , let k = foldr (~>) Star (replicate (length vs) Star)
-          res = foldr (~>) (Ty_ k $ TCon_ n) $ map (Ty_ Star . TVar_) vs
+    [ (cn, [] ==> foldr (~>) (tyConResTy d) (map (convTy . fieldType) tys))
+    | d@(DataDef n vs cs) <- dataDefs
     , ConDef cn tys <- cs
     ]
 
@@ -303,7 +310,11 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
         (\t -> Exp t $ setTag undefined undefined e') <$> case e' of
             EApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             EFieldProj_ fn -> fieldProjType fn
-            ERecord_ (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
+            ERecord_ Nothing (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
+            ERecord_ (Just n) (unzip -> (fs, es)) -> do -- TODO: handle field names
+                (s', nt) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
+                (s, t) <- unifyTypings ([nt]: map getTag' es) $ \(tf: ts) v -> [tf ~~~ foldr (~>) v ts] ==> v
+                return (s <> s', t)
             ETuple_ te -> unifyTypings (map (getTag') te) TTuple
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n

@@ -249,11 +249,14 @@ addPos f m = do
 typeAtom :: P TyR
 typeAtom = typeRecord
     <|> addPos Ty' (TVar_ <$> try typeVar)
-    <|> try (addPos Ty' $ parens $ pure $ TCon_ "()")
     <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
     <|> addPos Ty' (TCon_ <$> typeConstructor)
-    <|> addPos Ty' (TTuple_ <$> parens (sepBy ty comma))
+    <|> addPos tTuple (parens (sepBy ty comma))
     <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "[]")) (brackets ty)
+
+tTuple :: Range -> [TyR] -> TyR
+tTuple p [t] = t
+tTuple p ts = Ty' p $ TTuple_ ts
 
 typeClassDef :: P ()
 typeClassDef = void_ $ do
@@ -450,7 +453,7 @@ expressionAtom =
   recordExp = addPos ERecord $ braces $ sepBy ((,) <$> var <* colon <*> expression) comma
 
   recordExp' :: P (Exp Range)
-  recordExp' = try $ dataConstructor {-TODO-} *> addPos ERecord (braces $ sepBy ((,) <$> var <* keyword "=" <*> expression) comma)
+  recordExp' = try $ addPos (uncurry . ENamedRecord) ((,) <$> dataConstructor <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma))
 
   recordFieldProjection :: P (Exp Range)
   recordFieldProjection = try $ addPos (uncurry . flip . EApp) $ (,) <$> addPos EVar var <*> addPos EFieldProj (dot *> var)

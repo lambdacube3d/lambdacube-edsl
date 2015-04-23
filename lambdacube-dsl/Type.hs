@@ -108,7 +108,7 @@ data Exp_ t p b
   | ELet_      p b b
   | ECase_     b [(p, b)]
   | ETuple_    [b]
-  | ERecord_   [(FName, b)]
+  | ERecord_   (Maybe FName) [(FName, b)]
   | EFieldProj_ FName
   | ETyping_   b t
 --  | EFix EName Exp
@@ -123,7 +123,8 @@ pattern ELam a b c = Exp a (ELam_ b c)
 pattern ELet a b c d = Exp a (ELet_ b c d)
 pattern ECase a b c = Exp a (ECase_ b c)
 pattern ETuple a b = Exp a (ETuple_ b)
-pattern ERecord a b = Exp a (ERecord_ b)
+pattern ERecord a b = Exp a (ERecord_ Nothing b)
+pattern ENamedRecord a n b = Exp a (ERecord_ (Just n) b)
 pattern EFieldProj a c = Exp a (EFieldProj_ c)
 pattern ETyping a b c = Exp a (ETyping_ b c)
 
@@ -136,7 +137,7 @@ setTag tf f = \case
     ELet_      x y z   -> ELet_ (f x) y z
     ECase_     x y     -> ECase_ x (map (f *** id) y)
     ETuple_    x       -> ETuple_ x
-    ERecord_   x       -> ERecord_ x
+    ERecord_   m x     -> ERecord_ m x
     EFieldProj_ x      -> EFieldProj_ x
     ETyping_   x y     -> ETyping_ x $ tf y
 
