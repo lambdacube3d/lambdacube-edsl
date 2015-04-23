@@ -11,7 +11,6 @@ import Data.Foldable (Foldable)
 import qualified Data.Foldable as F
 import Data.Traversable
 import Control.DeepSeq
-import Data.ByteString.Char8 (pack)
 import Debug.Trace
 import Data.Monoid
 import Data.Maybe
@@ -136,6 +135,11 @@ toCore sub e = case e of
 eLam (VarT n) (EApp e (EType (TVar m))) | n == m = e  -- optimization
 eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization
 eLam vt x = ELam vt x
+
+tyOf :: Exp -> Ty
+tyOf (EVar (VarE _ t)) = t
+tyOf (EApp (tyOf -> TArr _ t) _) = t
+tyOf e = error $ "tyOf " ++ ppShow e
 
 pattern Va x <- VarE x _
 pattern A0 x <- EVar (Va x)

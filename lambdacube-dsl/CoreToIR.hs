@@ -11,10 +11,10 @@ import Text.Show.Pretty
 import qualified Data.Vector as V
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as F
-import Data.ByteString.Char8 (pack,ByteString)
-import qualified Data.Trie as T
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import qualified Type as AST
 import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp, Exp_ (..), Pat, PVar, PLit, PTuple)
@@ -48,35 +48,60 @@ compilePipeline e = do
   c <- getCommands e
   modify (\s -> s {IR.commands = c})
 
+mergeSlot a b = a
+  { IR.slotUniforms = IR.slotUniforms a <> IR.slotUniforms b
+  , IR.slotStreams  = IR.slotStreams a <> IR.slotStreams b
+  , IR.slotPrograms = IR.slotPrograms a <> IR.slotPrograms b
+  }
+
 getSlot :: Exp -> CG IR.SlotName
 getSlot (A3 "Fetch" (ELit (LString slotName)) prim attrs) = do
   let slot = IR.Slot
-        { IR.slotName       = pack slotName
-        , IR.slotUniforms   = T.fromList [("MVP",IR.M44F)] -- TODO
-        , IR.slotStreams    = T.fromList (compInput attrs)
+        { IR.slotName       = slotName
+        , IR.slotUniforms   = mempty
+        , IR.slotStreams    = Map.fromList (compInput attrs)
         , IR.slotPrimitive  = compFetchPrimitive prim
-        , IR.slotPrograms   = [0] -- TODO
+        , IR.slotPrograms   = []
         }
   sv <- gets IR.slots
-  modify (\s -> s {IR.slots = sv `V.snoc` slot})
-  return $ V.length sv
+  case V.findIndex ((slotName ==) . IR.slotName) sv of
+    Nothing -> do
+      modify (\s -> s {IR.slots = sv `V.snoc` slot})
+      return $ V.length sv
+    Just i -> do
+      modify (\s -> s {IR.slots = sv V.// [(i,mergeSlot (sv V.! i) slot)]})
+      return i
+
+addProgramToSlot :: IR.ProgramName -> IR.SlotName -> CG ()
+addProgramToSlot prgName slotName = do
+  sv <- gets IR.slots
+  pv <- gets IR.programs
+  let slot = sv V.! slotName
+      prg = pv V.! prgName
+      slot' = slot
+        { IR.slotUniforms = IR.slotUniforms slot <> IR.programUniforms prg
+        , IR.slotPrograms = IR.slotPrograms slot <> [prgName]
+        }
+  modify (\s -> s {IR.slots = sv V.// [(slotName,slot')]})
 
 getProgram :: IR.SlotName -> Exp -> Exp -> CG IR.ProgramName
 getProgram slot vert frag = do
   let (vertOut,vertSrc) = genVertexGLSL vert
       fragSrc = genFragmentGLSL vertOut frag
       prg = IR.Program
-        { IR.programUniforms    = T.fromList $ Set.toList $ getUniforms vert <> getUniforms frag -- uniform input (value based uniforms only / no textures)
-        , IR.programStreams     = T.fromList [("v",("position",IR.V4F))] -- :: Trie (ByteString,InputType)  -- vertex shader input attribute name -> (slot attribute name, attribute type)
-        , IR.programInTextures  = T.empty -- :: Trie InputType               -- all textures (uniform textures and render textures) referenced by the program
+        { IR.programUniforms    = Map.fromList $ Set.toList $ getUniforms vert <> getUniforms frag -- uniform input (value based uniforms only / no textures)
+        , IR.programStreams     = Map.fromList [("v",("position",IR.V4F))] -- :: Trie (ByteString,InputType)  -- vertex shader input attribute name -> (slot attribute name, attribute type)
+        , IR.programInTextures  = mempty -- :: Trie InputType               -- all textures (uniform textures and render textures) referenced by the program
         , IR.programOutput      = [("f0",IR.V4F)] -- TODO
-        , IR.vertexShader       = trace vertSrc $ pack vertSrc
+        , IR.vertexShader       = trace vertSrc vertSrc
         , IR.geometryShader     = mempty -- :: Maybe ByteString
-        , IR.fragmentShader     = trace fragSrc $ pack fragSrc
+        , IR.fragmentShader     = trace fragSrc fragSrc
         }
   pv <- gets IR.programs
   modify (\s -> s {IR.programs = pv `V.snoc` prg})
-  return $ V.length pv
+  let prgName = V.length pv
+  addProgramToSlot prgName slot
+  return prgName
 
 getCommands :: Exp -> CG [IR.Command]
 getCommands e = case e of
@@ -90,7 +115,7 @@ getCommands e = case e of
     pure [IR.SetRenderTarget rt, IR.ClearRenderTarget (map imageToSemantic i)]
   Exp e -> F.foldrM (\a b -> (<> b) <$> getCommands a) [] e
 
-getUniforms :: Exp -> Set (ByteString,IR.InputType)
+getUniforms :: Exp -> Set (String,IR.InputType)
 getUniforms e = case e of
   A1 "Uni" a -> Set.fromList $ compInput a
   Exp e -> F.foldMap getUniforms e
@@ -174,8 +199,8 @@ compFrag x = case x of
 
 compInput x = case x of
   ETuple a -> concatMap compInput a
-  A1 "IV4F" (ELit (LString s)) -> [(pack s, IR.V4F)]
-  A1 "IM44F" (ELit (LString s)) -> [(pack s, IR.M44F)]
+  A1 "IV4F" (ELit (LString s)) -> [(s, IR.V4F)]
+  A1 "IM44F" (ELit (LString s)) -> [(s, IR.M44F)]
   x -> error $ "compInput " ++ show x
 
 compFetchPrimitive x = case x of
