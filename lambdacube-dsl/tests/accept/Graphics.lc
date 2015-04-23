@@ -33,7 +33,7 @@ snoc' v s = let V3 x y z = unpack' v in pack' $ V4 x y z s
 drop4 :: Vec 4 Float -> Vec 3 Float
 drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
 
-drop3 :: Vec 3 Float -> V2F
+drop3 :: Vec 3 Float -> Vec 2 Float
 drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
 
 mkRasterContext :: CommonAttrs -> RasterContext Triangle
@@ -188,7 +188,7 @@ data Deform
     | D_Text6
     | D_Text7
 -}
-mkDeform :: V2F -> Vec 3 Float -> Vec 3 Float -> Deform -> Vec 3 Float
+mkDeform :: Vec 2 Float -> Vec 3 Float -> Vec 3 Float -> Deform -> Vec 3 Float
 mkDeform uv normal pos d = case d of
     D_Move (Vec3 x y z) w   -> pos @+ v3V (V3 x y z) @* mkWave w
     D_Wave spread w@(Wave _ _ _ _ f)
@@ -208,10 +208,10 @@ mkDeform uv normal pos d = case d of
 data TCMod
     = TM_EntityTranslate
 -}
-mkTCMod :: Vec 3 Float -> V2F -> TCMod -> V2F
+mkTCMod :: Vec 3 Float -> Vec 2 Float -> TCMod -> Vec 2 Float
 mkTCMod pos uv m = trace (show m) $ case m of
-    TM_Scroll su sv -> uv @+ (Const $ V2 su sv :: V2F) @* (Uni (IFloat "time") :: Float)
-    TM_Scale su sv  -> uv @* (Const $ V2 su sv :: V2F)
+    TM_Scroll su sv -> uv @+ (Const $ V2 su sv :: Vec 2 Float) @* (Uni (IFloat "time") :: Float)
+    TM_Scale su sv  -> uv @* (Const $ V2 su sv :: Vec 2 Float)
     TM_Stretch w    -> let p    = floatV 1 @/ mkWave w 
                            v0_5 = floatV 0.5
                            off  = v0_5 @- v0_5 @* p
@@ -240,7 +240,7 @@ mkTCMod pos uv m = trace (show m) $ case m of
                                     in uv @+ sin' (pack' $ V2 offU offV) @* floatV amp
     _ -> uv
 
-mkTexCoord :: Vec 3 Float -> Vec 3 Float -> StageAttrs -> V2F -> V2F -> V2F
+mkTexCoord :: Vec 3 Float -> Vec 3 Float -> StageAttrs -> Vec 2 Float -> Vec 2 Float -> Vec 2 Float
 mkTexCoord pos normal sa uvD uvL = foldl' (mkTCMod pos) uv $ saTCMod sa
   where
     uv = case saTCGen sa of
@@ -257,7 +257,7 @@ mkTexCoord pos normal sa uvD uvL = foldl' (mkTCMod pos) uv $ saTCMod sa
                                                            t    = Const $ V3 tx ty tz :: Vec 3 Float
                                                        in pack' $ V2 (pos @. s) (pos @. t)
 
-mkVertexShader :: CommonAttrs -> StageAttrs -> (Vec 3 Float,Vec 3 Float,V2F,V2F,Vec 4 Float) -> VertexOut () (V2F,Vec 4 Float)
+mkVertexShader :: CommonAttrs -> StageAttrs -> (Vec 3 Float,Vec 3 Float,Vec 2 Float,Vec 2 Float,Vec 4 Float) -> VertexOut () (Vec 2 Float,Vec 4 Float)
 mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) ZT (Smooth uv, Smooth color)
   where
     worldMat    = Uni (IM44F "worldMat")
@@ -270,7 +270,7 @@ mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) ZT (Smooth uv, Smooth
     uv          = mkTexCoord pos n sa d l
     color       = mkColor ca sa c
 
-mkFragmentShader :: StageAttrs -> Exp F (V2F,Vec 4 Float) -> FragmentOut (Depth Float, Color (Vec 4 Float))
+mkFragmentShader :: StageAttrs -> Exp F (Vec 2 Float,Vec 4 Float) -> FragmentOut (Depth Float, Color (Vec 4 Float))
 mkFragmentShader sa uvrgba = FragmentOutRastDepth color
   where
     (uv,rgba)   = untup2 uvrgba
@@ -286,7 +286,7 @@ mkFragmentShader sa uvrgba = FragmentOutRastDepth color
       where
         sampler     = Sampler LinearFilter em $ TextureSlot name (Texture2D (Float RGBA) n1)
 
-mkFilterFunction :: StageAttrs -> FragmentFilter (V2F,Vec 4 Float)
+mkFilterFunction :: StageAttrs -> FragmentFilter (Vec 2 Float,Vec 4 Float)
 mkFilterFunction sa = case saAlphaFunc sa of
     Nothing -> PassAll
     Just f  -> Filter $ \uvrgba ->

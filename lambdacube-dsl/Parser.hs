@@ -230,7 +230,10 @@ ty = foldr1 tArr <$> sepBy1 tyApp (operator "->")
 
 -- compose ranges through getTag
 infixl 9 <->
-a <-> b = (fst $ getTag a, snd $ getTag b)
+a <-> b = ord (fst $ getTag a, snd $ getTag b)
+  where
+    ord (a, b) | a > b = (b, a)
+               | otherwise = (a, b)
 
 tyApp :: P TyR
 tyApp = typeAtom >>= f

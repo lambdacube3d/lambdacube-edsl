@@ -83,6 +83,7 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
 
         -- TODO: generalize
         unifyTy (StarToStar 0) Star = return ()
+        unifyTy (StarToStar 1) (TArr Star Star) = return ()
         unifyTy (TArr Star Star) StarStar = return ()
 
         unifyTy Star Star = return ()
@@ -269,7 +270,6 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)
             TTuple_ ts -> unifyTypings (map ((star:) . getTag') ts) $ \_ -> Star
-            TVec_ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TMat_ _ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v

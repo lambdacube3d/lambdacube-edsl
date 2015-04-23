@@ -193,7 +193,7 @@ data Ty_ a
 
   -- lambdacube types
   | TNat_    Int
-  | TVec_    Int a          -- invariant property: Int = 2,3,4;  a = Bool, Int, Word, Float
+--  | TVec_    Int a          -- invariant property: Int = 2,3,4;  a = Bool, Int, Word, Float
   | TMat_    Int Int a      -- invariant property: Int = 2,3,4;  a = Float
 
   -- GADT/special (two frequencies)
@@ -230,7 +230,8 @@ pattern TTuple b = Ty (TTuple_ b)
 pattern TRecord b = Ty (TRecord_ b)
 
 pattern TNat a = Ty_ NatKind (TNat_ a)
-pattern TVec a b = Ty (TVec_ a b)
+pattern VecKind = TArr NatKind StarStar
+pattern TVec a b = TApp Star (TApp StarStar (TCon VecKind "Vec") (TNat a)) b
 pattern TMat a b c = Ty (TMat_ a b c)
 
 -- basic types
