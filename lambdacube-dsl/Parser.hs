@@ -339,13 +339,25 @@ valueDef = do
         return (n, id)
     )
   localIndentation Gt $ do
+    e <- rhsWhere
+    return $ ValueDef (n, f e)
+
+rhsWhere = do
     d <- expression
     do
         do
           keyword "where"
           l <- localIndentation Ge $ localAbsoluteIndentation $ some (valueDef <|> typeSignature)
-          return (ValueDef (n, f $ eLets l d))
-      <|> return (ValueDef (n, f d))
+          return (eLets l d)
+      <|> return d
+
+rhs :: P (Exp Range)
+rhs = x
+  <|> compileGuards <$> (many $ (,) <$> (operator "|" *> expression) <*> x)
+  where
+    x = operator "->" *> rhsWhere
+    compileGuards = foldr addGuard (Exp mempty ENext_)
+    addGuard (b, x) y = eApp (eApp (eApp (EVar mempty "ifThenElse") b) x) y
 
 application :: [Exp Range] -> Exp Range
 application [e] = e
@@ -413,14 +425,6 @@ groupDefinitions = concatMap g . groupBy f
 
 eTyping :: Exp Range -> Typing_ TyR -> Exp Range
 eTyping a b = ETyping (a <-> typingType{-!-} b) a b
-
-rhs :: P (Exp Range)
-rhs = x
-  <|> compileGuards <$> (many $ (,) <$> (operator "|" *> expression) <*> x)
-  where
-    x = operator "->" *> expression
-    compileGuards = foldr addGuard (Exp mempty ENext_)
-    addGuard (b, x) y = eApp (eApp (eApp (EVar mempty "ifThenElse") b) x) y
 
 expressionOpAtom :: P (Exp Range)
 expressionOpAtom = do
