@@ -28,8 +28,7 @@ module Backend.GL.Util (
     primitiveToFetchPrimitive,
     primitiveToGLType,
     inputTypeToTextureTarget,
-    toTrie,
-    fromTrie
+    toTrie
 ) where
 
 import Control.Applicative
@@ -360,9 +359,6 @@ import Backend.GL.Type
 
 toTrie :: Map String a -> Trie a
 toTrie m = T.fromList [(pack k,v) | (k,v) <- Map.toList m]
-
-fromTrie :: Trie a -> Map String a
-fromTrie t = Map.fromList [(unpack k,v) | (k,v) <- T.toList t]
 
 setSampler :: GLint -> Int32 -> IO ()
 setSampler i v = glUniform1i i $ fromIntegral v
