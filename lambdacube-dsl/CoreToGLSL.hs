@@ -140,8 +140,28 @@ genGLSLSubst s e = case e of
     | all (isIntegral . tyOf) [a,b] -> binOp s "%" a b
     | otherwise -> functionCall s "mod" [a,b]
 
-  -- TODO: Bit-wise Functions
-  -- TODO: Logic Functions
+  -- Bit-wise Functions
+  A2 "PrimBAnd" a b -> binOp s "&" a b
+  A2 "PrimBAndS" a b -> binOp s "&" a b
+  A2 "PrimBOr" a b -> binOp s "|" a b
+  A2 "PrimBOrS" a b -> binOp s "|" a b
+  A2 "PrimBXor" a b -> binOp s "^" a b
+  A2 "PrimBXorS" a b -> binOp s "^" a b
+  A1 "PrimBNot" a -> ["~"] <> parens (genGLSLSubst s a)
+  A2 "PrimBShiftL" a b -> binOp s "<<" a b
+  A2 "PrimBShiftLS" a b -> binOp s "<<" a b
+  A2 "PrimBShiftR" a b -> binOp s ">>" a b
+  A2 "PrimBShiftRS" a b -> binOp s ">>" a b
+
+  -- Logic Functions
+  A2 "PrimAnd" a b -> binOp s "&&" a b
+  A2 "PrimOr" a b -> binOp s "||" a b
+  A2 "PrimXor" a b -> binOp s "^" a b
+  A1 "PrimNot" a
+    | all (isScalar . tyOf) [a] -> ["!"] <> parens (genGLSLSubst s a)
+    | otherwise -> functionCall s "not" [a]
+  A1 "PrimAny" a -> functionCall s "any" [a]
+  A1 "PrimAll" a -> functionCall s "all" [a]
 
   -- Angle and Trigonometry Functions
   A1 "PrimACos" a -> functionCall s "acos" [a]
@@ -221,6 +241,41 @@ genGLSLSubst s e = case e of
   A2 "PrimMulVecMat" a b -> binOp s "*" a b
   A2 "PrimMulMatMat" a b -> binOp s "*" a b
 
+  -- Vector and Scalar Relational Functions
+  A2 "PrimLessThan" a b
+    | all (isScalarNum . tyOf) [a,b] -> binOp s "<" a b
+    | otherwise -> functionCall s "lessThan" [a,b]
+  A2 "PrimLessThanEqual" a b
+    | all (isScalarNum . tyOf) [a,b] -> binOp s "<=" a b
+    | otherwise -> functionCall s "lessThanEqual" [a,b]
+  A2 "PrimGreaterThan" a b
+    | all (isScalarNum . tyOf) [a,b] -> binOp s ">" a b
+    | otherwise -> functionCall s "greaterThan" [a,b]
+  A2 "PrimGreaterThanEqual" a b
+    | all (isScalarNum . tyOf) [a,b] -> binOp s ">=" a b
+    | otherwise -> functionCall s "greaterThanEqual"   [a,b]
+  A2 "PrimEqualV" a b
+    | all (isScalar . tyOf) [a,b] -> binOp s "==" a b
+    | otherwise -> functionCall s "equal" [a,b]
+  A2 "PrimEqual" a b -> binOp s "==" a b
+  A2 "PrimNotEqualV" a b
+    | all (isScalar . tyOf) [a,b] -> binOp s "!=" a b
+    | otherwise -> functionCall s "notEqual" [a,b]
+  A2 "PrimNotEqual" a b -> binOp s "!=" a b
+
+  -- Fragment Processing Functions
+  A1 "PrimDFdx" a -> functionCall s "dFdx" [a]
+  A1 "PrimDFdy" a -> functionCall s "dFdy" [a]
+  A1 "PrimFWidth" a -> functionCall s "fwidth" [a]
+
+  -- Noise Functions
+  A1 "PrimNoise1" a -> functionCall s "noise1" [a]
+  A1 "PrimNoise2" a -> functionCall s "noise2" [a]
+  A1 "PrimNoise3" a -> functionCall s "noise3" [a]
+  A1 "PrimNoise4" a -> functionCall s "noise4" [a]
+
+  -- TODO: Texture Lookup Functions
+
   Exp e -> F.foldMap (genGLSLSubst s) e
 
 isMatrix :: Ty -> Bool
@@ -233,3 +288,9 @@ isIntegral TInt = True
 isIntegral (TVec _ TWord) = True
 isIntegral (TVec _ TInt) = True
 isIntegral _ = False
+
+isScalarNum :: Ty -> Bool
+isScalarNum ty = elem ty [TInt, TWord, TFloat]
+
+isScalar :: Ty -> Bool
+isScalar ty = elem ty [TBool, TInt, TWord, TFloat]
