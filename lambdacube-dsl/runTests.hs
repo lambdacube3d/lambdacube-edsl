@@ -11,6 +11,7 @@ import System.Directory
 import System.FilePath
 import System.IO
 --import Prelude
+import Text.Show.Pretty
 
 import Type
 import CompositionalLC
@@ -23,7 +24,8 @@ main = do
   hSetBuffering stdin NoBuffering
   let acceptPath = "./tests/accept"
       rejectPath = "./tests/reject"
-      errorFileName lc = dropExtension lc ++ ".error"
+      errorFileName lc = rejectPath </> (lc ++ ".error")
+      okFileName lc = acceptPath </> (lc ++ ".res")
 
   args <- getArgs
   let (verboseFlags,samplesToAccept) = partition (== "-v") args
@@ -40,7 +42,7 @@ main = do
         True -> do
             e' <- readFile ef
             if e == e' then ok else do
-                putStrLn $ "Error message of " ++ n ++ " has changed."
+                putStrLn $ "Error message has changed."
                 putStrLn "Old message: "
                 putStrLn e'
                 putStrLn "-------------------------------------------"
@@ -55,21 +57,24 @@ main = do
                     else putStrLn " Not Accepted."
         where
             ef = errorFileName n
-            ok = putStrLn $ " * OK - " ++ n ++ " " ++ if verbose then e else []
+            ok = putStrLn $ "OK" ++ if verbose then e else []
 
 
   putStrLn $ "Catching errors (must get an error)"
   forM_ testToReject $ \n -> do
+    putStr $ " # " ++ n ++ " ... "
     result <- typeCheckLC "./tests/reject" n
     case result of
       Left e -> checkErrorMsg n e
-      _ -> putStrLn $ " # FAIL - " ++ n ++ " failed to catch error"
+      _ -> putStrLn $ "\n!FAIL - failed to catch error"
 
   putStrLn $ "Checking valid pipelines"
   forM_ testToAccept $ \n -> do
-    result <- either Left (Right . fmap (toCore mempty) . getMain) <$> typeCheckLC "./tests/accept" n
-    putStrLn $ case result of
-      Left e -> " # FAIL - " ++ n ++ "\n" ++ e
-      Right (Left _) -> " * OK (no main) - " ++ n
-      Right (Right x) -> {- length (show x) `seq` -} (" * OK - " ++ n)
+    putStr $ " # " ++ n ++ " ... "
+    result <- either Left (Right . fmap (reduce mempty mempty . toCore mempty) . getMain) <$> typeCheckLC "./tests/accept" n
+    let ef = okFileName n
+    case result of
+      Left e -> putStrLn $ "\n!FAIL\n" ++ e
+      Right (Left x) -> writeFile ef (ppShow x) >> putStrLn "OK (no main)"
+      Right (Right x) -> writeFile ef (ppShow x) >> putStrLn "OK"
 

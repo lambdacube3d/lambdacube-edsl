@@ -123,7 +123,8 @@ toCore sub e = case e of
       ctr = map VarC $ constraints $ snd $ getTag a
       pv = map VarT $ Set.toList $ polyVars $ snd $ getTag a
   AST.ELam t (AST.PVar tn n) a -> ELam (VarE n $ toType' tn) $ toCore' a
-  _ -> error $ "toCore: " ++ show e
+--  AST.ERecord 
+  _ -> error $ "toCore: " ++ ppShow e
  where
     toCore' = toCore sub'
     s = fst $ getTag e

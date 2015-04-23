@@ -305,6 +305,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "V3" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> TVec 3 a
   "V4" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> a ~> TVec 4 a
   "[]" --> \a -> TList a
+  ":" --> \a -> a ~> TList a ~> TList a
   "$" --> \a b -> (a ~> b) ~> a ~> b
   "negate" --> \a -> [IsNum @@ a] ==> a ~> a
   "fromInt" --> \a -> [IsNum @@ a] ==> TInt ~> a
