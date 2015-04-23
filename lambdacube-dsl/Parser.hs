@@ -6,8 +6,11 @@ module Parser where
 import Data.ByteString.Char8 (unpack,pack)
 import Data.Char
 import Data.List
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Monoid
 import Control.Applicative
+import Control.Arrow
 import Control.Monad
 import Text.Parser.Expression
 import Text.Parser.Token.Style
@@ -110,10 +113,11 @@ varId = var <|> parens (ident lcOps :: P String)
 --------------------------------------------------------------------------------
 
 data Definition a
-  = ValueDef (ValueDef a)
+  = ValueDef (Pat a, Prec -> Exp a)
   | TypeSig (String, TyR)
   | DDataDef (DataDef a)
-    deriving (Show)
+  | DFixity EName (FixityDir, Int)
+--    deriving (Show)
 
 moduleName :: P (Q Name)
 moduleName = do
@@ -137,17 +141,19 @@ moduleDef = do
         , const [] <$> typeSynonym
         , const [] <$> typeClassDef
         , (:[]) <$> valueDef
-        , const [] <$> fixityDef
+        , fixityDef
         , const [] <$> typeClassInstanceDef
         ])
+    let ps = Map.fromList [(n, p) | DFixity n p <- defs]
     return $ Module
       { moduleImports = idefs
       , moduleExports = ()
       , typeAliases   = ()
-      , definitions   = [d | ValueDef d <- defs]
+      , definitions   = [id *** ($ ps) $ d | ValueDef d <- defs]
       , dataDefs      = [d | DDataDef d <- defs]
       , typeClasses   = ()
       , instances     = ()
+      , precedences   = ps     -- TODO: check multiple definitions
       }
 
 
@@ -285,12 +291,15 @@ typeClassInstanceDef = void_ $ do
       localAbsoluteIndentation $ do
         many valueDef
 
-fixityDef :: P ()
-fixityDef = void_ $ do
-  keyword "infix" <|> keyword "infixl" <|> keyword "infixr"
+fixityDef :: P [Definition Range]
+fixityDef = do
+  dir <-    FNoDir  <$ keyword "infix" 
+        <|> FDLeft  <$ keyword "infixl"
+        <|> FDRight <$ keyword "infixr"
   localIndentation Gt $ do
-    natural
-    ident lcOps :: P String
+    i <- natural
+    ns <- sepBy1 (ident lcOps) comma
+    return [DFixity n (dir, fromIntegral i) | n <- ns]
 
 undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
@@ -319,7 +328,7 @@ valuePatternAtom
   recordPat :: P (Pat Range)
   recordPat = addPos PRecord $ braces (sepBy ((,) <$> var <* colon <*> valuePattern) comma)
 
-eLam p e = ELam (p <-> e) p e
+eLam p e_ ps = ELam (p <-> e) p e where e = e_ ps
 
 valueDef :: P (Definition Range)
 valueDef = do
@@ -351,49 +360,55 @@ rhsWhere = do
           return (eLets l d)
       <|> return d
 
-rhs :: P (Exp Range)
+rhs :: P ExpR
 rhs = x
   <|> compileGuards <$> (many $ (,) <$> (operator "|" *> expression) <*> x)
   where
     x = operator "->" *> rhsWhere
-    compileGuards = foldr addGuard (Exp mempty ENext_)
-    addGuard (b, x) y = eApp (eApp (eApp (EVar mempty "ifThenElse") b) x) y
+    compileGuards = foldr addGuard (const $ Exp mempty ENext_)
+    addGuard (b, x) y = eApp (eApp (eApp (eVar mempty "ifThenElse") b) x) y
 
-application :: [Exp Range] -> Exp Range
+application :: [ExpR] -> ExpR
 application [e] = e
 application es = eApp (application $ init es) (last es)
 
-eApp a b = EApp (a <-> b) a b
+eApp :: ExpR -> ExpR -> ExpR
+eApp = liftA2 eApp'
 
-expression :: P (Exp Range)
+type ExpR' = Exp Range
+
+eApp' :: ExpR' -> ExpR' -> ExpR'
+eApp' a b = EApp (a <-> b) a b
+
+expression :: P ExpR
 expression = do
   e <-
       ifthenelse <|>
       caseof <|>
       letin <|>
       lambda <|>
-      eApp <$> addPos EVar (const "negate" <$> operator "-") <*> expressionOpAtom <|> -- TODO: precedence
+      eApp <$> addPos eVar (const "negate" <$> operator "-") <*> expressionOpAtom <|> -- TODO: precedence
       expressionOpAtom
   optional (operator "::" *> void_ typeExp)  -- TODO
   return e
  where
-  lambda :: P (Exp Range)
+  lambda :: P ExpR
   lambda = (\(ps, e) -> foldr eLam e ps) <$> (operator "\\" *> ((,) <$> many valuePatternAtom <* operator "->" <*> expression))
 
-  ifthenelse :: P (Exp Range)
-  ifthenelse = addPos (\r (a, b, c) -> eApp (eApp (eApp (EVar r "ifThenElse") a) b) c) $
+  ifthenelse :: P ExpR
+  ifthenelse = addPos (\r (a, b, c) -> eApp (eApp (eApp (eVar r "ifThenElse") a) b) c) $
         (,,) <$ keyword "if" <*> expression <* keyword "then" <*> expression <* keyword "else" <*> expression
 
-  caseof :: P (Exp Range)
-  caseof = addPos Exp $ do
+  caseof :: P ExpR
+  caseof = addPos (ret' Exp) $ do
     keyword "case"
     e <- expression
     keyword "of"
-    ps <- localIndentation Ge $ localAbsoluteIndentation $ some $
+    pds <- localIndentation Ge $ localAbsoluteIndentation $ some $
         (,) <$> valuePattern <*> localIndentation Gt rhs
-    return $ ECase_ e ps
+    return $ \ps -> ECase_ (e ps) $ map (id *** ($ ps)) pds
 
-  letin :: P (Exp Range)
+  letin :: P ExpR
   letin = do
       keyword "let"
       l <- localIndentation Ge $ localAbsoluteIndentation $ some valueDef
@@ -401,10 +416,11 @@ expression = do
       a <- expression
       return $ eLets l a
 
-eLets l a = foldr ($) a . map eLet $ groupDefinitions l
+eLets l a ps = foldr ($) (a ps) . map eLet $ groupDefinitions l
   where
-    eLet (ValueDef (a, b)) = ELet (a <-> b) a b
+    eLet (ValueDef (a, b_)) = ELet (a <-> b) a b where b = b_ ps
 
+groupDefinitions :: [Definition Range] -> [Definition Range]
 groupDefinitions = concatMap g . groupBy f
   where
     f (h -> Just x) (h -> Just y) = x == y
@@ -421,53 +437,55 @@ groupDefinitions = concatMap g . groupBy f
     g xs@(ValueDef (p, _): _) = [ValueDef (p, foldr1 eAlt [e | ValueDef (_, e) <- xs])]
     g xs = xs
 
-    eAlt a b = Exp (a <-> b) $ EAlt_ a b
+    eAlt a_ b_ ps = Exp (a <-> b) $ EAlt_ a b where a = a_ ps; b = b_ ps
 
-eTyping :: Exp Range -> Typing_ TyR -> Exp Range
-eTyping a b = ETyping (a <-> typingType{-!-} b) a b
+type ExpR = Prec -> Exp Range
 
-expressionOpAtom :: P (Exp Range)
+eTyping :: ExpR -> Typing_ TyR -> ExpR
+eTyping a_ b ps = ETyping (a <-> typingType{-!-} b) a b  where a = a_ ps
+
+expressionOpAtom :: P ExpR
 expressionOpAtom = do
     e <- application <$> some expressionAtom
     f e <$> op <*> expression  <|>  return e
   where
     f e op e' = application [op, e, e']
 
-    op = addPos EVar $
+    op = addPos eVar $
             ident lcOps
         <|> try (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
         <|> (dot *> pure ".")
 
-expressionAtom :: P (Exp Range)
+expressionAtom :: P ExpR
 expressionAtom =
   listExp <|>
-  addPos eLit literalExp <|>
+  addPos (ret eLit) literalExp <|>
   recordExp <|>
   recordExp' <|>
   recordFieldProjection <|>
-  addPos EVar qVar <|>
-  addPos EVar dataConstructor <|>
+  addPos eVar qVar <|>
+  addPos eVar dataConstructor <|>
   unit <|>
   try tuple <|>
   parens expression
  where
-  tuple :: P (Exp Range)
-  tuple = addPos ETuple $ parens $ (:) <$> expression <*> some (comma *> expression)
+  tuple :: P ExpR
+  tuple = addPos eTuple $ parens $ (:) <$> expression <*> some (comma *> expression)
 
-  unit :: P (Exp Range)
-  unit = try $ addPos ETuple $ parens $ pure []
+  unit :: P ExpR
+  unit = try $ addPos eTuple $ parens $ pure []
 
-  recordExp :: P (Exp Range)
-  recordExp = addPos ERecord $ braces $ sepBy ((,) <$> var <* colon <*> expression) comma
+  recordExp :: P ExpR
+  recordExp = addPos eRecord $ braces $ sepBy ((,) <$> var <* colon <*> expression) comma
 
-  recordExp' :: P (Exp Range)
-  recordExp' = try $ addPos (uncurry . ENamedRecord) ((,) <$> dataConstructor <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma))
+  recordExp' :: P ExpR
+  recordExp' = try $ addPos (uncurry . eNamedRecord) ((,) <$> dataConstructor <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma))
 
-  recordFieldProjection :: P (Exp Range)
-  recordFieldProjection = try $ flip eApp <$> addPos EVar var <*>
-        addPos EFieldProj (runUnspaced $ dot *> Unspaced var)
+  recordFieldProjection :: P ExpR
+  recordFieldProjection = try $ flip eApp <$> addPos eVar var <*>
+        addPos (ret EFieldProj) (runUnspaced $ dot *> Unspaced var)
 
-  eLit p l@LInt{} = eApp (EVar p "fromInt") $ ELit p l
+  eLit p l@LInt{} = eApp' (EVar p "fromInt") $ ELit p l
   eLit p l = ELit p l
 
   literalExp :: P Lit
@@ -478,11 +496,18 @@ expressionAtom =
       LString <$> stringLiteral <|>
       (LNat . fromIntegral <$ operator "#" <*> integer) <?> "type level nat"
 
-  listExp :: P (Exp Range)
+  listExp :: P ExpR
   listExp = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep expression
     where
-      nil (p1, p2) = EVar (p2 {- - 1 -}, p2) "[]"
-      cons a b = eApp (eApp (EVar mempty{-TODO-} ":") a) b
+      nil (p1, p2) = eVar (p2 {- - 1 -}, p2) "[]"
+      cons a b = eApp (eApp (eVar mempty{-TODO-} ":") a) b
+
+eTuple p xs ps = ETuple p $ map ($ ps) xs
+eRecord p xs ps = ERecord p (map (id *** ($ ps)) xs)
+eNamedRecord p n xs ps = ENamedRecord p n (map (id *** ($ ps)) xs)
+ret f x y = const $ f x y
+ret' f x y ps = f x (y ps)
+eVar p n = \ps -> EVar p n
 
 indentState = mkIndentationState 0 infIndentation True Ge
 

@@ -13,6 +13,10 @@ import Material hiding (Blending)
 
 --import Debug.Trace
 
+infixl 6 +., +, -., -
+infixl 7 *., *, /., /
+infix  4 <, <=, >, >=
+
 (+.) = PrimAddS
 (+) = PrimAdd
 (-.) = PrimSubS

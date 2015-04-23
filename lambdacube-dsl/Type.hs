@@ -373,6 +373,8 @@ instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap fre
 data Q a = Q {qualifier :: [String], qData :: a} -- | UQ a
     deriving (Show)
 
+type Prec = Map EName (FixityDir, Int)
+
 -- AST
 data Module a
   = Module
@@ -383,6 +385,7 @@ data Module a
   , dataDefs      :: [DataDef a]
   , typeClasses   :: ()
   , instances     :: ()
+  , precedences   :: Prec
   }
     deriving (Show)
 
@@ -400,6 +403,9 @@ data TypeClassDefinition
 
 data TypeClassInstance -- name, type, [definition]
   = TypeClassInstance
+
+data FixityDir = FNoDir | FDLeft | FDRight
+    deriving (Show)
 
 
 class GetTag c where getTag :: c a -> a
