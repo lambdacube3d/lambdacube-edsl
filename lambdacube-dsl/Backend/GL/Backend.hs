@@ -1,11 +1,11 @@
-{-# LANGUAGE TupleSections, MonadComprehensions #-}
+{-# LANGUAGE TupleSections, MonadComprehensions, ViewPatterns #-}
 module Backend.GL.Backend where
 
 import Control.Applicative
 import Control.Monad
 import Control.Monad.State
 import Data.Bits
-import Data.ByteString.Char8 (ByteString)
+import Data.ByteString.Char8 (ByteString,pack)
 import Data.IORef
 import Data.IntMap (IntMap)
 import Data.Maybe (isNothing)
@@ -15,6 +15,7 @@ import Data.Vector (Vector,(!),(//))
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.Foldable as F
 import qualified Data.IntMap as IM
+import qualified Data.Map as Map
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Vector as V
@@ -198,7 +199,7 @@ compileProgram uniTrie p = do
     putStrLn $ "compile program: " ++ show po
     let createAndAttach src t = do
             o <- glCreateShader t
-            compileShader o [src]
+            compileShader o $ map pack [src]
             glAttachShader po o
             putStr "    + compile shader source: " >> printGLStatus
             return o
@@ -207,7 +208,7 @@ compileProgram uniTrie p = do
         Nothing -> []
         Just s  -> [createAndAttach s gl_GEOMETRY_SHADER]
 
-    forM_ (zip (programOutput p) [0..]) $ \((n,t),i) -> SB.useAsCString n $ \pn -> do
+    forM_ (zip (programOutput p) [0..]) $ \((pack -> n,t),i) -> SB.useAsCString n $ \pn -> do
         putStrLn ("variable " ++ show n ++ " attached to color number #" ++ show i)
         glBindFragDataLocation po i $ castPtr pn
     putStr "    + setup shader output mapping: " >> printGLStatus
@@ -224,10 +225,10 @@ compileProgram uniTrie p = do
     (attributes,attributesType) <- queryStreams po
     print uniforms
     print attributes
-    when (uniformsType /= programUniforms p `unionL` programInTextures p) $ fail "shader program uniform input mismatch!"
-    when (attributesType /= fmap snd (programStreams p)) $ fail "shader program stream input mismatch!"
+    when (uniformsType /= (toTrie $ programUniforms p) `unionL` (toTrie $ programInTextures p)) $ fail "shader program uniform input mismatch!"
+    when (attributesType /= fmap snd (toTrie $ programStreams p)) $ fail "shader program stream input mismatch!"
     -- the public (user) pipeline and program input is encoded by the slots, therefore the programs does not distinct the render and slot textures input
-    let inUniNames = programUniforms p
+    let inUniNames = toTrie $ programUniforms p
         (inUniforms,inTextures) = L.partition (\(n,v) -> T.member n inUniNames) $ T.toList $ uniforms
         texUnis = [n | (n,_) <- inTextures, T.member n uniTrie]
     return $ GLProgram
@@ -235,8 +236,8 @@ compileProgram uniTrie p = do
         , programObject         = po
         , inputUniforms         = T.fromList inUniforms
         , inputTextures         = T.fromList inTextures
-        , inputTextureUniforms  = S.fromList texUnis
-        , inputStreams          = T.fromList [(n,(idx,attrName)) | ((n,idx),(_,(attrName,_))) <- zip (T.toList attributes) (T.toList $ programStreams p)]
+        , inputTextureUniforms  = S.fromList $ texUnis
+        , inputStreams          = T.fromList [(n,(idx,pack attrName)) | ((n,idx),(_,(attrName,_))) <- zip (T.toList $ attributes) (T.toList $ toTrie $ programStreams p)]
         }
 
 compileSampler :: SamplerDescriptor -> IO GLSampler
@@ -355,7 +356,7 @@ allocPipeline p = do
     trgs <- V.mapM (compileRenderTarget (textures p) texs) $ targets p
     prgs <- V.mapM (compileProgram uniTrie) $ programs p
     -- texture unit mapping ioref trie
-    texUnitMapRefs <- T.fromList <$> mapM (\k -> (k,) <$> newIORef 0) (S.toList $ S.fromList $ concat $ V.toList $ V.map (T.keys . programInTextures) $ programs p)
+    texUnitMapRefs <- T.fromList <$> mapM (\k -> (k,) <$> newIORef 0) (S.toList $ S.fromList $ concat $ V.toList $ V.map (T.keys . toTrie . programInTextures) $ programs p)
     let (cmds,st) = runState (mapM (compileCommand texUnitMapRefs smps texs trgs prgs) $ commands p) initCGState
     input <- newIORef Nothing
     -- default Vertex Array Object
@@ -368,7 +369,7 @@ allocPipeline p = do
         , glCommands        = cmds
         , glSlotPrograms    = V.map slotPrograms $ IR.slots p
         , glInput           = input
-        , glSlotNames       = V.map slotName $ IR.slots p
+        , glSlotNames       = V.map (pack . slotName) $ IR.slots p
         , glVAO             = vao
         , glTexUnitMapping  = texUnitMapRefs
         }
@@ -636,9 +637,9 @@ compileCommand texUnitMap samplers textures targets programs cmd = case cmd of
                                     return $ GLSetProgram $ programObject $ programs ! p
     SetSamplerUniform n tu      -> do
                                     p <- currentProgram <$> get
-                                    case T.lookup n (inputTextures $ programs ! p) of
+                                    case T.lookup (pack n) (inputTextures $ programs ! p) of
                                         Nothing -> fail "internal error (SetSamplerUniform)!"
-                                        Just i  -> case T.lookup n texUnitMap of
+                                        Just i  -> case T.lookup (pack n) texUnitMap of
                                             Nothing -> fail "internal error (SetSamplerUniform - IORef)!"
                                             Just r  -> return $ GLSetSamplerUniform i (fromIntegral tu) r
     SetTexture tu t             -> do

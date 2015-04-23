@@ -27,13 +27,15 @@ module Backend.GL.Util (
     compileTexture,
     primitiveToFetchPrimitive,
     primitiveToGLType,
-    inputTypeToTextureTarget
+    inputTypeToTextureTarget,
+    toTrie,
+    fromTrie
 ) where
 
 import Control.Applicative
 import Control.Exception
 import Control.Monad
-import Data.ByteString.Char8 (ByteString)
+import Data.ByteString.Char8 (ByteString,pack,unpack)
 import Data.IORef
 import Data.List as L
 import Data.Trie as T
@@ -42,6 +44,8 @@ import qualified Data.ByteString.Char8 as SB
 import qualified Data.Vector as V
 import Data.Vector.Unboxed.Mutable (IOVector)
 import qualified Data.Vector.Unboxed.Mutable as MV
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import Graphics.Rendering.OpenGL.Raw.Core33
     ( GLchar
@@ -353,6 +357,12 @@ import Graphics.Rendering.OpenGL.Raw.Core33
 
 import IR
 import Backend.GL.Type
+
+toTrie :: Map String a -> Trie a
+toTrie m = T.fromList [(pack k,v) | (k,v) <- Map.toList m]
+
+fromTrie :: Trie a -> Map String a
+fromTrie t = Map.fromList [(unpack k,v) | (k,v) <- T.toList t]
 
 setSampler :: GLint -> Int32 -> IO ()
 setSampler i v = glUniform1i i $ fromIntegral v

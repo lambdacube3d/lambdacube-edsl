@@ -131,7 +131,7 @@ data GLProgram
     , programObject         :: GLuint
     , inputUniforms         :: Trie GLint
     , inputTextures         :: Trie GLint   -- all input textures (render texture + uniform texture)
-    , inputTextureUniforms  :: Set UniformName
+    , inputTextureUniforms  :: Set ByteString
     , inputStreams          :: Trie (GLuint,ByteString)
     }
 

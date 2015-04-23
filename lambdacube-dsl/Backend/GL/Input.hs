@@ -3,7 +3,7 @@ module Backend.GL.Input where
 import Control.Applicative
 import Control.Exception
 import Control.Monad
-import Data.ByteString.Char8 (ByteString)
+import Data.ByteString.Char8 (ByteString,pack)
 import Data.IORef
 import Data.IntMap (IntMap)
 import Data.Trie (Trie)
@@ -14,6 +14,7 @@ import Foreign
 import qualified Data.ByteString.Char8 as SB
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
+import qualified Data.Map as Map
 import qualified Data.Trie as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as I
@@ -29,7 +30,7 @@ import qualified IR as IR
 schemaFromPipeline :: IR.Pipeline -> PipelineSchema
 schemaFromPipeline a = PipelineSchema (T.fromList sl) (foldl T.unionL T.empty ul)
   where
-    (sl,ul) = unzip [((n,SlotSchema p (fmap cvt s)),u) | IR.Slot n u s p _ <- V.toList $ IR.slots a]
+    (sl,ul) = unzip [((pack n,SlotSchema p (fmap cvt (toTrie s))),toTrie u) | IR.Slot n u s p _ <- V.toList $ IR.slots a]
     cvt a = case toStreamType a of
         Just v  -> v
         Nothing -> error "internal error (schemaFromPipeline)"

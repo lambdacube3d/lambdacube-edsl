@@ -3,8 +3,7 @@ module IR where
 
 import Data.Int
 import Data.Word
-import Data.ByteString.Char8 (ByteString)
-import Data.Trie (Trie)
+import Data.Map
 import Data.Vector (Vector)
 
 data V2 a = V2 !a !a deriving (Eq,Ord,Show,Read,Functor)
@@ -200,7 +199,7 @@ data FragmentOperation
 
 data AccumulationContext
     = AccumulationContext
-    { accViewportName   :: Maybe ByteString
+    { accViewportName   :: Maybe String
     , accOperations     :: [FragmentOperation]
     }
     deriving (Read,Show, Eq, Ord)
@@ -253,12 +252,12 @@ data EdgeMode
 type ProgramName = Int
 type TextureName = Int
 type SamplerName = Int
-type UniformName = ByteString
+type UniformName = String
 type SlotName = Int
 type FrameBufferComponent = Int
 type TextureUnit = Int
 type RenderTargetName = Int
-type TextureUnitMapping = Trie TextureUnit
+type TextureUnitMapping = Map UniformName TextureUnit
 
 data ImageRef
     = TextureImage  TextureName Int (Maybe Int)  -- Texture name, mip index, array index
@@ -344,21 +343,21 @@ data SamplerDescriptor
 
 data Program    -- AST, input
     = Program
-    { programUniforms   :: Trie InputType               -- uniform input (value based uniforms only / no textures)
-    , programStreams    :: Trie (ByteString,InputType)  -- vertex shader input attribute name -> (slot attribute name, attribute type)
-    , programInTextures :: Trie InputType               -- all textures (uniform textures and render textures) referenced by the program
-    , programOutput     :: [(ByteString,InputType)]
-    , vertexShader      :: ByteString
-    , geometryShader    :: Maybe ByteString
-    , fragmentShader    :: ByteString
+    { programUniforms   :: Map UniformName InputType    -- uniform input (value based uniforms only / no textures)
+    , programStreams    :: Map UniformName (String,InputType)  -- vertex shader input attribute name -> (slot attribute name, attribute type)
+    , programInTextures :: Map UniformName InputType               -- all textures (uniform textures and render textures) referenced by the program
+    , programOutput     :: [(String,InputType)]
+    , vertexShader      :: String
+    , geometryShader    :: Maybe String
+    , fragmentShader    :: String
     }
     deriving Show
 
 data Slot       -- input, primitive type
     = Slot
-    { slotName      :: ByteString
-    , slotUniforms  :: Trie InputType
-    , slotStreams   :: Trie InputType
+    { slotName      :: String
+    , slotUniforms  :: Map UniformName InputType
+    , slotStreams   :: Map String InputType
     , slotPrimitive :: FetchPrimitive
     , slotPrograms  :: [ProgramName]
     }
