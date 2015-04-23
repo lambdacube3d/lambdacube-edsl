@@ -227,6 +227,7 @@ pattern TArr a b = Ty (TArr_ a b)
 pattern Forall a b = Ty (Forall_ a b)
 pattern TConstraintArg a b = Ty (TConstraintArg_ a b)
 pattern TTuple b = Ty (TTuple_ b)
+pattern TUnit = TTuple []
 pattern TRecord b = Ty (TRecord_ b)
 
 pattern TNat a = Ty_ NatKind (TNat_ a)

@@ -13,6 +13,13 @@ import Material hiding (Blending)
 
 --import Debug.Trace
 
+(+.) = PrimAddS
+(+) = PrimAdd
+(-.) = PrimSubS
+(-) = PrimSub
+(*.) = PrimMulS
+(*) = PrimMul
+
 ifThenElse True a b = a
 ifThenElse False a b = b
 
@@ -111,14 +118,14 @@ floatF :: Float -> Float  -- V freq
 floatF = Const
 
 mkWave' :: Float -> Wave -> Float
-mkWave' off (Wave wFunc base amplitude phase freq) = floatV base + a * floatV amplitude
+mkWave' off (Wave wFunc base amplitude phase freq) = floatV base +. a *. floatV amplitude
   where
     time        = Uni (IFloat "time") :: Float
-    u           = off + floatV phase + floatV freq * time
+    u           = off +. floatV phase +. floatV freq *. time
     uv          = pack' $ V2 u (Const 0)
+    sampler     = () -- TODO --  Sampler LinearFilter Repeat $ TextureSlot name (Texture2D (Float RGBA) n1)
     V4 v _ _ _  = unpack' $ texture' sampler uv
-    a           = v * floatV 2 - floatV 1
-    sampler     = Sampler LinearFilter Repeat $ TextureSlot name (Texture2D (Float RGBA) n1)
+    a           = v *. floatV 2 -. floatV 1
     name        = case wFunc of
         WT_Sin              -> "SinTable"
         WT_Triangle         -> "TriangleTable"

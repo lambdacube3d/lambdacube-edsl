@@ -81,7 +81,7 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
 
         unifyTy :: Ty -> Ty -> StateT Subst TCM ()
 
-        -- TODO: generalize
+        -- TODO: generalize this or normalize kinds
         unifyTy (StarToStar 0) Star = return ()
         unifyTy (StarToStar 1) (TArr Star Star) = return ()
         unifyTy (TArr Star Star) StarStar = return ()
