@@ -14,6 +14,7 @@ import Data.Foldable (Foldable, toList)
 import qualified Data.Foldable as F
 import Data.Traversable
 import Control.DeepSeq
+import Control.Arrow
 import Debug.Trace
 import Data.Monoid
 import Data.Maybe
@@ -28,9 +29,11 @@ import System.Directory
 import System.FilePath
 import Text.Show.Pretty
 
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)
+import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EAlts, ENext, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)
 import qualified Type as AST
 import Typecheck hiding (Exp(..))
+
+trace' _ x = x
 
 data Kind
   = Star
@@ -93,36 +96,43 @@ pattern ELam a b = Exp (ELam_ a b)
 pattern ELet a b c = Exp (ELet_ a b c)
 pattern ECase a b = Exp (ECase_ a b)
 pattern ETuple a = Exp (ETuple_ a)
---pattern ERecord a b = Exp (ERecord_ a b)
+pattern ERecord a b = Exp (ERecord_ a b)
 --pattern EFieldProj a c = Exp (EFieldProj_ a c)
 pattern EType a = Exp (EType_ a)
 pattern EConstraint a = Exp (EConstraint_ a)
+pattern EAlts b = Exp (EAlts_ b)
+pattern ENext = Exp ENext_
 
-reduce, reduceHNF :: Subst -> Map EName Exp -> Exp -> Exp
+mkReduce :: Exp -> Exp
+mkReduce = reduce (error "impossible") mempty mempty
+
+reduce, reduceHNF :: Exp -> Subst -> Map EName Exp -> Exp -> Exp
 reduce = reduce_ True
 reduceHNF = reduce_ False
 
-reduce_ :: Bool -> Subst -> Map EName Exp -> Exp -> Exp
-reduce_ total s m exp = case exp of
-    ETuple es -> tot $ ETuple $ map (reduce s m) es
-    ELam p e -> tot $ ELam (subst s p) $ reduce s m e
+reduce_ :: Bool -> Exp -> Subst -> Map EName Exp -> Exp -> Exp
+reduce_ total cont s m exp = case exp of
+    EAlts es -> foldr (\alt x -> reduce_ total x s m alt) (error "pattern match failure") es
+    ENext -> cont
+    ETuple es -> tot $ ETuple $ map (reduce cont s m) es
+    ELam p e -> tot $ ELam (subst s p) $ reduce cont s m e
     ELit l -> ELit l
     EType t -> tot $ EType $ subst s t
     EConstraint c -> tot $ EConstraint $ subst s c
-    EVar (VarE v t) -> maybe (tot $ EVar $ VarE v $ subst s t) (reduce_ total s m) $ Map.lookup v m
+    EVar (VarE v t) -> maybe (tot $ EVar $ VarE v $ subst s t) (reduce_ total cont s m) $ Map.lookup v m
     ELet p x e' -> case defs x p of
-        Just m' -> reduce_ total s (m' <> m) e'
-        _ -> tot $ ELet (subst s p) (reduce s m x) $ reduce s m e'
-    EApp f x -> case reduceHNF s m f of
+        Just m' -> reduce_ total cont s (m' <>. m) e'
+        _ -> tot $ ELet (subst s p) (reduce cont s m x) $ reduce cont s m e'
+    EApp f x -> trace' "eapp" $ case reduceHNF cont s m f of
         ELam p e' -> case p of
             PVar (VarT v) -> case re of
-                EType x -> reduce_ total (s `composeSubst` Map.singleton v x) m e'
+                EType x -> reduce_ total cont (s `composeSubst` Map.singleton v x) m e'
             PVar (VarC v) -> case re of
                 EConstraint x -> case unifC (subst s v) x of
-                    Right s' -> reduce_ total (s `composeSubst` s') m e'
+                    Right s' -> reduce_ total cont (s `composeSubst` s') m e'
                     Left e -> error $ "reduce: " ++ e
             _ -> case defs x p of
-                Just m' -> reduce_ total s (m' <> m) e'
+                Just m' -> reduce_ total cont s (m' <>. m) e'
                 _ -> fallback
         EVar e' -> case e' of
             VarE v (Forall tv t) -> case re of
@@ -134,8 +144,8 @@ reduce_ total s m exp = case exp of
                 e -> error $ "reduce constr: " ++ show e
             _ -> fallback
         _ -> fallback
-     where re = reduce s m x
-           fallback = tot $ EApp (reduce s m f) re
+     where re = reduce cont s m x
+           fallback = tot $ EApp (reduce cont s m f) re
     e -> error $ "reduce_ " ++ ppShow e
   where
     tot x = if total then x else exp
@@ -146,22 +156,26 @@ reduce_ total s m exp = case exp of
 
     defs e = \case
         Wildcard -> mempty
-        PVar (VarE v _) -> Just $ Map.singleton v e
+        PVar (VarE v _) -> trace' (v ++ " = ...") $ Just $ Map.singleton v e
         PCon (c, _) ps     -> case getApp (c, ps) (length ps) e of
             Just (EVar (VarE c' _), xs)
-                | c == c' -> mconcat <$> sequence (zipWith defs xs ps)
+                | c == c' -> mconcat' <$> sequence (zipWith defs xs ps)
                 | otherwise -> error "defs"
             _ -> Nothing
-        PTuple ps -> case reduceHNF s m e of
-            ETuple xs ->  mconcat <$> sequence (zipWith defs xs ps)
+        PTuple ps -> case reduceHNF cont s m e of
+            ETuple xs ->  mconcat' <$> sequence (zipWith defs xs ps)
             _ -> Nothing
         p -> error $ "defs: " ++ ppShow p
 
-    getApp c n x = f [] n x where
+    getApp c n x = trace' ("getApp " ++ show n) $ f [] n x where
         f acc 0 e = Just (e, acc)
-        f acc n e = case reduceHNF s m e of
+        f acc n e = case reduceHNF cont s m e of
             EApp a b -> f (b: acc) (n-1) a
             e -> Nothing -- error $ "getApp: " ++ ppShow c ++ "\n" ++ ppShow e
+
+mconcat' = foldr (<>.) mempty
+
+m <>. n = Map.unionWithKey (\k a _ -> trace' ("redefined: " ++ k) a) m n
 
 toCorePat :: Subst -> AST.Pat (Subst, Typing) -> Pat
 toCorePat sub p = case p of
@@ -192,7 +206,9 @@ toCore sub e = case e of
       pv = map VarT $ Set.toList $ polyVars $ snd $ getTag a
   AST.ELam t p a -> ELam (toCorePat' p) $ toCore' a
   AST.ECase t e ps -> ECase (toCore' e) [(toCorePat' p, toCore' x) | (p, x) <- ps]
---  AST.ERecord
+  AST.Exp t (ERecord_ mb rv) -> ERecord mb $ map (id *** toCore') $ rv
+  AST.EAlts t xs -> EAlts $ map toCore' xs
+  AST.ENext t -> ENext
   _ -> error $ "toCore: " ++ ppShow e
  where
     toCore' = toCore sub'

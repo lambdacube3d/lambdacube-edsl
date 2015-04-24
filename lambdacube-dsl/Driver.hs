@@ -22,7 +22,7 @@ compileMain path fname = fmap IR.compilePipeline <$> reducedMain path fname
 
 reducedMain :: FilePath -> MName -> IO (Either String Exp)
 reducedMain path fname =
-    runMM path $ reduce mempty mempty <$> parseAndToCoreMain fname
+    runMM path $ mkReduce <$> parseAndToCoreMain fname
 
 runMM path = runExceptT . flip evalStateT mempty . flip runReaderT path
 

@@ -112,12 +112,63 @@ varId = var <|> parens (ident lcOps :: P String)
 
 --------------------------------------------------------------------------------
 
-data Definition a
-  = ValueDef (Pat a, Prec -> Exp a)
+type PatR = Pat Range
+type ExpR' = Exp Range
+type ExpR = Prec -> ExpR'
+
+data WhereRHS = WhereRHS GuardedRHS (Maybe [Definition])
+data GuardedRHS
+    = Guards [(ExpR, ExpR)]
+    | NoGuards ExpR
+
+data Definition
+  = ValueDef (PatR, ExpR)
+  | PreValueDef (Range, EName) [PatR] WhereRHS --(PatR, Prec -> Exp Range -> Exp Range)  -- before group
   | TypeSig (String, TyR)
-  | DDataDef (DataDef a)
+  | DDataDef (DataDef Range)
   | DFixity EName (FixityDir, Int)
---    deriving (Show)
+
+--------------------------------------------------------------------------------
+
+alts :: [ExpR] -> ExpR
+alts es_ ps = Exp (foldr1 (<-->) $ map getTag es) $ EAlts_ es  where es = map ($ ps) es_
+
+compileWhereRHS :: WhereRHS -> ExpR
+compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
+    x = compileGuardedRHS r
+
+compileGuardedRHS :: GuardedRHS -> ExpR
+compileGuardedRHS (NoGuards e) = e
+compileGuardedRHS (Guards gs) = foldr addGuard (\ps -> Exp mempty ENext_) gs
+  where
+    addGuard (b, x) y = eApp (eApp (eApp (eVar mempty "ifThenElse") b) x) y
+
+compileCases :: Range -> ExpR -> [(PatR, WhereRHS)] -> ExpR
+compileCases r e rs = eApp (alts [eLam p $ compileWhereRHS r | (p, r) <- rs]) e
+
+compileRHS :: [Definition] -> Definition
+compileRHS ds = case ds of
+    (TypeSig (_, t): PreValueDef (r, n) _ _: _)
+        -> ValueDef (PVar r n, eTyping (alts [foldr eLam (compileWhereRHS rhs) pats | PreValueDef _ pats rhs <- ds]) $ [] ==> t)
+    (PreValueDef (r, n) _ _: _)
+        -> ValueDef (PVar r n, alts [foldr eLam (compileWhereRHS rhs) pats | PreValueDef _ pats rhs <- ds])
+    [x] -> x
+
+groupDefinitions :: [Definition] -> [Definition]
+groupDefinitions = map compileRHS . groupBy f
+  where
+    f (h -> Just x) (h -> Just y) = x == y
+    f _ _ = False
+
+    h (PreValueDef (_, n) _ _) = Just n
+    h (ValueDef (p, _)) = name p        -- TODO
+    h (TypeSig (n, _)) = Just n
+    h _ = Nothing
+
+    name (PVar _ n) = Just n
+    name _ = Nothing
+
+--------------------------------------------------------------------------------
 
 moduleName :: P (Q Name)
 moduleName = do
@@ -180,7 +231,7 @@ typeSynonym = void_ $ do
     operator "="
     void_ typeExp
 
-typeSignature :: P (Definition Range)
+typeSignature :: P Definition
 typeSignature = TypeSig <$> do
   n <- try' "type signature" $ do
     n <- varId
@@ -235,11 +286,10 @@ ty = foldr1 tArr <$> sepBy1 tyApp (operator "->")
     tArr t a = Ty' (t <-> a) $ TArr_ t a
 
 -- compose ranges through getTag
-infixl 9 <->
-a <-> b = ord (fst $ getTag a, snd $ getTag b)
-  where
-    ord t@(x, y) | x > y = (fst $ getTag b, snd $ getTag a)
-                 | otherwise = t
+infixl 9 <->, <-->
+a <-> b = getTag a <--> getTag b
+(<-->) :: Range -> Range -> Range
+(a1, a2) <--> (b1, b2) = (min a1 a2, max b1 b2)
 
 tyApp :: P TyR
 tyApp = typeAtom >>= f
@@ -291,7 +341,7 @@ typeClassInstanceDef = void_ $ do
       localAbsoluteIndentation $ do
         many valueDef
 
-fixityDef :: P [Definition Range]
+fixityDef :: P [Definition]
 fixityDef = do
   dir <-    FNoDir  <$ keyword "infix" 
         <|> FDLeft  <$ keyword "infixl"
@@ -303,16 +353,16 @@ fixityDef = do
 
 undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
-valuePattern :: P (Pat Range)
+valuePattern :: P PatR
 valuePattern
     =   appP <$> some valuePatternAtom
 
-appP :: [Pat Range] -> Pat Range
+appP :: [PatR] -> PatR
 appP [p] = p
 appP (PCon r n xs: ps) = PCon r n $ xs ++ ps
 appP xs = error $ "appP: " ++ ppShow xs
 
-valuePatternAtom :: P (Pat Range)
+valuePatternAtom :: P PatR
 valuePatternAtom
     =   addPos Pat (const Wildcard_ <$> operator "_")
     <|> addPos Pat (PAt_ <$> try' "at pattern" (var <* operator "@") <*> valuePatternAtom)
@@ -322,51 +372,50 @@ valuePatternAtom
     <|> recordPat
     <|> parens valuePattern
  where
-  tuplePattern :: P (Pat Range)
+  tuplePattern :: P PatR
   tuplePattern = try' "tuple" $ addPos PTuple $ parens ((:) <$> valuePattern <*> some (comma *> valuePattern))
 
-  recordPat :: P (Pat Range)
+  recordPat :: P PatR
   recordPat = addPos PRecord $ braces (sepBy ((,) <$> var <* colon <*> valuePattern) comma)
 
 eLam p e_ ps = ELam (p <-> e) p e where e = e_ ps
 
-valueDef :: P (Definition Range)
+valueDef :: P Definition
 valueDef = do
-  (n, f) <- 
+  f <- 
     try' "definition" (do
-      n <- addPos PVar varId
+      n <- addPos (,) varId
       localIndentation Gt $ do
-        a <- many valuePatternAtom
-        operator "="
-        return (n, \d -> foldr eLam d a)
+        pats <- many valuePatternAtom
+        lookAhead $ operator "=" <|> operator "|"
+        return $ PreValueDef n pats
     )
    <|>
     try' "node definition" (do
       n <- valuePattern
       localIndentation Gt $ do
-        operator "="
-        return (n, id)
+        lookAhead $ operator "=" <|> operator "|"
+        return $ \e -> ValueDef (n, alts [compileWhereRHS e])
     )
   localIndentation Gt $ do
-    e <- rhsWhere
-    return $ ValueDef (n, f e)
+    e <- whereRHS $ operator "="
+    return $ f e
 
-rhsWhere = do
-    d <- expression
+whereRHS :: P () -> P WhereRHS
+whereRHS delim = do
+    d <- rhs delim
     do
         do
           keyword "where"
           l <- localIndentation Ge $ localAbsoluteIndentation $ some (valueDef <|> typeSignature)
-          return (eLets l d)
-      <|> return d
+          return (WhereRHS d $ Just l)
+      <|> return (WhereRHS d Nothing)
 
-rhs :: P ExpR
-rhs = x
-  <|> compileGuards <$> (many $ (,) <$> (operator "|" *> expression) <*> x)
+rhs :: P () -> P GuardedRHS
+rhs delim = NoGuards <$> xx
+  <|> Guards <$> many ((,) <$> (operator "|" *> expression) <*> xx)
   where
-    x = operator "->" *> rhsWhere
-    compileGuards = foldr addGuard (const $ Exp mempty ENext_)
-    addGuard (b, x) y = eApp (eApp (eApp (eVar mempty "ifThenElse") b) x) y
+    xx = delim *> expression
 
 application :: [ExpR] -> ExpR
 application [e] = e
@@ -374,8 +423,6 @@ application es = eApp (application $ init es) (last es)
 
 eApp :: ExpR -> ExpR -> ExpR
 eApp = liftA2 eApp'
-
-type ExpR' = Exp Range
 
 eApp' :: ExpR' -> ExpR' -> ExpR'
 eApp' a b = EApp (a <-> b) a b
@@ -404,13 +451,13 @@ expression = do
         (,,) <$ keyword "if" <*> expression <* keyword "then" <*> expression <* keyword "else" <*> expression
 
   caseof :: P ExpR
-  caseof = addPos (ret' Exp) $ do
+  caseof = addPos (uncurry . compileCases) $ do
     keyword "case"
     e <- expression
     keyword "of"
     pds <- localIndentation Ge $ localAbsoluteIndentation $ some $
-        (,) <$> valuePattern <*> localIndentation Gt rhs
-    return $ \ps -> ECase_ (e ps) $ map (id *** ($ ps)) pds
+        (,) <$> valuePattern <*> localIndentation Gt (whereRHS $ operator "->")
+    return (e, pds)
 
   letin :: P ExpR
   letin = do
@@ -420,30 +467,10 @@ expression = do
       a <- expression
       return $ eLets l a
 
+eLets :: [Definition] -> ExpR -> ExpR
 eLets l a ps = foldr ($) (a ps) . map eLet $ groupDefinitions l
   where
     eLet (ValueDef (a, b_)) = ELet (a <-> b) a b where b = b_ ps
-
-groupDefinitions :: [Definition Range] -> [Definition Range]
-groupDefinitions = concatMap g . groupBy f
-  where
-    f (h -> Just x) (h -> Just y) = x == y
-    f _ _ = False
-
-    h (ValueDef (p, _)) = name p
-    h (TypeSig (n, _)) = Just n
-    h _ = Nothing
-
-    name (PVar _ n) = Just n
-    name _ = Nothing
-
-    g xs@(TypeSig (_, t): ValueDef (p, _): _) = [ValueDef (p, eTyping (foldr1 eAlt [e | ValueDef (_, e) <- xs]) $ [] ==> t)]
-    g xs@(ValueDef (p, _): _) = [ValueDef (p, foldr1 eAlt [e | ValueDef (_, e) <- xs])]
-    g xs = xs
-
-    eAlt a_ b_ ps = Exp (a <-> b) $ EAlt_ a b where a = a_ ps; b = b_ ps
-
-type ExpR = Prec -> Exp Range
 
 eTyping :: ExpR -> Typing_ TyR -> ExpR
 eTyping a_ b ps = ETyping (a <-> typingType{-!-} b) a b  where a = a_ ps

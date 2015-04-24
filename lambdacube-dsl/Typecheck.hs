@@ -320,7 +320,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             ETuple_ te -> unifyTypings (map (getTag') te) TTuple
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            EAlt_ a b -> unifyTypings [getTag' a ++ getTag' b] $ \[x] -> x
+            EAlts_ xs -> unifyTypings [concatMap getTag' xs] $ \[x] -> x
             ENext_ -> newV $ \t -> t :: Ty          -- TODO
             x -> error $ "inferTyping: " ++ ppShow x
   where

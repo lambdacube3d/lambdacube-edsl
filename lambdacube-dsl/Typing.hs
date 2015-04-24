@@ -314,7 +314,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "fromInt" --> \a -> [IsNum @@ a] ==> TInt ~> a
   ["zero'", "one'"] ---> \a -> {- [IsComponent @@ a] ==> -- TODO -} (a :: Ty)
   "texture'" --> TUnit ~> TVec 2 TFloat ~> TVec 4 TFloat
-  "toMat" --> \v m a b i j x -> [m ~~ TFMat a b, a ~~ TFVec i x, b ~~ TFVec j x, v ~~ TFVec j a] ==> v ~> m
+--  "toMat" --> \v m a b i j x -> [m ~~ TFMat a b, a ~~ TFVec i x, b ~~ TFVec j x, v ~~ TFVec j a] ==> v ~> m
         -- Vec 2 (Vec 4 Float) ~> Mat 4 2 Float
   "." --> \a b c -> (b ~> c) ~> (a ~> b) ~> a ~> c
   "foldl'" --> \a b -> (b ~> a ~> b) ~> b ~> TList a ~> b
