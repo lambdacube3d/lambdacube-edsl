@@ -52,6 +52,7 @@ toGLSLType t = show $ pPrint $ case t of
   TMat 4 2 (TFloat) -> GLSL.Mat4x2
   TMat 4 3 (TFloat) -> GLSL.Mat4x3
   TMat 4 4 (TFloat) -> GLSL.Mat4
+  t -> error $ "toGLSLType: " ++ ppShow t
 
 pattern ELString s = ELit (LString s)
 
@@ -83,6 +84,7 @@ genVertexGLSL e@(ELam (PVar i) (A4 "VertexOut" p s c o)) = id *** unlines $ runW
   tell $ ["gl_PointSize = " <> unwords (genGLSL s) <> ";"]
   tell ["}"]
   return out
+genVertexGLSL e = error $ "genVertexGLSL: " ++ ppShow e
 
 genFragmentGLSL :: [(String,String,String)] -> Exp -> String
 genFragmentGLSL s e@(ELam (PVar (VarE i _)) (A1 "FragmentOutRastDepth" o)) = unlines $ execWriter $ do

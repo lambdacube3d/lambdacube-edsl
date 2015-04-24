@@ -172,13 +172,14 @@ main = do
           putStrLn "reloaded"
           return $ Just renderer
 
-    --let cm  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
-    let cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
+    let cm'  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
+        cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
         loop renderer = do
             (w,h) <- getWindowSize win
             let uniformMap      = uniformSetter pplInput
                 texture         = uniformFTexture2D "myTextureSampler" uniformMap
                 mvp             = uniformM44F "MVP" uniformMap
+                mvp'             = uniformM44F "MVP2" uniformMap
                 pm              = perspective 0.1 100 (pi/4) (fromIntegral w / fromIntegral h)
 
             setScreenSize pplInput (fromIntegral w) (fromIntegral h)
@@ -186,6 +187,7 @@ main = do
             let angle = pi / 24 * realToFrac t
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
             mvp $! mat4ToM44F $! mm .*. cm .*. pm
+            mvp' $! mat4ToM44F $! mm .*. cm' .*. pm
             renderPipeline renderer
             swapBuffers win >> pollEvents
 
