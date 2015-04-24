@@ -215,7 +215,7 @@ inference_ primFunMap m = runExcept $ fst <$>
     inferDef (PVar _ n, e) = do
         e <- inferTyping e <* checkUnambError
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
-        return ((PVar (error "inferDef") n, e), f)
+        return ((PVar (getTag e) n, e), f)
 
 selectorTypes :: [DataDef (Subst, Typing)] -> [(EName, Typing)]
 selectorTypes dataDefs =
