@@ -10,6 +10,7 @@ import System.Environment
 import System.Directory
 import System.FilePath
 import System.IO
+import Control.Exception
 --import Prelude
 import Text.Show.Pretty
 
@@ -53,7 +54,10 @@ acceptTests testToAccept = forM_ testToAccept $ \n -> do
     case result of
       Left e -> putStrLn $ "\n!FAIL\n" ++ e
       Right Nothing -> putStrLn "OK (no main)"
-      Right (Just x) -> writeFile ef (ppShow x) >> putStrLn "OK"
+      Right (Just x) -> catch (writeFile ef (ppShow x) >> putStrLn "OK") getErr
+  where
+    getErr :: ErrorCall -> IO ()
+    getErr e = putStrLn $ "\n!FAIL\n" ++ show e
 
 rejectTests testToReject = forM_ testToReject $ \n -> do
     putStr $ " # " ++ n ++ " ... "
