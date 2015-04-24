@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 module Core where
 
 import Control.Monad.State
@@ -25,7 +26,7 @@ import Control.Applicative
 import CompositionalLC hiding (Exp(..))
 import qualified CompositionalLC as AST
 import qualified Type as AST
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp, Exp_ (..), Pat, PVar, PLit, PTuple)
+import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Exp_ (..), Pat, PVar, PLit, PTuple, PCon, Wildcard)
 import Text.Trifecta (Result(..))
 import System.Directory
 import System.FilePath
@@ -51,9 +52,10 @@ data Pat
   | PVar     Var
   | PCon EName Type [Pat]
   | PTuple   [Pat]
+  | Wildcard
   deriving (Show,Eq,Ord)
 
-newtype Exp = Exp (Exp_ Exp)
+newtype Exp = Exp (Exp_ Pat Exp)
   deriving (Show,Eq,Ord)
 
 dummyType = TVar ""
@@ -63,16 +65,16 @@ stripTypes e = case e of
     EVar (VarE n _) -> EVar $ VarE n dummyType
     Exp e -> Exp $ stripTypes <$> e
 
-data Exp_ a
+data Exp_ p a
   = ELit_     Lit
   | EVar_     Var
   | EApp_     a a
-  | ELam_     Var a
-  | ELet_     Var a a -- VarE only!
+  | ELam_     p a
+  | ELet_     p a a -- VarE only!
   | ETuple_   [a]
   | EType_    Ty
   | EConstraint_ (Constraint Ty)  -- TODO: wittnesses here if needed
-  | ECase_    a [(Pat, a)]
+  | ECase_    a [(p, a)]
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 pattern ELit a = Exp (ELit_ a)
@@ -90,11 +92,15 @@ pattern EConstraint a = Exp (EConstraint_ a)
 reduce :: Subst -> Map EName Exp -> Exp -> Exp
 reduce s m e = case e of
     EVar (VarE v t) -> maybe (EVar $ VarE v $ subst s t) r $ Map.lookup v m
-    ELet (VarE v _) e f -> reduce s (Map.insert v e m) f
+    ELet p e' f -> case defs (r e') p of
+        Just m' -> reduce s (m' <> m) f
+        _ -> e
     EApp f x -> case r f of
-        ELam (VarE v _) e -> reduce s (Map.insert v x m) e
-        ELam (VarT v) e -> case r x of
+        ELam (PVar (VarE v _)) e -> reduce s (Map.insert v x m) e
+        ELam (PVar (VarT v)) e -> case r x of
             EType x -> reduce (s `composeSubst` Map.singleton v x) m e
+        EVar (VarE "unpack'" _) -> EVar (VarE "#const" undefined)
+        EVar (VarE "#const" _) -> r x
         EVar (VarE v (Forall tv t)) -> case r x of
             EType t' -> EVar $ VarE v $ subst (Map.singleton tv t') t
         EVar (VarE v (TConstraintArg t ty)) -> case r x of
@@ -112,6 +118,38 @@ reduce s m e = case e of
   where
     r = reduce s m
 
+    defs e = \case
+        PVar (VarE v _) -> Just $ Map.singleton v e
+        PCon c _ ps     -> case getApp (c, ps) (length ps) e of
+            Just (EVar (VarE c' _), xs)
+                | c == c' -> mconcat <$> sequence (zipWith defs xs ps)
+                | otherwise -> error "defs"
+            _ -> Nothing
+        PTuple ps -> case e of
+            ETuple xs ->  mconcat <$> sequence (zipWith defs xs ps)
+            _ -> Nothing
+        p -> error $ "defs: " ++ ppShow p
+
+getApp c n x = f [] n x where
+    f acc 0 = \e -> Just (e, acc)
+    f acc n = \case
+        EApp a b -> f (b: acc) (n-1) a
+        e -> Nothing -- error $ "getApp: " ++ ppShow c ++ "\n" ++ ppShow e
+
+toCorePat :: Subst -> AST.Pat (Subst, Typing) -> Pat
+toCorePat sub p = case p of
+  AST.PLit _ l      -> PLit l
+  AST.PVar t n    -> PVar $ VarE n $ toType' t
+  AST.PCon t n ps -> PCon n (toType' t) $ map toCorePat' ps
+  AST.Wildcard _  -> Wildcard
+  AST.PTuple t ps -> PTuple $ map toCorePat' ps
+  p -> error $ "toCorePat: " ++ ppShow p
+ where
+    toCorePat' = toCorePat sub'
+    s = fst $ getTag p
+    sub' = s `composeSubst` sub
+    toType' (_, t) = toType $ subst sub' t
+
 toCore :: Subst -> AST.Exp (Subst, Typing) -> Exp
 toCore sub e = case e of
   AST.ELit _ a      -> ELit a
@@ -121,27 +159,29 @@ toCore sub e = case e of
       cs = map EConstraint $ subst sub' $ constraints $ snd t
       pv = map EType $ subst sub' $ map TVar $ Map.keys $ fst t
   AST.EApp t f a    -> EApp (toCore' f) (toCore' a)
-  AST.ELet _ (AST.PVar _ n) a b  -> ELet (VarE n $ toType' $ getTag a) (pv --> ctr --> toCore' a) (toCore' b)
+  AST.ELet _ p a b  -> ELet (toCorePat' p) (pv --> ctr --> toCore' a) (toCore' b)
     where
       ctr = map VarC $ constraints $ snd $ getTag a
       pv = map VarT $ Set.toList $ polyVars $ snd $ getTag a
-  AST.ELam t (AST.PVar tn n) a -> ELam (VarE n $ toType' tn) $ toCore' a
---  AST.ERecord 
+  AST.ELam t (AST.PVar tn n) a -> ELam (PVar $ VarE n $ toType' tn) $ toCore' a
+  AST.ECase t e ps -> ECase (toCore' e) [(toCorePat' p, toCore' x) | (p, x) <- ps]
+--  AST.ERecord
   _ -> error $ "toCore: " ++ ppShow e
  where
     toCore' = toCore sub'
+    toCorePat' = toCorePat sub'
     s = fst $ getTag e
     sub' = s `composeSubst` sub
     toType' (_, t) = toType $ subst sub' t
     infixr 9 -->
     pv --> x = foldr eLam x pv
 
-    toType :: Typing -> Type
-    toType ty = foldr Forall (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
+toType :: Typing -> Type
+toType ty = foldr Forall (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
 
 eLam (VarT n) (EApp e (EType (TVar m))) | n == m = e  -- optimization
 eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization
-eLam vt x = ELam vt x
+eLam vt x = ELam (PVar vt) x
 
 tyOf :: Exp -> Ty
 tyOf (EVar (VarE _ t)) = t
