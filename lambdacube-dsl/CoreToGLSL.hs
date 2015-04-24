@@ -52,6 +52,7 @@ toGLSLType t = show $ pPrint $ case t of
   TMat 4 2 (TFloat) -> GLSL.Mat4x2
   TMat 4 3 (TFloat) -> GLSL.Mat4x3
   TMat 4 4 (TFloat) -> GLSL.Mat4
+  TTuple []         -> GLSL.Void
   t -> error $ "toGLSLType: " ++ ppShow t
 
 pattern ELString s = ELit (LString s)
