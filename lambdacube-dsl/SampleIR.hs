@@ -232,24 +232,3 @@ lookat pos target up = translateBefore4 (neg pos) (orthogonal $ toOrthoUnsafe r)
     u = normalize $ up &^ w
     v = w &^ u
     r = transpose $ Mat3 u v w
-{-
-parseLC :: String -> IO (Either String (Exp (Subst, Typing)))
-parseLC fname = do
-  (src, res) <- parseLC_ fname
-  case res of
-    Failure m -> do
-      print m
-      return (Left $ show m)
-    Success e -> do
-      --let r = render s
-      --print $ pretty $ delta r
-      --print $ pretty r
-      --putStrLn $ ppShow e
-      case inference e of
-        Right t   -> do
-          --putStrLn $ ppShow t
-          return (Right t)
-        Left m    -> do
-          putStrLn $ "error: " ++ m src
-          return (Left $ m src)
--}
