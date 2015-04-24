@@ -129,11 +129,13 @@ unifyTypings_ bidirectional ts f = do
 ambiguityCheck :: Typing -> TCM ()
 ambiguityCheck ty = do
     e <- errorTCM
-    let c = if used `Set.isSubsetOf` defined then Nothing else Just $ e <> \_ -> unlines
-            ["ambiguous type: " ++ show ty, "defined vars: " ++ show defined, "used vars: " ++ show used]
+    let c = if all ok $ constraints ty then Nothing else Just $ e <> \_ -> unlines
+            ["ambiguous type: " ++ show ty, "defined vars: " ++ show defined] --, "used vars: " ++ show used]
     modify $ (c:) *** id
   where
-    used = freeVars $ constraints ty
+    ok c = not (Set.null used) && used `Set.isSubsetOf` defined
+      where
+        used = freeVars c
     defined = dependentVars (constraints ty) $ freeVars (monoEnv ty) <> freeVars (typingType ty)
 
 -- complex example:
