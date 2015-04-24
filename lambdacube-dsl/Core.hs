@@ -197,7 +197,7 @@ eLam vt x = ELam (PVar vt) x
 
 tyOf :: Exp -> Ty
 tyOf = \case
-    ETuple [] -> TTuple []
+    ETuple es -> TTuple $ map tyOf es
     EVar (VarE _ t) -> t
     EApp (tyOf -> TArr _ t) _ -> t
     e -> error $ "tyOf " ++ ppShow e
