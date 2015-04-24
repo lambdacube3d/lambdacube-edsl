@@ -69,6 +69,7 @@ genStreamOutput (A1 i a@(toGLSLType "3" . tyOf -> t)) = do
       f "NoPerspective" = "noperspective"
   tell [unwords [f i,"out",t,"v0",";"]]
   return [(f i,t,"v0")]
+genStreamOutput (ETuple []) = return []
 
 genFragmentInput s = tell [unwords [i,"in",t,n,";"] | (i,t,n) <- s]
 genFragmentOutput a@(toGLSLType "4" . tyOf -> t) = case tyOf a of
