@@ -20,16 +20,17 @@ import Parser
 import Driver
 import CoreToIR
 
+acceptPath = "./tests/accept"
+rejectPath = "./tests/reject"
+errorFileName lc = rejectPath </> (lc ++ ".error")
+okFileName lc = acceptPath </> (lc ++ ".res")
+
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
   hSetBuffering stdin NoBuffering
-  let acceptPath = "./tests/accept"
-      rejectPath = "./tests/reject"
-      errorFileName lc = rejectPath </> (lc ++ ".error")
-      okFileName lc = acceptPath </> (lc ++ ".res")
-
   args <- getArgs
+
   let (verboseFlags,samplesToAccept) = partition (== "-v") args
       verbose = verboseFlags /= []
   (testToAccept,testToReject) <- case samplesToAccept of
@@ -39,39 +40,13 @@ main = do
       return (map dropExtension toAccept,map dropExtension toReject)
     _ -> return (samplesToAccept,[])
 
-  let checkErrorMsg n e = doesFileExist ef >>= \b -> case b of
-        False -> writeFile ef e >> ok
-        True -> do
-            e' <- readFile ef
-            if e == e' then ok else do
-                putStrLn $ "Error message has changed."
-                putStrLn "Old message: "
-                putStrLn e'
-                putStrLn "-------------------------------------------"
-                putStrLn "New message: "
-                putStrLn e
-                putStrLn "-------------------------------------------"
-                putStr "Accept new error message (y/n)? "
-                c <- getChar
-                if c `elem` ("yY\n" :: String) then do
-                        writeFile ef e
-                        putStrLn " Accepted."
-                    else putStrLn " Not Accepted."
-        where
-            ef = errorFileName n
-            ok = putStrLn $ "OK" ++ if verbose then e else []
-
+  putStrLn $ "Checking valid pipelines"
+  acceptTests testToAccept
 
   putStrLn $ "Catching errors (must get an error)"
-  forM_ testToReject $ \n -> do
-    putStr $ " # " ++ n ++ " ... "
-    result <- runMM "./tests/reject" $ typeCheckLC n
-    case result of
-      Left e -> checkErrorMsg n e
-      _ -> putStrLn $ "\n!FAIL - failed to catch error"
+  rejectTests testToReject
 
-  putStrLn $ "Checking valid pipelines"
-  forM_ testToAccept $ \n -> do
+acceptTests testToAccept = forM_ testToAccept $ \n -> do
     putStr $ " # " ++ n ++ " ... "
     result <- runMM "./tests/accept" $ fmap (compilePipeline . reduce mempty mempty . toCore mempty) <$> getDef_ n "main" (Just $ [] ==> TCon0 "Output")
     let ef = okFileName n
@@ -79,4 +54,33 @@ main = do
       Left e -> putStrLn $ "\n!FAIL\n" ++ e
       Right Nothing -> putStrLn "OK (no main)"
       Right (Just x) -> writeFile ef (ppShow x) >> putStrLn "OK"
+
+rejectTests testToReject = forM_ testToReject $ \n -> do
+    putStr $ " # " ++ n ++ " ... "
+    result <- runMM "./tests/reject" $ typeCheckLC n
+    case result of
+      Left e -> checkErrorMsg False n e
+      _ -> putStrLn $ "\n!FAIL - failed to catch error"
+
+checkErrorMsg verbose n e = doesFileExist ef >>= \b -> case b of
+    False -> writeFile ef e >> ok
+    True -> do
+        e' <- readFile ef
+        if e == e' then ok else do
+            putStrLn $ "Error message has changed."
+            putStrLn "Old message: "
+            putStrLn e'
+            putStrLn "-------------------------------------------"
+            putStrLn "New message: "
+            putStrLn e
+            putStrLn "-------------------------------------------"
+            putStr "Accept new error message (y/n)? "
+            c <- getChar
+            if c `elem` ("yY\n" :: String) then do
+                    writeFile ef e
+                    putStrLn " Accepted."
+                else putStrLn " Not Accepted."
+    where
+        ef = errorFileName n
+        ok = putStrLn $ "OK" ++ if verbose then e else []
 
