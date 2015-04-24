@@ -11,17 +11,14 @@ import System.FilePath
 import qualified Type as AST
 import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)
 import Core
-import CoreToIR
+import qualified IR as IR
+import qualified CoreToIR as IR
 import Parser
 import Typecheck hiding (Exp(..))
 import Typing (primFunMap)
 
-testCompile n = test'' n (compilePipeline . reduce mempty mempty)
-run' n = testCompile n >>= putStrLn
-run = run' "gfx03"
-
-test'' n f = test_ n $ ppShow . f
-test_ n f = either error f <$> runMM "./tests/accept" (parseAndToCoreMain n)
+compileMain :: FilePath -> MName -> IO (Either String IR.Pipeline)
+compileMain path fname = fmap IR.compilePipeline <$> reducedMain path fname
 
 reducedMain :: FilePath -> MName -> IO (Either String Exp)
 reducedMain path fname =

@@ -10,20 +10,13 @@ import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import qualified Data.Vector as V
 
-import Backend.GL
+import Backend.GL as GL
 import Backend.GL.Mesh
 import IR as IR
 
 import System.Environment
 
---import Codec.Image.STB hiding (Image)
-
---import Type
---import Typecheck hiding (test)
---import ToDeBruijn (compile)
-import CoreToIR (testCompile')
---import Parser hiding (main, parseLC)
---import Text.Trifecta (Result (..))
+import Driver (compileMain)
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
 --  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
@@ -116,61 +109,36 @@ myCube = Mesh
     , mGPUData      = Nothing
     }
 
-{-
-rendererFromDSL :: String -> IO (Maybe Renderer)
-rendererFromDSL fname = do
-  lcAST' <- parseLC fname
-  case lcAST' of
-    Right lcAST -> case compile lcAST of
-        Right lcNet -> Just <$> compileRendererFromCore lcNet
-        Left e -> do
-          putStrLn $ "rendererFromDSL error: " ++ e
-          return Nothing
-    Left a -> putStrLn a >> return Nothing
--}
-
 main :: IO ()
 main = do
     win <- initWindow "LambdaCube 3D DSL Sample" 1024 768
     let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
 
     n <- getArgs
+    let srcName = case n of
+          [fn]  -> fn
+          _     -> "tests/accept/gfx03"
 
     gpuCube <- compileMesh myCube
 
-    {-
-    let bakedPPL = -- TEMP!!!
-          Pipeline
-          { textures  = mempty
-          , samplers  = mempty
-          , targets   = V.fromList [RenderTarget [(Color,Just $ Framebuffer Color)]]
-          , programs  = mempty
-          , IR.slots  = mempty
-          , commands  = [SetRenderTarget 0,ClearRenderTarget [(Color,VFloat 1)]]
+    let inputSchema = 
+          PipelineSchema
+          { GL.slots = T.fromList [("stream",SlotSchema Triangles $ T.fromList [("position",TV4F),("vertexUV",TV2F)])]
+          , uniforms = T.fromList [("MVP",M44F),("MVP2",M44F)]
           }
-    -}
-    bakedPPL <- testCompile'
-
-    let inputSchema = schemaFromPipeline bakedPPL
     pplInput <- mkGLPipelineInput inputSchema
     addMesh pplInput "stream" gpuCube []
+
     let setup = do
-          ppl <- testCompile'
-          renderer <- allocPipeline ppl
-          setPipelineInput renderer (Just pplInput)
-          sortSlotObjects pplInput
-          {-
-          renderer <- rendererFromDSL $ case n of
-            [fn]  -> fn
-            _     -> "tests/accept/gfx03.lc"
-          case renderer of
-            Nothing -> return ()
-            Just r  -> do
-              addMesh r "stream" gpuCube []
-              return ()
-          -}
-          putStrLn "reloaded"
-          return $ Just renderer
+          pplRes <- compileMain "." srcName
+          case pplRes of
+            Left err -> putStrLn ("error: " ++ err) >> return Nothing
+            Right ppl -> do
+              renderer <- allocPipeline ppl
+              setPipelineInput renderer (Just pplInput)
+              sortSlotObjects pplInput
+              putStrLn "reloaded"
+              return $ Just renderer
 
     let cm'  = fromProjective (lookat (Vec3 4 0.5 (-0.6)) (Vec3 0 0 0) (Vec3 0 1 0))
         cm  = fromProjective (lookat (Vec3 3 1.3 0.3) (Vec3 0 0 0) (Vec3 0 1 0))
