@@ -196,6 +196,8 @@ reduceConstraint x = case x of
                 | all (==n) ns = reduced $ TFrameBuffer (TNat n) $ tTuple tys
                 | otherwise = fail "frambuffer number of layers differ"
 
+        TFJoinTupleType (TTuple []) x -> reduced x
+        TFJoinTupleType x (TTuple []) -> reduced x
         TFJoinTupleType TVar{} _ -> nothing  -- TODO: observe res?
         TFJoinTupleType _ TVar{} -> nothing  -- TODO: observe res?
         TFJoinTupleType (TTuple l) (TTuple r) -> reduced $ TTuple (l ++ r)

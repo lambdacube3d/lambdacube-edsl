@@ -196,9 +196,11 @@ eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization
 eLam vt x = ELam (PVar vt) x
 
 tyOf :: Exp -> Ty
-tyOf (EVar (VarE _ t)) = t
-tyOf (EApp (tyOf -> TArr _ t) _) = t
-tyOf e = error $ "tyOf " ++ ppShow e
+tyOf = \case
+    ETuple [] -> TTuple []
+    EVar (VarE _ t) -> t
+    EApp (tyOf -> TArr _ t) _ -> t
+    e -> error $ "tyOf " ++ ppShow e
 
 pattern Va x <- VarE x _
 pattern A0 x <- EVar (Va x)
