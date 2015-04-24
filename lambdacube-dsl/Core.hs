@@ -197,19 +197,6 @@ pattern A3 f x y z <- EApp (A2 f x y) z
 pattern A4 f x y z v <- EApp (A3 f x y z) v
 pattern A5 f x y z v w <-  EApp (A4 f x y z v) w
 
-
---test' = test_ $ \x -> head (comp $ reduce mempty mempty x) `seq` print "ok"
-----
-
-showStrippedReducedTest = test'' (stripTypes . reduce mempty mempty) >>= writeFile "testStripped.tmp"
-showReducedTest = test'' (reduce mempty mempty) >>= writeFile "test.tmp"
-showUnreducedTest = test'' id >>= writeFile "testUnreduced.tmp"
-
-test = test'' (reduce mempty mempty) >>= putStrLn
-test'' f = test_ $ ppShow . f
-
-test_ f = either error f <$> runMM "./tests/accept" (parseAndToCoreMain "gfx03") -- "example01"
-
 reducedMain :: FilePath -> MName -> IO (Either String Exp)
 reducedMain path fname =
     runMM path $ reduce mempty mempty <$> parseAndToCoreMain fname

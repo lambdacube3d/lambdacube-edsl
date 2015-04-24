@@ -24,10 +24,13 @@ import qualified IR as IR
 
 type CG = State IR.Pipeline
 
+test'' n f = test_ n $ ppShow . f
+test_ n f = either error f <$> runMM "./tests/accept" (parseAndToCoreMain n)
+
 emptyPipeline = IR.Pipeline mempty mempty mempty mempty mempty mempty
-testCompile = test'' (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
-testCompile' = test_ $ (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
-run = testCompile >>= putStrLn
+testCompile n = test'' n (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
+run' n = testCompile n >>= putStrLn
+run = run' "gfx03"
 
 imageToSemantic :: IR.Image -> (IR.ImageSemantic, IR.Value)
 imageToSemantic a = case a of
