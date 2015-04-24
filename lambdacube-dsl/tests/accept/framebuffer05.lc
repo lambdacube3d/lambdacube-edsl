@@ -1,0 +1,4 @@
+render _ =
+    let frame = FrameBuffer (DepthImage #1 1.0)
+    in ScreenOut frame
+main = render (Uni (IM44F "MVP"))
