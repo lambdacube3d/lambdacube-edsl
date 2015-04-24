@@ -119,6 +119,7 @@ reduce s m e = case e of
     unifC a b = error $ "unifC: " ++ ppShow a ++ "\n ~ \n" ++ ppShow b
 
     defs e = \case
+        Wildcard -> mempty
         PVar (VarE v _) -> Just $ Map.singleton v e
         PCon (c, _) ps     -> case getApp (c, ps) (length ps) e of
             Just (EVar (VarE c' _), xs)
@@ -163,7 +164,7 @@ toCore sub e = case e of
     where
       ctr = map VarC $ subst sub' $ constraints $ snd $ getTag a
       pv = map VarT $ Set.toList $ polyVars $ snd $ getTag a
-  AST.ELam t (AST.PVar tn n) a -> ELam (PVar $ VarE n $ toType' tn) $ toCore' a
+  AST.ELam t p a -> ELam (toCorePat' p) $ toCore' a
   AST.ECase t e ps -> ECase (toCore' e) [(toCorePat' p, toCore' x) | (p, x) <- ps]
 --  AST.ERecord
   _ -> error $ "toCore: " ++ ppShow e
