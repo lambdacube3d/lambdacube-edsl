@@ -72,7 +72,7 @@ genFragmentInput s = tell [unwords [i,"in",t,n,";"] | (i,t,n) <- s]
 genFragmentOutput (toGLSLType . tyOf -> t) = tell [unwords ["out",t,"f0",";"]]
 
 genVertexGLSL :: Exp -> ([(String,String,String)],String)
-genVertexGLSL e@(ELam i (A4 "VertexOut" p s c o)) = id *** unlines $ runWriter $ do
+genVertexGLSL e@(ELam (PVar i) (A4 "VertexOut" p s c o)) = id *** unlines $ runWriter $ do
   tell ["#version 330 core"]
   F.mapM_ tell $ genUniforms e
   genStreamInput i
@@ -85,7 +85,7 @@ genVertexGLSL e@(ELam i (A4 "VertexOut" p s c o)) = id *** unlines $ runWriter $
   return out
 
 genFragmentGLSL :: [(String,String,String)] -> Exp -> String
-genFragmentGLSL s e@(ELam (VarE i _) (A1 "FragmentOutRastDepth" o)) = unlines $ execWriter $ do
+genFragmentGLSL s e@(ELam (PVar (VarE i _)) (A1 "FragmentOutRastDepth" o)) = unlines $ execWriter $ do
   tell ["#version 330 core"]
   F.mapM_ tell $ genUniforms e
   genFragmentInput s
