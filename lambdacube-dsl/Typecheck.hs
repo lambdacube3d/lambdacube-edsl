@@ -275,7 +275,7 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)
             TTuple_ ts -> unifyTypings (map ((star:) . getTag') ts) $ \_ -> Star
-            TMat_ _ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
+--            TMat_ _ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Type variable " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)

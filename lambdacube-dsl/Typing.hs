@@ -300,6 +300,7 @@ primFunMap = Map.fromList $ execWriter $ do
   ["FragmentStream", "Image", "VertexStream"] ----> Star ~> Star ~> Star
   ["FrameBuffer"] ----> NatKind ~> Star ~> Star
   ["Vec"] ----> NatKind ~> Star ~> Star
+  ["Mat"] ----> NatKind ~> NatKind ~> Star ~> Star
 
   "V2" --> \a -> [IsComponent @@ a] ==> a ~> a ~> TVec 2 a
   "V3" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> TVec 3 a

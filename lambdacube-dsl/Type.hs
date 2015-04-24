@@ -196,7 +196,7 @@ data Ty_ a
   -- lambdacube types
   | TNat_    Int
 --  | TVec_    Int a          -- invariant property: Int = 2,3,4;  a = Bool, Int, Word, Float
-  | TMat_    Int Int a      -- invariant property: Int = 2,3,4;  a = Float
+--  | TMat_    Int Int a      -- invariant property: Int = 2,3,4;  a = Float
 
   -- GADT/special (two frequencies)
 --  | TPrimitiveStream_      Frequency a{-PrimitiveType-} a{-Nat-} Frequency a -- ???
@@ -238,7 +238,8 @@ pattern TRecord b = Ty (TRecord_ b)
 pattern TNat a = Ty_ NatKind (TNat_ a)
 pattern VecKind = TArr NatKind StarStar
 pattern TVec a b = TApp Star (TApp StarStar (TCon VecKind "Vec") (TNat a)) b
-pattern TMat a b c = Ty (TMat_ a b c)
+pattern MatKind = TArr NatKind (TArr NatKind StarStar)
+pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TNat a)) (TNat b)) c
 
 -- basic types
 pattern TChar = TCon0 "Char"
