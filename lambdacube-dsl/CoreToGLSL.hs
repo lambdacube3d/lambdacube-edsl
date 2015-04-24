@@ -87,7 +87,10 @@ genVertexGLSL e@(ELam (PVar i) (A4 "VertexOut" p s c o)) = id *** unlines $ runW
 genVertexGLSL e = error $ "genVertexGLSL: " ++ ppShow e
 
 genFragmentGLSL :: [(String,String,String)] -> Exp -> String
-genFragmentGLSL s e@(ELam (PVar (VarE i _)) (A1 "FragmentOutRastDepth" o)) = unlines $ execWriter $ do
+genFragmentGLSL s e@(ELam (PVar (VarE i _)) fragOut) = unlines $ execWriter $ do
+  let o = case fragOut of
+        A1 "FragmentOutRastDepth" o -> o
+        A1 "FragmentOut" o -> o
   tell ["#version 330 core"]
   F.mapM_ tell $ genUniforms e
   genFragmentInput s
@@ -95,6 +98,7 @@ genFragmentGLSL s e@(ELam (PVar (VarE i _)) (A1 "FragmentOutRastDepth" o)) = unl
   tell ["void main() {"]
   tell $ ["f0 = " <> unwords (genGLSLSubst (let [(_,_,n)] = s in Map.singleton i n) o) <> ";"]
   tell ["}"]
+genFragmentGLSL _ e = error $ "genFragmentGLSL: " ++ ppShow e
 
 
 genGLSL :: Exp -> [String]
