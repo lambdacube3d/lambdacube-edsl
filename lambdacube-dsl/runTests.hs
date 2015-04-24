@@ -49,12 +49,12 @@ main = do
 
 acceptTests testToAccept = forM_ testToAccept $ \n -> do
     putStr $ " # " ++ n ++ " ... "
-    result <- runMM "./tests/accept" $ fmap (compilePipeline . reduce mempty mempty . toCore mempty) <$> getDef_ n "main" (Just $ [] ==> TCon0 "Output")
+    result <- runMM "./tests/accept" $ fmap (compilePipeline . reduce mempty mempty . toCore mempty) <$> getDef_ n "main" (Just $ TCon0 "Output")
     let ef = okFileName n
     case result of
       Left e -> putStrLn $ "\n!FAIL\n" ++ e
-      Right Nothing -> putStrLn "OK (no main)"
-      Right (Just x) -> catch (writeFile ef (ppShow x) >> putStrLn "OK") getErr
+      Right (Left e) -> putStrLn $ "OK (no main because " ++ e ++ ")"
+      Right (Right x) -> catch (writeFile ef (ppShow x) >> putStrLn "OK") getErr
   where
     getErr :: ErrorCall -> IO ()
     getErr e = putStrLn $ "\n!FAIL\n" ++ show e

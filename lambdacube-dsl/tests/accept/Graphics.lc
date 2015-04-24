@@ -247,7 +247,7 @@ mkTCMod pos uv m = {- trace (show m) $ -} case m of
                            c    = cos' fi
                            mA   = pack' $ V2 c s
                            mB   = pack' $ V2 ms c
-                           m'   = toMat (pack' $ V2 mA mB :: Vec 2 (Vec 2 Float))
+                           m'   = M22F mA mB
                            v0_5 = floatV 0.5
                            off  = pack' $ V2 (v0_5 -. v0_5 *. c +. v0_5 *. s) (v0_5 -. v0_5 *. s -. v0_5 *. c)
                        in (m' `PrimMulMatVec` uv) + off

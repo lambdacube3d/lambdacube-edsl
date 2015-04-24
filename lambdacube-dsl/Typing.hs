@@ -149,7 +149,7 @@ reduceConstraint x = case x of
             _ -> fail "no instance"
 
         TFVec (TNat n) ty | n `elem` [2,3,4] && ty `elem` floatIntWordBool -> reduced $ TVec n ty
-        TFVec a b -> check (a `matches` nat234 {- && b `matches` floatIntWordBool -- FIXME -}) $ observe res $ \case
+        TFVec a b -> check (a `matches` nat234 && b `matches` floatIntWordBool {- -- FIXME -}) $ observe res $ \case
             TVec n t -> keep [[a, TNat n], [b, t]]
             _ -> fail "no instance"
 
