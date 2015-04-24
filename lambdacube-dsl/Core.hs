@@ -29,7 +29,7 @@ import System.Directory
 import System.FilePath
 import Text.Show.Pretty
 
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EAlts, ENext, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)
+import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EAlts, ENext, Exp, Pat, PAt, PVar, PLit, PTuple, PCon, Wildcard)
 import qualified Type as AST
 import Typecheck hiding (Exp(..))
 
@@ -62,6 +62,7 @@ instance Substitute Pat where
         PCon (n, ty) l -> PCon (n, subst s ty) $ subst s l
         Pat p -> Pat $ fmap (subst s) p
 
+pattern PAt v l = Pat (PAt_ v l)
 pattern PLit l = Pat (PLit_ l)
 pattern PVar l = Pat (PVar_ l)
 pattern PCon c l = Pat (PCon_ c l)
@@ -112,6 +113,7 @@ reduceHNF = reduce_ False
 
 reduce_ :: Bool -> Exp -> Subst -> Map EName Exp -> Exp -> Exp
 reduce_ total cont s m exp = case exp of
+    ERecord mn fs -> tot $ ERecord mn $ map (id *** reduce cont s m) fs
     EAlts es -> foldr (\alt x -> reduce_ total x s m alt) (error "pattern match failure") es
     ENext -> cont
     ETuple es -> tot $ ETuple $ map (reduce cont s m) es
@@ -119,8 +121,8 @@ reduce_ total cont s m exp = case exp of
     ELit l -> ELit l
     EType t -> tot $ EType $ subst s t
     EConstraint c -> tot $ EConstraint $ subst s c
-    EVar (VarE v t) -> maybe (tot $ EVar $ VarE v $ subst s t) (reduce_ total cont s m) $ Map.lookup v m
-    ELet p x e' -> case defs x p of
+    EVar (VarE v t) -> trace' ("evar " ++ v) $ maybe (tot $ EVar $ VarE v $ subst s t) id{-(reduce_ total cont s m)-} $ Map.lookup v m
+    ELet p x e' -> trace' "elet" $ case defs x p of
         Just m' -> reduce_ total cont s (m' <>. m) e'
         _ -> tot $ ELet (subst s p) (reduce cont s m x) $ reduce cont s m e'
     EApp f x -> trace' "eapp" $ case reduceHNF cont s m f of
@@ -146,7 +148,7 @@ reduce_ total cont s m exp = case exp of
         _ -> fallback
      where re = reduce cont s m x
            fallback = tot $ EApp (reduce cont s m f) re
-    e -> error $ "reduce_ " ++ ppShow e
+    x -> error $ "reduce': " ++ ppShow x
   where
     tot x = if total then x else exp
 
@@ -156,11 +158,11 @@ reduce_ total cont s m exp = case exp of
 
     defs e = \case
         Wildcard -> mempty
-        PVar (VarE v _) -> trace' (v ++ " = ...") $ Just $ Map.singleton v e
+        PVar (VarE v _) -> trace' (v ++ " = ...") $ Just $ Map.singleton v $ reduce_ total cont s m e
         PCon (c, _) ps     -> case getApp (c, ps) (length ps) e of
             Just (EVar (VarE c' _), xs)
                 | c == c' -> mconcat' <$> sequence (zipWith defs xs ps)
-                | otherwise -> error "defs"
+                | otherwise -> Nothing --error $ "defs not eq: " ++ show (c, c')
             _ -> Nothing
         PTuple ps -> case reduceHNF cont s m e of
             ETuple xs ->  mconcat' <$> sequence (zipWith defs xs ps)
@@ -184,6 +186,7 @@ toCorePat sub p = case p of
   AST.PCon t n ps -> PCon (n, toType' t) $ map toCorePat' ps
   AST.Wildcard _  -> Wildcard
   AST.PTuple t ps -> PTuple $ map toCorePat' ps
+  AST.PAt t n p   -> PAt (VarE n $ toType' t) $ toCorePat' p
   p -> error $ "toCorePat: " ++ ppShow p
  where
     toCorePat' = toCorePat sub'

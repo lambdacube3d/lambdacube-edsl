@@ -90,6 +90,7 @@ data Pat_ c v b
   | Wildcard_
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
+pattern PAt t a b = Pat t (PAt_ a b)
 pattern PVar a b = Pat a (PVar_ b)
 pattern PLit a b = Pat a (PLit_ b)
 pattern PCon a b c = Pat a (PCon_ b c)
