@@ -1,0 +1,13 @@
+render modelViewProj = let
+  emptyFB           = FrameBuffer (ColorImage #1 (V4F 0.5 0.0 0.4 1.0))
+  rasterCtx         = LineCtx 1.0 LastVertex
+  fragmentCtx       = AccumulationContext (ColorOp NoBlending (V4B True True True True))
+  vertexShader v    = VertexOut (PrimMulMatVec modelViewProj v) 1.0 () (Flat v)
+  vertexStream      = Fetch "stream" Lines (IV4F "position")
+  primitiveStream   = Transform vertexShader vertexStream
+  fragmentStream    = Rasterize rasterCtx primitiveStream
+  fragmentShader v  = FragmentOut v
+  frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
+ in ScreenOut frame
+
+main = render (Uni (IM44F "MVP"))
