@@ -82,7 +82,8 @@ genVertexGLSL e@(ELam (PVar i) (A4 "VertexOut" p s c o)) = id *** unlines $ runW
   genStreamInput i
   out <- genStreamOutput o
   tell ["void main() {"]
-  tell $ ["v0 = " <> unwords (genGLSL o) <> ";"]
+  unless (null out) $ do
+    tell $ ["v0 = " <> unwords (genGLSL o) <> ";"]
   tell $ ["gl_Position = " <> unwords (genGLSL p) <> ";"]
   tell $ ["gl_PointSize = " <> unwords (genGLSL s) <> ";"]
   tell ["}"]
