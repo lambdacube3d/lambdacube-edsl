@@ -90,9 +90,9 @@ getProgram slot vert frag = do
         , IR.programStreams     = Map.fromList [("v",("position",IR.V4F))] -- TODO
         , IR.programInTextures  = mempty -- TODO
         , IR.programOutput      = [("f0",IR.V4F)] -- TODO
-        , IR.vertexShader       = trace vertSrc vertSrc
+        , IR.vertexShader       = {-trace vertSrc-} vertSrc
         , IR.geometryShader     = mempty -- TODO
-        , IR.fragmentShader     = trace fragSrc fragSrc
+        , IR.fragmentShader     = {-trace fragSrc-} fragSrc
         }
   pv <- gets IR.programs
   modify (\s -> s {IR.programs = pv `V.snoc` prg})
