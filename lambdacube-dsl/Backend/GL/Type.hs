@@ -12,7 +12,7 @@ import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
 
-import Graphics.Rendering.OpenGL.Raw.Core33 (GLint, GLuint, GLenum, GLboolean, GLsizei)
+import Graphics.Rendering.OpenGL.Raw.Core33
 
 import IR
 

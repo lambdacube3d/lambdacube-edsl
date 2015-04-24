@@ -19,7 +19,7 @@ import qualified Data.Trie as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as I
 
-import Graphics.Rendering.OpenGL.Raw.Core33 (GLint)
+import Graphics.Rendering.OpenGL.Raw.Core33
 
 import IR as IR
 import Backend.GL.Type as T
@@ -242,7 +242,7 @@ createObjectCommands texUnitMap topUnis obj prg = objUniCmds ++ objStreamCmds ++
             constAttr -> GLSetVertexAttrib i constAttr
 
 nullSetter :: ByteString -> String -> a -> IO ()
-nullSetter n t _ = Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t
+nullSetter n t _ = return () -- Prelude.putStrLn $ "WARNING: unknown uniform: " ++ SB.unpack n ++ " :: " ++ t
 
 uniformBool  :: ByteString -> Trie InputSetter -> SetterFun Bool
 uniformV2B   :: ByteString -> Trie InputSetter -> SetterFun V2B

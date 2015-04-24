@@ -17,43 +17,6 @@ import qualified Data.Vector.Storable as SV
 --import Control.DeepSeq
 
 import Graphics.Rendering.OpenGL.Raw.Core33
-    ( GLuint
-    -- * BUFFER related *
-    -- buffer data
-    , glBindBuffer
-    , glBufferData
-    , glBufferSubData
-    , glGenBuffers
-    , gl_ARRAY_BUFFER
-    , gl_ELEMENT_ARRAY_BUFFER
-    , gl_STATIC_DRAW
-
-    -- * TEXTURE related *
-    -- texture data
-    , glBindTexture
-    , glGenTextures
-    , glGenerateMipmap
-    , glPixelStorei
-    , glTexImage2D
-    , glTexParameteri
-    , gl_CLAMP_TO_EDGE
-    , gl_LINEAR
-    , gl_LINEAR_MIPMAP_LINEAR
-    , gl_REPEAT
-    , gl_RGB
-    , gl_RGBA
-    , gl_RGBA8
-    , gl_TEXTURE_2D
-    , gl_TEXTURE_BASE_LEVEL
-    , gl_TEXTURE_MAG_FILTER
-    , gl_TEXTURE_MAX_LEVEL
-    , gl_TEXTURE_MIN_FILTER
-    , gl_TEXTURE_WRAP_S
-    , gl_TEXTURE_WRAP_T
-    , gl_UNPACK_ALIGNMENT
-    , gl_UNSIGNED_BYTE
-    )
-
 import Data.Word
 import Codec.Picture
 
