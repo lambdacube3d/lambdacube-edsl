@@ -71,7 +71,9 @@ genStreamOutput (A1 i a@(toGLSLType . tyOf -> t)) = do
   return [(f i,t,"v0")]
 
 genFragmentInput s = tell [unwords [i,"in",t,n,";"] | (i,t,n) <- s]
-genFragmentOutput (toGLSLType . tyOf -> t) = tell [unwords ["out",t,"f0",";"]]
+genFragmentOutput a@(toGLSLType . tyOf -> t) = case tyOf a of
+  TUnit -> return False
+  _ -> tell [unwords ["out",t,"f0",";"]] >> return True
 
 genVertexGLSL :: Exp -> ([(String,String,String)],String)
 genVertexGLSL e@(ELam (PVar i) (A4 "VertexOut" p s c o)) = id *** unlines $ runWriter $ do
@@ -95,9 +97,10 @@ genFragmentGLSL s e@(ELam (PVar (VarE i _)) fragOut) = unlines $ execWriter $ do
   tell ["#version 330 core"]
   F.mapM_ tell $ genUniforms e
   genFragmentInput s
-  genFragmentOutput o
+  hasOutput <- genFragmentOutput o
   tell ["void main() {"]
-  tell $ ["f0 = " <> unwords (genGLSLSubst (let [(_,_,n)] = s in Map.singleton i n) o) <> ";"]
+  when hasOutput $ do
+    tell $ ["f0 = " <> unwords (genGLSLSubst (let [(_,_,n)] = s in Map.singleton i n) o) <> ";"]
   tell ["}"]
 genFragmentGLSL _ e = error $ "genFragmentGLSL: " ++ ppShow e
 
