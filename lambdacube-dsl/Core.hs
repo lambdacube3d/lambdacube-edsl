@@ -80,30 +80,41 @@ pattern EConstraint a = Exp (EConstraint_ a)
 
 reduce :: Subst -> Map EName Exp -> Exp -> Exp
 reduce s m e = case e of
-    EVar (VarE v t) -> maybe (EVar $ VarE v $ subst s t) r $ Map.lookup v m
-    ELet p e' f -> case defs (r e') p of
-        Just m' -> reduce s (m' <> m) f
-        _ -> e
-    EApp f x -> case r f of
-        ELam (PVar (VarE v _)) e -> reduce s (Map.insert v x m) e
-        ELam (PVar (VarT v)) e -> case r x of
-            EType x -> reduce (s `composeSubst` Map.singleton v x) m e
-        EVar (VarE "unpack'" _) -> EVar (VarE "#const" undefined)
-        EVar (VarE "#const" _) -> r x
-        EVar (VarE v (Forall tv t)) -> case r x of
-            EType t' -> EVar $ VarE v $ subst (Map.singleton tv t') t
-        EVar (VarE v (TConstraintArg t ty)) -> case r x of
-            EConstraint t'
-               | t == t' -> EVar $ VarE v ty
-               | otherwise -> error "unification of constraints is not yet implemented"
-            e -> error $ "reduce constr: " ++ show e
-        e -> EApp e $ r x
     ETuple es -> ETuple $ map r es
---    ELam v@(VarE n t) e -> ELam v $ reduce (s `composeSubst` Map.singleton n t) m e
-    ELam v e -> ELam v $ r e
+    ELam p e -> ELam p $ r e
     ELit{} -> e
     EType t -> EType $ subst s t
     EConstraint c -> EConstraint $ subst s c
+    EVar (VarE v t) -> maybe (EVar $ VarE v $ subst s t) r $ Map.lookup v m
+    ELet p x e' -> case defs re p of
+        Just m' -> reduce s (m' <> m) e'
+        _ -> ELet p re $ r e'
+     where re = r x
+    EApp f x -> case r f of
+        ELam p e' -> case p of
+            PVar (VarT v) -> case re of
+                EType x -> reduce (s `composeSubst` Map.singleton v x) m e'
+            PVar (VarC v) -> case re of
+                EConstraint x
+                    | True {-v == x -- TODO -} -> r e'
+                    | otherwise -> error $ "unification of constraints is not yet implemented\n" ++ ppShow v ++ "\n ~~ \n" ++ ppShow x 
+
+            _ -> case defs re p of
+                Just m' -> reduce s (m' <> m) e'
+                _ -> ELam p $ r e'
+         where re = r x
+        EVar e' -> case e' of
+--            VarE "unpack'" _ -> EVar (VarE "#const" undefined)
+--            VarE "#const" _ -> r x
+            VarE v (Forall tv t) -> case r x of
+                EType t' -> EVar $ VarE v $ subst (Map.singleton tv t') t
+            VarE v (TConstraintArg t ty) -> case r x of
+                EConstraint t'
+                   | True {-t == t' -- TODO -} -> EVar $ VarE v ty
+                   | otherwise -> error "unification of constraints is not yet implemented"
+                e -> error $ "reduce constr: " ++ show e
+            _ -> EApp (EVar e') $ r x
+        e -> EApp e $ r x
   where
     r = reduce s m
 
@@ -150,7 +161,7 @@ toCore sub e = case e of
   AST.EApp t f a    -> EApp (toCore' f) (toCore' a)
   AST.ELet _ p a b  -> ELet (toCorePat' p) (pv --> ctr --> toCore' a) (toCore' b)
     where
-      ctr = map VarC $ constraints $ snd $ getTag a
+      ctr = map VarC $ subst sub' $ constraints $ snd $ getTag a
       pv = map VarT $ Set.toList $ polyVars $ snd $ getTag a
   AST.ELam t (AST.PVar tn n) a -> ELam (PVar $ VarE n $ toType' tn) $ toCore' a
   AST.ECase t e ps -> ECase (toCore' e) [(toCorePat' p, toCore' x) | (p, x) <- ps]
