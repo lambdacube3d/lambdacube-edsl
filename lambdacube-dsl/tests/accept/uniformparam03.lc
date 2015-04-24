@@ -6,7 +6,7 @@ render modelViewProj = let
   vertexStream      = Fetch "stream" Lines (IV4F "position")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
-  fragmentShader v  = FragmentOut v
+  fragmentShader f  = FragmentOut f
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream emptyFB
  in ScreenOut frame
 

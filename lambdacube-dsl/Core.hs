@@ -47,6 +47,18 @@ data Var
 newtype Pat = Pat (Pat_ (EName, Type) Var Pat)
   deriving (Show,Eq,Ord)
 
+instance Substitute Var where
+    subst s = \case
+        VarE n t -> VarE n $ subst s t
+        VarC c -> VarC $ subst s c
+        VarT n -> VarT n
+
+instance Substitute Pat where
+    subst s = \case
+        PVar v -> PVar $ subst s v
+        PCon (n, ty) l -> PCon (n, subst s ty) $ subst s l
+        Pat p -> Pat $ fmap (subst s) p
+
 pattern PLit l = Pat (PLit_ l)
 pattern PVar l = Pat (PVar_ l)
 pattern PCon c l = Pat (PCon_ c l)
@@ -87,18 +99,18 @@ pattern EType a = Exp (EType_ a)
 pattern EConstraint a = Exp (EConstraint_ a)
 
 reduce :: Subst -> Map EName Exp -> Exp -> Exp
-reduce s m e = case e of
+reduce s m = \case
     ETuple es -> ETuple $ map r es
-    ELam p e -> ELam p $ r e
-    ELit{} -> e
+    ELam p e -> ELam (subst s p) $ r e
+    ELit l -> ELit l
     EType t -> EType $ subst s t
     EConstraint c -> EConstraint $ subst s c
     EVar (VarE v t) -> maybe (EVar $ VarE v $ subst s t) r $ Map.lookup v m
     ELet p x e' -> case defs re p of
         Just m' -> reduce s (m' <> m) e'
-        _ -> ELet p re $ r e'
+        _ -> ELet (subst s p) re $ r e'
      where re = r x
-    EApp f x -> case r f of
+    EApp f x -> case r f {- head reduce -} of
         ELam p e' -> case p of
             PVar (VarT v) -> case re of
                 EType x -> reduce (s `composeSubst` Map.singleton v x) m e'
@@ -109,19 +121,17 @@ reduce s m e = case e of
             _ -> case defs re p of
                 Just m' -> reduce s (m' <> m) e'
                 _ -> ELam p $ r e'
-         where re = r x
         EVar e' -> case e' of
---            VarE "unpack'" _ -> EVar (VarE "#const" undefined)
---            VarE "#const" _ -> r x
-            VarE v (Forall tv t) -> case r x of
-                EType t' -> EVar $ VarE v $ subst (Map.singleton tv t') t
-            VarE v (TConstraintArg t ty) -> case r x of
+            VarE v (Forall tv t) -> case re of
+                EType t' -> EVar $ VarE v $ subst (s `composeSubst` Map.singleton tv t') t
+            VarE v (TConstraintArg t ty) -> case re of
                 EConstraint t' -> case unifC (subst s t) t' of
-                    Right s' -> EVar $ VarE v ty -- TODO: s `composeSubst` s'
+                    Right s' -> EVar $ VarE v $ subst (s `composeSubst` s') ty
                     Left e -> error $ "reduce (2): " ++ e
                 e -> error $ "reduce constr: " ++ show e
-            _ -> EApp (EVar e') $ r x
-        e -> EApp e $ r x
+            _ -> EApp (EVar e') re
+        e -> EApp e re
+     where re = r x
   where
     r = reduce s m
 

@@ -26,7 +26,7 @@ import GLSLUtil
 import qualified Language.GLSL.Syntax as GLSL
 import qualified Language.GLSL.Pretty as GLSL
 
-toGLSLType t = show $ pPrint $ case t of
+toGLSLType msg t = show $ pPrint $ case t of
   TBool             -> GLSL.Bool
   TWord             -> GLSL.UInt
   TInt              -> GLSL.Int
@@ -53,17 +53,17 @@ toGLSLType t = show $ pPrint $ case t of
   TMat 4 3 (TFloat) -> GLSL.Mat4x3
   TMat 4 4 (TFloat) -> GLSL.Mat4
   TTuple []         -> GLSL.Void
-  t -> error $ "toGLSLType: " ++ ppShow t
+  t -> error $ "toGLSLType: " ++ msg ++ " " ++ ppShow t
 
 pattern ELString s = ELit (LString s)
 
 genUniforms e = case e of
-  A1 "Uni" (A1 _ (ELString s)) -> Set.singleton [unwords ["uniform",toGLSLType $ tyOf e,s,";"]]
+  A1 "Uni" (A1 _ (ELString s)) -> Set.singleton [unwords ["uniform",toGLSLType "1" $ tyOf e,s,";"]]
   Exp e -> F.foldMap genUniforms e
 
-genStreamInput (VarE n t) = tell [unwords ["in",toGLSLType t,n,";"]]
+genStreamInput x@(VarE n t) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]]
 
-genStreamOutput (A1 i a@(toGLSLType . tyOf -> t)) = do
+genStreamOutput (A1 i a@(toGLSLType "3" . tyOf -> t)) = do
   let f "Smooth" = "smooth"
       f "Flat" = "flat"
       f "NoPerspective" = "noperspective"
@@ -71,7 +71,7 @@ genStreamOutput (A1 i a@(toGLSLType . tyOf -> t)) = do
   return [(f i,t,"v0")]
 
 genFragmentInput s = tell [unwords [i,"in",t,n,";"] | (i,t,n) <- s]
-genFragmentOutput a@(toGLSLType . tyOf -> t) = case tyOf a of
+genFragmentOutput a@(toGLSLType "4" . tyOf -> t) = case tyOf a of
   TUnit -> return False
   _ -> tell [unwords ["out",t,"f0",";"]] >> return True
 

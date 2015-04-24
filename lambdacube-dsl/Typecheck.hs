@@ -7,18 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-} -- for ghc-7.10.1
-module Typecheck
-    ( inference, inference_
-    , composeSubst
-    , subst
-    , freeVars
-    , polyVars
-    , instantiateTyping
-    , typing
-    , joinPolyEnvs
-    , exportEnv
-    , unifyTypes_
-    ) where
+module Typecheck where
 
 import Data.Function
 import Data.List
