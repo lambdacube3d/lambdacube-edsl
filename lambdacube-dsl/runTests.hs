@@ -17,6 +17,8 @@ import Type
 import CompositionalLC
 import Core
 import Parser
+import Driver
+import CoreToIR
 
 main :: IO ()
 main = do
@@ -71,7 +73,7 @@ main = do
   putStrLn $ "Checking valid pipelines"
   forM_ testToAccept $ \n -> do
     putStr $ " # " ++ n ++ " ... "
-    result <- runMM "./tests/accept" $ fmap (reduce mempty mempty . toCore mempty) <$> getDef_ n "main"
+    result <- runMM "./tests/accept" $ fmap (compilePipeline . reduce mempty mempty . toCore mempty) <$> getDef_ n "main"
     let ef = okFileName n
     case result of
       Left e -> putStrLn $ "\n!FAIL\n" ++ e

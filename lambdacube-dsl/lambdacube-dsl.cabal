@@ -28,6 +28,7 @@ library
     CoreToIR
     CoreToGLSL
     SampleIR
+    Driver
     -- Backend
     Backend.GL
     Backend.GL.Backend

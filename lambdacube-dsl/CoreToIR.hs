@@ -24,13 +24,7 @@ import qualified IR as IR
 
 type CG = State IR.Pipeline
 
-test'' n f = test_ n $ ppShow . f
-test_ n f = either error f <$> runMM "./tests/accept" (parseAndToCoreMain n)
-
 emptyPipeline = IR.Pipeline mempty mempty mempty mempty mempty mempty
-testCompile n = test'' n (\a -> execState (compilePipeline . reduce mempty mempty $ a) emptyPipeline)
-run' n = testCompile n >>= putStrLn
-run = run' "gfx03"
 
 imageToSemantic :: IR.Image -> (IR.ImageSemantic, IR.Value)
 imageToSemantic a = case a of
@@ -45,10 +39,10 @@ newRenderTarget a = do
   modify (\s -> s {IR.targets = tv `V.snoc` t})
   return $ V.length tv
 
-compilePipeline :: Exp -> CG ()
-compilePipeline e = do
-  c <- getCommands e
-  modify (\s -> s {IR.commands = c})
+compilePipeline :: Exp -> IR.Pipeline
+compilePipeline e = flip execState emptyPipeline $ do
+    c <- getCommands e
+    modify (\s -> s {IR.commands = c})
 
 mergeSlot a b = a
   { IR.slotUniforms = IR.slotUniforms a <> IR.slotUniforms b

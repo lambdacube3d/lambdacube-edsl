@@ -23,17 +23,14 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Applicative
-import CompositionalLC hiding (Exp(..))
-import qualified CompositionalLC as AST
-import qualified Type as AST
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)
 import Text.Trifecta (Result(..))
 import System.Directory
 import System.FilePath
-
 import Text.Show.Pretty
-import Parser (parseLC)
-import Typing (primFunMap)
+
+import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)
+import qualified Type as AST
+import CompositionalLC hiding (Exp(..))
 
 data Kind
   = Star
@@ -200,58 +197,6 @@ pattern A3 f x y z <- EApp (A2 f x y) z
 pattern A4 f x y z v <- EApp (A3 f x y z) v
 pattern A5 f x y z v w <-  EApp (A4 f x y z v) w
 
-reducedMain :: FilePath -> MName -> IO (Either String Exp)
-reducedMain path fname =
-    runMM path $ reduce mempty mempty <$> parseAndToCoreMain fname
-
-runMM path = runExceptT . flip evalStateT mempty . flip runReaderT path
-
-parseAndToCoreMain :: MName -> MM Exp
-parseAndToCoreMain m = toCore mempty <$> getDef m "main"
-
-type Modules = [(MName, Module (Subst, Typing))]
-
-type MM = ReaderT FilePath (StateT Modules (ExceptT String IO))
-
-typeCheckLC :: MName -> MM (Module (Subst, Typing))
-typeCheckLC mname = do
- c <- gets $ lookup mname
- case c of
-    Just m -> return m
-    _ -> do
-     fname <- asks $ flip lcModuleFile mname
-     b <- liftIO $ doesFileExist fname
-     if not b then throwError $ "can't find module " ++ fname
-     else do
-      res <- liftIO $ parseLC fname
-      case res of
-        Left m -> throwError m
-        Right (src, e) -> do
-          ms <- mapM (typeCheckLC . qData) $ moduleImports e
-          case joinPolyEnvs $ PolyEnv primFunMap: map exportEnv ms of
-            Left m -> throwError m
-            Right env -> case inference_ env e of
-                Left m    -> throwError $ m src
-                Right x   -> do
-                    modify ((mname, x):)
-                    return x
-
-lcModuleFile path n = path </> (n ++ ".lc")
-
-getDef :: MName -> EName -> MM (AST.Exp (Subst, Typing))
-getDef m d = do
-    maybe (throwError $ d ++ " is not defined in " ++ m) return =<< getDef_ m d
-
-getDef_ :: MName -> EName -> MM (Maybe (AST.Exp (Subst, Typing)))
-getDef_ m d = do
-    typeCheckLC m
-    ms <- get
-    case [ buildLet (concatMap (definitions . snd) (reverse dss) ++ reverse ps) e
-         | ((m', defs): dss) <- tails ms, m' == m, ((AST.PVar _ d', e):ps) <- tails $ reverse $ definitions defs, d' == d] of
-        [e] -> return $ Just e
-        [] -> return Nothing
-
 buildLet :: [(AST.Pat (Subst, Typing), AST.Exp (Subst, Typing))] -> AST.Exp (Subst, Typing) -> AST.Exp (Subst, Typing)
 buildLet es e = foldr (\(p, e) x -> AST.ELet (getTag e) p e x) e es
-
 
