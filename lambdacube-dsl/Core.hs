@@ -30,7 +30,7 @@ import Text.Show.Pretty
 
 import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)
 import qualified Type as AST
-import CompositionalLC hiding (Exp(..))
+import Typecheck hiding (Exp(..))
 
 data Kind
   = Star

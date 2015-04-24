@@ -14,7 +14,7 @@ import System.IO
 import Text.Show.Pretty
 
 import Type
-import CompositionalLC
+import Typecheck
 import Core
 import Parser
 import Driver

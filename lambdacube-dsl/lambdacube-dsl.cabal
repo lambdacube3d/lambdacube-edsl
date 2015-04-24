@@ -21,7 +21,7 @@ library
     -- Compiler
     Type
     Typing
-    CompositionalLC
+    Typecheck
     Parser
     Core
     IR

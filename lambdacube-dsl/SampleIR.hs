@@ -19,7 +19,7 @@ import System.Environment
 --import Codec.Image.STB hiding (Image)
 
 --import Type
---import CompositionalLC hiding (test)
+--import Typecheck hiding (test)
 --import ToDeBruijn (compile)
 import CoreToIR (testCompile')
 --import Parser hiding (main, parseLC)

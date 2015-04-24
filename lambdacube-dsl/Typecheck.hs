@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-} -- for ghc-7.10.1
-module CompositionalLC
+module Typecheck
     ( inference, inference_
     , composeSubst
     , subst

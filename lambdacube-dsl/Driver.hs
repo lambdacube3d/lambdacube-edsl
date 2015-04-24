@@ -13,7 +13,7 @@ import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Pat, PVar,
 import Core
 import CoreToIR
 import Parser
-import CompositionalLC hiding (Exp(..))
+import Typecheck hiding (Exp(..))
 import Typing (primFunMap)
 
 testCompile n = test'' n (compilePipeline . reduce mempty mempty)
