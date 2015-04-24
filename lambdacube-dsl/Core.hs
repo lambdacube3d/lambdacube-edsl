@@ -98,29 +98,32 @@ pattern ETuple a = Exp (ETuple_ a)
 pattern EType a = Exp (EType_ a)
 pattern EConstraint a = Exp (EConstraint_ a)
 
-reduce :: Subst -> Map EName Exp -> Exp -> Exp
-reduce s m = \case
-    ETuple es -> ETuple $ map r es
-    ELam p e -> ELam (subst s p) $ r e
+reduce, reduceHNF :: Subst -> Map EName Exp -> Exp -> Exp
+reduce = reduce_ True
+reduceHNF = reduce_ False
+
+reduce_ :: Bool -> Subst -> Map EName Exp -> Exp -> Exp
+reduce_ total s m exp = case exp of
+    ETuple es -> tot $ ETuple $ map (reduce s m) es
+    ELam p e -> tot $ ELam (subst s p) $ reduce s m e
     ELit l -> ELit l
-    EType t -> EType $ subst s t
-    EConstraint c -> EConstraint $ subst s c
-    EVar (VarE v t) -> maybe (EVar $ VarE v $ subst s t) r $ Map.lookup v m
-    ELet p x e' -> case defs re p of
-        Just m' -> reduce s (m' <> m) e'
-        _ -> ELet (subst s p) re $ r e'
-     where re = r x
-    EApp f x -> case r f {- head reduce -} of
+    EType t -> tot $ EType $ subst s t
+    EConstraint c -> tot $ EConstraint $ subst s c
+    EVar (VarE v t) -> maybe (tot $ EVar $ VarE v $ subst s t) (reduce_ total s m) $ Map.lookup v m
+    ELet p x e' -> case defs x p of
+        Just m' -> reduce_ total s (m' <> m) e'
+        _ -> tot $ ELet (subst s p) (reduce s m x) $ reduce s m e'
+    EApp f x -> case reduceHNF s m f of
         ELam p e' -> case p of
             PVar (VarT v) -> case re of
-                EType x -> reduce (s `composeSubst` Map.singleton v x) m e'
+                EType x -> reduce_ total (s `composeSubst` Map.singleton v x) m e'
             PVar (VarC v) -> case re of
                 EConstraint x -> case unifC (subst s v) x of
-                    Right s' -> reduce (s `composeSubst` s') m e'
+                    Right s' -> reduce_ total (s `composeSubst` s') m e'
                     Left e -> error $ "reduce: " ++ e
-            _ -> case defs re p of
-                Just m' -> reduce s (m' <> m) e'
-                _ -> ELam p $ r e'
+            _ -> case defs x p of
+                Just m' -> reduce_ total s (m' <> m) e'
+                _ -> fallback
         EVar e' -> case e' of
             VarE v (Forall tv t) -> case re of
                 EType t' -> EVar $ VarE v $ subst (s `composeSubst` Map.singleton tv t') t
@@ -129,11 +132,12 @@ reduce s m = \case
                     Right s' -> EVar $ VarE v $ subst (s `composeSubst` s') ty
                     Left e -> error $ "reduce (2): " ++ e
                 e -> error $ "reduce constr: " ++ show e
-            _ -> EApp (EVar e') re
-        e -> EApp e re
-     where re = r x
+            _ -> fallback
+        _ -> fallback
+     where re = reduce s m x
+           fallback = tot $ EApp (reduce s m f) re
   where
-    r = reduce s m
+    tot x = if total then x else exp
 
     unifC (CEq t f) (CEq t' f') = runExcept $ unifyTypes_ throwError True $ [t, t']: zipWith (\x y->[x,y]) (toList f) (toList f')
     unifC (CClass c t) (CClass c' t') | c == c' = runExcept $ unifyTypes_ throwError True $ [t, t']: []
@@ -147,16 +151,16 @@ reduce s m = \case
                 | c == c' -> mconcat <$> sequence (zipWith defs xs ps)
                 | otherwise -> error "defs"
             _ -> Nothing
-        PTuple ps -> case e of
+        PTuple ps -> case reduceHNF s m e of
             ETuple xs ->  mconcat <$> sequence (zipWith defs xs ps)
             _ -> Nothing
         p -> error $ "defs: " ++ ppShow p
 
-getApp c n x = f [] n x where
-    f acc 0 = \e -> Just (e, acc)
-    f acc n = \case
-        EApp a b -> f (b: acc) (n-1) a
-        e -> Nothing -- error $ "getApp: " ++ ppShow c ++ "\n" ++ ppShow e
+    getApp c n x = f [] n x where
+        f acc 0 e = Just (e, acc)
+        f acc n e = case reduceHNF s m e of
+            EApp a b -> f (b: acc) (n-1) a
+            e -> Nothing -- error $ "getApp: " ++ ppShow c ++ "\n" ++ ppShow e
 
 toCorePat :: Subst -> AST.Pat (Subst, Typing) -> Pat
 toCorePat sub p = case p of
