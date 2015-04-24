@@ -1,22 +1,44 @@
-render fb = let
+renderWire fb = let
   modelViewProj = Uni (IM44F "MVP2")
   blendFun x = Blend x ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
   blend'' = blendFun (FuncAdd,FuncAdd)
-  blend = Blend (FuncAdd,FuncAdd) ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
+  blend = Blend (FuncSubtract,FuncAdd) ((SrcColor,SrcColor),(SrcColor,OneMinusSrcAlpha)) (V4F 0.0 1.0 0.0 0.0)
   blend' = NoBlending
   polyMode          = PolygonLine 20.0
   polyMode'         = PolygonFill
   polyMode''        = PolygonPoint (PointSize 10.0)
   cull = CullNone
   cull' = CullFront CW
-  rasterCtx         = TriangleCtx cull polyMode' NoOffset LastVertex
-  fragmentCtx       = AccumulationContext (DepthOp Less False, ColorOp blend (V4B True True True True))
-  vertexShader v    = VertexOut (PrimMulMatVec modelViewProj v) 1.0 () (Flat v)
+  rasterCtx         = TriangleCtx cull polyMode NoOffset FirstVertex
+  fragmentCtx       = AccumulationContext (DepthOp Less False, ColorOp blend' (V4B True True False False))
+  vertexShader v    = VertexOut (PrimMulMatVec modelViewProj v) 1.0 () (Smooth v)
   vertexStream      = Fetch "stream" Triangles (IV4F "position")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
   fragmentShader' v = FragmentOutRastDepth (Const (V4F 1.0 0.4 0.0 0.2))
-  fragmentShader v  = FragmentOutRastDepth (PrimMul v (Const (V4F 1.0 1.4 1.0 0.6)))
+  fragmentShader v  = FragmentOutRastDepth ((Const (V4F 0.0 0.4 0.0 1.0)))
+  frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
+  in frame
+
+render fb = let
+  modelViewProj = Uni (IM44F "MVP2")
+  blendFun x = Blend x ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
+  blend'' = blendFun (FuncAdd,FuncAdd)
+  blend = Blend (Max,FuncAdd) ((SrcColor,SrcColor),(SrcColor,OneMinusSrcAlpha)) (V4F 0.0 1.0 0.0 0.0)
+  blend' = NoBlending
+  polyMode          = PolygonLine 20.0
+  polyMode'         = PolygonFill
+  polyMode''        = PolygonPoint (PointSize 10.0)
+  cull = CullNone
+  cull' = CullFront CW
+  rasterCtx         = TriangleCtx cull polyMode' NoOffset FirstVertex
+  fragmentCtx       = AccumulationContext (DepthOp Less False, ColorOp blend' (V4B True True False False))
+  vertexShader v    = VertexOut (PrimMulMatVec modelViewProj v) 1.0 () (Smooth v)
+  vertexStream      = Fetch "stream" Triangles (IV4F "position")
+  primitiveStream   = Transform vertexShader vertexStream
+  fragmentStream    = Rasterize rasterCtx primitiveStream
+  fragmentShader' v = FragmentOutRastDepth (Const (V4F 1.0 0.4 0.0 0.2))
+  fragmentShader v  = FragmentOutRastDepth (PrimAdd v (Const (V4F 1.0 1.4 1.0 0.6)))
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
   in frame
 
@@ -51,5 +73,5 @@ main = let
   --out = fx (fx emptyFB)
   --out = fx emptyFB
   --out = render modelViewProj emptyFB
-  out = render (render' (render' emptyFB))
+  out = renderWire (render (render' emptyFB))
   in ScreenOut out
