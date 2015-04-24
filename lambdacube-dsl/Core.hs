@@ -60,8 +60,19 @@ dummyType = TVar ""
 
 stripTypes :: Exp -> Exp
 stripTypes e = case e of
-    EVar (VarE n _) -> EVar $ VarE n dummyType
+    EVar (VarE n _) -> ELit $ LString n --EVar $ VarE n dummyType
+    EVar (VarC _) -> ELit $ LNat 13
+    EType t -> ELit $ LNat 29
+    EConstraint c -> ELit $ LNat 27
+    ELam p e -> ELam (stripPats p) (stripTypes e)
+    ELet p e e' -> ELet (stripPats p) (stripTypes e) (stripTypes e')
     Exp e -> Exp $ stripTypes <$> e
+
+stripPats :: Pat -> Pat
+stripPats = \case
+    PVar (VarE n _) -> PLit $ LString n --EVar $ VarE n dummyType
+    PVar (VarC _) -> PLit $ LNat 17
+    Pat e -> Pat $ stripPats <$> e
 
 pattern ELit a = Exp (ELit_ a)
 pattern EVar a = Exp (EVar_ a)
