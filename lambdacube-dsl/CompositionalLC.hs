@@ -17,6 +17,7 @@ module CompositionalLC
     , typing
     , joinPolyEnvs
     , exportEnv
+    , unifyTypes_
     ) where
 
 import Data.Function
@@ -60,9 +61,12 @@ s1 `composeSubst` s2 = s2 <> (subst s2 <$> s1)
 
 -- unify each types in the sublists
 unifyTypes :: Bool -> [[Ty]] -> TCM Subst
-unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith uni xs $ tail xs
+unifyTypes = unifyTypes_ throwErrorTCM
+
+unifyTypes_ :: (Monad m, Foldable t) => (String -> m ()) -> Bool -> t [Ty] -> m Subst
+unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith uni xs $ tail xs
   where
-    uni :: Ty -> Ty -> StateT Subst TCM ()
+--    uni :: Ty -> Ty -> StateT Subst TCM ()
     uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
       where
         subst1 s tv@(TVar a) = fromMaybe tv $ Map.lookup a s
@@ -77,10 +81,10 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
             s <- get
             let t' = subst s t
             if n `Set.member` freeVars t
-                then lift $ throwErrorTCM $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
+                then lift $ fail $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
                 else put $ Map.insert n t' $ singSubst n t' <$> s
 
-        unifyTy :: Ty -> Ty -> StateT Subst TCM ()
+--        unifyTy :: Ty -> Ty -> StateT Subst TCM ()
 
         -- TODO: generalize this or normalize kinds
         unifyTy (StarToStar 0) Star = return ()
@@ -99,7 +103,7 @@ unifyTypes bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> seque
         unifyTy (TMat a1 b1 c1) (TMat a2 b2 c2) | a1 == a2 && b1 == b2 = uni c1 c2
         unifyTy a b
           | a == b = return ()
-          | otherwise = lift $ throwErrorTCM $ "cannot unify " ++ ppShow a ++ "\n with " ++ ppShow b
+          | otherwise = lift $ fail $ "cannot unify " ++ ppShow a ++ "\n with " ++ ppShow b
 
 unifyTypings = unifyTypings_ True
 

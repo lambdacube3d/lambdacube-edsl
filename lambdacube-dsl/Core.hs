@@ -10,7 +10,7 @@ module Core where
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
-import Data.Foldable (Foldable)
+import Data.Foldable (Foldable, toList)
 import qualified Data.Foldable as F
 import Data.Traversable
 import Control.DeepSeq
@@ -95,10 +95,9 @@ reduce s m e = case e of
             PVar (VarT v) -> case re of
                 EType x -> reduce (s `composeSubst` Map.singleton v x) m e'
             PVar (VarC v) -> case re of
-                EConstraint x
-                    | True {-v == x -- TODO -} -> r e'
-                    | otherwise -> error $ "unification of constraints is not yet implemented\n" ++ ppShow v ++ "\n ~~ \n" ++ ppShow x 
-
+                EConstraint x -> case unifC (subst s v) x of
+                    Right s' -> reduce (s `composeSubst` s') m e'
+                    Left e -> error $ "reduce: " ++ e
             _ -> case defs re p of
                 Just m' -> reduce s (m' <> m) e'
                 _ -> ELam p $ r e'
@@ -109,14 +108,18 @@ reduce s m e = case e of
             VarE v (Forall tv t) -> case r x of
                 EType t' -> EVar $ VarE v $ subst (Map.singleton tv t') t
             VarE v (TConstraintArg t ty) -> case r x of
-                EConstraint t'
-                   | True {-t == t' -- TODO -} -> EVar $ VarE v ty
-                   | otherwise -> error "unification of constraints is not yet implemented"
+                EConstraint t' -> case unifC (subst s t) t' of
+                    Right s' -> EVar $ VarE v ty -- TODO: s `composeSubst` s'
+                    Left e -> error $ "reduce (2): " ++ e
                 e -> error $ "reduce constr: " ++ show e
             _ -> EApp (EVar e') $ r x
         e -> EApp e $ r x
   where
     r = reduce s m
+
+    unifC (CEq t f) (CEq t' f') = runExcept $ unifyTypes_ throwError True $ [t, t']: zipWith (\x y->[x,y]) (toList f) (toList f')
+    unifC (CClass c t) (CClass c' t') | c == c' = runExcept $ unifyTypes_ throwError True $ [t, t']: []
+    unifC a b = error $ "unifC: " ++ ppShow a ++ "\n ~ \n" ++ ppShow b
 
     defs e = \case
         PVar (VarE v _) -> Just $ Map.singleton v e
