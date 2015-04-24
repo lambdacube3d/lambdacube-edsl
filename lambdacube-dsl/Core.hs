@@ -26,7 +26,7 @@ import Control.Applicative
 import CompositionalLC hiding (Exp(..))
 import qualified CompositionalLC as AST
 import qualified Type as AST
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Exp_ (..), Pat, PVar, PLit, PTuple, PCon, Wildcard)
+import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)
 import Text.Trifecta (Result(..))
 import System.Directory
 import System.FilePath
@@ -47,15 +47,16 @@ data Var
   | VarC (Constraint Ty)               -- constraint var
   deriving (Show,Eq,Ord)
 
-data Pat
-  = PLit     Lit
-  | PVar     Var
-  | PCon EName Type [Pat]
-  | PTuple   [Pat]
-  | Wildcard
+newtype Pat = Pat (Pat_ (EName, Type) Var Pat)
   deriving (Show,Eq,Ord)
 
-newtype Exp = Exp (Exp_ Pat Exp)
+pattern PLit l = Pat (PLit_ l)
+pattern PVar l = Pat (PVar_ l)
+pattern PCon c l = Pat (PCon_ c l)
+pattern PTuple l = Pat (PTuple_ l)
+pattern Wildcard = Pat Wildcard_
+
+newtype Exp = Exp (Exp_ Var Ty Pat Exp)
   deriving (Show,Eq,Ord)
 
 dummyType = TVar ""
@@ -64,18 +65,6 @@ stripTypes :: Exp -> Exp
 stripTypes e = case e of
     EVar (VarE n _) -> EVar $ VarE n dummyType
     Exp e -> Exp $ stripTypes <$> e
-
-data Exp_ p a
-  = ELit_     Lit
-  | EVar_     Var
-  | EApp_     a a
-  | ELam_     p a
-  | ELet_     p a a -- VarE only!
-  | ETuple_   [a]
-  | EType_    Ty
-  | EConstraint_ (Constraint Ty)  -- TODO: wittnesses here if needed
-  | ECase_    a [(p, a)]
-  deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 pattern ELit a = Exp (ELit_ a)
 pattern EVar a = Exp (EVar_ a)
@@ -120,7 +109,7 @@ reduce s m e = case e of
 
     defs e = \case
         PVar (VarE v _) -> Just $ Map.singleton v e
-        PCon c _ ps     -> case getApp (c, ps) (length ps) e of
+        PCon (c, _) ps     -> case getApp (c, ps) (length ps) e of
             Just (EVar (VarE c' _), xs)
                 | c == c' -> mconcat <$> sequence (zipWith defs xs ps)
                 | otherwise -> error "defs"
@@ -140,7 +129,7 @@ toCorePat :: Subst -> AST.Pat (Subst, Typing) -> Pat
 toCorePat sub p = case p of
   AST.PLit _ l      -> PLit l
   AST.PVar t n    -> PVar $ VarE n $ toType' t
-  AST.PCon t n ps -> PCon n (toType' t) $ map toCorePat' ps
+  AST.PCon t n ps -> PCon (n, toType' t) $ map toCorePat' ps
   AST.Wildcard _  -> Wildcard
   AST.PTuple t ps -> PTuple $ map toCorePat' ps
   p -> error $ "toCorePat: " ++ ppShow p

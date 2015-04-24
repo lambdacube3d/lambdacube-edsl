@@ -77,16 +77,16 @@ data Lit
   | LNat    Int
   deriving (Show,Eq,Ord)
 
-data Pat a = Pat a (Pat_ (Pat a))
+data Pat a = Pat a (Pat_ EName EName (Pat a))
   deriving (Show,Eq,Ord)
 
-data Pat_ b
+data Pat_ c v b
   = PLit_ Lit
-  | PVar_ EName
-  | PCon_ EName [b]
+  | PVar_ v
+  | PCon_ c [b]
   | PTuple_ [b]
   | PRecord_ [(FName, b)]
-  | PAt_ EName b
+  | PAt_ v b
   | Wildcard_
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
@@ -97,12 +97,12 @@ pattern PTuple a b = Pat a (PTuple_ b)
 pattern PRecord a b = Pat a (PRecord_ b)
 pattern Wildcard a = Pat a Wildcard_
 
-data Exp a = Exp a (Exp_ (Typing_ (Ty' a)) (Pat a) (Exp a))
+data Exp a = Exp a (Exp_ EName (Typing_ (Ty' a)) (Pat a) (Exp a))
   deriving (Show,Eq,Ord)
 
-data Exp_ t p b
+data Exp_ v t p b
   = ELit_      Lit
-  | EVar_      EName
+  | EVar_      v
   | EApp_      b b
   | ELam_      p b
   | ELet_      p b b
@@ -114,6 +114,8 @@ data Exp_ t p b
 --  | EFix EName Exp
   | EAlt_      b b  -- function alternatives
   | ENext_     -- go to next alternative
+  | EType_     t
+  | EConstraint_ (Constraint t)  -- TODO: wittnesses here if needed
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 pattern ELit a b = Exp a (ELit_ b)
@@ -128,7 +130,7 @@ pattern ENamedRecord a n b = Exp a (ERecord_ (Just n) b)
 pattern EFieldProj a c = Exp a (EFieldProj_ c)
 pattern ETyping a b c = Exp a (ETyping_ b c)
 
-setTag :: (t -> t') -> (p -> p') -> Exp_ t p b -> Exp_ t' p' b
+setTag :: (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v t' p' b
 setTag tf f = \case
     ELit_      x       -> ELit_ x
     EVar_      x       -> EVar_ x
