@@ -40,15 +40,13 @@ data Kind
   = Star
   deriving (Show,Eq,Ord)
 
-type Type = Ty
-
 data Var
-  = VarE EName Type
+  = VarE EName Ty
   | VarT EName -- Kind
   | VarC (Constraint Ty)               -- constraint var
   deriving (Show,Eq,Ord)
 
-newtype Pat = Pat (Pat_ (EName, Type) Var Pat)
+newtype Pat = Pat (Pat_ (EName, Ty) Var Pat)
   deriving (Show,Eq,Ord)
 
 instance Substitute Var where
@@ -196,23 +194,23 @@ m <>. n = Map.unionWithKey (\k a _ -> trace' ("redefined: " ++ k) a) m n
 toCorePat :: Subst -> AST.Pat (Subst, Typing) -> Pat
 toCorePat sub p = case p of
   AST.PLit _ l      -> PLit l
-  AST.PVar t n    -> PVar $ VarE n $ toType' t
-  AST.PCon t n ps -> PCon (n, toType' t) $ map toCorePat' ps
+  AST.PVar t n    -> PVar $ VarE n $ typingToTy' t
+  AST.PCon t n ps -> PCon (n, typingToTy' t) $ map toCorePat' ps
   AST.Wildcard _  -> Wildcard
   AST.PTuple t ps -> PTuple $ map toCorePat' ps
-  AST.PAt t n p   -> PAt (VarE n $ toType' t) $ toCorePat' p
+  AST.PAt t n p   -> PAt (VarE n $ typingToTy' t) $ toCorePat' p
   p -> error $ "toCorePat: " ++ ppShow p
  where
     toCorePat' = toCorePat sub'
     s = fst $ getTag p
     sub' = s `composeSubst` sub
-    toType' (_, t) = toType $ subst sub' t
+    typingToTy' (_, t) = typingToTy $ subst sub' t
 
 toCore :: Subst -> AST.Exp (Subst, Typing) -> Exp
 toCore sub e = case e of
   AST.ELit _ a      -> ELit a
   AST.ETuple _ a    -> ETuple $ fmap toCore' a
-  AST.EVar t n      -> foldl EApp (foldl EApp (EVar $ VarE n $ toType $ subst sub' $ snd t) pv) cs
+  AST.EVar t n      -> foldl EApp (foldl EApp (EVar $ VarE n $ typingToTy $ subst sub' $ snd t) pv) cs
     where
       cs = map EConstraint $ subst sub' $ constraints $ snd t
       pv = map EType $ subst sub' $ map TVar $ Map.keys $ fst t
@@ -232,12 +230,9 @@ toCore sub e = case e of
     toCorePat' = toCorePat sub'
     s = fst $ getTag e
     sub' = s `composeSubst` sub
-    toType' (_, t) = toType $ subst sub' t
+    typingToTy' (_, t) = typingToTy $ subst sub' t
     infixr 9 -->
     pv --> x = foldr eLam x pv
-
-toType :: Typing -> Type
-toType ty = foldr Forall (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
 
 eLam (VarT n) (EApp e (EType (TVar m))) | n == m = e  -- optimization
 eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization

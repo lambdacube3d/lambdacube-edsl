@@ -29,11 +29,11 @@ runMM path = runExceptT . flip evalStateT mempty . flip runReaderT path
 parseAndToCoreMain :: MName -> MM Exp
 parseAndToCoreMain m = toCore mempty <$> getDef m "main"
 
-type Modules = [(MName, Module (Subst, Typing))]
+type Modules = [(MName, ModuleT)]
 
 type MM = ReaderT FilePath (StateT Modules (ExceptT String IO))
 
-typeCheckLC :: MName -> MM (Module (Subst, Typing))
+typeCheckLC :: MName -> MM ModuleT
 typeCheckLC mname = do
  c <- gets $ lookup mname
  case c of
@@ -72,7 +72,7 @@ getDef_ m d mt = do
          , ((AST.PVar (_, t) d', e):ps) <- tails $ reverse $ definitions defs, d' == d
          ] of
         [(e, t)]
-            | maybe True (== typingType{-TODO: check no constr.-} t) mt -> Right e
-            | otherwise -> Left $ "type is " ++ ppShow (typingType t)
+            | maybe True (== typingToTy t {- TODO: unification -}) mt -> Right e
+            | otherwise -> Left $ "type is " ++ ppShow (typingToTy t)
         [] -> Left "not found"
 

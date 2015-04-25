@@ -28,7 +28,7 @@ import Text.Show.Pretty
 
 import Type
 import Typing
-
+import Parser (ModuleR)
 
 class Substitute a where subst :: Subst -> a -> a
 
@@ -48,6 +48,10 @@ instance Substitute a => Substitute (Constraint a)      where subst = fmap . sub
 composeSubst :: Subst -> Subst -> Subst
 s1 `composeSubst` s2 = s2 <> (subst s2 <$> s1)
 
+subst1 :: Subst -> Ty -> Ty
+subst1 s tv@(TVar a) = fromMaybe tv $ Map.lookup a s
+subst1 _ t = t
+
 -- unify each types in the sublists
 unifyTypes :: Bool -> [[Ty]] -> TCM Subst
 unifyTypes = unifyTypes_ throwErrorTCM
@@ -58,9 +62,6 @@ unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs ->
 --    uni :: Ty -> Ty -> StateT Subst TCM ()
     uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
       where
-        subst1 s tv@(TVar a) = fromMaybe tv $ Map.lookup a s
-        subst1 _ t = t
-
         singSubst n t (TVar a) | a == n = t
         singSubst n t (Ty_ k ty) = Ty_ (singSubst n t k) $ singSubst n t <$> ty
         singSubst _ _ (StarToStar n) = StarToStar n
@@ -101,7 +102,7 @@ unifyTypings_
     => Bool         -- bidirectional unification
     -> [[Typing]]   -- unify each group
     -> ([Ty] -> a)  -- main typing types for each unified group -> result typing
-    -> TCM (Subst, Typing)
+    -> TCM STyping
 unifyTypings_ bidirectional ts f = do
     (s', t) <- newV $ f $ map (typingType . head) ts
     let ms = map monoEnv $ t: concat ts
@@ -141,7 +142,7 @@ ambiguityCheck ty = do
 -- complex example:
 --      forall b y {-monomorph vars-} . (b ~ F y) => b ->      -- monoenv & monomorph part of instenv
 --      forall a x {-polymorph vars-} . (Num a, a ~ F x) => a  -- type & polymorph part of instenv
-instantiateTyping :: Typing -> TCM (Subst, Typing)
+instantiateTyping :: Typing -> TCM STyping
 instantiateTyping ty = do
     let fv = polyVars ty
     newVars <- replicateM (Set.size fv) (newVar C)
@@ -170,13 +171,14 @@ dependentVars ie s = cycle mempty s
         a --> b = \s -> if Set.null $ a `Set.intersection` s then mempty else b
         a <-> b = (a --> b) <> (b --> a)
 
+type ModuleT = Module Typing STyping
 
-inference :: Module Range -> Either ErrorMsg (Module (Subst, Typing))
+inference :: ModuleR -> Either ErrorMsg ModuleT
 inference = inference_ $ PolyEnv primFunMap
 
 primed = ('\'':)
 
-inference_ :: PolyEnv -> Module Range -> Either ErrorMsg (Module (Subst, Typing))
+inference_ :: PolyEnv -> ModuleR -> Either ErrorMsg ModuleT
 inference_ primFunMap m = runExcept $ fst <$>
     evalRWST (inferModule m) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
   where
@@ -200,7 +202,7 @@ inference_ primFunMap m = runExcept $ fst <$>
         return $ ConDef n tys
 
     inferFieldKind (FieldTy mn t) = do
-        t <- inferKind t
+        t <- inferKind' t
         return $ FieldTy mn t
 
     inferDef (PVar _ n, e) = do
@@ -212,30 +214,34 @@ inference_ primFunMap m = runExcept $ fst <$>
 
 modTag f (Exp t x) = Exp (f t) x
 
-selectorTypes :: [DataDef (Subst, Typing)] -> [(EName, Typing)]
+type STyping = (Subst, Typing)
+
+selectorTypes :: [DataDef Typing] -> [(EName, Typing)]
 selectorTypes dataDefs =
-    [ (sel, [] ==> tyConResTy d ~> convTy t)
+    [ (sel, tyConResTy d .~> t)
     | d@(DataDef n vs cs) <- dataDefs
     , ConDef cn tys <- cs
     , FieldTy (Just sel) t <- tys
     ]
 
-tyConResTy (DataDef n vs cs)
-    = foldl app (Ty_ k $ TCon_ n) $ zip [i-1,i-2..] $ map (Ty_ Star . TVar_) vs
+tyConResTy :: DataDef a -> Typing
+tyConResTy (DataDef n vs _)
+    = [] ==> foldl app (Ty_ k $ TCon_ n) (zip [i-1,i-2..] $ map (Ty_ Star . TVar_) vs)
   where
     app x (i, y) = TApp (StarToStar i) x y
     k = StarToStar i
     i = length vs
 
+tyConTypes :: [DataDef Typing] -> [(EName, Typing)]
 tyConTypes dataDefs =
-    [ (cn, [] ==> foldr (~>) (tyConResTy d) (map (convTy . fieldType) tys))
+    [ (cn, foldr (.~>) (tyConResTy d) $ map fieldType tys)
     | d@(DataDef n vs cs) <- dataDefs
     , ConDef cn tys <- cs
     ]
 
 tyConKinds dataDefs = [(primed n, [] ==> foldr (~>) Star (replicate (length vs) Star)) | DataDef n vs _ <- dataDefs]
 
-exportEnv :: Module (Subst, Typing) -> PolyEnv
+exportEnv :: ModuleT -> PolyEnv
 exportEnv Module{..}
     = PolyEnv $ fmap instantiateTyping $ Map.fromList $
             [(n, snd $ getTag e) | (PVar _ n, e) <- definitions]
@@ -253,11 +259,22 @@ joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 
-inferKind' (Typing me cs t _) = do
-    t <- inferKind t
-    return $ typing mempty{-TODO-} []{-TODO-} $ convTy t
+(.~>) :: Typing -> Typing -> Typing
+t .~> s = typing (monoEnv t <> monoEnv s) (constraints t ++ constraints s) (typingType t ~> typingType s)
 
-inferKind :: Ty' Range -> TCM (Ty' (Subst, Typing))
+convTy :: Ty' STyping -> Typing
+convTy = f mempty where
+    f sub (Ty' (s, k) t) = typing me cs $ subst1 sub{-TODO: move innerwards-} $ ty_ (subst sub $ typingType k) (typingType <$> t')
+      where
+        sub' = s `composeSubst` sub
+        t' = f sub' <$> t
+        me = subst sub (monoEnv k) <> foldMap monoEnv t'
+        cs = subst sub (constraints k) <> foldMap constraints t'
+
+inferKind' :: Ty' Range -> TCM Typing
+inferKind' t = convTy <$> inferKind t
+
+inferKind :: Ty' Range -> TCM (Ty' STyping)
 inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     Forall_ n t -> do
         let n' = '\'':n
@@ -280,7 +297,7 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     getTag' = (:[]) . snd . getTag
     star = [] ==> Star
 
-inferTyping :: Exp Range -> TCM (Exp (Subst, Typing))
+inferTyping :: Exp Range -> TCM (Exp STyping)
 inferTyping (Exp r e) = local (id *** const [r]) $ case e of
     ELam_ p f -> do
         p_@(p, tr) <- inferPatTyping False p
@@ -301,7 +318,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
         te@(Exp _ e') <- inferTyping e
         ty <- inferKind' ty
         t <- unifyTypings_ False [getTag' te ++ [ty]] $ \[ty] -> ty
-        return $ Exp t e' -- t <$ te -- ETyping t te $ error "inferTyping TODO" -- _ ty
+        return $ Exp t e'
     ECase_ e cs -> do
         te <- inferTyping e
         cs <- forM cs $ \(p, exp) -> do
@@ -328,7 +345,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             ENext_ -> newV $ \t -> t :: Ty          -- TODO
             x -> error $ "inferTyping: " ++ ppShow x
   where
-    inferPatTyping :: Bool -> Pat Range -> TCM (Pat (Subst, Typing), Map EName Typing)
+    inferPatTyping :: Bool -> Pat Range -> TCM (Pat STyping, Map EName Typing)
     inferPatTyping polymorph p_@(Pat pt p) = local (id *** const [pt]) $ do
         p' <- T.mapM (inferPatTyping polymorph) p
         (t, tr) <- case p' of

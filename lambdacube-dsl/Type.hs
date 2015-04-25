@@ -98,7 +98,7 @@ pattern PTuple a b = Pat a (PTuple_ b)
 pattern PRecord a b = Pat a (PRecord_ b)
 pattern Wildcard a = Pat a Wildcard_
 
-data Exp a = Exp a (Exp_ EName (Typing_ (Ty' a)) (Pat a) (Exp a))
+data Exp a = Exp a (Exp_ EName (Ty' a) (Pat a) (Exp a))
   deriving (Show,Eq,Ord)
 
 data Exp_ v t p b
@@ -169,14 +169,14 @@ data Ty
     | Ty_ Ty (Ty_ Ty)
   deriving (Show,Eq,Ord)
 
+typingToTy :: Typing -> Ty
+typingToTy ty = foldr Forall (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
+
 data Ty' a = Ty' a (Ty_ (Ty' a))
   deriving (Show,Eq,Ord)
 
 ty_ :: Ty -> Ty_ Ty -> Ty
 ty_ = Ty_ --Star (StarToStar
-
-convTy :: Ty' (Subst, Typing) -> Ty
-convTy (Ty' (_, k) t) = ty_ (typingType{-TODO-} k) $ convTy <$> t
 
 data Ty_ a
   -- kinds
@@ -385,13 +385,13 @@ data Q a = Q {qualifier :: [String], qData :: a} -- | UQ a
 type Prec = Map EName (FixityDir, Int)
 
 -- AST
-data Module a
+data Module t a
   = Module
   { moduleImports :: [Q MName]
   , moduleExports :: ()
   , typeAliases   :: ()
   , definitions   :: [ValueDef a]
-  , dataDefs      :: [DataDef a]
+  , dataDefs      :: [DataDef t]
   , typeClasses   :: ()
   , instances     :: ()
   , precedences   :: Prec
@@ -401,7 +401,7 @@ data Module a
 type ValueDef a = (Pat a, Exp a)
 data DataDef a = DataDef String [String] [ConDef a]
     deriving (Show)
-data ConDef a = ConDef EName [FieldTy (Ty' a)]
+data ConDef a = ConDef EName [FieldTy a]
     deriving (Show)
 data FieldTy a
     = FieldTy {fieldName :: Maybe EName, fieldType :: a}

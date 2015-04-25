@@ -115,6 +115,9 @@ varId = var <|> parens ("." <$ operator "." <|> ident lcOps)
 type PatR = Pat Range
 type ExpR' = Exp Range
 type ExpR = Prec -> ExpR'
+type TyR = Ty' Range
+type DataDefR = DataDef TyR
+type ModuleR = Module TyR Range
 
 data WhereRHS = WhereRHS GuardedRHS (Maybe [Definition])
 data GuardedRHS
@@ -125,7 +128,7 @@ data Definition
   = ValueDef (PatR, ExpR)
   | PreValueDef (Range, EName) [PatR] WhereRHS --(PatR, Prec -> Exp Range -> Exp Range)  -- before group
   | TypeSig (String, TyR)
-  | DDataDef (DataDef Range)
+  | DDataDef DataDefR
   | DFixity EName (FixityDir, Int)
 
 --------------------------------------------------------------------------------
@@ -149,7 +152,7 @@ compileCases r e rs = eApp (alts [eLam p $ compileWhereRHS r | (p, r) <- rs]) e
 compileRHS :: [Definition] -> Definition
 compileRHS ds = case ds of
     (TypeSig (_, t): PreValueDef (r, n) _ _: _)
-        -> ValueDef (PVar r n, eTyping (alts [foldr eLam (compileWhereRHS rhs) pats | PreValueDef _ pats rhs <- ds]) $ [] ==> t)
+        -> ValueDef (PVar r n, eTyping (alts [foldr eLam (compileWhereRHS rhs) pats | PreValueDef _ pats rhs <- ds]) t)
     (PreValueDef (r, n) _ _: _)
         -> ValueDef (PVar r n, alts [foldr eLam (compileWhereRHS rhs) pats | PreValueDef _ pats rhs <- ds])
     [x] -> x
@@ -176,7 +179,7 @@ moduleName = do
   when (any (isLower . head) l) $ fail "module name must start with capital letter"
   return $ Q (init l) (last l)
 
-moduleDef :: P (Module Range)
+moduleDef :: P ModuleR
 moduleDef = do
   optional $ do
     keyword "module"
@@ -256,7 +259,7 @@ typeExp = do
   optional (tcExp <?> "type context")
   ty
 
-dataDef :: P (DataDef Range)
+dataDef :: P DataDefR
 dataDef = do
  keyword "data"
  localIndentation Gt $ do
@@ -277,8 +280,6 @@ derivingStm = optional $ keyword "deriving" <* (void_ typeConstructor <|> void_ 
 typeRecord :: P TyR
 typeRecord = undef "trec" $ do
   braces (commaSep1 typeSignature >> optional (operator "|" >> void_ typeVar))
-
-type TyR = Ty' Range
 
 ty :: P TyR
 ty = foldr1 tArr <$> sepBy1 tyApp (operator "->")
@@ -460,7 +461,7 @@ expression = do
       do
         operator "::"
         t <- typeExp
-        return $ eTyping e $ [] ==> t
+        return $ eTyping e t
     <|> return e
  where
   lambda :: P ExpR
@@ -492,8 +493,8 @@ eLets l a ps = foldr ($) (a ps) . map eLet $ groupDefinitions l
   where
     eLet (ValueDef (a, b_)) = ELet (a <-> b) a b where b = b_ ps
 
-eTyping :: ExpR -> Typing_ TyR -> ExpR
-eTyping a_ b ps = ETyping (a <-> typingType{-!-} b) a b  where a = a_ ps
+eTyping :: ExpR -> TyR -> ExpR
+eTyping a_ b ps = ETyping (a <-> b) a b  where a = a_ ps
 
 expressionOpAtom :: P ExpR
 expressionOpAtom = do
@@ -559,7 +560,7 @@ eVar p n = \ps -> EVar p n
 
 indentState = mkIndentationState 0 infIndentation True Ge
 
-parseLC :: String -> IO (Either String (BS.ByteString, Module Range))
+parseLC :: String -> IO (Either String (BS.ByteString, ModuleR))
 parseLC fname = do
   src <- BS.readFile fname
   case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> moduleDef <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
