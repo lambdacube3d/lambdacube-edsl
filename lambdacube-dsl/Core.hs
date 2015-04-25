@@ -12,6 +12,7 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Data.Foldable (Foldable, toList)
 import qualified Data.Foldable as F
+import Data.Char
 import Data.Traversable
 import Control.DeepSeq
 import Control.Arrow
@@ -100,7 +101,7 @@ pattern ERecord a b = Exp (ERecord_ a b)
 pattern EFieldProj a = Exp (EFieldProj_ a)
 pattern EType a = Exp (EType_ a)
 pattern EConstraint a = Exp (EConstraint_ a)
-pattern EAlts b = Exp (EAlts_ b)
+pattern EAlts i b = Exp (EAlts_ i b)
 pattern ENext = Exp ENext_
 
 data Env = Env {envSubst :: Subst, envMap :: Map EName Thunk}
@@ -116,8 +117,19 @@ addSubst s' (Env s m) = Env (s `composeSubst` s') m
 mkReduce :: Exp -> Exp
 mkReduce = reduce . Thunk mempty
 
-reduce :: Thunk -> Exp
-reduce t = case exp of
+reduce = fromMaybe (error "pattern match failure.") . reduce_
+
+reduce_ :: Thunk -> Maybe Exp
+reduce_ t = case reduceHNF t of
+  Left err -> Nothing --Left err
+  Right (Thunk env exp) -> let
+    reduce' = reduce . Thunk env
+    reduceDel vs = reduce . Thunk (deleteEnvVars vs env)
+
+    subst' :: Substitute a => a -> a
+    subst' = subst (envSubst env)
+
+   in Just $ case exp of
     ERecord mn fs -> ERecord mn $ map (id *** reduce') fs
     ETuple es -> ETuple $ map reduce' es
     ELit l -> ELit l
@@ -127,89 +139,104 @@ reduce t = case exp of
     EVar (VarE v t) -> EVar $ VarE v $ subst' t
     ELet p x e' -> ELet (subst' p) (reduceDel (fvars p) x) $ reduceDel (fvars p) e'
     EApp f x -> EApp (reduce' f) (reduce' x)
+    EAlts i es -> case catMaybes [reduce_ $ Thunk env e | e <- es] of
+        [e] -> e
+        es -> EAlts i es
     EFieldProj x -> EFieldProj x
     x -> error $ "reduce: " ++ ppShow x
-  where
-    (Thunk env exp) = reduceHNF' t
-    reduce' = reduce . Thunk env
-    reduceDel vs = reduce . Thunk (deleteEnvVars vs env)
 
-    subst' :: Substitute a => a -> a
-    subst' = subst (envSubst env)
-
-reduceHNF' = reduceHNF $ error "impossible"
-
--- main = ((\f -> (\x -> f)) ()) ()
---          (   {f = ()} \x -> f )  ()
-
-reduceHNF :: Thunk -> Thunk -> Thunk
-reduceHNF cont th@(Thunk env exp) = case exp of
-    EAlts es -> foldr (\alt x -> reduceHNF x $ Thunk env alt) (error "pattern match failure") es
-    ENext -> cont
+reduceHNF :: Thunk -> Either String Thunk       -- Left: pattern match failure
+reduceHNF th@(Thunk env exp) = case exp of
+    EAlts 0 es -> trace' ("ealts " ++ show (length es)) $ case [e | Right e <- es'] of
+        (thu:_) -> Right thu
+        [] -> error $ "pattern match failure " ++ show [err | Left err <- es']
+      where es' = map (reduceHNF . Thunk env) es
+    ENext -> Left "? err"
     EVar v -> case v of
-        VarE v t -> trace' ("evar " ++ v) $
-            maybe (trace' (" no " ++ v) th) (reduceHNF cont . addEnv env) $ Map.lookup v $ envMap env
-    ELet p x e' -> trace' "elet" $ case defs (Thunk env x) p of
-        Just m' -> reduceHNF cont $ Thunk (m' <> env) e'
-        _ -> th
-    EApp f x -> trace' "eapp" $ case reduceHNF cont $ Thunk env f of
-      Thunk env' exp' -> case exp' of
-        EFieldProj fi -> case reduceHNF cont $ Thunk env x of
-          Thunk env'' exp'' -> case exp'' of
+        VarE v t
+          | isConstr v -> Right th
+          | otherwise -> trace' ("evar " ++ v) $
+            maybe (trace' (" no " ++ v) $ Right th) (reduceHNF . addEnv env) $ Map.lookup v $ envMap env
+    ELet p x e' -> trace' "elet" $ case matchPattern (Thunk env x) p of
+        Right (Just m') -> reduceHNF $ Thunk (m' <> env) e'
+        Right _ -> Right th
+        Left err -> Left err
+    EApp f x -> trace' "eapp" $ case reduceHNF $ Thunk env f of
+      Left err -> Left err
+      Right (Thunk env' exp') -> case exp' of
+
+        EAlts i es | i > 0 -> trace' ("alts " ++ show (i, length es)) $ reduceHNF $ Thunk env' $ EAlts (i-1) $ map (\e -> EApp e x) es      -- TODO: make this more efficient
+
+        EFieldProj fi -> case reduceHNF $ Thunk env x of
+          Left err -> Left err
+          Right (Thunk env'' exp'') -> case exp'' of
             ERecord Nothing fs -> case [e | (fi', e) <- fs, fi' == fi] of
-                [e] -> Thunk env'' e
-            _ -> th
+                [e] -> reduceHNF $ Thunk env'' e
+            _ -> Right th
 
         ELam p e' -> case p of
-            PVar (VarT v) -> trace' " ety" $ case x of
-                EType x -> reduceHNF cont $ Thunk (addSubst (Map.singleton v (subst s x)) env') e'
+            PVar (VarT v) -> trace' (" ety: " ++ v) $ case x of
+                EType x -> reduceHNF $ Thunk (addSubst (Map.singleton v (subst s x)) env') e'
+                x -> error $ "reduce varT: " ++ ppShow (x, e')
             PVar (VarC v) -> trace' " ectr" $ case x of
                 EConstraint x -> case unifC (subst s v) (subst s x) of
-                    Right s' -> reduceHNF cont $ Thunk (addSubst s' env') e'
-                    Left e -> error $ "reduce: " ++ e
-            _ -> case defs (Thunk env x) p of
-                Just m' -> reduceHNF cont $ Thunk (m' <> env') e'
-                _ -> th
+                    Right s' -> reduceHNF $ Thunk (addSubst s' env') e'
+                    Left e -> error $ "reduce_c: " ++ e
+            _ -> case trace' "matchPattern" $ matchPattern (Thunk env x) p of
+                Right (Just m') -> reduceHNF $ Thunk (m' <> env') e'
+                Right _ -> Right th
+                Left err -> Left err
 
         EVar e' -> case e' of
             VarE v (Forall tv t) -> trace' (" forall " ++ tv) $ case x of
-                EType t' -> Thunk (addSubst (Map.singleton tv (subst s t')) env') $ EVar $ VarE v t
+                EType t' -> Right $ Thunk (addSubst (Map.singleton tv (subst s t')) env') $ EVar $ VarE v t
             VarE v (TConstraintArg t ty) -> trace' (" constr ") $ case x of
                 EConstraint t' -> case unifC (subst s t) (subst s t') of
-                    Right s' -> Thunk (addSubst s' env') $ EVar $ VarE v ty
+                    Right s' -> Right $ Thunk (addSubst s' env') $ EVar $ VarE v ty
                     Left e -> error $ "reduce (2): " ++ e
                 e -> error $ "reduce constr: " ++ show e
-            _ -> th
-        _ -> th
-    _ -> th
+            _ -> Right th
+        _ -> Right th
+    _ -> Right th
   where
     s = envSubst env
 
-    defs :: Thunk -> Pat -> Maybe Env
-    defs e@(Thunk env _) = \case
-        Wildcard -> mempty
-        PVar (VarE v _) -> trace' (v ++ " = ...") $ Just $ Env mempty $ Map.singleton v e
-        PCon (c, _) ps     -> case getApp {-(c, ps)-} (length ps) e of
-            Just (EVar (VarE c' _), xs)
-                | c == c' -> mconcat <$> sequence (zipWith defs xs ps)
-                | otherwise -> trace' ("constructors doesn't match: " ++ show (c, c')) Nothing
-            _ -> Nothing
-        PTuple ps -> case reduceHNF cont e of
-          Thunk env' exp' -> case exp' of
-            ETuple xs -> mconcat <$> sequence (zipWith defs (map (Thunk env') xs) ps)
-            _ -> Nothing
-        p -> error $ "defs: " ++ ppShow p
+    notConstr = not . isConstr
 
-    getApp :: Int -> Thunk -> Maybe (Exp, [Thunk])
-    getApp n x@(Thunk env _) = trace' ("getApp " ++ show n) $ f [] n x where
-        f acc 0 e = Just (thunkExp $ reduceHNF cont e, acc)
-        f acc n e = case reduceHNF cont e of
-          Thunk env' exp' -> case exp' of
-            EApp a b -> f (Thunk env' b: acc) (n-1) $ Thunk env' a
-            e -> Nothing -- error $ "getApp: " ++ ppShow c ++ "\n" ++ ppShow e
+    matchPattern :: Thunk -> Pat -> Either String (Maybe Env)       -- Left: pattern match failure; Right Nothing: can't reduce
+    matchPattern e@(Thunk env _) = \case
+        Wildcard -> trace' "match _" $ Right $ Just mempty
+        PVar (VarE v _) -> trace' (v ++ " = ...") $ Right $ Just $ Env mempty $ Map.singleton v e
+        PCon (c, _) ps     -> case getApp {-(c, ps)-} e of
+            Left err -> trace' ("cant match " ++ show (c, err)) $ Left err
+            Right Nothing -> Right Nothing
+            Right (Just (xx, xs)) -> case xx of
+              EVar (VarE c' _)
+                | c == c' -> trace' ("match: " ++ c) (fmap mconcat . sequence) <$> sequence (zipWith matchPattern xs ps)
+--                | notConstr c' -> trace' ("match not constr: " ++ show (c, c')) $ Right Nothing
+                | otherwise -> trace' ("constructors doesn't match: " ++ show (c, c')) $ Left $ "constructors doesn't match: " ++ show (c, c')
+              q -> error $ "match rj: " ++ ppShow q
+        PTuple ps -> trace' "match (,)" $ case reduceHNF e of
+          Left err -> Left err
+          Right (Thunk env' exp') -> case exp' of
+            ETuple xs -> (fmap mconcat . sequence) <$> sequence (zipWith matchPattern (map (Thunk env') xs) ps)
+            _ -> Right Nothing
+        p -> error $ "matchPattern: " ++ ppShow p
+
+    getApp :: Thunk -> Either String (Maybe (Exp, [Thunk]))
+    getApp x@(Thunk env _) = trace' ("getApp ") $ f [] x where
+        f acc e = case reduceHNF e of
+          Left err -> Left err
+          Right (Thunk env' exp') -> case exp' of
+                EApp a b -> f (Thunk env' b: acc) $ Thunk env' a
+                EVar (VarE n _) | isConstr n -> trace' ("match constr: " ++ n) $ Right $ Just (exp', acc)
+                e -> Right Nothing -- error $ "getApp: " ++ ppShow c ++ "\n" ++ ppShow e
 
 --mconcat' = foldr (<>.) mempty
---m <>. n = Map.unionWithKey (\k a _ -> trace' ("redefined: " ++ k) a) m n
+m <>. n = Map.unionWithKey (\k a _ -> trace' ("redefined: " ++ k) a) m n
+
+isConstr "[]" = True
+isConstr n@(c:_) = isUpper c || c == ':' -- TODO
 
 unifC (CEq t f) (CEq t' f') = runExcept $ unifyTypes_ throwError True $ [t, t']: zipWith (\x y->[x,y]) (toList f) (toList f')
 unifC (CClass c t) (CClass c' t') | c == c' = runExcept $ unifyTypes_ throwError True $ [t, t']: []
@@ -218,7 +245,7 @@ unifC a b = error $ "unifC: " ++ ppShow a ++ "\n ~ \n" ++ ppShow b
 fvars = \case
     Wildcard -> []
     PVar x -> case x of
-        VarE v _ -> [v]
+        VarE v _ | not (isConstr v) -> [v]
         _ -> []
     PCon (c, _) ps     -> concatMap fvars ps
     PTuple ps -> concatMap fvars ps
@@ -256,7 +283,7 @@ toCore sub e = case e of
   AST.ELam t p a -> ELam (toCorePat' p) $ toCore' a
   AST.ECase t e ps -> ECase (toCore' e) [(toCorePat' p, toCore' x) | (p, x) <- ps]
   AST.Exp t (ERecord_ mb rv) -> ERecord mb $ map (id *** toCore') $ rv
-  AST.EAlts t xs -> EAlts $ map toCore' xs
+  AST.EAlts t i xs -> EAlts i $ map toCore' xs
   AST.ENext t -> ENext
   AST.EFieldProj t x -> EFieldProj x
   _ -> error $ "toCore: " ++ ppShow e

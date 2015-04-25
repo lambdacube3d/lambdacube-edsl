@@ -206,11 +206,19 @@ inference_ primFunMap m = runExcept $ fst <$>
         return $ FieldTy mn t
 
     inferDef (PVar _ n, e) = do
-        (s, v) <- newV $ \t -> Typing (Map.singleton n t) mempty t mempty :: Typing
-        e_ <- withTyping (Map.singleton n v) $ inferTyping e <* checkUnambError
-        let e = modTag (id *** removeMonoVars (Set.singleton n)) e_
+        (s', v) <- newV $ \t -> Typing (Map.singleton n t) mempty t mempty :: Typing
+        (Exp (s'', te) exp) <- withTyping (Map.singleton n v) $ inferTyping e
+        (s, t) <- unifyTypings [[v, te]] $ \[t] -> t
+        let e = Exp (s <> {- s'' <> -} s', removeMonoVars (Set.singleton n) t) exp -- setTag (id *** ) e_
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
-        return ((PVar (getTag e) n, e), f)
+        return ((PVar (getTag e) n, replCallType n (getTag e) e), f)
+
+-- TODO
+replCallType n nt = \case
+    EVar _ n' | n == n' -> EVar nt n
+    Exp t e -> Exp t $ f <$> e
+--    x -> error $ "replCallType: " ++ ppShow x
+  where f = replCallType n nt
 
 modTag f (Exp t x) = Exp (f t) x
 
@@ -341,7 +349,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             ETuple_ te -> unifyTypings (map (getTag') te) TTuple
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            EAlts_ xs -> unifyTypings [concatMap getTag' xs] $ \[x] -> x
+            EAlts_ _ xs -> unifyTypings [concatMap getTag' xs] $ \[x] -> x
             ENext_ -> newV $ \t -> t :: Ty          -- TODO
             x -> error $ "inferTyping: " ++ ppShow x
   where

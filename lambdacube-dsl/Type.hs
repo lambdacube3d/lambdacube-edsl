@@ -113,7 +113,7 @@ data Exp_ v t p b
   | EFieldProj_ FName
   | ETyping_   b t
 --  | EFix EName Exp
-  | EAlts_     [b]  -- function alternatives
+  | EAlts_     Int [b]  -- function alternatives
   | ENext_     -- go to next alternative
   | EType_     t
   | EConstraint_ (Constraint t)  -- TODO: wittnesses here if needed
@@ -130,7 +130,7 @@ pattern ERecord a b = Exp a (ERecord_ Nothing b)
 pattern ENamedRecord a n b = Exp a (ERecord_ (Just n) b)
 pattern EFieldProj a c = Exp a (EFieldProj_ c)
 pattern ETyping a b c = Exp a (ETyping_ b c)
-pattern EAlts a b = Exp a (EAlts_ b)
+pattern EAlts a i b = Exp a (EAlts_ i b)
 pattern ENext a = Exp a ENext_
 
 setTag :: (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v t' p' b
@@ -145,7 +145,7 @@ setTag tf f = \case
     ERecord_   m x     -> ERecord_ m x
     EFieldProj_ x      -> EFieldProj_ x
     ETyping_   x y     -> ETyping_ x $ tf y
-    EAlts_     x       -> EAlts_ x
+    EAlts_     x y     -> EAlts_ x y
     ENext_             -> ENext_
 --    EType
 

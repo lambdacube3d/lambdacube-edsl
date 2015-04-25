@@ -133,8 +133,8 @@ data Definition
 
 --------------------------------------------------------------------------------
 
-alts :: [ExpR] -> ExpR
-alts es_ ps = Exp (foldr1 (<-->) $ map getTag es) $ EAlts_ es  where es = map ($ ps) es_
+alts :: Int -> [ExpR] -> ExpR
+alts i es_ ps = EAlts (foldr1 (<-->) $ map getTag es) i es  where es = map ($ ps) es_
 
 compileWhereRHS :: WhereRHS -> ExpR
 compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
@@ -147,15 +147,21 @@ compileGuardedRHS (Guards gs) = foldr addGuard (\ps -> Exp mempty ENext_) gs
     addGuard (b, x) y = eApp (eApp (eApp (eVar mempty "ifThenElse") b) x) y
 
 compileCases :: Range -> ExpR -> [(PatR, WhereRHS)] -> ExpR
-compileCases r e rs = eApp (alts [eLam p $ compileWhereRHS r | (p, r) <- rs]) e
+compileCases r e rs = eApp (alts 1 [eLam p $ compileWhereRHS r | (p, r) <- rs]) e
 
 compileRHS :: [Definition] -> Definition
 compileRHS ds = case ds of
-    (TypeSig (_, t): PreValueDef (r, n) _ _: _)
-        -> ValueDef (PVar r n, eTyping (alts [foldr eLam (compileWhereRHS rhs) pats | PreValueDef _ pats rhs <- ds]) t)
-    (PreValueDef (r, n) _ _: _)
-        -> ValueDef (PVar r n, alts [foldr eLam (compileWhereRHS rhs) pats | PreValueDef _ pats rhs <- ds])
+    (TypeSig (_, t): ds@(PreValueDef{}: _)) -> mkAlts (`eTyping` t) ds
+    ds@(PreValueDef{}: _) -> mkAlts id ds
     [x] -> x
+  where
+    mkAlts f ds@(PreValueDef (r, n) _ _: _)
+        = ValueDef (PVar r n, f $ alts i als)
+      where
+        i = allSame is
+        (als, is) = unzip [(foldr eLam (compileWhereRHS rhs) pats, length pats) | PreValueDef _ pats rhs <- ds]
+
+allSame (n:ns) | all (==n) ns = n
 
 groupDefinitions :: [Definition] -> [Definition]
 groupDefinitions = map compileRHS . groupBy f
@@ -416,7 +422,7 @@ valueDef = do
       n <- valuePattern
       localIndentation Gt $ do
         lookAhead $ operator "=" <|> operator "|"
-        return $ \e -> ValueDef (n, alts [compileWhereRHS e])
+        return $ \e -> ValueDef (n, alts 0 [compileWhereRHS e])
     )
   localIndentation Gt $ do
     e <- whereRHS $ operator "="
