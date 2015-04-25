@@ -29,7 +29,7 @@ import System.Directory
 import System.FilePath
 import Text.Show.Pretty
 
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EAlts, ENext, Exp, Pat, PAt, PVar, PLit, PTuple, PCon, Wildcard)
+import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EFieldProj, EAlts, ENext, Exp, Pat, PAt, PVar, PLit, PTuple, PCon, Wildcard)
 import qualified Type as AST
 import Typecheck hiding (Exp(..))
 
@@ -97,7 +97,7 @@ pattern ELet a b c = Exp (ELet_ a b c)
 pattern ECase a b = Exp (ECase_ a b)
 pattern ETuple a = Exp (ETuple_ a)
 pattern ERecord a b = Exp (ERecord_ a b)
---pattern EFieldProj a c = Exp (EFieldProj_ a c)
+pattern EFieldProj a = Exp (EFieldProj_ a)
 pattern EType a = Exp (EType_ a)
 pattern EConstraint a = Exp (EConstraint_ a)
 pattern EAlts b = Exp (EAlts_ b)
@@ -247,6 +247,7 @@ toCore sub e = case e of
   AST.Exp t (ERecord_ mb rv) -> ERecord mb $ map (id *** toCore') $ rv
   AST.EAlts t xs -> EAlts $ map toCore' xs
   AST.ENext t -> ENext
+  AST.EFieldProj t x -> EFieldProj x
   _ -> error $ "toCore: " ++ ppShow e
  where
     toCore' = toCore sub'
