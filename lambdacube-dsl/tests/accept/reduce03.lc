@@ -1,0 +1,7 @@
+data AB = A | B
+
+image ab = case ab of
+  A -> ColorImage #1 (V4F 0.0 0.0 0.4 1.0)
+  B -> ColorImage #1 (V4F 0.4 0.0 0.0 1.0)
+
+main = ScreenOut (FrameBuffer (image A))
