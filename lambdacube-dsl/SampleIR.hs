@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, MonadComprehensions #-}
 module SampleIR where
 
 import "GLFW-b" Graphics.UI.GLFW as GLFW
@@ -109,6 +109,10 @@ myCube = Mesh
     , mGPUData      = Nothing
     }
 
+toV4Position :: Mesh -> Mesh
+toV4Position m = m {mAttributes = T.adjust v3ToV4 "position" $ mAttributes m, mGPUData = Nothing}
+ where v3ToV4 (A_V3F l) = A_V4F $ SV.map (\(V3 x y z) -> V4 x y z 1) l
+
 main :: IO ()
 main = do
     win <- initWindow "LambdaCube 3D DSL Sample" 1024 768
@@ -119,15 +123,17 @@ main = do
           [fn]  -> fn
           _     -> "tests/accept/gfx03"
 
-    gpuCube <- compileMesh myCube
-
     let inputSchema = 
           PipelineSchema
-          { GL.slots = T.fromList [("stream",SlotSchema Triangles $ T.fromList [("position",TV4F),("vertexUV",TV2F)])]
+          { GL.slots = T.fromList [("stream",SlotSchema Triangles $ T.fromList [("position",TV4F)])]
           , uniforms = T.fromList [("MVP",M44F),("MVP2",M44F)]
           }
     pplInput <- mkGLPipelineInput inputSchema
-    addMesh pplInput "stream" gpuCube []
+
+    gpuCube <- compileMesh myCube
+    gpuMonkey <- compileMesh =<< toV4Position <$> loadMesh "Monkey.lcmesh"
+
+    addMesh pplInput "stream" gpuMonkey []
 
     let setup = do
           pplRes <- compileMain "." srcName

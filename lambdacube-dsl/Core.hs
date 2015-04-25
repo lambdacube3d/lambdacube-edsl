@@ -136,6 +136,7 @@ reduce_ total s m exp = case exp of
         _ -> fallback
      where re = reduce s m x
            fallback = tot $ EApp (reduce s m f) re
+    e -> error $ "reduce_ " ++ ppShow e
   where
     tot x = if total then x else exp
 

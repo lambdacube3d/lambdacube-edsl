@@ -64,11 +64,11 @@ data GPUData
     , dIndices      :: Maybe (IndexStream Buffer)
     }
 
-loadMesh :: ByteString -> IO Mesh
-loadMesh n = compileMesh =<< decode <$> LB.readFile (SB.unpack n)
+loadMesh :: String -> IO Mesh
+loadMesh n = compileMesh =<< decode <$> LB.readFile n
 
-saveMesh :: ByteString -> Mesh -> IO ()
-saveMesh n m = LB.writeFile (SB.unpack n) (encode m)
+saveMesh :: String -> Mesh -> IO ()
+saveMesh n m = LB.writeFile n (encode m)
 
 addMesh :: GLPipelineInput -> ByteString -> Mesh -> [ByteString] -> IO Object
 addMesh input slotName (Mesh _ _ (Just (GPUData prim streams indices))) objUniNames = do
