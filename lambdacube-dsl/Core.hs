@@ -104,13 +104,14 @@ pattern EConstraint a = Exp (EConstraint_ a)
 pattern EAlts i b = Exp (EAlts_ i b)
 pattern ENext = Exp ENext_
 
-data Env = Env {envSubst :: Subst, envMap :: Map EName Thunk}
+type EnvMap = Map EName (Maybe Thunk{- Nothing: statically unknown but defined -})
+data Env = Env {envSubst :: Subst, envMap :: EnvMap}
 instance Monoid Env where
     mempty = Env mempty mempty
-    Env x y `mappend` Env x' y' = Env (x <> x') (y <> y')
+    e@(Env x y) `mappend` Env x' y' = Env (x' `composeSubst` x) (y <> (fmap (\(Thunk e' x) -> Thunk (e <> e') x) <$> y'))
 data Thunk = Thunk {thunkEnv :: Env, thunkExp :: Exp}
 
-deleteEnvVars vs (Env s m) = Env s $ foldr Map.delete m vs
+deleteEnvVars vs (Env s m) = Env s $ foldr (\i m -> Map.insert i Nothing m) m vs
 addEnv e (Thunk e' x) = Thunk (e' <> e) x
 addSubst s' (Env s m) = Env (s `composeSubst` s') m
 
@@ -156,8 +157,8 @@ reduceHNF th@(Thunk env exp) = case exp of
         VarE v t
           | isConstr v -> Right th
           | otherwise -> trace' ("evar " ++ v) $
-            maybe (trace' (" no " ++ v) $ Right th) (reduceHNF . addEnv env) $ Map.lookup v $ envMap env
-    ELet p x e' -> trace' "elet" $ case matchPattern (Thunk env x) p of
+            maybe (trace' (" no " ++ v) $ Right th) (maybe (Right th) (reduceHNF {- . addEnv env-})) $ Map.lookup v $ envMap env
+    ELet p x e' -> trace' "elet" $ case matchPattern (recEnv p env x) p of
         Right (Just m') -> reduceHNF $ Thunk (m' <> env) e'
         Right _ -> Right th
         Left err -> Left err
@@ -176,10 +177,10 @@ reduceHNF th@(Thunk env exp) = case exp of
 
         ELam p e' -> case p of
             PVar (VarT v) -> trace' (" ety: " ++ v) $ case x of
-                EType x -> reduceHNF $ Thunk (addSubst (Map.singleton v (subst s x)) env') e'
+                EType x -> reduceHNF $ Thunk (addSubst (Map.singleton v (subst (envSubst env) x)) env') e'
                 x -> error $ "reduce varT: " ++ ppShow (x, e')
             PVar (VarC v) -> trace' " ectr" $ case x of
-                EConstraint x -> case unifC (subst s v) (subst s x) of
+                EConstraint x -> case unifC (subst (envSubst env') v) (subst (envSubst env) x) of
                     Right s' -> reduceHNF $ Thunk (addSubst s' env') e'
                     Left e -> error $ "reduce_c: " ++ e
             _ -> case trace' "matchPattern" $ matchPattern (Thunk env x) p of
@@ -189,9 +190,9 @@ reduceHNF th@(Thunk env exp) = case exp of
 
         EVar e' -> case e' of
             VarE v (Forall tv t) -> trace' (" forall " ++ tv) $ case x of
-                EType t' -> Right $ Thunk (addSubst (Map.singleton tv (subst s t')) env') $ EVar $ VarE v t
+                EType x -> Right $ Thunk (addSubst (Map.singleton tv (subst (envSubst env) x)) env') $ EVar $ VarE v t
             VarE v (TConstraintArg t ty) -> trace' (" constr ") $ case x of
-                EConstraint t' -> case unifC (subst s t) (subst s t') of
+                EConstraint t' -> case unifC (subst (envSubst env') t) (subst (envSubst env) t') of
                     Right s' -> Right $ Thunk (addSubst s' env') $ EVar $ VarE v ty
                     Left e -> error $ "reduce (2): " ++ e
                 e -> error $ "reduce constr: " ++ show e
@@ -199,14 +200,15 @@ reduceHNF th@(Thunk env exp) = case exp of
         _ -> Right th
     _ -> Right th
   where
-    s = envSubst env
-
     notConstr = not . isConstr
+
+    recEnv (PVar (VarE v _)) env x = let th = Thunk (Env mempty (Map.singleton v (Just th)) <> env) x in th
+    recEnv _ env x = Thunk env x
 
     matchPattern :: Thunk -> Pat -> Either String (Maybe Env)       -- Left: pattern match failure; Right Nothing: can't reduce
     matchPattern e@(Thunk env _) = \case
         Wildcard -> trace' "match _" $ Right $ Just mempty
-        PVar (VarE v _) -> trace' (v ++ " = ...") $ Right $ Just $ Env mempty $ Map.singleton v e
+        PVar (VarE v _) -> trace' (v ++ " = ...") $ Right $ Just $ Env mempty $ Map.singleton v (Just e)
         PCon (c, _) ps     -> case getApp {-(c, ps)-} e of
             Left err -> trace' ("cant match " ++ show (c, err)) $ Left err
             Right Nothing -> Right Nothing
@@ -245,8 +247,7 @@ unifC a b = error $ "unifC: " ++ ppShow a ++ "\n ~ \n" ++ ppShow b
 fvars = \case
     Wildcard -> []
     PVar x -> case x of
-        VarE v _ | not (isConstr v) -> [v]
-        _ -> []
+        VarE v _ {- | not (isConstr v) -} -> [v]
     PCon (c, _) ps     -> concatMap fvars ps
     PTuple ps -> concatMap fvars ps
     p -> error $ "fvars: " ++ ppShow p
