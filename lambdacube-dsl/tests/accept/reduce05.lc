@@ -1,0 +1,22 @@
+foldl' f e [] = e
+foldl' f e (x: xs) = foldl' f (f e x) xs
+
+data AB = A | B
+
+render fb choice = let
+  rasterCtx         = TriangleCtx CullNone PolygonFill NoOffset LastVertex
+  fragmentCtx       = AccumulationContext (ColorOp NoBlending (V4B True True True True))
+  vertexShader v    = VertexOut v 1.0 () (Smooth v)
+  vertexStream      = Fetch "stream" Triangles (IV4F "position")
+  primitiveStream   = Transform vertexShader vertexStream
+  fragmentStream    = Rasterize rasterCtx primitiveStream
+  fragmentShader v  = let res = case choice of
+                            A -> v
+                            B -> V4F 1.0 0.0 0.0 0.2
+                      in FragmentOut res
+  frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
+ in frame
+
+emptyFB = FrameBuffer (ColorImage #1 (V4F 0.0 0.0 0.4 1.0))
+
+main = ScreenOut (foldl' render emptyFB [A,B])
