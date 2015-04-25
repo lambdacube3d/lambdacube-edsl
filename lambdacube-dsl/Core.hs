@@ -33,7 +33,8 @@ import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EAlts,
 import qualified Type as AST
 import Typecheck hiding (Exp(..))
 
-trace' _ x = x
+trace' = trace
+--trace' _ x = x
 
 data Kind
   = Star
@@ -117,52 +118,65 @@ reduce_ total cont s m exp = case exp of
     EAlts es -> foldr (\alt x -> reduce_ total x s m alt) (error "pattern match failure") es
     ENext -> cont
     ETuple es -> tot $ ETuple $ map (reduce cont s m) es
-    ELam p e -> tot $ ELam (subst s p) $ reduce cont s m e
+    ELam p e -> tot $ ELam (subst s p) $ reduce cont s (foldr Map.delete m $ fvars p) e
     ELit l -> ELit l
     EType t -> tot $ EType $ subst s t
     EConstraint c -> tot $ EConstraint $ subst s c
-    EVar (VarE v t) -> trace' ("evar " ++ v) $ maybe (tot $ EVar $ VarE v $ subst s t) id{-(reduce_ total cont s m)-} $ Map.lookup v m
+    EVar v -> case v of
+--        VarE "foldl'" _ -> ELam (PVar (VarE "f" _)) $ EVar $ VarE "foldl'#3" _
+        VarE v t -> trace' ("evar " ++ v) $ maybe (trace' (" no " ++ v) $ tot $ EVar $ VarE v $ subst s t) (reduce_ total cont s m) $ Map.lookup v m
     ELet p x e' -> trace' "elet" $ case defs x p of
-        Just m' -> reduce_ total cont s (m' <>. m) e'
-        _ -> tot $ ELet (subst s p) (reduce cont s m x) $ reduce cont s m e'
+        Just m' -> reduce cont s (m' <>. m) e'
+        _ -> trace' "    x" tot $ ELet (subst s p) (reduce cont s m x) $ reduce cont s (foldr Map.delete m $ fvars p) e'
     EApp f x -> trace' "eapp" $ case reduceHNF cont s m f of
         ELam p e' -> case p of
-            PVar (VarT v) -> case re of
+            PVar (VarT v) -> trace' " ety" $ case re of
                 EType x -> reduce_ total cont (s `composeSubst` Map.singleton v x) m e'
-            PVar (VarC v) -> case re of
+            PVar (VarC v) -> trace' " ectr" $ case re of
                 EConstraint x -> case unifC (subst s v) x of
                     Right s' -> reduce_ total cont (s `composeSubst` s') m e'
                     Left e -> error $ "reduce: " ++ e
             _ -> case defs x p of
-                Just m' -> reduce_ total cont s (m' <>. m) e'
-                _ -> fallback
+                Just m' -> reduce cont s (m' <>. m) e'
+                _ -> trace' "     x" $ fallback
         EVar e' -> case e' of
-            VarE v (Forall tv t) -> case re of
+            VarE v (Forall tv t) -> trace' (" forall " ++ tv) $ case re of
                 EType t' -> EVar $ VarE v $ subst (s `composeSubst` Map.singleton tv t') t
-            VarE v (TConstraintArg t ty) -> case re of
+            VarE v (TConstraintArg t ty) -> trace' (" constr ") $ case re of
                 EConstraint t' -> case unifC (subst s t) t' of
                     Right s' -> EVar $ VarE v $ subst (s `composeSubst` s') ty
                     Left e -> error $ "reduce (2): " ++ e
                 e -> error $ "reduce constr: " ++ show e
-            _ -> fallback
-        _ -> fallback
+            _ -> trace' "    ." $ fallback
+        _ -> trace' "   ." $ fallback
      where re = reduce cont s m x
            fallback = tot $ EApp (reduce cont s m f) re
     x -> error $ "reduce': " ++ ppShow x
   where
     tot x = if total then x else exp
 
+    -- ((\f -> \x -> f) ()) ()
+
     unifC (CEq t f) (CEq t' f') = runExcept $ unifyTypes_ throwError True $ [t, t']: zipWith (\x y->[x,y]) (toList f) (toList f')
     unifC (CClass c t) (CClass c' t') | c == c' = runExcept $ unifyTypes_ throwError True $ [t, t']: []
     unifC a b = error $ "unifC: " ++ ppShow a ++ "\n ~ \n" ++ ppShow b
 
+    fvars = \case
+        Wildcard -> []
+        PVar x -> case x of
+            VarE v _ -> [v]
+            _ -> []
+        PCon (c, _) ps     -> concatMap fvars ps
+        PTuple ps -> concatMap fvars ps
+        p -> error $ "fvars: " ++ ppShow p
+
     defs e = \case
         Wildcard -> mempty
-        PVar (VarE v _) -> trace' (v ++ " = ...") $ Just $ Map.singleton v $ reduce_ total cont s m e
+        PVar (VarE v _) -> trace' (v ++ " = ...") $ Just $ Map.singleton v $ reduce cont s m e
         PCon (c, _) ps     -> case getApp (c, ps) (length ps) e of
             Just (EVar (VarE c' _), xs)
                 | c == c' -> mconcat' <$> sequence (zipWith defs xs ps)
-                | otherwise -> Nothing --error $ "defs not eq: " ++ show (c, c')
+                | otherwise -> error $ "defs not eq: " ++ show (c, c')
             _ -> Nothing
         PTuple ps -> case reduceHNF cont s m e of
             ETuple xs ->  mconcat' <$> sequence (zipWith defs xs ps)
