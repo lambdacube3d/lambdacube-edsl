@@ -33,8 +33,8 @@ import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EAlts,
 import qualified Type as AST
 import Typecheck hiding (Exp(..))
 
-trace' = trace
---trace' _ x = x
+--trace' = trace
+trace' _ x = x
 
 data Kind
   = Star
