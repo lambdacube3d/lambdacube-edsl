@@ -288,7 +288,7 @@ genGLSLSubst s e = case e of
 
   -- TODO: Texture Lookup Functions
 
-  Exp e -> F.foldMap (genGLSLSubst s) e
+  x -> error $ "genGLSLSubst - unknown primitive " ++ ppShow x
 
 isMatrix :: Ty -> Bool
 isMatrix (TMat{}) = True
