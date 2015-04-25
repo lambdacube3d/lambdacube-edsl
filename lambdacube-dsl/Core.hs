@@ -176,7 +176,7 @@ reduce_ total cont s m exp = case exp of
         PCon (c, _) ps     -> case getApp (c, ps) (length ps) e of
             Just (EVar (VarE c' _), xs)
                 | c == c' -> mconcat' <$> sequence (zipWith defs xs ps)
-                | otherwise -> error $ "defs not eq: " ++ show (c, c')
+                | otherwise -> Nothing -- error $ "defs not eq: " ++ show (c, c')
             _ -> Nothing
         PTuple ps -> case reduceHNF cont s m e of
             ETuple xs ->  mconcat' <$> sequence (zipWith defs xs ps)
@@ -248,7 +248,16 @@ tyOf = \case
     ETuple es -> TTuple $ map tyOf es
     EVar (VarE _ t) -> t
     EApp (tyOf -> TArr _ t) _ -> t
+    ELam (tyOfPat -> a) (tyOf -> b) -> TArr a b
     e -> error $ "tyOf " ++ ppShow e
+
+tyOfPat :: Pat -> Ty
+tyOfPat = \case
+    PCon (_, t) ps -> stripArgs (length ps) t
+    e -> error $ "tyOfPat " ++ ppShow e
+  where
+    stripArgs 0 t = t
+    stripArgs n (TArr _ t) = stripArgs (n-1) t
 
 pattern Va x <- VarE x _
 pattern A0 x <- EVar (Va x)
