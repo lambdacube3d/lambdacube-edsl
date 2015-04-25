@@ -91,9 +91,9 @@ getProgram slot vert frag = do
         , IR.programStreams     = Map.fromList [("v",("position",IR.V3F))] -- TODO
         , IR.programInTextures  = mempty -- TODO
         , IR.programOutput      = [("f0",IR.V4F)] -- TODO
-        , IR.vertexShader       = {-trace vertSrc-} vertSrc
+        , IR.vertexShader       = vertSrc
         , IR.geometryShader     = mempty -- TODO
-        , IR.fragmentShader     = {-trace fragSrc-} fragSrc
+        , IR.fragmentShader     = fragSrc
         }
   pv <- gets IR.programs
   modify (\s -> s {IR.programs = pv `V.snoc` prg})
@@ -198,7 +198,34 @@ compFrag x = case x of
 
 compInput x = case x of
   ETuple a -> concatMap compInput a
+  A1 "IFloat" (ELit (LString s)) -> [(s, IR.Float)]
+  A1 "IV2F" (ELit (LString s)) -> [(s, IR.V2F)]
+  A1 "IV3F" (ELit (LString s)) -> [(s, IR.V3F)]
   A1 "IV4F" (ELit (LString s)) -> [(s, IR.V4F)]
+
+  A1 "IBool" (ELit (LString s)) -> [(s, IR.Bool)]
+  A1 "IV2B" (ELit (LString s)) -> [(s, IR.V2B)]
+  A1 "IV3B" (ELit (LString s)) -> [(s, IR.V3B)]
+  A1 "IV4B" (ELit (LString s)) -> [(s, IR.V4B)]
+
+  A1 "IInt" (ELit (LString s)) -> [(s, IR.Int)]
+  A1 "IV2I" (ELit (LString s)) -> [(s, IR.V2I)]
+  A1 "IV3I" (ELit (LString s)) -> [(s, IR.V3I)]
+  A1 "IV4I" (ELit (LString s)) -> [(s, IR.V4I)]
+
+  A1 "IWord" (ELit (LString s)) -> [(s, IR.Word)]
+  A1 "IV2U" (ELit (LString s)) -> [(s, IR.V2U)]
+  A1 "IV3U" (ELit (LString s)) -> [(s, IR.V3U)]
+  A1 "IV4U" (ELit (LString s)) -> [(s, IR.V4U)]
+
+  A1 "IM22F" (ELit (LString s)) -> [(s, IR.M22F)]
+  A1 "IM23F" (ELit (LString s)) -> [(s, IR.M23F)]
+  A1 "IM24F" (ELit (LString s)) -> [(s, IR.M24F)]
+  A1 "IM32F" (ELit (LString s)) -> [(s, IR.M32F)]
+  A1 "IM33F" (ELit (LString s)) -> [(s, IR.M33F)]
+  A1 "IM34F" (ELit (LString s)) -> [(s, IR.M34F)]
+  A1 "IM42F" (ELit (LString s)) -> [(s, IR.M42F)]
+  A1 "IM43F" (ELit (LString s)) -> [(s, IR.M43F)]
   A1 "IM44F" (ELit (LString s)) -> [(s, IR.M44F)]
   x -> error $ "compInput " ++ show x
 
