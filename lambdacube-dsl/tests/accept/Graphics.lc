@@ -416,5 +416,5 @@ q3GFX shl = {-blurVH $ PrjFrameBuffer "" tix0 $ -}errorShader $ foldl' mkShader 
     clear   = FrameBuffer (DepthImage #1 1000, ColorImage #1 (zero'::Vec 4 Float))
 
 --main :: Output
-main = ()--ScreenOut $ q3GFX [("a",defaultCommonAttrs)]
+main = ScreenOut $ q3GFX [("a",defaultCommonAttrs)]
 

@@ -157,7 +157,7 @@ reduceHNF th@(Thunk env exp) = case exp of
         VarE v t
           | isConstr v -> Right th
           | otherwise -> trace' ("evar " ++ v) $
-            maybe (trace' (" no " ++ v) $ Right th) (maybe (Right th) (reduceHNF {- . addEnv env-})) $ Map.lookup v $ envMap env
+            maybe (trace' (" no " ++ v) $ Right th) (maybe (Right th) reduceHNF) $ Map.lookup v $ envMap env
     ELet p x e' -> trace' "elet" $ case matchPattern (recEnv p env x) p of
         Right (Just m') -> reduceHNF $ Thunk (m' <> env) e'
         Right _ -> Right th
