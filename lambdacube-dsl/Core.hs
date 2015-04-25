@@ -274,7 +274,7 @@ toCore sub e = case e of
   AST.EVar t n      -> foldl EApp (foldl EApp (EVar $ VarE n $ typingToTy $ subst sub' $ snd t) pv) cs
     where
       cs = map EConstraint $ subst sub' $ constraints $ snd t
-      pv = map EType $ subst sub' $ map TVar $ Map.keys $ fst t
+      pv = map EType $ subst sub' $ map TVar $ Set.toList $ polyVars $ snd t
   AST.EApp t f a    -> EApp (toCore' f) (toCore' a)
   AST.ELet _ p a b  -> ELet (toCorePat' p) (pv --> ctr --> toCore' a) (toCore' b)
     where

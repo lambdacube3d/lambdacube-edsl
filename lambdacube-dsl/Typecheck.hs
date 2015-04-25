@@ -205,11 +205,11 @@ inference_ primFunMap m = runExcept $ fst <$>
         t <- inferKind' t
         return $ FieldTy mn t
 
-    inferDef (PVar _ n, e) = do
-        (s', v) <- newV $ \t -> Typing (Map.singleton n t) mempty t mempty :: Typing
-        (Exp (s'', te) exp) <- withTyping (Map.singleton n v) $ inferTyping e
-        (s, t) <- unifyTypings [[v, te]] $ \[t] -> t
-        let e = Exp (s <> {- s'' <> -} s', removeMonoVars (Set.singleton n) t) exp -- setTag (id *** ) e_
+    inferDef (p@(PVar _ n), e) = do
+        (p, tr) <- inferPatTyping False p
+        (Exp (s'', te) exp) <- withTyping tr $ inferTyping e
+        (s, t) <- unifyTypings [[snd $ getTag p, te]] $ \[t] -> t
+        let e = Exp (s {- <> s'' -}, removeMonoVars (Set.singleton n) t) exp
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
         return ((PVar (getTag e) n, replCallType n (getTag e) e), f)
 
@@ -353,29 +353,32 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             ENext_ -> newV $ \t -> t :: Ty          -- TODO
             x -> error $ "inferTyping: " ++ ppShow x
   where
-    inferPatTyping :: Bool -> Pat Range -> TCM (Pat STyping, Map EName Typing)
-    inferPatTyping polymorph p_@(Pat pt p) = local (id *** const [pt]) $ do
-        p' <- T.mapM (inferPatTyping polymorph) p
-        (t, tr) <- case p' of
-            PLit_ n -> noTr $ noSubst $ inferLit n
-            Wildcard_ -> noTr $ newV $ \t -> t :: Ty
-            PVar_ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
-                if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t mempty :: Typing
-            PAt_ n p -> addTr (\t -> Map.singleton n (snd t)) $ newV $ snd . getTag . fst $ p
-            PTuple_ ps -> noTr $ unifyTypings (map getTagP' ps) TTuple
-            PCon_ n ps -> noTr $ do
-                (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
-                unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ tl ~~> v] ==> v)
-            PRecord_ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
-                (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip fs tl] ==> v)
---            x -> error $ "inferPatTyping: " ++ ppShow x
-        let trs = Map.unionsWith (++) . map ((:[]) <$>) $ tr: map snd (toList p')
-        tr <- case filter ((>1) . length . snd) $ Map.toList trs of
-            [] -> return $ Map.map head trs
-            ns -> throwErrorTCM $ "conflicting definitions for " ++ show (map fst ns)
-        return (Pat t $ fst <$> p', tr)
-
     getTag' = (:[]) . snd . getTag
+    getTagP' = (:[]) . snd . getTag . fst
+    noSubst = fmap ((,) mempty)
+
+inferPatTyping :: Bool -> Pat Range -> TCM (Pat STyping, Map EName Typing)
+inferPatTyping polymorph p_@(Pat pt p) = local (id *** const [pt]) $ do
+    p' <- T.mapM (inferPatTyping polymorph) p
+    (t, tr) <- case p' of
+        PLit_ n -> noTr $ noSubst $ inferLit n
+        Wildcard_ -> noTr $ newV $ \t -> t :: Ty
+        PVar_ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
+            if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t mempty :: Typing
+        PAt_ n p -> addTr (\t -> Map.singleton n (snd t)) $ newV $ snd . getTag . fst $ p
+        PTuple_ ps -> noTr $ unifyTypings (map getTagP' ps) TTuple
+        PCon_ n ps -> noTr $ do
+            (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
+            unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ tl ~~> v] ==> v)
+        PRecord_ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
+            (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip fs tl] ==> v)
+--            x -> error $ "inferPatTyping: " ++ ppShow x
+    let trs = Map.unionsWith (++) . map ((:[]) <$>) $ tr: map snd (toList p')
+    tr <- case filter ((>1) . length . snd) $ Map.toList trs of
+        [] -> return $ Map.map head trs
+        ns -> throwErrorTCM $ "conflicting definitions for " ++ show (map fst ns)
+    return (Pat t $ fst <$> p', tr)
+  where
     getTagP' = (:[]) . snd . getTag . fst
     noSubst = fmap ((,) mempty)
     noTr = addTr $ const mempty
