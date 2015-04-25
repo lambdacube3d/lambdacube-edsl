@@ -48,17 +48,17 @@ main = do
   rejectTests testToReject
 
 
-acceptTests = acceptTests_ (compilePipeline . mkReduce . toCore mempty) (Just $ TCon0 "Output")
-acceptTests' = acceptTests_ (mkReduce . toCore mempty) Nothing
-
-acceptTests_ f t testToAccept = forM_ (testToAccept :: [String]) $ \n -> do
+acceptTests testToAccept = forM_ (testToAccept :: [String]) $ \n -> do
     putStr $ " # " ++ n ++ " ... "
-    result <- runMM "./tests/accept" $ fmap f <$> getDef_ n "main" t
-    let ef = okFileName n
-    case result of
+    result <- runMM "./tests/accept" $ getDef_ n "main"
+    let f e
+            | typingToTy (snd $ getTag e) == TCon0 "Output" = ("compiled", ppShow . compilePipeline . mkReduce . toCore mempty $ e)
+            | otherwise = ("reduced", ppShow . mkReduce . toCore mempty $ e)
+        ef = okFileName n
+    case fmap f <$> result of
       Left e -> putStrLn $ "\n!FAIL\n" ++ e
-      Right (Left e) -> putStrLn $ "OK (no main because " ++ e ++ ")"
-      Right (Right x) -> catch (writeFile ef (ppShow x) >> putStrLn "OK") getErr
+      Right (Left e) -> putStrLn $ "OK - no main because " ++ e
+      Right (Right (op, x)) -> catch (writeFile ef x >> putStrLn ("OK - " ++ op)) getErr
   where
     getErr :: ErrorCall -> IO ()
     getErr e = putStrLn $ "\n!FAIL\n" ++ show e

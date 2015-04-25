@@ -209,7 +209,7 @@ inference_ primFunMap m = runExcept $ fst <$>
         (p, tr) <- inferPatTyping False p
         (Exp (s'', te) exp) <- withTyping tr $ inferTyping e
         (s, t) <- unifyTypings [[snd $ getTag p, te]] $ \[t] -> t
-        let e = Exp (s {- <> s'' -}, removeMonoVars (Set.singleton n) t) exp
+        let e = Exp (s <> s'', removeMonoVars (Set.singleton n) t) exp
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
         return ((PVar (getTag e) n, replCallType n (getTag e) e), f)
 

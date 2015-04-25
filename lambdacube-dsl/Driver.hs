@@ -60,19 +60,17 @@ lcModuleFile path n = path </> (n ++ ".lc")
 
 getDef :: MName -> EName -> MM (AST.Exp (Subst, Typing))
 getDef m d = do
-    either (\s -> throwError $ m ++ "." ++ d ++ ": " ++ s) return =<< getDef_ m d Nothing
+    either (\s -> throwError $ m ++ "." ++ d ++ ": " ++ s) return =<< getDef_ m d
 
-getDef_ :: MName -> EName -> Maybe Ty -> MM (Either String (AST.Exp (Subst, Typing)))
-getDef_ m d mt = do
+getDef_ :: MName -> EName -> MM (Either String (AST.Exp (Subst, Typing)))
+getDef_ m d = do
     typeCheckLC m
     ms <- get
     return $ case
-        [ (buildLet (concatMap (definitions . snd) (reverse dss) ++ reverse ps) e, t)
+        [ buildLet (concatMap (definitions . snd) (reverse dss) ++ reverse ps) e
          | ((m', defs): dss) <- tails ms, m' == m
          , ((AST.PVar (_, t) d', e):ps) <- tails $ reverse $ definitions defs, d' == d
          ] of
-        [(e, t)]
-            | maybe True (== typingToTy t {- TODO: unification -}) mt -> Right e
-            | otherwise -> Left $ "type is " ++ ppShow (typingToTy t)
+        [e] -> Right e
         [] -> Left "not found"
 
