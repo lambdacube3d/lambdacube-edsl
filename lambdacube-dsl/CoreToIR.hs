@@ -103,6 +103,7 @@ getProgram slot vert frag = do
 
 getCommands :: Exp -> CG [IR.Command]
 getCommands e = case e of
+  A1 "ScreenOut" a -> getCommands a
   A5 "Accumulate" actx ffilter frag (A2 "Rasterize" rctx (A2 "Transform" vert input)) fbuf -> do
     slot <- getSlot input
     prog <- getProgram slot vert frag
@@ -111,7 +112,7 @@ getCommands e = case e of
     let i = compImg a
     rt <- newRenderTarget i
     pure [IR.SetRenderTarget rt, IR.ClearRenderTarget (map imageToSemantic i)]
-  Exp e -> F.foldrM (\a b -> (<> b) <$> getCommands a) [] e
+  x -> error $ "getCommands " ++ ppShow x
 
 getUniforms :: Exp -> Set (String,IR.InputType)
 getUniforms e = case e of
