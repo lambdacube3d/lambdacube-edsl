@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, PackageImports #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, LambdaCase #-}
 
 import Data.List
 import Control.Applicative
@@ -47,48 +47,59 @@ main = do
   putStrLn $ "Catching errors (must get an error)"
   rejectTests testToReject
 
+acceptTests = testFrame "./tests/accept" $ \case
+    Left e -> Left e
+    Right (Left e) -> Right ("typechecked", ppShow e)
+    Right (Right e)
+        | typingToTy (snd $ getTag e) == TCon0 "Output"
+            -> Right ("compiled main", ppShow . compilePipeline . mkReduce . toCore mempty $ e)
+        | otherwise -> Right ("reduced main", ppShow . mkReduce . toCore mempty $ e)
 
-acceptTests testToAccept = forM_ (testToAccept :: [String]) $ \n -> do
-    putStr $ " # " ++ n ++ " ... "
-    result <- runMM "./tests/accept" $ getDef_ n "main"
-    let f e
-            | typingToTy (snd $ getTag e) == TCon0 "Output" = ("compiled", ppShow . compilePipeline . mkReduce . toCore mempty $ e)
-            | otherwise = ("reduced", ppShow . mkReduce . toCore mempty $ e)
-        ef = okFileName n
-    case fmap f <$> result of
+rejectTests = testFrame "./tests/reject" $ \case
+    Left e -> Right ("error message", e)
+    _ -> Left "failed to catch error"
+
+testFrame dir f tests = forM_ (zip [1..] (tests :: [String])) $ \(i, n) -> do
+    putStr $ " # " ++ pad 4 (show i) ++ pad 15 n ++ " ... "
+    result <- runMM dir $ getDef_ n "main"
+    case f result of
       Left e -> putStrLn $ "\n!FAIL\n" ++ e
-      Right (Left e) -> putStrLn $ "OK - no main because " ++ e
-      Right (Right (op, x)) -> catch (writeFile ef x >> putStrLn ("OK - " ++ op)) getErr
+      Right (op, x) -> catch (length x `seq` compareResult (pad 15 op) (dir </> (n ++ ".out")) x) getErr
   where
     getErr :: ErrorCall -> IO ()
     getErr e = putStrLn $ "\n!FAIL\n" ++ show e
 
-rejectTests testToReject = forM_ testToReject $ \n -> do
-    putStr $ " # " ++ n ++ " ... "
-    result <- runMM "./tests/reject" $ typeCheckLC n
-    case result of
-      Left e -> checkErrorMsg False n e
-      _ -> putStrLn $ "\n!FAIL - failed to catch error"
-
-checkErrorMsg verbose n e = doesFileExist ef >>= \b -> case b of
-    False -> writeFile ef e >> ok
+compareResult msg ef e = doesFileExist ef >>= \b -> case b of
+    False -> writeFile ef e >> putStrLn ("OK - " ++ msg ++ " is written")
     True -> do
         e' <- readFile ef
-        if e == e' then ok else do
-            putStrLn $ "Error message has changed."
-            putStrLn "Old message: "
-            putStrLn e'
+        case map fst $ filter snd $ zip [0..] $ zipWith (/=) e e' of
+          [] -> putStrLn $ "OK - " ++ msg ++ " agrees"
+          rs -> do
+            putStrLn $ msg ++ " has changed."
+            putStrLn "------------------------------------------- Old"
+            putStrLn $ showRanges ef rs e'
+            putStrLn "------------------------------------------- New"
+            putStrLn $ showRanges ef rs e
             putStrLn "-------------------------------------------"
-            putStrLn "New message: "
-            putStrLn e
-            putStrLn "-------------------------------------------"
-            putStr "Accept new error message (y/n)? "
+            putStr $ "Accept new " ++ msg ++ " (y/n)? "
             c <- getChar
-            if c `elem` ("yY\n" :: String) then do
-                    writeFile ef e
-                    putStrLn " Accepted."
-                else putStrLn " Not Accepted."
-    where
-        ef = errorFileName n
-        ok = putStrLn $ "OK" ++ if verbose then e else []
+            if c `elem` ("yY\n" :: String)
+                then writeFile ef e >> putStrLn " - accepted."
+                else putStrLn " - not Accepted."
+
+pad n s = s ++ replicate (n - length s) ' '
+
+showRanges :: String -> [Int] -> String -> String
+showRanges fname is e = (if head rs == 0 then "" else "...\n") ++ limit 4000 (intercalate "\n...\n" $ f (zipWith (-) rs (0:rs)) e)
+  where
+    limit n s = take n s ++ if null (drop n s) then "" else "\n... (see " ++ fname ++ " for more differences)"
+    f :: [Int] -> String -> [String]
+    f (i:is) e = g is $ drop i e
+    f [] "" = []
+    f [] _ = ["\n..."]
+    g (i:is) e = take i e: f is (drop i e)
+    rs = (head is - x) : concat [[a + x, b - x] | (a, b) <- zip is (tail is), a + y < b] ++ [last is + x]
+    x = 50
+    y = 3*x
 
