@@ -309,17 +309,20 @@ primFunMap = Map.fromList $ execWriter $ do
   "V4" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> a ~> TVec 4 a
   "[]" --> \a -> TList a
   ":" --> \a -> a ~> TList a ~> TList a
-  "$" --> \a b -> (a ~> b) ~> a ~> b
-  "negate" --> \a -> [IsNum @@ a] ==> a ~> a
+
+  -- TODO: eliminate
+--  "$" --> \a b -> (a ~> b) ~> a ~> b
+--  "negate" --> \a -> [IsNum @@ a] ==> a ~> a
   "fromInt" --> \a -> [IsNum @@ a] ==> TInt ~> a
-  ["zero'", "one'"] ---> \a -> {- [IsComponent @@ a] ==> -- TODO -} (a :: Ty)
-  "texture'" --> TUnit ~> TVec 2 TFloat ~> TVec 4 TFloat
 --  "toMat" --> \v m a b i j x -> [m ~~ TFMat a b, a ~~ TFVec i x, b ~~ TFVec j x, v ~~ TFVec j a] ==> v ~> m
         -- Vec 2 (Vec 4 Float) ~> Mat 4 2 Float
-  "." --> \a b c -> (b ~> c) ~> (a ~> b) ~> a ~> c
-  "foldl'" --> \a b -> (b ~> a ~> b) ~> b ~> TList a ~> b
+--  "." --> \a b c -> (b ~> c) ~> (a ~> b) ~> a ~> c
+--  "foldl'" --> \a b -> (b ~> a ~> b) ~> b ~> TList a ~> b
   "sortBy" --> \a -> (a ~> a ~> TCon0 "Ordering") ~> TList a ~> TList a
   "compare" --> \a -> [IsNum @@ a] ==> a ~> a ~> TCon0 "Ordering"
+
+  ["PrimZero", "PrimOne"] ---> \a -> {- [IsComponent @@ a] ==> -- TODO -} (a :: Ty)
+  "PrimTexture" --> TUnit ~> TVec 2 TFloat ~> TVec 4 TFloat
 
   -- temporary?
   ["Tup", "Const", "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"]  ---> \a -> a ~> a

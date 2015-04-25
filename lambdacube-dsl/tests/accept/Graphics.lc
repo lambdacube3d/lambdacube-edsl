@@ -33,8 +33,18 @@ otherwise = True
 clamp' = PrimClamp
 sin' = PrimSin
 cos' = PrimCos
+zero' = PrimZero
+one' = PrimOne
 normalize' = PrimNormalize
+texture' = PrimTexture
 pi = 3.14
+negate x = 0 -. x
+
+($) = \f1 x -> f1 x
+(.) = \f2 g x -> f2 (g x)
+
+foldl' f e [] = e
+foldl' f e (x: xs) = foldl' f (f e x) xs
 
 ifThenElse True a b = a
 ifThenElse False a b = b

@@ -204,9 +204,13 @@ inference_ primFunMap m = runExcept $ fst <$>
         return $ FieldTy mn t
 
     inferDef (PVar _ n, e) = do
-        e <- inferTyping e <* checkUnambError
+        (s, v) <- newV $ \t -> Typing (Map.singleton n t) mempty t mempty :: Typing
+        e_ <- withTyping (Map.singleton n v) $ inferTyping e <* checkUnambError
+        let e = modTag (id *** removeMonoVars (Set.singleton n)) e_
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
         return ((PVar (getTag e) n, e), f)
+
+modTag f (Exp t x) = Exp (f t) x
 
 selectorTypes :: [DataDef (Subst, Typing)] -> [(EName, Typing)]
 selectorTypes dataDefs =

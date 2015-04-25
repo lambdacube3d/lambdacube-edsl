@@ -68,6 +68,7 @@ getSlot (A3 "Fetch" (ELit (LString slotName)) prim attrs) = do
     Just i -> do
       modify (\s -> s {IR.slots = sv V.// [(i,mergeSlot (sv V.! i) slot)]})
       return i
+getSlot x = error $ "getSlot: " ++ ppShow x
 
 addProgramToSlot :: IR.ProgramName -> IR.SlotName -> CG ()
 addProgramToSlot prgName slotName = do

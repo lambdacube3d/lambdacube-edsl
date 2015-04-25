@@ -108,7 +108,7 @@ operator' = try' "operator" $ do
   if head i == ':' then fail "operator cannot start with ':'" else return i
 
 varId :: P String
-varId = var <|> parens (ident lcOps :: P String)
+varId = var <|> parens ("." <$ operator "." <|> ident lcOps)
 
 --------------------------------------------------------------------------------
 
@@ -355,12 +355,25 @@ undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
 valuePattern :: P PatR
 valuePattern
-    =   appP <$> some valuePatternAtom
+    =   appP <$> some valuePatternOpAtom
 
 appP :: [PatR] -> PatR
 appP [p] = p
 appP (PCon r n xs: ps) = PCon r n $ xs ++ ps
 appP xs = error $ "appP: " ++ ppShow xs
+
+valuePatternOpAtom :: P PatR
+valuePatternOpAtom = do
+    e <- appP <$> some valuePatternAtom
+    f e <$> op <*> valuePattern  <|>  return e
+  where
+    f e op e' = appP [op, e, e']
+
+    op :: P PatR
+    op = addPos (\p x -> PCon p x []) $
+            ident lcOps
+--        <|> try' "backquote operator" (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
+        <|> (operator ":" *> pure ":")
 
 valuePatternAtom :: P PatR
 valuePatternAtom
@@ -370,6 +383,7 @@ valuePatternAtom
     <|> addPos (\p c -> PCon p c []) (try dataConstructor)
     <|> tuplePattern
     <|> recordPat
+    <|> listPat
     <|> parens valuePattern
  where
   tuplePattern :: P PatR
@@ -377,6 +391,12 @@ valuePatternAtom
 
   recordPat :: P PatR
   recordPat = addPos PRecord $ braces (sepBy ((,) <$> var <* colon <*> valuePattern) comma)
+
+  listPat :: P PatR
+  listPat = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep valuePattern
+    where
+      nil (p1, p2) = PCon (p2 {- - 1 -}, p2) "[]" []
+      cons a b = PCon mempty ":" [a, b]
 
 eLam p e_ ps = ELam (p <-> e) p e where e = e_ ps
 
@@ -485,7 +505,8 @@ expressionOpAtom = do
     op = addPos eVar $
             ident lcOps
         <|> try' "backquote operator" (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
-        <|> (dot *> pure ".")
+        <|> (operator "." *> pure ".")
+        <|> (operator ":" *> pure ":")
 
 expressionAtom :: P ExpR
 expressionAtom =
