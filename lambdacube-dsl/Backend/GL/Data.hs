@@ -19,6 +19,7 @@ import qualified Data.Vector.Storable as SV
 import Graphics.Rendering.OpenGL.Raw.Core33
 import Data.Word
 import Codec.Picture
+import Codec.Picture.RGBA8
 
 import Backend.GL.Type
 import Backend.GL.Util
@@ -59,7 +60,8 @@ arrayType buf arrIdx = arrType $! bufArrays buf V.! arrIdx
 
 -- FIXME: Temporary implemenation
 compileTexture2DRGBAF :: Bool -> Bool -> DynamicImage -> IO TextureData
-compileTexture2DRGBAF isMip isClamped bitmap = do
+compileTexture2DRGBAF isMip isClamped bitmap' = do
+    let bitmap = ImageRGBA8 $ fromDynamicImage bitmap'
     glPixelStorei gl_UNPACK_ALIGNMENT 1
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     glBindTexture gl_TEXTURE_2D to

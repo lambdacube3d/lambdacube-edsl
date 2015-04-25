@@ -1,4 +1,6 @@
 module Backend.GL (
+    -- IR
+    V2(..),V3(..),V4(..),
     -- Array, Buffer, Texture
     Array(..),
     ArrayType(..),
@@ -27,6 +29,7 @@ module Backend.GL (
     Object,
     PipelineSchema(..),
     SlotSchema(..),
+    schema,
     schemaFromPipeline,
     allocPipeline,
     disposePipeline,
@@ -79,3 +82,4 @@ import Backend.GL.Type
 import Backend.GL.Backend
 import Backend.GL.Data
 import Backend.GL.Input
+import IR

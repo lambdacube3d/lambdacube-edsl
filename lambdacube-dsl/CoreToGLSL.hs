@@ -287,7 +287,7 @@ genGLSLSubst s e = case e of
   A1 "PrimNoise4" a -> functionCall s "noise4" [a]
 
   -- TODO: Texture Lookup Functions
-
+  A1 "PrimV3FToV4F" a -> ["vec4("] <> genGLSLSubst s a <> [",1.0)"]
   x -> error $ "genGLSLSubst - unknown primitive " ++ ppShow x
 
 isMatrix :: Ty -> Bool

@@ -226,7 +226,7 @@ compileProgram uniTrie p = do
     print uniforms
     print attributes
     when (uniformsType /= (toTrie $ programUniforms p) `unionL` (toTrie $ programInTextures p)) $ fail "shader program uniform input mismatch!"
-    when (attributesType /= fmap snd (toTrie $ programStreams p)) $ fail "shader program stream input mismatch!"
+    when (attributesType /= fmap snd (toTrie $ programStreams p)) $ fail $ "shader program stream input mismatch! " ++ show (attributesType,fmap snd (toTrie $ programStreams p))
     -- the public (user) pipeline and program input is encoded by the slots, therefore the programs does not distinct the render and slot textures input
     let inUniNames = toTrie $ programUniforms p
         (inUniforms,inTextures) = L.partition (\(n,v) -> T.member n inUniNames) $ T.toList $ uniforms

@@ -102,16 +102,12 @@ g_uv_buffer_data =
 myCube :: Mesh
 myCube = Mesh
     { mAttributes   = T.fromList
-        [ ("position", A_V4F $ SV.fromList [V4 x y z 1 | (x,y,z) <- g_vertex_buffer_data])
+        [ ("position", A_V3F $ SV.fromList [V3 x y z | (x,y,z) <- g_vertex_buffer_data])
         , ("vertexUV", A_V2F $ SV.fromList [V2 u v | (u,v) <- g_uv_buffer_data])
         ]
     , mPrimitive    = P_Triangles
     , mGPUData      = Nothing
     }
-
-toV4Position :: Mesh -> Mesh
-toV4Position m = m {mAttributes = T.adjust v3ToV4 "position" $ mAttributes m, mGPUData = Nothing}
- where v3ToV4 (A_V3F l) = A_V4F $ SV.map (\(V3 x y z) -> V4 x y z 1) l
 
 main :: IO ()
 main = do
@@ -125,13 +121,13 @@ main = do
 
     let inputSchema = 
           PipelineSchema
-          { GL.slots = T.fromList [("stream",SlotSchema Triangles $ T.fromList [("position",TV4F)])]
+          { GL.slots = T.fromList [("stream",SlotSchema Triangles $ T.fromList [("position",TV3F)])]
           , uniforms = T.fromList [("MVP",M44F),("MVP2",M44F)]
           }
     pplInput <- mkGLPipelineInput inputSchema
 
     gpuCube <- compileMesh myCube
-    gpuMonkey <- compileMesh =<< toV4Position <$> loadMesh "Monkey.lcmesh"
+    gpuMonkey <- loadMesh "Monkey.lcmesh"
 
     addMesh pplInput "stream" gpuMonkey []
 

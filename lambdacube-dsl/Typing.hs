@@ -325,6 +325,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "PrimTexture" --> TUnit ~> TVec 2 TFloat ~> TVec 4 TFloat
 
   -- temporary?
+  "PrimV3FToV4F" --> TVec 3 TFloat ~> TVec 4 TFloat
   ["Tup", "Const", "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"]  ---> \a -> a ~> a
 
   ["True", "False"] ---> TBool
