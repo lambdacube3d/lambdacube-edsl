@@ -47,9 +47,13 @@ main = do
   putStrLn $ "Catching errors (must get an error)"
   rejectTests testToReject
 
-acceptTests testToAccept = forM_ testToAccept $ \n -> do
+
+acceptTests = acceptTests_ (compilePipeline . mkReduce . toCore mempty) (Just $ TCon0 "Output")
+acceptTests' = acceptTests_ (mkReduce . toCore mempty) Nothing
+
+acceptTests_ f t testToAccept = forM_ (testToAccept :: [String]) $ \n -> do
     putStr $ " # " ++ n ++ " ... "
-    result <- runMM "./tests/accept" $ fmap (compilePipeline . mkReduce . toCore mempty) <$> getDef_ n "main" (Just $ TCon0 "Output")
+    result <- runMM "./tests/accept" $ fmap f <$> getDef_ n "main" t
     let ef = okFileName n
     case result of
       Left e -> putStrLn $ "\n!FAIL\n" ++ e

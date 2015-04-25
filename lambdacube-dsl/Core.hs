@@ -111,6 +111,7 @@ data Thunk = Thunk {thunkEnv :: Env, thunkExp :: Exp}
 
 deleteEnvVars vs (Env s m) = Env s $ foldr Map.delete m vs
 addEnv e (Thunk e' x) = Thunk (e' <> e) x
+addSubst s' (Env s m) = Env (s `composeSubst` s') m
 
 mkReduce :: Exp -> Exp
 mkReduce = reduce . Thunk mempty
@@ -138,8 +139,11 @@ reduce t = case exp of
 
 reduceHNF' = reduceHNF $ error "impossible"
 
+-- main = ((\f -> (\x -> f)) ()) ()
+--          (   {f = ()} \x -> f )  ()
+
 reduceHNF :: Thunk -> Thunk -> Thunk
-reduceHNF cont th@(Thunk env@(Env _ ma) exp) = case exp of
+reduceHNF cont th@(Thunk env exp) = case exp of
     EAlts es -> foldr (\alt x -> reduceHNF x $ Thunk env alt) (error "pattern match failure") es
     ENext -> cont
     EVar v -> case v of
@@ -148,30 +152,31 @@ reduceHNF cont th@(Thunk env@(Env _ ma) exp) = case exp of
     ELet p x e' -> trace' "elet" $ case defs (Thunk env x) p of
         Just m' -> reduceHNF cont $ Thunk (m' <> env) e'
         _ -> th
-    EApp f x -> trace' "eapp" $ case thunkExp $ reduceHNF cont $ Thunk env f of
-
-        EFieldProj fi -> case thunkExp $ reduceHNF cont $ Thunk env x of
+    EApp f x -> trace' "eapp" $ case reduceHNF cont $ Thunk env f of
+      Thunk env' exp' -> case exp' of
+        EFieldProj fi -> case reduceHNF cont $ Thunk env x of
+          Thunk env'' exp'' -> case exp'' of
             ERecord Nothing fs -> case [e | (fi', e) <- fs, fi' == fi] of
-                [e] -> Thunk env e
+                [e] -> Thunk env'' e
             _ -> th
 
         ELam p e' -> case p of
             PVar (VarT v) -> trace' " ety" $ case x of
-                EType x -> reduceHNF cont $ Thunk (Env (s `composeSubst` Map.singleton v (subst s x)) ma) e'
+                EType x -> reduceHNF cont $ Thunk (addSubst (Map.singleton v (subst s x)) env') e'
             PVar (VarC v) -> trace' " ectr" $ case x of
                 EConstraint x -> case unifC (subst s v) (subst s x) of
-                    Right s' -> reduceHNF cont $ Thunk (Env (s `composeSubst` s') ma) e'
+                    Right s' -> reduceHNF cont $ Thunk (addSubst s' env') e'
                     Left e -> error $ "reduce: " ++ e
             _ -> case defs (Thunk env x) p of
-                Just m' -> reduceHNF cont $ Thunk (m' <> env) e'
+                Just m' -> reduceHNF cont $ Thunk (m' <> env') e'
                 _ -> th
 
         EVar e' -> case e' of
             VarE v (Forall tv t) -> trace' (" forall " ++ tv) $ case x of
-                EType t' -> Thunk (Env (s `composeSubst` Map.singleton tv (subst s t')) ma) $ EVar $ VarE v t
+                EType t' -> Thunk (addSubst (Map.singleton tv (subst s t')) env') $ EVar $ VarE v t
             VarE v (TConstraintArg t ty) -> trace' (" constr ") $ case x of
                 EConstraint t' -> case unifC (subst s t) (subst s t') of
-                    Right s' -> Thunk (Env (s `composeSubst` s') ma) $ EVar $ VarE v ty
+                    Right s' -> Thunk (addSubst s' env') $ EVar $ VarE v ty
                     Left e -> error $ "reduce (2): " ++ e
                 e -> error $ "reduce constr: " ++ show e
             _ -> th
@@ -186,21 +191,21 @@ reduceHNF cont th@(Thunk env@(Env _ ma) exp) = case exp of
         PVar (VarE v _) -> trace' (v ++ " = ...") $ Just $ Env mempty $ Map.singleton v e
         PCon (c, _) ps     -> case getApp {-(c, ps)-} (length ps) e of
             Just (EVar (VarE c' _), xs)
-                | c == c' -> mconcat <$> sequence (zipWith defs' xs ps)
+                | c == c' -> mconcat <$> sequence (zipWith defs xs ps)
                 | otherwise -> trace' ("constructors doesn't match: " ++ show (c, c')) Nothing
             _ -> Nothing
-        PTuple ps -> case thunkExp $ reduceHNF cont e of
-            ETuple xs -> mconcat <$> sequence (zipWith defs' xs ps)
+        PTuple ps -> case reduceHNF cont e of
+          Thunk env' exp' -> case exp' of
+            ETuple xs -> mconcat <$> sequence (zipWith defs (map (Thunk env') xs) ps)
             _ -> Nothing
         p -> error $ "defs: " ++ ppShow p
-      where
-        defs' a b = defs (Thunk env a) b
 
-    getApp :: Int -> Thunk -> Maybe (Exp, [Exp])
+    getApp :: Int -> Thunk -> Maybe (Exp, [Thunk])
     getApp n x@(Thunk env _) = trace' ("getApp " ++ show n) $ f [] n x where
         f acc 0 e = Just (thunkExp $ reduceHNF cont e, acc)
-        f acc n e = case thunkExp $ reduceHNF cont e of
-            EApp a b -> f (b: acc) (n-1) $ Thunk env a
+        f acc n e = case reduceHNF cont e of
+          Thunk env' exp' -> case exp' of
+            EApp a b -> f (Thunk env' b: acc) (n-1) $ Thunk env' a
             e -> Nothing -- error $ "getApp: " ++ ppShow c ++ "\n" ++ ppShow e
 
 --mconcat' = foldr (<>.) mempty
