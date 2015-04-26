@@ -1,6 +1,4 @@
-data AB = A | B
+constf = \e x -> e
 
-const = \e x -> e
-
-main = (\x -> const x A) B  -- should be B
+main = (\x -> constf x False) True  -- should be True
 

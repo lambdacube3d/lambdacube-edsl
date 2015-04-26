@@ -58,6 +58,9 @@ acceptTests = testFrame ["./tests/accept"] $ \case
     Right (Right e)
         | typingToTy (snd $ getTag e) == TCon0 "Output"
             -> Right ("compiled main", ppShow . compilePipeline . mkReduce . toCore mempty $ e)
+        | typingToTy (snd $ getTag e) == TCon0 "Bool" -> case mkReduce . toCore mempty $ e of
+            x@(A0t "True" (TCon0 "Bool")) -> Right ("main ~~> True", ppShow x)
+            x -> Left $ "main should be True but it is \n" ++ ppShow x
         | otherwise -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e)
 
 rejectTests = testFrame ["./tests/reject", "./tests/accept"] $ \case
