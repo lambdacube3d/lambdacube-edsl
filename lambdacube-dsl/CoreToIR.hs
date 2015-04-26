@@ -50,7 +50,7 @@ mergeSlot a b = a
   , IR.slotPrograms = IR.slotPrograms a <> IR.slotPrograms b
   }
 
-getSlot :: Exp -> CG IR.SlotName
+getSlot :: Exp -> CG (IR.SlotName,[(String,IR.InputType)])
 getSlot (A3 "Fetch" (ELit (LString slotName)) prim attrs) = do
   let input = compInput attrs
       slot = IR.Slot
@@ -64,10 +64,10 @@ getSlot (A3 "Fetch" (ELit (LString slotName)) prim attrs) = do
   case V.findIndex ((slotName ==) . IR.slotName) sv of
     Nothing -> do
       modify (\s -> s {IR.slots = sv `V.snoc` slot})
-      return $ V.length sv
+      return (V.length sv,input)
     Just i -> do
       modify (\s -> s {IR.slots = sv V.// [(i,mergeSlot (sv V.! i) slot)]})
-      return i
+      return (i,input)
 getSlot x = error $ "getSlot: " ++ ppShow x
 
 addProgramToSlot :: IR.ProgramName -> IR.SlotName -> CG ()
@@ -82,13 +82,13 @@ addProgramToSlot prgName slotName = do
         }
   modify (\s -> s {IR.slots = sv V.// [(slotName,slot')]})
 
-getProgram :: IR.SlotName -> Exp -> Exp -> CG IR.ProgramName
-getProgram slot vert frag = do
-  let (vertOut,vertSrc) = genVertexGLSL vert
+getProgram :: [(String,IR.InputType)] -> IR.SlotName -> Exp -> Exp -> CG IR.ProgramName
+getProgram input slot vert frag = do
+  let ((vertexInput,vertOut),vertSrc) = genVertexGLSL vert
       fragSrc = genFragmentGLSL vertOut frag
       prg = IR.Program
         { IR.programUniforms    = Map.fromList $ Set.toList $ getUniforms vert <> getUniforms frag
-        , IR.programStreams     = Map.fromList [("v",("position",IR.V3F))] -- TODO
+        , IR.programStreams     = Map.fromList $ zip vertexInput input
         , IR.programInTextures  = mempty -- TODO
         , IR.programOutput      = [("f0",IR.V4F)] -- TODO
         , IR.vertexShader       = vertSrc
@@ -105,8 +105,8 @@ getCommands :: Exp -> CG [IR.Command]
 getCommands e = case e of
   A1 "ScreenOut" a -> getCommands a
   A5 "Accumulate" actx ffilter frag (A2 "Rasterize" rctx (A2 "Transform" vert input)) fbuf -> do
-    slot <- getSlot input
-    prog <- getProgram slot vert frag
+    (slot,input) <- getSlot input
+    prog <- getProgram input slot vert frag
     (<>) <$> getCommands fbuf <*> pure [IR.SetRasterContext (compRC rctx), IR.SetAccumulationContext (compAC actx), IR.SetProgram prog, IR.RenderSlot slot]
   A1 "FrameBuffer" a -> do
     let i = compImg a

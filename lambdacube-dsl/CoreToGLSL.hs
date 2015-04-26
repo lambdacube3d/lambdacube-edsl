@@ -61,7 +61,7 @@ genUniforms e = case e of
   A1 "Uni" (A1 _ (ELString s)) -> Set.singleton [unwords ["uniform",toGLSLType "1" $ tyOf e,s,";"]]
   Exp e -> F.foldMap genUniforms e
 
-genStreamInput x@(VarE n t) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]]
+genStreamInput x@(VarE n t) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]] >> return [n] -- TODO: support tuple input
 
 genStreamOutput (A1 i a@(toGLSLType "3" . tyOf -> t)) = do
   let f "Smooth" = "smooth"
@@ -76,11 +76,11 @@ genFragmentOutput a@(toGLSLType "4" . tyOf -> t) = case tyOf a of
   TUnit -> return False
   _ -> tell [unwords ["out",t,"f0",";"]] >> return True
 
-genVertexGLSL :: Exp -> ([(String,String,String)],String)
+genVertexGLSL :: Exp -> (([String],[(String,String,String)]),String)
 genVertexGLSL e@(ELam (PVar i) (A4 "VertexOut" p s c o)) = id *** unlines $ runWriter $ do
   tell ["#version 330 core"]
   F.mapM_ tell $ genUniforms e
-  genStreamInput i
+  input <- genStreamInput i
   out <- genStreamOutput o
   tell ["void main() {"]
   unless (null out) $ do
@@ -88,7 +88,7 @@ genVertexGLSL e@(ELam (PVar i) (A4 "VertexOut" p s c o)) = id *** unlines $ runW
   tell $ ["gl_Position = " <> unwords (genGLSL p) <> ";"]
   tell $ ["gl_PointSize = " <> unwords (genGLSL s) <> ";"]
   tell ["}"]
-  return out
+  return (input,out)
 genVertexGLSL e = error $ "genVertexGLSL: " ++ ppShow e
 
 genFragmentGLSL :: [(String,String,String)] -> Exp -> String
