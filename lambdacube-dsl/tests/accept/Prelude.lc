@@ -42,6 +42,20 @@ data Maybe a
 
 axioms
 
+  Char, String, Word, Int, Float :: *
+  Depth, Stencil, Color :: * -> *
+  Triangle, Line, Point, TriangleAdjacency, LineAdjacency :: *
+  CullMode, PolygonMode, PolygonOffset, ProvokingVertex, FrontFace, PointSize, BlendingFactor, BlendEquation, LogicOperation, StencilOperation, ComparisonFunction, PointSpriteCoordOrigin :: *
+
+  -- TODO: more precise kinds
+  Output :: *
+  AccumulationContext, Blending, FetchPrimitive, FragmentFilter, FragmentOperation, FragmentOut, Input, Interpolated, RasterContext, VertexOut :: * -> *
+  VertexStream :: * -> * -> *
+  PrimitiveStream :: * -> NatKind -> * -> *
+  Image, FragmentStream, FrameBuffer :: NatKind -> * -> *
+  Vec :: NatKind -> * -> *
+  Mat :: NatKind -> NatKind -> * -> *
+
   -- TODO: eliminate
   fromInt :: Num a => Int -> a
   compare :: Num a => a -> a -> Ordering

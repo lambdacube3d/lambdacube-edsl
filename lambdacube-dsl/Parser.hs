@@ -353,11 +353,16 @@ addPos f m = do
 
 typeAtom :: P TyR
 typeAtom = typeRecord
+    <|> addPos Ty' (Star_ C <$ operator "*")
     <|> addPos Ty' (TVar_ <$> try' "type var" typeVar)
     <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
-    <|> addPos Ty' (TCon_ <$> typeConstructor)
+    <|> addPos Ty' (tCon <$> typeConstructor)
     <|> addPos tTuple (parens (sepBy ty comma))
     <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "[]")) (brackets ty)
+  where
+    tCon "NatKind" = NatKind_
+    tCon n = TCon_ n
+
 
 tTuple :: Range -> [TyR] -> TyR
 tTuple p [t] = t

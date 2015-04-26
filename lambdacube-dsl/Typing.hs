@@ -151,7 +151,7 @@ reduceConstraint x = case x of
         TFVec (TNat n) ty | n `elem` [2,3,4] && ty `elem` floatIntWordBool -> reduced $ TVec n ty
         TFVec a b -> check (a `matches` nat234 && b `matches` floatIntWordBool {- -- FIXME -}) $ observe res $ \case
             TVec n t -> keep [[a, TNat n], [b, t]]
-            _ -> fail "no instance"
+            _ -> fail "no instance tfvec"
 
         TFVecScalar a b -> case a of
             TNat 1 -> case b of
@@ -292,18 +292,9 @@ primFunMap :: Map EName (TCM (Subst, Typing))
 primFunMap = Map.fromList $ execWriter $ do
 
   -- kind of type constructors
-  ["()", "Char", "String", "Word", "Int", "Float"] ----> Star
-  ["[]", "Depth", "Stencil", "Color"] ----> Star ~> Star
-  ["Triangle", "Line", "Point", "TriangleAdjacency", "LineAdjacency"] ----> Star
-  ["CullMode", "PolygonMode", "PolygonOffset", "ProvokingVertex", "FrontFace", "PointSize", "BlendingFactor", "BlendEquation", "LogicOperation", "StencilOperation", "ComparisonFunction", "PointSpriteCoordOrigin"] ----> Star
-  -- TODO: more precise kinds
-  ["Output"] ----> Star
-  ["AccumulationContext", "Blending", "FetchPrimitive", "FragmentFilter", "FragmentOperation", "FragmentOut", "Input", "Interpolated", "RasterContext", "VertexOut"] ----> Star ~> Star
-  ["VertexStream"] ----> Star ~> Star ~> Star
-  ["PrimitiveStream"] ----> Star ~> NatKind ~> Star ~> Star
-  ["Image", "FragmentStream", "FrameBuffer"] ----> NatKind ~> Star ~> Star
-  ["Vec"] ----> NatKind ~> Star ~> Star
-  ["Mat"] ----> NatKind ~> NatKind ~> Star ~> Star
+  ["NatKind"] ----> Star
+  ["()"] ----> Star
+  ["[]"] ----> Star ~> Star
 
   "[]" --> \a -> TList a
   ":" --> \a -> a ~> TList a ~> TList a

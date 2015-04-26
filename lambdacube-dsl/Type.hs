@@ -189,17 +189,18 @@ type Nat = Ty
 
 data Ty
     = StarToStar !Int
-    | Ty_ Ty (Ty_ Ty)
+    | Ty Ty (Ty_ Ty)
   deriving (Show,Eq,Ord)
+
+pattern Ty_ a b <- Ty a b where
+    Ty_ Star (Star_ C) = Star
+    Ty_ a b = Ty a b
 
 typingToTy :: Typing -> Ty
 typingToTy ty = foldr Forall (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
 
 data Ty' a = Ty' a (Ty_ (Ty' a))
   deriving (Show,Eq,Ord)
-
-ty_ :: Ty -> Ty_ Ty -> Ty
-ty_ = Ty_ --Star (StarToStar
 
 data Ty_ a
   -- kinds
@@ -257,7 +258,7 @@ pattern MatKind = TArr NatKind (TArr NatKind StarStar)
 pattern Forall a b = TyStar (Forall_ a b)
 pattern TConstraintArg a b = TyStar (TConstraintArg_ a b)
 pattern TArr a b <- TyStar (TArr_ a b) where
-    TArr Star Star = StarStar
+    TArr Star (StarToStar i) = StarToStar (i + 1)
     TArr a b = TyStar (TArr_ a b)
 pattern TCon0 a = TCon Star a
 pattern TCon1 a b = TApp Star (TCon StarStar a) b

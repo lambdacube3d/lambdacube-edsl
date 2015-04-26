@@ -75,13 +75,8 @@ unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs ->
                 then lift $ fail $ "Infinite type, type variable " ++ n ++ " occurs in " ++ show t
                 else put $ Map.insert n t' $ singSubst n t' <$> s
 
---        unifyTy :: Ty -> Ty -> StateT Subst TCM ()
-
-        -- TODO: generalize this or normalize kinds
-        unifyTy Star (StarToStar 0) = return ()
-        unifyTy (TArr a b) (StarToStar i) = uni Star a >> uni (StarToStar $ i-1) b
-        unifyTy (StarToStar 0) Star = return ()
-        unifyTy (StarToStar i) (TArr a b) = uni Star a >> uni (StarToStar $ i-1) b
+        unifyTy (TArr a b) (StarToStar i) | i > 0 = uni Star a >> uni (StarToStar $ i-1) b
+        unifyTy (StarToStar i) (TArr a b) | i > 0 = uni Star a >> uni (StarToStar $ i-1) b
         unifyTy Star Star = return ()
 
         unifyTy (TVar k u) (TVar k' v) | u == v = uni k k'
@@ -182,22 +177,36 @@ inference = inference_ $ PolyEnv primFunMap
 
 primed = ('\'':)
 
+mkEnv = map $ mangleAx . (id *** generalizeTypeVars . convTy)
+
+mangleAx (n, t) = (if kinded $ res $ typingType t then primed n else n, t)
+  where
+    res (TArr a b) = res b
+    res t = t
+    kinded = \case
+        StarToStar n -> True
+        Ty_ _ (Star_ _) -> True
+        _ -> False
+
 inference_ :: PolyEnv -> ModuleR -> Either ErrorMsg ModuleT
 inference_ primFunMap m = runExcept $ fst <$>
     evalRWST (inferModule m) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
   where
     inferModule Module{..} = withTyping (Map.fromList $ tyConKinds dataDefs) $ do
         let d = dataDefs
-        axioms <- forM axioms $ \(n, a) -> do
-            a' <- inferKind a
-            return (n, a')
-        withTyping (Map.fromList $ map (id *** generalizeTypeVars . convTy) axioms) $ do
+        inferAxioms [] axioms $ \axioms -> do
             dataDefs <- mapM inferDataDef dataDefs
             definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs $ selectorDefs d ++ definitions
             return Module{..}
 
+    inferAxioms acc [] cont = cont $ reverse acc
+    inferAxioms acc ((n, a): ds) cont = do
+        a' <- inferKind a
+        let (n', a'') = mangleAx . (id *** generalizeTypeVars . convTy) $ (n, a')
+        withTyping (Map.singleton n' a'') $ inferAxioms ((n, a'): acc) ds cont
+
     inferDefs [] = return []
-    inferDefs (d:ds) = do
+    inferDefs (d: ds) = do
         (d, f) <- inferDef d
         ds <- f $ inferDefs ds
         return (d: ds)
@@ -278,7 +287,7 @@ exportEnv Module{..}
         ++  tyConKinds dataDefs
         ++  tyConTypes dataDefs
         ++  selectorTypes dataDefs
-        ++  map (id *** generalizeTypeVars . convTy) axioms
+        ++  mkEnv axioms
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     [] -> Right $ PolyEnv $ head <$> ms
@@ -306,12 +315,15 @@ convTy = f mempty where
       where
         sub' = s `composeSubst` sub
         t' = f sub' t
-    f sub (Ty' (s, k) t) = typing me cs $ subst1 sub{-TODO: move innerwards-} $ ty_ (subst sub $ typingType k) (typingType <$> t')
+    f sub (Ty' (s, k) t) = typing me cs $ subst1 sub{-TODO: move innerwards-} $ simpArr $ Ty_ (subst sub $ typingType k) (typingType <$> t')
       where
         sub' = s `composeSubst` sub
         t' = f sub' <$> t
         me = subst sub (monoEnv k) <> foldMap monoEnv t'
         cs = subst sub (constraints k) <> foldMap constraints t'
+
+simpArr (TArr a b) = TArr a b   -- patt syn trick
+simpArr x = x
 
 inferKind' :: Ty' Range -> TCM Typing
 inferKind' t = convTy <$> inferKind t
@@ -326,6 +338,7 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     _ -> do
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
+            NatKind_ -> return (mempty, [] ==> Star)
             TConstraintArg_ c t -> return (mempty, error "tcarg")
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)
