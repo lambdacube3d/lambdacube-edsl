@@ -9,6 +9,7 @@ import Data.Vect
 import qualified Data.Trie as T
 import qualified Data.Vector.Storable as SV
 import qualified Data.Vector as V
+import Text.Show.Pretty
 
 import Backend.GL as GL
 import Backend.GL.Mesh
@@ -121,8 +122,8 @@ main = do
 
     let inputSchema = 
           PipelineSchema
-          { GL.slots = T.fromList [("stream",SlotSchema Triangles $ T.fromList [("position",TV3F)])
-                                  ,("stream4",SlotSchema Triangles $ T.fromList [("position4",TV4F)])
+          { GL.slots = T.fromList [("stream",SlotSchema Triangles $ T.fromList [("position",TV3F),("normal",TV3F),("UVTex",TV2F)])
+                                  ,("stream4",SlotSchema Triangles $ T.fromList [("position4",TV4F),("vertexUV",TV2F)])
                                   ]
           , uniforms = T.fromList [("MVP",M44F),("MVP2",M44F)]
           }
@@ -139,6 +140,7 @@ main = do
           case pplRes of
             Left err -> putStrLn ("error: " ++ err) >> return Nothing
             Right ppl -> do
+              putStrLn $ ppShow ppl
               renderer <- allocPipeline ppl
               setPipelineInput renderer (Just pplInput)
               sortSlotObjects pplInput
