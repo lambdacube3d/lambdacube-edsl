@@ -24,7 +24,7 @@ render fb = let
 main = let
   bgColor = V4F 0.5 0.0 0.4 1.0
   bgColor' = V4F 0.2 0.2 0.4 1.0
-  emptyFB = FrameBuffer (DepthImage #1 1000.0,ColorImage #1 bgColor)
+  emptyFB = FrameBuffer (depthImage1 1000.0,colorImage1 bgColor)
   modelViewProj = Uni (IM44F "MVP")
   out = render emptyFB
   in ScreenOut out

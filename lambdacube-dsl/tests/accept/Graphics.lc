@@ -369,9 +369,8 @@ errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
     viewProj = Uni (IM44F "viewProj")
 
     vert :: (Vec 3 Float,Vec 4 Float) -> VertexOut (Vec 4 Float)
-    vert pc = VertexOut v4 (Const 1) () (singT $ Smooth c')
+    vert (p,c) = VertexOut v4 (Const 1) () (singT $ Smooth c')
       where
-        (p,c) = untup2 pc
         v4    = viewProj `PrimMulMatVec` (worldMat `PrimMulMatVec` snoc p 1)
         V4 r g b _  = unpack' c
         c'          = pack' $ V4 r g b $ floatV 0.5
@@ -393,9 +392,8 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
     worldMat = Uni (IM44F "worldMat")
 
     vert :: (Vec 3 Float,Vec 4 Float) -> VertexOut (Vec 4 Float)
-    vert pc = VertexOut v4 (Const 1) () (Smooth c)
+    vert (p,c) = VertexOut v4 (Const 1) () (Smooth c)
       where
-        (p,c) = untup2 pc
         v4    = viewProj `PrimMulMatVec` (worldMat `PrimMulMatVec` snoc p 1)
 
     offset  = NoOffset--Offset (0) (-10)
