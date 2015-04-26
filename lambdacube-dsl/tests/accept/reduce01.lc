@@ -5,7 +5,7 @@ render choice = let
   rasterCtx         = TriangleCtx CullNone PolygonFill NoOffset LastVertex
   fragmentCtx       = AccumulationContext (ColorOp NoBlending (V4B True True True True))
   vertexShader v    = VertexOut v 1.0 () (Smooth v)
-  vertexStream      = Fetch "stream" Triangles (IV4F "position")
+  vertexStream      = Fetch "stream" Triangles (IV4F "position4")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
   fragmentShader v  = let res = case choice of
