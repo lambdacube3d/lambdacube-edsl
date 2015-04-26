@@ -338,7 +338,6 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     _ -> do
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
-            NatKind_ -> return (mempty, [] ==> Star)
             TConstraintArg_ c t -> return (mempty, error "tcarg")
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)

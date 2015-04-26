@@ -205,7 +205,6 @@ data Ty' a = Ty' a (Ty_ (Ty' a))
 data Ty_ a
   -- kinds
   = Star_ Frequency      -- type of types
-  | NatKind_    -- type of TNat
   -- constraint kinds
   | ClassCK_
   | EqCK_ a a
@@ -251,7 +250,7 @@ pattern TApp k a b = Ty_ k (TApp_ a b)
 pattern TCon k a = Ty_ k (TCon_ a)
 pattern TVar k b = Ty_ k (TVar_ b)
 
-pattern NatKind = TyStar NatKind_
+pattern NatKind = TCon0 "NatKind"
 pattern VecKind = TArr NatKind StarStar
 pattern MatKind = TArr NatKind (TArr NatKind StarStar)
 

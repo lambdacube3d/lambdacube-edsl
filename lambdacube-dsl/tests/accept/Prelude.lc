@@ -42,6 +42,7 @@ data Maybe a
 
 axioms
 
+  NatKind :: *
   Char, String, Word, Int, Float :: *
   Depth, Stencil, Color :: * -> *
   Triangle, Line, Point, TriangleAdjacency, LineAdjacency :: *

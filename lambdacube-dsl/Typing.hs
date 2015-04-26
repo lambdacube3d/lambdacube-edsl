@@ -292,7 +292,6 @@ primFunMap :: Map EName (TCM (Subst, Typing))
 primFunMap = Map.fromList $ execWriter $ do
 
   -- kind of type constructors
-  ["NatKind"] ----> Star
   ["()"] ----> Star
   ["[]"] ----> Star ~> Star
 
