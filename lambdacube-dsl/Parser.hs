@@ -286,14 +286,14 @@ pattern TyApp2 s t t' <- Tyy (TApp_ (TyApp1 s t) t')
 
 mkTypeFun :: TyR -> TypeFun TyR
 mkTypeFun = \case
-    TyApp2 "Mat" a b -> TFMat a b
+    TyApp2 "TFMat" a b -> TFMat a b
     TyApp1 "MatVecElem" a -> TFMatVecElem a
     TyApp1 "MatVecScalarElem" a -> TFMatVecScalarElem a
-    TyApp2 "Vec" a b -> TFVec a b               -- may be data family
+    TyApp2 "TFVec" a b -> TFVec a b               -- may be data family
     TyApp2 "VecScalar" a b -> TFVecScalar a b
     TyApp1 "FTRepr'" a -> TFFTRepr' a
     TyApp1 "ColorRepr" a -> TFColorRepr a
-    TyApp1 "FrameBuffer" a -> TFFrameBuffer a
+    TyApp1 "TFFrameBuffer" a -> TFFrameBuffer a
     TyApp1 "FragOps" a -> TFFragOps a
     TyApp2 "JoinTupleType" a b -> TFJoinTupleType a b
     x -> error $ "mkTypeFun: " ++ ppShow x

@@ -253,7 +253,8 @@ pattern TCon k a = Ty_ k (TCon_ a)
 pattern TCon0 a = TCon Star a
 pattern TCon1 a b = TApp Star (TCon StarStar a) b
 pattern TCon2 a b c = TApp Star (TApp StarStar (TCon (StarToStar 2) a) b) c
-pattern TCon2' a b c = TApp Star (TApp StarStar (TCon (NatKind `TArr` StarStar) a) b) c
+pattern VecKind = TArr NatKind StarStar
+pattern TCon2' a b c = TApp Star (TApp StarStar (TCon VecKind a) b) c
 pattern TCon3 a b c d = TApp Star (TApp StarStar (TApp (StarToStar 2) (TCon (StarToStar 3) a) b) c) d
 pattern TArr a b <- Ty (TArr_ a b) where
     TArr Star Star = StarStar
@@ -265,8 +266,7 @@ pattern TUnit = TTuple []
 pattern TRecord b = Ty (TRecord_ b)
 
 pattern TNat a = Ty_ NatKind (TNat_ a)
-pattern VecKind = TArr NatKind StarStar
-pattern TVec a b = TApp Star (TApp StarStar (TCon VecKind "Vec") (TNat a)) b
+pattern TVec a b = TCon2' "Vec" (TNat a) b
 pattern MatKind = TArr NatKind (TArr NatKind StarStar)
 pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TNat a)) (TNat b)) c
 
@@ -316,7 +316,7 @@ pattern TFragmentOperation b = TCon1 "FragmentOperation" b
 pattern TFragmentOut b = TCon1 "FragmentOut" b
 pattern TFragmentStream b c = TCon2 "FragmentStream" b c
 pattern TFrameBuffer b c = TCon2' "FrameBuffer" b c
-pattern TImage b c = TCon2 "Image" b c
+pattern TImage b c = TCon2' "Image" b c
 pattern TInput b = TCon1 "Input" b
 pattern TInterpolated b = TCon1 "Interpolated" b
 pattern TOutput = TCon0 "Output"

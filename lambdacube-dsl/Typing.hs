@@ -299,34 +299,14 @@ primFunMap = Map.fromList $ execWriter $ do
   -- TODO: more precise kinds
   ["Output"] ----> Star
   ["AccumulationContext", "Blending", "FetchPrimitive", "FragmentFilter", "FragmentOperation", "FragmentOut", "Input", "Interpolated", "RasterContext", "VertexOut"] ----> Star ~> Star
-  ["FragmentStream", "Image", "VertexStream"] ----> Star ~> Star ~> Star
-  ["FrameBuffer"] ----> NatKind ~> Star ~> Star
+  [] ----> Star ~> Star ~> Star
+  ["PrimitiveStream"] ----> Star ~> NatKind ~> Star ~> Star
+  ["Image", "VertexStream", "FragmentStream", "FrameBuffer"] ----> NatKind ~> Star ~> Star
   ["Vec"] ----> NatKind ~> Star ~> Star
   ["Mat"] ----> NatKind ~> NatKind ~> Star ~> Star
 
---  "V2" --> \a -> [IsComponent @@ a] ==> a ~> a ~> TVec 2 a
---  "V3" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> TVec 3 a
---  "V4" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> a ~> TVec 4 a
   "[]" --> \a -> TList a
   ":" --> \a -> a ~> TList a ~> TList a
-
-  -- TODO: eliminate
---  "$" --> \a b -> (a ~> b) ~> a ~> b
---  "negate" --> \a -> [IsNum @@ a] ==> a ~> a
-  "fromInt" --> \a -> [IsNum @@ a] ==> TInt ~> a
---  "toMat" --> \v m a b i j x -> [m ~~ TFMat a b, a ~~ TFVec i x, b ~~ TFVec j x, v ~~ TFVec j a] ==> v ~> m
-        -- Vec 2 (Vec 4 Float) ~> Mat 4 2 Float
---  "." --> \a b c -> (b ~> c) ~> (a ~> b) ~> a ~> c
---  "foldl'" --> \a b -> (b ~> a ~> b) ~> b ~> TList a ~> b
---  "sortBy" --> \a -> (a ~> a ~> TCon0 "Ordering") ~> TList a ~> TList a
-  "compare" --> \a -> [IsNum @@ a] ==> a ~> a ~> TCon0 "Ordering"
-
-  ["PrimZero", "PrimOne"] ---> \a -> {- [IsComponent @@ a] ==> -- TODO -} (a :: Ty)
-  "PrimTexture" --> TUnit ~> TVec 2 TFloat ~> TVec 4 TFloat
-
-  -- temporary?
-  "PrimV3FToV4F" --> TVec 3 TFloat ~> TVec 4 TFloat
-  ["Tup", "Const"]  ---> \a -> a ~> a
 
   forM_ [2..4] $ \i -> do
     forM_ (zip ["F","I","U","B"] floatIntWordBool) $ \(tn, t) ->
@@ -336,7 +316,7 @@ primFunMap = Map.fromList $ execWriter $ do
                                                                 -- like  "M22F" --> TV2F ~> TV2F ~> TM22F
 
   -- Input declaration
-  "Uni"     --> \t -> TInput t ~> t
+--  "Uni"     --> \t -> TInput t ~> t
   forM_ (  zip ["IFloat", "IInt", "IWord", "IBool"] floatIntWordBool
         ++ [("IM" ++ show i ++ show j ++ "F", TMat i j TFloat) | i <- [2..4], j <- [2..4]]
         ++ [ ("IV" ++ show i ++ tn, TVec i t)
@@ -346,80 +326,12 @@ primFunMap = Map.fromList $ execWriter $ do
         ) $ \(name, t) ->
     name --> TString ~> TInput t                            -- like  "IBool" --> TString ~> TInput (TBool )
 
-  ["Zero", "One", "SrcColor", "OneMinusSrcColor", "DstColor", "OneMinusDstColor", "SrcAlpha", "OneMinusSrcAlpha", "DstAlpha", "OneMinusDstAlpha", "ConstantColor", "OneMinusConstantColor", "ConstantAlpha", "OneMinusConstantAlpha", "SrcAlphaSaturate"]
-                        ---> TBlendingFactor
-  ["FuncAdd", "FuncSubtract", "FuncReverseSubtract", "Min", "Max"]
-                        ---> TBlendEquation
-  ["Clear", "And", "AndReverse", "Copy", "AndInverted", "Noop", "Xor", "Or", "Nor", "Equiv", "Invert", "OrReverse", "CopyInverted", "OrInverted", "Nand", "Set"]
-                        ---> TLogicOperation
-  ["OpZero", "OpKeep", "OpReplace", "OpIncr", "OpIncrWrap", "OpDecr", "OpDecrWrap", "OpInvert"]
-                        ---> TStencilOperation
-  ["Never", "Less", "Equal", "Lequal", "Greater", "Notequal", "Gequal", "Always"]
-                        ---> TComparisonFunction
-  ["LastVertex", "FirstVertex"]
-                        ---> TProvokingVertex
-
---  [{-"CW",-} "CCW"]         ---> TFrontFace
-  ["CullFront", "CullBack"]
-                        ---> TFrontFace ~> TCullMode
-  "CullNone"            -->                TCullMode
-
-  "PolygonFill"         -->               TPolygonMode
-  "PolygonPoint"        --> TPointSize ~> TPolygonMode
-  "PolygonLine"         --> TFloat ~>     TPolygonMode
-
-  "NoOffset"            -->                     TPolygonOffset
-  "Offset"              --> TFloat ~> TFloat ~> TPolygonOffset
-
-  "PointSize"           --> TFloat ~> TPointSize
-  "ProgramPointSize"    -->           TPointSize
-
-  "FragmentOut"         --> \a t -> [a ~~ TFColorRepr t] ==> t  ~> TFragmentOut a
-  "FragmentOutDepth"    --> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth TFloat) a] ==> TFloat ~> t
-                                                                ~> TFragmentOut b
-  "FragmentOutRastDepth"--> \a b t -> [a ~~ TFColorRepr t, b ~~ TFJoinTupleType (Depth TFloat) a] ==> t
-                                                                ~> TFragmentOut b
-
-  "VertexOut"           --> \a t -> [t ~~ TFFTRepr' a] ==> TVec 4 TFloat ~> TFloat ~> TTuple []{-TODO-} ~> a ~> TVertexOut t
-
-  ["LowerLeft", "UpperLeft"]
-                        ---> TPointSpriteCoordOrigin
-
-  "TriangleCtx"         --> TCullMode ~> TPolygonMode ~> TPolygonOffset ~> TProvokingVertex ~> TRasterContext TTriangle
-  "PointCtx"            --> TPointSize ~> TFloat ~> TPointSpriteCoordOrigin                 ~> TRasterContext TPoint
-  "LineCtx"             --> TFloat ~> TProvokingVertex                                      ~> TRasterContext TLine
-
-  "Points"              --> TFetchPrimitive TPoint
-  "Lines"               --> TFetchPrimitive TLine
-  "Triangles"           --> TFetchPrimitive TTriangle
-  "LinesAdjacency"      --> TFetchPrimitive TLineAdjacency
-  "TrianglesAdjacency"  --> TFetchPrimitive TTriangleAdjacency
-
-  "AccumulationContext" --> \t' t -> [t' ~~ TFFragOps t] ==> t ~> TAccumulationContext t'
-
   "ColorImage"          --> \a d color t -> [IsTypeLevelNatural @@ a, IsNum @@ t, color ~~ vecS d t] ==> a ~> color
                                                                              ~> TImage a (Color color)
   "DepthImage"          --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TFloat  ~> TImage a (Depth TFloat)
   "StencilImage"        --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TInt    ~> TImage a (Stencil TInt)
 
-  ["Smooth", "NoPerspective"]
-                        ---> \t -> [IsFloating @@ t] ==> t ~> TInterpolated t
-  ["Flat"]              ---> \t ->                       t ~> TInterpolated t
 
-  "ColorOp"             --> \d mask c color -> [mask ~~ vecS d TBool, color ~~ vecS d c, IsNum @@ c] ==> TBlending c ~> mask
-                                                            ~> TFragmentOperation (Color color)
-  "DepthOp"             --> TComparisonFunction ~> TBool    ~> TFragmentOperation (Depth TFloat)
-    -- "StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
-
-  -- Blending
-  "NoBlending"          --> \t ->                                          TBlending t
-  "BlendLogicOp"        --> \t -> [IsIntegral @@ t] ==> TLogicOperation ~> TBlending t
-  "Blend"               --> TTuple [TBlendEquation,TBlendEquation]
-                         ~> TTuple [TTuple [TBlendingFactor,TBlendingFactor],TTuple [TBlendingFactor,TBlendingFactor]]
-                         ~> TVec 4 TFloat ~>                             TBlending TFloat
-  -- Fragment Filter
-  "PassAll"             --> \t ->                 TFragmentFilter t
-  "Filter"              --> \t -> (t ~> TBool) ~> TFragmentFilter t
   -- Render Operations
   "Fetch"               --> \a t b -> [IsInputTuple @@ t, b ~~ TFFTRepr' t] ==> TString ~> TFetchPrimitive a ~> t ~> TVertexStream a b
   "Transform"           --> \a b p -> (a ~> TVertexOut b) ~> TVertexStream p a ~> TPrimitiveStream p (TNat 1) b
@@ -436,76 +348,7 @@ primFunMap = Map.fromList $ execWriter $ do
                         -> [t' ~~ TFFTRepr' t, IsValidFrameBuffer @@ t, TFrameBuffer n t ~~ TFFrameBuffer a]
                         ==> a ~> TFrameBuffer n t'
   "ScreenOut"           --> \a b -> TFrameBuffer a b ~> TOutput
-  -- * Primitive Functions *
-  -- Arithmetic Functions (componentwise)
---  ["PrimAdd", "PrimSub", "PrimMul"]     ---> \a t   -> [t ~~ TFMatVecElem a, IsNum @@ t] ==> a ~> a ~> a
-  ["PrimAddS", "PrimSubS", "PrimMulS"]  ---> \a t   -> [t ~~ TFMatVecScalarElem a, IsNum @@ t] ==> a ~> t ~> a
-  ["PrimDiv", "PrimMod"]                ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a
-  ["PrimDivS", "PrimModS"]              ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> a
-  ["PrimNeg"]                           ---> \a t   -> [t ~~ TFMatVecScalarElem a, IsSigned @@ t] ==> a ~> a
-  -- Bit-wise Functions
-  ["PrimBAnd", "PrimBOr", "PrimBXor"]   ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> a ~> a
-  ["PrimBAndS", "PrimBOrS", "PrimBXorS"]---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> t ~> a
-  ["PrimBNot"]                          ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> a
-  ["PrimBShiftL", "PrimBShiftR"]        ---> \d a b t -> [IsIntegral @@ t, a ~~ vecS d t, b ~~ vecS d TWord] ==> a ~> b ~> a
-  ["PrimBShiftLS", "PrimBShiftRS"]      ---> \d a t -> [IsIntegral @@ t, a ~~ vecS d t] ==> a ~> TWord ~> a
-  -- Logic Functions
-  ["PrimAnd", "PrimOr", "PrimXor"]      ---> TBool ~> TBool ~> TBool
-  ["PrimNot"]                           ---> \d a   -> [a ~~ vecS d TBool] ==> a ~> a
-  ["PrimAny", "PrimAll"]                ---> \d a   -> [a ~~ vecS d TBool] ==> a ~> TBool
-  -- Angle, Trigonometry and Exponential Functions
-  ["PrimACos", "PrimACosH", "PrimASin", "PrimASinH", "PrimATan", "PrimATanH", "PrimCos", "PrimCosH", "PrimDegrees", "PrimRadians", "PrimSin", "PrimSinH", "PrimTan", "PrimTanH", "PrimExp", "PrimLog", "PrimExp2", "PrimLog2", "PrimSqrt", "PrimInvSqrt"]
-                                        ---> \d a   -> [a ~~ floatVecS d] ==> a ~> a
-  ["PrimPow", "PrimATan2"]              ---> \d a   -> [a ~~ floatVecS d] ==> a ~> a ~> a
-  --ommon Functions
-  ["PrimFloor", "PrimTrunc", "PrimRound", "PrimRoundEven", "PrimCeil", "PrimFract"]
-                                        ---> \d a   -> [a ~~ floatVecS d] ==> a ~> a
-  ["PrimMin", "PrimMax"]                ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a
-  ["PrimMinS", "PrimMaxS"]              ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> a
-  ["PrimIsNan", "PrimIsInf"]            ---> \d a b -> [a ~~ floatVecS d, b ~~ vecS d TBool] ==> a ~> b
-  ["PrimAbs", "PrimSign"]               ---> \d a t -> [IsSigned @@ t, a ~~ vecS d t] ==> a ~> a
-  "PrimModF"            --> \d a   -> [a ~~ floatVecS d] ==> a ~> TTuple [a, a]
-  "PrimClamp"           --> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a ~> a
-  "PrimClampS"          --> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> t ~> a
-  "PrimMix"             --> \d a   -> [a ~~ floatVecS d] ==> a ~> a ~> a ~> a
-  "PrimMixS"            --> \d a   -> [a ~~ floatVecS d] ==> a ~> a ~> TFloat ~> a
-  "PrimMixB"            --> \d a b -> [a ~~ floatVecS d, b ~~ vecS d TBool] ==> a ~> a ~> b ~> a
-  "PrimStep"            --> \d a   -> [a ~~ TFVec d TFloat] ==> a ~> a ~> a
-  "PrimStepS"           --> \d a   -> [a ~~ floatVecS d] ==> TFloat ~> a ~> a
-  "PrimSmoothStep"      --> \d a   -> [a ~~ TFVec d TFloat] ==> a ~> a ~> a ~> a
-  "PrimSmoothStepS"     --> \d a   -> [a ~~ floatVecS d] ==> TFloat ~> TFloat ~> a ~> a
-  -- Integer/Floatonversion Functions
-  "PrimFloatBitsToInt"  --> \d fv iv -> [fv ~~ floatVecS d, iv ~~ vecS d TInt]  ==> fv ~> iv
-  "PrimFloatBitsToUInt" --> \d fv uv -> [fv ~~ floatVecS d, uv ~~ vecS d TWord] ==> fv ~> uv
-  "PrimIntBitsToFloat"  --> \d fv iv -> [fv ~~ floatVecS d, iv ~~ vecS d TInt]  ==> iv ~> fv
-  "PrimUIntBitsToFloat" --> \d fv uv -> [fv ~~ floatVecS d, uv ~~ vecS d TWord] ==> uv ~> fv
-  -- Geometric Functions
-  "PrimLength"          --> \d a -> [a ~~ floatVecS d] ==> a ~> TFloat
-  ["PrimDistance", "PrimDot"]
-                        ---> \d a -> [a ~~ floatVecS d] ==> a ~> a ~> TFloat
-  "PrimCross"           --> \a    -> [a ~~ floatVecS (TNat 3)] ==> a ~> a ~> a
-  "PrimNormalize"       --> \d a  -> [a ~~ floatVecS d] ==> a ~> a
-  ["PrimFaceForward", "PrimRefract"]
-                        ---> \d a -> [a ~~ floatVecS d] ==> a ~> a ~> a ~> a
-  "PrimReflect"         --> \d a  -> [a ~~ floatVecS d] ==> a ~> a ~> a
-  -- Matrix Functions
-  "PrimTranspose"       --> \a b h w -> [a ~~ TFMat h w, b ~~ TFMat w h] ==> a ~> b
-  "PrimDeterminant"     --> \m s   -> [m ~~ TFMat s s] ==> m ~> TFloat
-  "PrimInverse"         --> \m s   -> [m ~~ TFMat s s] ==> m ~> m
-  "PrimOuterProduct"    --> \m h w -> [m ~~ TFMat h w] ==> w ~> h ~> m
-  "PrimMulMatVec"       --> \m h w -> [m ~~ TFMat h w] ==> m ~> w ~> h
-  "PrimMulVecMat"       --> \m h w -> [m ~~ TFMat h w] ==> h ~> m ~> w
-  "PrimMulMatMat"       --> \a b c i j k -> [a ~~ TFMat i j, b ~~ TFMat j k, c ~~ TFMat i k] ==> a ~> b ~> c
-  -- Vector and Scalar Relational Functions
-  ["PrimLessThan", "PrimLessThanEqual", "PrimGreaterThan", "PrimGreaterThanEqual", "PrimEqualV", "PrimNotEqualV"]
-                        ---> \d a b t -> [IsNum @@ t, a ~~ vecS d t, b ~~ vecS d TBool] ==> a ~> a ~> b
-  ["PrimEqual", "PrimNotEqual"]
-                        ---> \a t  -> [t ~~ TFMatVecScalarElem a] ==> a ~> a ~> TBool
-  -- Fragment Processing Functions
-  ["PrimDFdx", "PrimDFdy", "PrimFWidth"]
-                        ---> \d a  -> [a ~~ floatVecS d] ==> a ~> a
-  -- Noise Functions
-  "PrimNoise1"          --> \d a   -> [a ~~ floatVecS d] ==> a ~> TFloat
+
   forM_ [2..4] $ \i ->
       "PrimNoise" ++ show i  --> \d a b -> [a ~~ floatVecS d, b ~~ floatVecS (TNat i)] ==> a ~> b
 

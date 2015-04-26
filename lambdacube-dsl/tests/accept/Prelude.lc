@@ -41,12 +41,212 @@ data Maybe a
     deriving (Eq, Ord, Show)
 
 axioms
-  CW, CCW :: FrontFace
+
+  -- TODO: eliminate
+  fromInt :: Num a => Int -> a
+  compare :: Num a => a -> a -> Ordering
 
   V2 :: Component a => a -> a -> Vec 2 a
   V3 :: Component a => a -> a -> a -> Vec 3 a
   V4 :: Component a => a -> a -> a -> a -> Vec 4 a
 
-  PrimAdd, PrimSub, PrimMul :: (t ~ MatVecElem a, Num t) => a -> a -> a
+  PrimZero, PrimOne :: {- (Component a) => -- TODO -} a
+  PrimTexture :: () -> Vec 2 Float -> Vec 4 Float
 
+  -- temporary?
+  PrimV3FToV4F :: Vec 3 Float -> Vec 4 Float
+  Tup, Const  :: a -> a
+
+{-
+  forM_ [2..4] $ \i -> do
+    forM_ (zip F,I,U,B floatIntWordBool) $ \(tn, t) ->
+        V ++ show i ++ tn :: replicate i t ~-> Vec i t      -- like  V2B :: Bool -> Bool -> V2B
+    forM_ [2..4] $ \j ->
+        M ++ show i ++ show j ++ F :: replicate j (Vec i Float) ~-> Mat i j Float
+                                                               -- like  M22F :: V2F -> V2F -> M22F
+-}
+
+  -- Input declaration
+  Uni     :: Input t -> t
+{-
+  forM_ (  zip IFloat, IInt, IWord, IBool floatIntWordBool
+        ++ [(IM ++ show i ++ show j ++ F, Mat i j Float) | i <- [2..4], j <- [2..4]]
+        ++ [ (IV ++ show i ++ tn, Vec i t)
+           | i <- [2..4]
+           , (tn, t) <- zip F,I,U,B floatIntWordBool
+           ]
+        ) $ \(name, t) ->
+    name :: String -> Input t                            -- like  IBool :: String -> Input (Bool )
+-}
+  Zero, One, SrcColor, OneMinusSrcColor, DstColor, OneMinusDstColor, SrcAlpha, OneMinusSrcAlpha, DstAlpha, OneMinusDstAlpha, ConstantColor, OneMinusConstantColor, ConstantAlpha, OneMinusConstantAlpha, SrcAlphaSaturate
+                        :: BlendingFactor
+  FuncAdd, FuncSubtract, FuncReverseSubtract, Min, Max
+                        :: BlendEquation
+  Clear, And, AndReverse, Copy, AndInverted, Noop, Xor, Or, Nor, Equiv, Invert, OrReverse, CopyInverted, OrInverted, Nand, Set
+                        :: LogicOperation
+  OpZero, OpKeep, OpReplace, OpIncr, OpIncrWrap, OpDecr, OpDecrWrap, OpInvert
+                        :: StencilOperation
+  Never, Less, Equal, Lequal, Greater, Notequal, Gequal, Always
+                        :: ComparisonFunction
+  LastVertex, FirstVertex
+                        :: ProvokingVertex
+  CW, CCW             :: FrontFace
+
+  CullFront, CullBack
+                        :: FrontFace -> CullMode
+  CullNone            ::                CullMode
+
+  PolygonFill         ::               PolygonMode
+  PolygonPoint        :: PointSize -> PolygonMode
+  PolygonLine         :: Float ->     PolygonMode
+
+  NoOffset            ::                     PolygonOffset
+  Offset              :: Float -> Float -> PolygonOffset
+
+  PointSize           :: Float -> PointSize
+  ProgramPointSize    ::           PointSize
+
+  FragmentOut         :: (a ~ ColorRepr t) => t  -> FragmentOut a
+  FragmentOutDepth    :: (a ~ ColorRepr t, b ~ JoinTupleType (Depth Float) a) => Float -> t
+                                                                -> FragmentOut b
+  FragmentOutRastDepth :: (a ~ ColorRepr t, b ~ JoinTupleType (Depth Float) a) => t
+                                                                -> FragmentOut b
+
+  VertexOut           :: (t ~ FTRepr' a) => Vec 4 Float -> Float -> (){-TODO-} -> a -> VertexOut t
+
+  LowerLeft, UpperLeft
+                        :: PointSpriteCoordOrigin
+
+  TriangleCtx         :: CullMode -> PolygonMode -> PolygonOffset -> ProvokingVertex -> RasterContext Triangle
+  PointCtx            :: PointSize -> Float -> PointSpriteCoordOrigin                 -> RasterContext Point
+  LineCtx             :: Float -> ProvokingVertex                                      -> RasterContext Line
+
+  Points              :: FetchPrimitive Point
+  Lines               :: FetchPrimitive Line
+  Triangles           :: FetchPrimitive Triangle
+  LinesAdjacency      :: FetchPrimitive LineAdjacency
+  TrianglesAdjacency  :: FetchPrimitive TriangleAdjacency
+
+  AccumulationContext :: (t' ~ FragOps t) => t -> AccumulationContext t'
+{-
+  ColorImage          :: (TNat a, Num t, color ~ VecScalar d t) => a -> color
+                                                                             -> Image a (Color color)
+  DepthImage          :: (TNat a) => a -> Float  -> Image a (Depth Float)
+  StencilImage        :: (TNat a) => a -> Int    -> Image a (Stencil Int)
+
+-}
+  Smooth, NoPerspective
+                        :: (Floating t) => t -> Interpolated t
+  Flat              ::                       t -> Interpolated t
+
+  ColorOp             :: (mask ~ VecScalar d Bool, color ~ VecScalar d c, Num c) => Blending c -> mask
+                                                            -> FragmentOperation (Color color)
+  DepthOp             :: ComparisonFunction -> Bool    -> FragmentOperation (Depth Float)
+    -- StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
+
+  -- Blending
+  NoBlending          ::                                          Blending t
+  BlendLogicOp        :: (Integral t) => LogicOperation -> Blending t
+  Blend               :: (BlendEquation, BlendEquation)
+                         -> ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
+                         -> Vec 4 Float ->                             Blending Float
+
+  -- Fragment Filter
+  PassAll             ::                 FragmentFilter t
+  Filter              :: (t -> Bool) -> FragmentFilter t
+
+{-
+  -- Render Operations
+  Fetch               :: (InputTuple t, b ~ FTRepr' t) => String -> FetchPrimitive a -> t -> VertexStream a b
+  Transform           :: (a -> VertexOut b) -> VertexStream p a -> PrimitiveStream p 1 b
+  Rasterize           :: RasterContext a -> PrimitiveStream a b c -> FragmentStream b c
+-}
+{-
+  Accumulate          :: (ValidOutput b, t ~ FTRepr' b) =>
+                           AccumulationContext b
+                        -> FragmentFilter a
+                        -> (a -> FragmentOut b)
+                        -> FragmentStream n a
+                        -> FrameBuffer n t
+                        -> FrameBuffer n t
+  FrameBuffer         :: (t' ~ FTRepr' t, ValidFrameBuffer t, FrameBuffer n t ~ TFFrameBuffer a]
+                        ==> a -> FrameBuffer n t'
+  ScreenOut           :: FrameBuffer a b -> Output
+  -- * Primitive Functions *
+  -- Arithmetic Functions (componentwise)
+-}
+  PrimAdd, PrimSub, PrimMul :: (t ~ MatVecElem a, Num t) => a -> a -> a
+  PrimAddS, PrimSubS, PrimMulS  :: (t ~ MatVecScalarElem a, Num t) => a -> t -> a
+  PrimDiv, PrimMod                :: (Num t, a ~ VecScalar d t) => a -> a -> a
+  PrimDivS, PrimModS              :: (Num t, a ~ VecScalar d t) => a -> t -> a
+  PrimNeg                           :: (t ~ MatVecScalarElem a, Signed t) => a -> a
+  -- Bit-wise Functions
+  PrimBAnd, PrimBOr, PrimBXor   :: (Integral t, a ~ VecScalar d t) => a -> a -> a
+  PrimBAndS, PrimBOrS, PrimBXorS:: (Integral t, a ~ VecScalar d t) => a -> t -> a
+  PrimBNot                          :: (Integral t, a ~ VecScalar d t) => a -> a
+  PrimBShiftL, PrimBShiftR        :: (Integral t, a ~ VecScalar d t, b ~ VecScalar d Word) => a -> b -> a
+  PrimBShiftLS, PrimBShiftRS      :: (Integral t, a ~ VecScalar d t) => a -> Word -> a
+  -- Logic Functions
+  PrimAnd, PrimOr, PrimXor      :: Bool -> Bool -> Bool
+  PrimNot                           :: (a ~ VecScalar d Bool) => a -> a
+  PrimAny, PrimAll                :: (a ~ VecScalar d Bool) => a -> Bool
+
+  -- Angle, Trigonometry and Exponential Functions
+  PrimACos, PrimACosH, PrimASin, PrimASinH, PrimATan, PrimATanH, PrimCos, PrimCosH, PrimDegrees, PrimRadians, PrimSin, PrimSinH, PrimTan, PrimTanH, PrimExp, PrimLog, PrimExp2, PrimLog2, PrimSqrt, PrimInvSqrt
+                                        :: (a ~ VecScalar d Float) => a -> a
+  PrimPow, PrimATan2              :: (a ~ VecScalar d Float) => a -> a -> a
+  --ommon Functions
+  PrimFloor, PrimTrunc, PrimRound, PrimRoundEven, PrimCeil, PrimFract
+                                        :: (a ~ VecScalar d Float) => a -> a
+  PrimMin, PrimMax                :: (Num t, a ~ VecScalar d t) => a -> a -> a
+  PrimMinS, PrimMaxS              :: (Num t, a ~ VecScalar d t) => a -> t -> a
+  PrimIsNan, PrimIsInf            :: (a ~ VecScalar d Float, b ~ VecScalar d Bool) => a -> b
+  PrimAbs, PrimSign               :: (Signed t, a ~ VecScalar d t) => a -> a
+  PrimModF            :: (a ~ VecScalar d Float) => a -> (a, a)
+  PrimClamp           :: (Num t, a ~ VecScalar d t) => a -> a -> a -> a
+  PrimClampS          :: (Num t, a ~ VecScalar d t) => a -> t -> t -> a
+  PrimMix             :: (a ~ VecScalar d Float) => a -> a -> a -> a
+  PrimMixS            :: (a ~ VecScalar d Float) => a -> a -> Float -> a
+  PrimMixB            :: (a ~ VecScalar d Float, b ~ VecScalar d Bool) => a -> a -> b -> a
+  PrimStep            :: (a ~ TFVec d Float) => a -> a -> a
+  PrimStepS           :: (a ~ VecScalar d Float) => Float -> a -> a
+  PrimSmoothStep      :: (a ~ TFVec d Float) => a -> a -> a -> a
+  PrimSmoothStepS     :: (a ~ VecScalar d Float) => Float -> Float -> a -> a
+
+  -- Integer/Floatonversion Functions
+  PrimFloatBitsToInt  :: (fv ~ VecScalar d Float, iv ~ VecScalar d Int)  => fv -> iv
+  PrimFloatBitsToUInt :: (fv ~ VecScalar d Float, uv ~ VecScalar d Word) => fv -> uv
+  PrimIntBitsToFloat  :: (fv ~ VecScalar d Float, iv ~ VecScalar d Int)  => iv -> fv
+  PrimUIntBitsToFloat :: (fv ~ VecScalar d Float, uv ~ VecScalar d Word) => uv -> fv
+  -- Geometric Functions
+  PrimLength          :: (a ~ VecScalar d Float) => a -> Float
+  PrimDistance, PrimDot
+                        :: (a ~ VecScalar d Float) => a -> a -> Float
+  PrimCross           :: (a ~ VecScalar 3 Float) => a -> a -> a
+  PrimNormalize       :: (a ~ VecScalar d Float) => a -> a
+  PrimFaceForward, PrimRefract
+                        :: (a ~ VecScalar d Float) => a -> a -> a -> a
+  PrimReflect         :: (a ~ VecScalar d Float) => a -> a -> a
+  -- Matrix Functions
+  PrimTranspose       :: (a ~ TFMat h w, b ~ TFMat w h) => a -> b
+  PrimDeterminant     :: (m ~ TFMat s s) => m -> Float
+  PrimInverse         :: (m ~ TFMat s s) => m -> m
+  PrimOuterProduct    :: (m ~ TFMat h w) => w -> h -> m
+  PrimMulMatVec       :: (m ~ TFMat h w) => m -> w -> h
+  PrimMulVecMat       :: (m ~ TFMat h w) => h -> m -> w
+  PrimMulMatMat       :: (a ~ TFMat i j, b ~ TFMat j k, c ~ TFMat i k) => a -> b -> c
+  -- Vector and Scalar Relational Functions
+  PrimLessThan, PrimLessThanEqual, PrimGreaterThan, PrimGreaterThanEqual, PrimEqualV, PrimNotEqualV
+                        :: (Num t, a ~ VecScalar d t, b ~ VecScalar d Bool) => a -> a -> b
+  PrimEqual, PrimNotEqual
+                        :: (t ~ MatVecScalarElem a) => a -> a -> Bool
+  -- Fragment Processing Functions
+  PrimDFdx, PrimDFdy, PrimFWidth
+                        :: (a ~ VecScalar d Float) => a -> a
+  -- Noise Functions
+  PrimNoise1          :: (a ~ VecScalar d Float) => a -> Float
+{-
+--  forM_ [2..4] $ \i ->
+--      PrimNoise ++ show i  :: (a ~ VecScalar d Float, b ~ VecScalar i Float) => a -> b
+-}
 
