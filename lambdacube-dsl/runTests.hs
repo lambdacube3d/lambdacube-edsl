@@ -53,7 +53,7 @@ acceptTests = testFrame "./tests/accept" $ \case
     Right (Right e)
         | typingToTy (snd $ getTag e) == TCon0 "Output"
             -> Right ("compiled main", ppShow . compilePipeline . mkReduce . toCore mempty $ e)
-        | otherwise -> Right ("reduced main", ppShow . mkReduce . toCore mempty $ e)
+        | otherwise -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e)
 
 rejectTests = testFrame "./tests/reject" $ \case
     Left e -> Right ("error message", e)
@@ -67,7 +67,7 @@ testFrame dir f tests = forM_ (zip [1..] (tests :: [String])) $ \(i, n) -> do
       Right (op, x) -> catch (length x `seq` compareResult (pad 15 op) (dir </> (n ++ ".out")) x) getErr
   where
     getErr :: ErrorCall -> IO ()
-    getErr e = putStrLn $ "\n!FAIL\n" ++ show e
+    getErr e = putStrLn $ "\n!FAIL\n" ++ limit "\n..." 4000 (show e)
 
 compareResult msg ef e = doesFileExist ef >>= \b -> case b of
     False -> writeFile ef e >> putStrLn ("OK - " ++ msg ++ " is written")
@@ -83,17 +83,20 @@ compareResult msg ef e = doesFileExist ef >>= \b -> case b of
             putStrLn $ showRanges ef rs e
             putStrLn "-------------------------------------------"
             putStr $ "Accept new " ++ msg ++ " (y/n)? "
-            c <- getChar
+            c <- length e' `seq` getChar
             if c `elem` ("yY\n" :: String)
                 then writeFile ef e >> putStrLn " - accepted."
                 else putStrLn " - not Accepted."
 
 pad n s = s ++ replicate (n - length s) ' '
 
+limit :: String -> Int -> String -> String
+limit msg n s = take n s ++ if null (drop n s) then "" else msg
+
 showRanges :: String -> [Int] -> String -> String
-showRanges fname is e = (if head rs == 0 then "" else "...\n") ++ limit 4000 (intercalate "\n...\n" $ f (zipWith (-) rs (0:rs)) e)
+showRanges fname is e = (if head rs == 0 then "" else "...\n")
+    ++ limit ("\n... (see " ++ fname ++ " for more differences)") 4000 (intercalate "\n...\n" $ f (zipWith (-) rs (0:rs)) e)
   where
-    limit n s = take n s ++ if null (drop n s) then "" else "\n... (see " ++ fname ++ " for more differences)"
     f :: [Int] -> String -> [String]
     f (i:is) e = g is $ drop i e
     f [] "" = []

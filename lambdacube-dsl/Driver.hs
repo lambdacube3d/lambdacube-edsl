@@ -7,6 +7,7 @@ import Control.Monad.Except
 import Text.Show.Pretty
 import System.Directory
 import System.FilePath
+import Debug.Trace
 
 import qualified Type as AST
 import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, Exp, Pat, PVar, PLit, PTuple, PCon, Wildcard)

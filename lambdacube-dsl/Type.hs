@@ -169,7 +169,7 @@ setTag_ vf tf f = \case
 type STyping = (Subst, Typing)
 
 buildLet :: [(Pat STyping, Exp STyping)] -> Exp STyping -> Exp STyping
-buildLet es e = foldr (\(p, e) x -> ELet (getTag e) p e x) e es
+buildLet es e = foldr (\(p, e) x -> ELet (getTag x) p e x) e es
 
 data Frequency -- frequency kind
   -- frequency values
