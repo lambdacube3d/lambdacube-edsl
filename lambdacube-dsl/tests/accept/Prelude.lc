@@ -298,6 +298,16 @@ axioms
   PrimNoise3          :: (a ~ VecScalar d Float, b ~ VecScalar 3 Float) => a -> b
   PrimNoise4          :: (a ~ VecScalar d Float, b ~ VecScalar 4 Float) => a -> b
 
+{-
+    -- Vec/Mat (de)construction
+    PrimTupToV2             :: IsComponent a                            => PrimFun stage ((a,a)     -> V2 a)
+    PrimTupToV3             :: IsComponent a                            => PrimFun stage ((a,a,a)   -> V3 a)
+    PrimTupToV4             :: IsComponent a                            => PrimFun stage ((a,a,a,a) -> V4 a)
+    PrimV2ToTup             :: IsComponent a                            => PrimFun stage (V2 a     -> (a,a))
+    PrimV3ToTup             :: IsComponent a                            => PrimFun stage (V3 a   -> (a,a,a))
+    PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
+-}
+
 colorImage1 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 1 (Color color)
 colorImage2 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 2 (Color color)
 

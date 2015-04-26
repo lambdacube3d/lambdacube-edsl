@@ -272,28 +272,18 @@ injType = \case
 vecS = TFVecScalar
 floatVecS d = vecS d TFloat
 
-infix 0 --->, -->, ---->
-ss ---> m = tell [(s, newV m) | s <- ss]
-s --> m = [s] ---> m
-ss ----> m = map ('\'':) ss ---> m
+infix 0 --->, -->
+ss --> m = tell [(ss, newV m)]
+s ---> m = ('\'': s) --> m
 
 isPrimFun n = Map.member n primFunMap
-{-
-    -- Vec/Mat (de)construction
-    PrimTupToV2             :: IsComponent a                            => PrimFun stage ((a,a)     -> V2 a)
-    PrimTupToV3             :: IsComponent a                            => PrimFun stage ((a,a,a)   -> V3 a)
-    PrimTupToV4             :: IsComponent a                            => PrimFun stage ((a,a,a,a) -> V4 a)
-    PrimV2ToTup             :: IsComponent a                            => PrimFun stage (V2 a     -> (a,a))
-    PrimV3ToTup             :: IsComponent a                            => PrimFun stage (V3 a   -> (a,a,a))
-    PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
--}
 
 primFunMap :: Map EName (TCM (Subst, Typing))
 primFunMap = Map.fromList $ execWriter $ do
 
   -- kind of type constructors
-  ["()"] ----> Star
-  ["[]"] ----> Star ~> Star
+  "()" ---> Star
+  "[]" ---> Star ~> Star
 
   "[]" --> \a -> TList a
   ":" --> \a -> a ~> TList a ~> TList a
