@@ -1,0 +1,9 @@
+data AB = A | B
+
+render l choice = let
+  mask              = case choice of
+                        A -> V4B False True False False
+                        B -> V4B True False False False
+ in mask:l
+
+main = foldl' render [] [A,B]
