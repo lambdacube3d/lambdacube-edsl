@@ -304,8 +304,8 @@ primFunMap = Map.fromList $ execWriter $ do
   ["Vec"] ----> NatKind ~> Star ~> Star
   ["Mat"] ----> NatKind ~> NatKind ~> Star ~> Star
 
-  "V2" --> \a -> [IsComponent @@ a] ==> a ~> a ~> TVec 2 a
-  "V3" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> TVec 3 a
+--  "V2" --> \a -> [IsComponent @@ a] ==> a ~> a ~> TVec 2 a
+--  "V3" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> TVec 3 a
 --  "V4" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> a ~> TVec 4 a
   "[]" --> \a -> TList a
   ":" --> \a -> a ~> TList a ~> TList a
