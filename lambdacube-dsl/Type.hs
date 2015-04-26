@@ -417,6 +417,7 @@ data Module t a
   , typeClasses   :: ()
   , instances     :: ()
   , precedences   :: Prec
+  , moduleFile    :: FilePath
   }
     deriving (Show)
 

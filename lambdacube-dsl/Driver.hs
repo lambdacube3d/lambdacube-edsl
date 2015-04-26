@@ -23,16 +23,16 @@ compileMain path fname = fmap IR.compilePipeline <$> reducedMain path fname
 
 reducedMain :: FilePath -> MName -> IO (Either String Exp)
 reducedMain path fname =
-    runMM path $ mkReduce <$> parseAndToCoreMain fname
+    runMM [path] $ mkReduce <$> parseAndToCoreMain fname
 
-runMM path = runExceptT . flip evalStateT mempty . flip runReaderT path
+runMM paths = runExceptT . flip evalStateT mempty . flip runReaderT paths
 
 parseAndToCoreMain :: MName -> MM Exp
 parseAndToCoreMain m = toCore mempty <$> getDef m "main"
 
 type Modules = [(MName, ModuleT)]
 
-type MM = ReaderT FilePath (StateT Modules (ExceptT String IO))
+type MM = ReaderT [FilePath] (StateT Modules (ExceptT String IO))
 
 typeCheckLC :: MName -> MM ModuleT
 typeCheckLC mname = do
@@ -40,22 +40,27 @@ typeCheckLC mname = do
  case c of
     Just m -> return m
     _ -> do
-     fname <- asks $ flip lcModuleFile mname
-     b <- liftIO $ doesFileExist fname
-     if not b then throwError $ "can't find module " ++ fname
-     else do
-      res <- liftIO $ parseLC fname
-      case res of
-        Left m -> throwError m
-        Right (src, e) -> do
-          ms <- mapM (typeCheckLC . qData) $ moduleImports e
-          case joinPolyEnvs $ PolyEnv primFunMap: map exportEnv ms of
+     fnames <- asks $ map $ flip lcModuleFile mname
+     let
+        find [] = throwError $ "can't find module " ++ intercalate "; " fnames
+        find (fname: fs) = do
+         b <- liftIO $ doesFileExist fname
+         if not b then find fs
+         else do
+          res <- liftIO $ parseLC fname
+          case res of
             Left m -> throwError m
-            Right env -> case inference_ env e of
-                Left m    -> throwError $ m src
-                Right x   -> do
-                    modify ((mname, x):)
-                    return x
+            Right (src, e) -> do
+              ms <- mapM (typeCheckLC . qData) $ moduleImports e
+              case joinPolyEnvs $ PolyEnv primFunMap: map exportEnv ms of
+                Left m -> throwError m
+                Right env -> case inference_ env e of
+                    Left m    -> throwError $ m src
+                    Right x   -> do
+                        modify ((mname, x):)
+                        return x
+
+     find fnames
 
 lcModuleFile path n = path </> (n ++ ".lc")
 

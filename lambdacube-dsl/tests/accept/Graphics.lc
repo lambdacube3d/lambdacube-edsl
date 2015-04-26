@@ -10,6 +10,7 @@ import Data.Vect
 import LambdaCube.GL
 -}
 import Material hiding (Blending)
+import Prelude
 
 --import Debug.Trace
 
@@ -37,36 +38,7 @@ zero' = PrimZero
 one' = PrimOne
 normalize' = PrimNormalize
 texture' = PrimTexture
-pi = 3.14
 negate x = 0 -. x
-
-($) = \f1 x -> f1 x
-(.) = \f2 g x -> f2 (g x)
-
-foldl' f e [] = e
-foldl' f e (x: xs) = foldl' f (f e x) xs
-
-(***) f g (x, y) = (f x, g y)
-
-uncurry f (x, y) = f x y
-
-split [] = ([], [])
-split (x: xs) = (x: bs, as)  where (as, bs) = split xs
-
-mergeBy f (x:xs) (y:ys) = case f x y of
-    LT -> x: mergeBy f xs (y:ys)
-    _ -> y: mergeBy f (x:xs) ys
-mergeBy f [] xs = xs
-mergeBy f xs [] = xs
-
-sortBy f [] = []
-sortBy f [x] = [x]
-sortBy f xs = uncurry (mergeBy f) ((sortBy f *** sortBy f) (split xs))
-
-ifThenElse True a b = a
-ifThenElse False a b = b
-
-id x = x
 
 pack' = id
 unpack' = id
@@ -387,8 +359,6 @@ mkStage name ca prevFB sa = Accumulate aCtx fFun fSh (Rasterize rCtx (Transform 
     vSh     = mkVertexShader ca sa
     fSh     = mkFragmentShader sa
     fFun    = mkFilterFunction sa
-
-data Ordering = LT | EQ | GT
 
 mkShader :: (FrameBuffer 1 (Float,Vec 4 Float)) -> (String,CommonAttrs) -> (FrameBuffer 1 (Float,Vec 4 Float))
 mkShader fb (name,ca) = foldl' (mkStage name ca) fb $ caStages ca

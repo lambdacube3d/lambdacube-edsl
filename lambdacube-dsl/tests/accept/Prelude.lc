@@ -1,0 +1,39 @@
+module Prelude where
+
+id x = x
+($) = \f1 x -> f1 x
+(.) = \f2 g x -> f2 (g x)
+
+uncurry f (x, y) = f x y
+(***) f g (x, y) = (f x, g y)
+
+ifThenElse True a b = a
+ifThenElse False a b = b
+
+pi = 3.14
+
+
+foldl' f e [] = e
+foldl' f e (x: xs) = foldl' f (f e x) xs
+
+split [] = ([], [])
+split (x: xs) = (x: bs, as)  where (as, bs) = split xs
+
+data Ordering = LT | EQ | GT
+
+mergeBy f (x:xs) (y:ys) = case f x y of
+    LT -> x: mergeBy f xs (y:ys)
+    _ -> y: mergeBy f (x:xs) ys
+mergeBy f [] xs = xs
+mergeBy f xs [] = xs
+
+sortBy f [] = []
+sortBy f [x] = [x]
+sortBy f xs = uncurry (mergeBy f) ((sortBy f *** sortBy f) (split xs))
+
+data Maybe a
+    = Nothing
+    | Just a
+    deriving (Eq, Ord, Show)
+
+

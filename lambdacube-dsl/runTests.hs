@@ -47,12 +47,12 @@ main = do
   putStrLn $ "Catching errors (must get an error)"
   rejectTests testToReject
 
-writeReduced = testFrame "./tests/accept" $ \case
+writeReduced = testFrame ["./tests/accept"] $ \case
     Left e -> Left e
     Right (Left e) -> Right ("typechecked", ppShow e)
     Right (Right e) -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e)
 
-acceptTests = testFrame "./tests/accept" $ \case
+acceptTests = testFrame ["./tests/accept"] $ \case
     Left e -> Left e
     Right (Left e) -> Right ("typechecked", ppShow e)
     Right (Right e)
@@ -60,16 +60,16 @@ acceptTests = testFrame "./tests/accept" $ \case
             -> Right ("compiled main", ppShow . compilePipeline . mkReduce . toCore mempty $ e)
         | otherwise -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e)
 
-rejectTests = testFrame "./tests/reject" $ \case
+rejectTests = testFrame ["./tests/reject", "./tests/accept"] $ \case
     Left e -> Right ("error message", e)
     _ -> Left "failed to catch error"
 
-testFrame dir f tests = forM_ (zip [1..] (tests :: [String])) $ \(i, n) -> do
+testFrame dirs f tests = forM_ (zip [1..] (tests :: [String])) $ \(i, n) -> do
     putStr $ " # " ++ pad 4 (show i) ++ pad 15 n ++ " ... "
-    result <- runMM dir $ getDef_ n "main"
+    result <- runMM dirs $ getDef_ n "main"
     case f result of
       Left e -> putStrLn $ "\n!FAIL\n" ++ e
-      Right (op, x) -> catch (length x `seq` compareResult (pad 15 op) (dir </> (n ++ ".out")) x) getErr
+      Right (op, x) -> catch (length x `seq` compareResult (pad 15 op) (head dirs </> (n ++ ".out")) x) getErr
   where
     getErr :: ErrorCall -> IO ()
     getErr e = putStrLn $ "\n!FAIL\n" ++ limit "\n..." 4000 (show e)

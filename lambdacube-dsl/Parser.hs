@@ -185,8 +185,8 @@ moduleName = do
   when (any (isLower . head) l) $ fail "module name must start with capital letter"
   return $ Q (init l) (last l)
 
-moduleDef :: P ModuleR
-moduleDef = do
+moduleDef :: FilePath -> P ModuleR
+moduleDef fname = do
   optional $ do
     keyword "module"
     moduleName
@@ -214,6 +214,7 @@ moduleDef = do
       , typeClasses   = ()
       , instances     = ()
       , precedences   = ps     -- TODO: check multiple definitions
+      , moduleFile    = fname
       }
 
 
@@ -569,7 +570,7 @@ indentState = mkIndentationState 0 infIndentation True Ge
 parseLC :: String -> IO (Either String (BS.ByteString, ModuleR))
 parseLC fname = do
   src <- BS.readFile fname
-  case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> moduleDef <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
+  case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> moduleDef fname <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
     Failure m -> return $ Left $ show m
     Success e -> return $ Right (src, e)
 
