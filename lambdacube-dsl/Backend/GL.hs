@@ -25,6 +25,7 @@ module Backend.GL (
     compileTexture2DRGBAF,
 
     -- GL Pipeline Input, Object
+    GLPipeline,
     GLPipelineInput,
     Object,
     PipelineSchema(..),

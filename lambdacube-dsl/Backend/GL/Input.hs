@@ -117,7 +117,7 @@ addObject input slotName prim indices attribs uniformNames = do
     ppls <- readIORef $ pipelines input
     let topUnis = uniformSetup input
     cmds <- V.forM ppls $ \mp -> case mp of
-        Nothing -> print "nothing to do??" >> return V.empty
+        Nothing -> return V.empty
         Just p  -> do
             Just ic <- readIORef $ glInput p
             case icSlotMapInputToPipeline ic ! slotIdx of
