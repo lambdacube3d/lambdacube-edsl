@@ -438,7 +438,7 @@ primFunMap = Map.fromList $ execWriter $ do
   "ScreenOut"           --> \a b -> TFrameBuffer a b ~> TOutput
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
-  ["PrimAdd", "PrimSub", "PrimMul"]     ---> \a t   -> [t ~~ TFMatVecElem a, IsNum @@ t] ==> a ~> a ~> a
+--  ["PrimAdd", "PrimSub", "PrimMul"]     ---> \a t   -> [t ~~ TFMatVecElem a, IsNum @@ t] ==> a ~> a ~> a
   ["PrimAddS", "PrimSubS", "PrimMulS"]  ---> \a t   -> [t ~~ TFMatVecScalarElem a, IsNum @@ t] ==> a ~> t ~> a
   ["PrimDiv", "PrimMod"]                ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> a ~> a
   ["PrimDivS", "PrimModS"]              ---> \d a t -> [IsNum @@ t, a ~~ vecS d t] ==> a ~> t ~> a

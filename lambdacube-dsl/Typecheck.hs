@@ -315,7 +315,7 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     _ -> do
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
-            TConstraintArg_ (CClass c tv) t -> return (mempty, error "tcarg")
+            TConstraintArg_ c t -> return (mempty, error "tcarg")
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)
             TTuple_ ts -> unifyTypings (map ((star:) . getTag') ts) $ \_ -> Star

@@ -41,7 +41,7 @@ instance TokenParsing p => TokenParsing (LCParser p) where
 lcCommentStyle = haskellCommentStyle
 
 lcOps = haskell98Ops
-  { _styleReserved = HashSet.fromList ["=","\\","#","::",".","@","_","|","->"]
+  { _styleReserved = HashSet.fromList ["=","\\","#","::",".","@","_","|","->","~"]
   }
 
 lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
@@ -271,12 +271,32 @@ typePattern = ty -- choice [try' "type var" typeVar, typeConstructor, parens ((v
 
 tcExp :: P (TyR -> TyR)   -- TODO
 tcExp = try $ do
-  let tyC = fmap addC $ CClass <$> typeConstraint <*> typePattern
+  let tyC = addC <$> (eqC <$> try (typePattern <* operator "~") <*> typePattern)
+        <|> addC <$> (CClass <$> typeConstraint <*> typePattern)
       addC :: Constraint TyR -> TyR -> TyR
       addC c = Ty' mempty . TConstraintArg_ c
+      eqC t1 t2 = CEq t1 (mkTypeFun t2)
   t <- tyC <|> parens (foldr (.) id <$> sepBy tyC comma)
   operator "=>"
   return t
+
+pattern Tyy a <- Ty' _ a
+pattern TyApp1 s t <- Tyy (TApp_ (Tyy (TCon_ s)) t)
+pattern TyApp2 s t t' <- Tyy (TApp_ (TyApp1 s t) t')
+
+mkTypeFun :: TyR -> TypeFun TyR
+mkTypeFun = \case
+    TyApp2 "Mat" a b -> TFMat a b
+    TyApp1 "MatVecElem" a -> TFMatVecElem a
+    TyApp1 "MatVecScalarElem" a -> TFMatVecScalarElem a
+    TyApp2 "Vec" a b -> TFVec a b               -- may be data family
+    TyApp2 "VecScalar" a b -> TFVecScalar a b
+    TyApp1 "FTRepr'" a -> TFFTRepr' a
+    TyApp1 "ColorRepr" a -> TFColorRepr a
+    TyApp1 "FrameBuffer" a -> TFFrameBuffer a
+    TyApp1 "FragOps" a -> TFFragOps a
+    TyApp2 "JoinTupleType" a b -> TFJoinTupleType a b
+    x -> error $ "mkTypeFun: " ++ ppShow x
 
 typeExp :: P TyR
 typeExp = do
