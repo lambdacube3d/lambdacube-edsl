@@ -47,6 +47,11 @@ main = do
   putStrLn $ "Catching errors (must get an error)"
   rejectTests testToReject
 
+writeReduced = testFrame "./tests/accept" $ \case
+    Left e -> Left e
+    Right (Left e) -> Right ("typechecked", ppShow e)
+    Right (Right e) -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e)
+
 acceptTests = testFrame "./tests/accept" $ \case
     Left e -> Left e
     Right (Left e) -> Right ("typechecked", ppShow e)

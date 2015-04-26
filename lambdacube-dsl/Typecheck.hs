@@ -183,8 +183,9 @@ inference_ primFunMap m = runExcept $ fst <$>
     evalRWST (inferModule m) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
   where
     inferModule Module{..} = withTyping (Map.fromList $ tyConKinds dataDefs) $ do
+        let d = dataDefs
         dataDefs <- mapM inferDataDef dataDefs
-        definitions <- withTyping (Map.fromList $ tyConTypes dataDefs ++ selectorTypes dataDefs) $ inferDefs definitions
+        definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs $ selectorDefs d ++ definitions
         return Module{..}
 
     inferDefs [] = return []
@@ -221,6 +222,21 @@ replCallType n nt = \case
   where f = replCallType n nt
 
 modTag f (Exp t x) = Exp (f t) x
+
+selectorDefs :: [DataDef (Ty' Range)] -> [ValueDef Range]
+selectorDefs dataDefs =
+    [ ( PVar mempty sel
+      , ELam mempty
+            (PCon mempty cn
+                [ if sel == sel' then PVar mempty "x" else Wildcard mempty
+                | FieldTy (Just sel') _ <- tys]
+            )
+            (EVar mempty "x")
+      )
+    | d@(DataDef n vs cs) <- dataDefs
+    , ConDef cn tys <- cs
+    , FieldTy (Just sel) t <- tys
+    ]
 
 selectorTypes :: [DataDef Typing] -> [(EName, Typing)]
 selectorTypes dataDefs =
@@ -265,6 +281,7 @@ joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 
+-- TODO: unification
 (.~>) :: Typing -> Typing -> Typing
 t .~> s = typing (monoEnv t <> monoEnv s) (constraints t ++ constraints s) (typingType t ~> typingType s)
 
@@ -304,6 +321,9 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     star = [] ==> Star
 
 inferTyping :: Exp Range -> TCM (Exp STyping)
+-- hack
+inferTyping (ENamedRecord r n (unzip -> (fs, es)))
+    = inferTyping $ foldl (EApp mempty) (EVar mempty n) es
 inferTyping (Exp r e) = local (id *** const [r]) $ case e of
     ELam_ p f -> do
         p_@(p, tr) <- inferPatTyping False p
@@ -340,10 +360,12 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             EApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             EFieldProj_ fn -> fieldProjType fn
             ERecord_ Nothing (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
+{-
             ERecord_ (Just n) (unzip -> (fs, es)) -> do -- TODO: handle field names
                 (s', nt) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
                 (s, t) <- unifyTypings ([nt]: map getTag' es) $ \(tf: ts) v -> [tf ~~~ foldr (~>) v ts] ==> v
                 return (s <> s', t)
+-}
             ETuple_ te -> unifyTypings (map (getTag') te) TTuple
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n

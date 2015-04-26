@@ -223,6 +223,9 @@ reduceHNF th@(Thunk env exp) = case exp of
                 Right (Just m') -> reduceHNF $ Thunk (m' <> env') e'
                 Right _ -> keep
 
+        -- TODO
+        EVar (VarE "fromInt" (TArr _ TFloat)) -> case x of
+            ELit (LInt i) -> Right $ Thunk mempty $ ELit $ LFloat $ fromIntegral i
         EVar (VarE v ty) -> case ty of
             Forall tv t -> case x of
                 EType x -> Right $ addSubst (Map.singleton tv (subst' env x)) $ Thunk env' $ EVar $ VarE v t

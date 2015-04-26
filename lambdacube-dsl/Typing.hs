@@ -318,7 +318,7 @@ primFunMap = Map.fromList $ execWriter $ do
         -- Vec 2 (Vec 4 Float) ~> Mat 4 2 Float
 --  "." --> \a b c -> (b ~> c) ~> (a ~> b) ~> a ~> c
 --  "foldl'" --> \a b -> (b ~> a ~> b) ~> b ~> TList a ~> b
-  "sortBy" --> \a -> (a ~> a ~> TCon0 "Ordering") ~> TList a ~> TList a
+--  "sortBy" --> \a -> (a ~> a ~> TCon0 "Ordering") ~> TList a ~> TList a
   "compare" --> \a -> [IsNum @@ a] ==> a ~> a ~> TCon0 "Ordering"
 
   ["PrimZero", "PrimOne"] ---> \a -> {- [IsComponent @@ a] ==> -- TODO -} (a :: Ty)
@@ -326,7 +326,7 @@ primFunMap = Map.fromList $ execWriter $ do
 
   -- temporary?
   "PrimV3FToV4F" --> TVec 3 TFloat ~> TVec 4 TFloat
-  ["Tup", "Const", "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"]  ---> \a -> a ~> a
+  ["Tup", "Const"{-, "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"-}]  ---> \a -> a ~> a
 
   ["True", "False"] ---> TBool
 

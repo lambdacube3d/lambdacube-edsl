@@ -46,8 +46,41 @@ negate x = 0 -. x
 foldl' f e [] = e
 foldl' f e (x: xs) = foldl' f (f e x) xs
 
+(***) f g (x, y) = (f x, g y)
+
+uncurry f (x, y) = f x y
+
+split [] = ([], [])
+split (x: xs) = (x: bs, as)  where (as, bs) = split xs
+
+mergeBy f (x:xs) (y:ys) = case f x y of
+    LT -> x: mergeBy f xs (y:ys)
+    _ -> y: mergeBy f (x:xs) ys
+mergeBy f [] xs = xs
+mergeBy f xs [] = xs
+
+sortBy f [] = []
+sortBy f [x] = [x]
+sortBy f xs = uncurry (mergeBy f) ((sortBy f *** sortBy f) (split xs))
+
 ifThenElse True a b = a
 ifThenElse False a b = b
+
+id x = x
+
+pack' = id
+unpack' = id
+singT = id
+tup2 = id
+untup2 = id
+tup3 = id
+untup3 = id
+tup4 = id
+untup4 = id
+tup5 = id
+untup5 = id
+tup6 = id
+untup6 = id
 
 -- specialized snoc
 v3v4 :: Vec 3 Float -> Vec 4 Float
