@@ -86,6 +86,7 @@ pattern Va x <- VarE x _
 pattern A0 x <- EVar (Va x)
 pattern A0t x t <- EVar (VarE x t)
 pattern A1 f x <- EApp (A0 f) x
+pattern A1t f t x <- EApp (A0t f t) x
 pattern A2 f x y <- EApp (A1 f x) y
 pattern A3 f x y z <- EApp (A2 f x y) z
 pattern A4 f x y z v <- EApp (A3 f x y z) v
@@ -141,7 +142,7 @@ unifC a b = error $ "unifC: " ++ ppShow a ++ "\n ~ \n" ++ ppShow b
 toCore :: Subst -> AST.Exp (Subst, Typing) -> Exp
 toCore sub (AST.Exp (s, t) e) = case e of
     EVar_ n -> foldl EApp (EVar $ VarE n t')
-        $  map EType (subst sub' $ map TVar $ toList $ polyVars t)
+        $  map EType (subst sub' $ map (TVar Star{-TODO-}) $ toList $ polyVars t)
         ++ map EConstraint (subst sub' $ constraints t)
     ELet_ p a@(snd . getTag -> ty) b -> ELet (toCorePat sub' p) (foldr eLam (toCore sub' a) pv) (toCore sub' b)
       where
@@ -158,7 +159,7 @@ toCorePat sub (AST.Pat (s, t) p) = Pat $ mapPat (flip (,) t') (`VarE` t') $ toCo
     sub' = s `composeSubst` sub
     t' = typingToTy $ subst sub' t
 
-eLam (VarT n) (EApp e (EType (TVar m))) | n == m = e  -- optimization
+eLam (VarT n) (EApp e (EType (TVar _ m))) | n == m = e  -- optimization
 eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization
 eLam vt x = ELam (PVar vt) x
 

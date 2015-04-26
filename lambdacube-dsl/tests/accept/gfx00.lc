@@ -1,4 +1,4 @@
 module Simple where
 
-frame = FrameBuffer (ColorImage #1 (V4F 0.0 0.0 0.4 1.0))
+frame = FrameBuffer (colorImage1 (V4F 0.0 0.0 0.4 1.0))
 main = ScreenOut frame

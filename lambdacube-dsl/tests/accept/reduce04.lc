@@ -4,7 +4,7 @@ render ab =
     let red = case ab of
                   A -> 1.0
                   B -> 0.0
-        frame = FrameBuffer (ColorImage #1 (V4F red 0.0 0.4 1.0))
+        frame = FrameBuffer (colorImage1 (V4F red 0.0 0.4 1.0))
     in ScreenOut frame
 
 out = {screen: render}

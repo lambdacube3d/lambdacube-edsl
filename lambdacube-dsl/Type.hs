@@ -244,30 +244,32 @@ data Ty_ a
 
 pattern Star = StarToStar 0
 pattern StarStar = StarToStar 1
-pattern Ty a = Ty_ Star a
+pattern TyStar a = Ty_ Star a
 
-pattern NatKind = Ty NatKind_
-pattern TVar b = Ty (TVar_ b)
 pattern TApp k a b = Ty_ k (TApp_ a b)
 pattern TCon k a = Ty_ k (TCon_ a)
+pattern TVar k b = Ty_ k (TVar_ b)
+
+pattern NatKind = TyStar NatKind_
+pattern VecKind = TArr NatKind StarStar
+pattern MatKind = TArr NatKind (TArr NatKind StarStar)
+
+pattern Forall a b = TyStar (Forall_ a b)
+pattern TConstraintArg a b = TyStar (TConstraintArg_ a b)
+pattern TArr a b <- TyStar (TArr_ a b) where
+    TArr Star Star = StarStar
+    TArr a b = TyStar (TArr_ a b)
 pattern TCon0 a = TCon Star a
 pattern TCon1 a b = TApp Star (TCon StarStar a) b
 pattern TCon2 a b c = TApp Star (TApp StarStar (TCon (StarToStar 2) a) b) c
-pattern VecKind = TArr NatKind StarStar
 pattern TCon2' a b c = TApp Star (TApp StarStar (TCon VecKind a) b) c
-pattern TCon3 a b c d = TApp Star (TApp StarStar (TApp (StarToStar 2) (TCon (StarToStar 3) a) b) c) d
-pattern TArr a b <- Ty (TArr_ a b) where
-    TArr Star Star = StarStar
-    TArr a b = Ty (TArr_ a b)
-pattern Forall a b = Ty (Forall_ a b)
-pattern TConstraintArg a b = Ty (TConstraintArg_ a b)
-pattern TTuple b = Ty (TTuple_ b)
-pattern TUnit = TTuple []
-pattern TRecord b = Ty (TRecord_ b)
+pattern TCon3' a b c d = TApp Star (TApp StarStar (TApp VecKind (TCon (TArr Star VecKind) a) b) c) d
 
+pattern TRecord b = TyStar (TRecord_ b)
+pattern TTuple b = TyStar (TTuple_ b)
+pattern TUnit = TTuple []
 pattern TNat a = Ty_ NatKind (TNat_ a)
 pattern TVec a b = TCon2' "Vec" (TNat a) b
-pattern MatKind = TArr NatKind (TArr NatKind StarStar)
 pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TNat a)) (TNat b)) c
 
 -- basic types
@@ -279,33 +281,11 @@ pattern TInt = TCon0 "Int"
 pattern TFloat = TCon0 "Float"
 pattern TArray b = TCon1 "Array" b
 pattern TList a = TCon1 "[]" a
-pattern TMaybe a = TCon1 "Maybe" a
 
 -- Semantic
 pattern Depth a = TCon1 "Depth" a
 pattern Stencil a = TCon1 "Stencil" a
 pattern Color a = TCon1 "Color" a
-
--- PrimitiveType
-pattern TTriangle = TCon0 "Triangle"
-pattern TLine = TCon0 "Line"
-pattern TPoint = TCon0 "Point"
-pattern TTriangleAdjacency = TCon0 "TriangleAdjacency"
-pattern TLineAdjacency = TCon0 "LineAdjacency"
-
--- ADT
-pattern TCullMode = TCon0 "CullMode"
-pattern TPolygonMode = TCon0 "PolygonMode"
-pattern TPolygonOffset = TCon0 "PolygonOffset"
-pattern TProvokingVertex = TCon0 "ProvokingVertex"
-pattern TFrontFace = TCon0 "FrontFace"
-pattern TPointSize = TCon0 "PointSize"
-pattern TBlendingFactor = TCon0 "BlendingFactor"
-pattern TBlendEquation = TCon0 "BlendEquation"
-pattern TLogicOperation = TCon0 "LogicOperation"
-pattern TStencilOperation = TCon0 "StencilOperation"
-pattern TComparisonFunction = TCon0 "ComparisonFunction"
-pattern TPointSpriteCoordOrigin = TCon0 "PointSpriteCoordOrigin"
 
 -- GADT
 pattern TAccumulationContext b = TCon1 "AccumulationContext" b
@@ -314,7 +294,7 @@ pattern TFetchPrimitive b = TCon1 "FetchPrimitive" b
 pattern TFragmentFilter b = TCon1 "FragmentFilter" b
 pattern TFragmentOperation b = TCon1 "FragmentOperation" b
 pattern TFragmentOut b = TCon1 "FragmentOut" b
-pattern TFragmentStream b c = TCon2 "FragmentStream" b c
+pattern TFragmentStream b c = TCon2' "FragmentStream" b c
 pattern TFrameBuffer b c = TCon2' "FrameBuffer" b c
 pattern TImage b c = TCon2' "Image" b c
 pattern TInput b = TCon1 "Input" b
@@ -323,7 +303,7 @@ pattern TOutput = TCon0 "Output"
 pattern TRasterContext b = TCon1 "RasterContext" b
 pattern TVertexOut b = TCon1 "VertexOut" b
 pattern TVertexStream b c = TCon2 "VertexStream" b c
-pattern TPrimitiveStream a b c = TCon3 "PrimitiveStream" a b c
+pattern TPrimitiveStream a b c = TCon3' "PrimitiveStream" a b c
 
 infixr 7 ~>, ~~>
 a ~> b = TArr a b

@@ -17,6 +17,6 @@ render fb choice = let
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
  in frame
 
-emptyFB = FrameBuffer (ColorImage #1 (V4F 0.0 0.0 1.0 1.0))
+emptyFB = FrameBuffer (colorImage1 (V4F 0.0 0.0 1.0 1.0))
 
 main = ScreenOut (foldl' render emptyFB [A,B])

@@ -49,7 +49,7 @@ composeSubst :: Subst -> Subst -> Subst
 s1 `composeSubst` s2 = s2 <> (subst s2 <$> s1)
 
 subst1 :: Subst -> Ty -> Ty
-subst1 s tv@(TVar a) = fromMaybe tv $ Map.lookup a s
+subst1 s tv@(TVar _ a) = fromMaybe tv $ Map.lookup a s
 subst1 _ t = t
 
 -- unify each types in the sublists
@@ -62,7 +62,7 @@ unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs ->
 --    uni :: Ty -> Ty -> StateT Subst TCM ()
     uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
       where
-        singSubst n t (TVar a) | a == n = t
+        singSubst n t (TVar _ a) | a == n = t
         singSubst n t (Ty_ k ty) = Ty_ (singSubst n t k) $ singSubst n t <$> ty
         singSubst _ _ (StarToStar n) = StarToStar n
 
@@ -77,14 +77,15 @@ unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs ->
 --        unifyTy :: Ty -> Ty -> StateT Subst TCM ()
 
         -- TODO: generalize this or normalize kinds
+        unifyTy Star (StarToStar 0) = return ()
+        unifyTy (TArr a b) (StarToStar i) = uni Star a >> uni (StarToStar $ i-1) b
         unifyTy (StarToStar 0) Star = return ()
-        unifyTy (StarToStar 1) (TArr a b) = uni Star a >> uni Star b
-        unifyTy (TArr Star Star) StarStar = return ()
-
+        unifyTy (StarToStar i) (TArr a b) = uni Star a >> uni (StarToStar $ i-1) b
         unifyTy Star Star = return ()
-        unifyTy (TVar u) (TVar v) | u == v = return ()
-        unifyTy (TVar u) _ = bindVar u b
-        unifyTy _ (TVar u) | bidirectional = bindVar u a
+
+        unifyTy (TVar k u) (TVar k' v) | u == v = uni k k'
+        unifyTy (TVar _ u) _ = bindVar u b
+        unifyTy _ (TVar _ u) | bidirectional = bindVar u a
         unifyTy (TCon k u) (TCon k' v) | u == v = uni k k' --return ()
         unifyTy (TTuple t1) (TTuple t2) = sequence_ $ zipWith uni t1 t2
         unifyTy (TApp k1 a1 b1) (TApp k2 a2 b2) = uni a1 a2 >> uni b1 b2
@@ -145,7 +146,7 @@ ambiguityCheck ty = do
 instantiateTyping :: Typing -> TCM STyping
 instantiateTyping ty = do
     let fv = polyVars ty
-    newVars <- replicateM (Set.size fv) (newVar Star)
+    (_, newVars) <- unzip <$> replicateM (Set.size fv) (newVar'' Star)
     let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
     return (s, subst s ty)
 
@@ -307,7 +308,7 @@ inferKind' t = convTy <$> inferKind t
 
 inferKind :: Ty' Range -> TCM (Ty' STyping)
 inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
-    Forall_ n t -> do
+    Forall_ n t -> do   -- TODO: make kind polymorph
         let n' = '\'':n
         tf <- withTyping (Map.singleton n' star) $ inferKind t
         ty <- unifyTypings [[star], getTag' tf] $ \[a, t] -> a ~> t
@@ -319,7 +320,6 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)
             TTuple_ ts -> unifyTypings (map ((star:) . getTag') ts) $ \_ -> Star
---            TMat_ _ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (addTypeVar ('\'':n)) . Map.lookup ('\'':n)
@@ -330,9 +330,8 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     star = [] ==> Star
 
     addTypeVar n = do
-        (s', k) <- newVar' Star  -- kind var
-        (s, t) <- newVar' k
-        return (s <> s', Typing (Map.singleton n t) mempty t mempty)
+        (s, t) <- newVar'' Star
+        return (s, Typing (Map.singleton n t) mempty t mempty)
 
 inferTyping :: Exp Range -> TCM (Exp STyping)
 -- hack

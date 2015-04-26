@@ -299,9 +299,9 @@ primFunMap = Map.fromList $ execWriter $ do
   -- TODO: more precise kinds
   ["Output"] ----> Star
   ["AccumulationContext", "Blending", "FetchPrimitive", "FragmentFilter", "FragmentOperation", "FragmentOut", "Input", "Interpolated", "RasterContext", "VertexOut"] ----> Star ~> Star
-  [] ----> Star ~> Star ~> Star
+  ["VertexStream"] ----> Star ~> Star ~> Star
   ["PrimitiveStream"] ----> Star ~> NatKind ~> Star ~> Star
-  ["Image", "VertexStream", "FragmentStream", "FrameBuffer"] ----> NatKind ~> Star ~> Star
+  ["Image", "FragmentStream", "FrameBuffer"] ----> NatKind ~> Star ~> Star
   ["Vec"] ----> NatKind ~> Star ~> Star
   ["Mat"] ----> NatKind ~> NatKind ~> Star ~> Star
 
@@ -326,11 +326,10 @@ primFunMap = Map.fromList $ execWriter $ do
         ) $ \(name, t) ->
     name --> TString ~> TInput t                            -- like  "IBool" --> TString ~> TInput (TBool )
 
-  "ColorImage"          --> \a d color t -> [IsTypeLevelNatural @@ a, IsNum @@ t, color ~~ vecS d t] ==> a ~> color
+  "ColorImage"          --> \a d color t -> [IsTypeLevelNatural @@ a, IsNum @@ t, color ~~ vecS d t] ==> color
                                                                              ~> TImage a (Color color)
   "DepthImage"          --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TFloat  ~> TImage a (Depth TFloat)
   "StencilImage"        --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TInt    ~> TImage a (Stencil TInt)
-
 
   -- Render Operations
   "Fetch"               --> \a t b -> [IsInputTuple @@ t, b ~~ TFFTRepr' t] ==> TString ~> TFetchPrimitive a ~> t ~> TVertexStream a b
@@ -404,11 +403,16 @@ instance NewVar Typing          where newV_ s t = return (s, t)
 instance NewVar Ty              where newV_ s t = return (s, [] ==> t)
 instance NewVar a => NewVar (Ty -> a) where
     newV_ s f = do
-        v@(TVar n) <- newVar Star
-        newV_ (Map.insert n v s) $ f v
+        (s', v) <- newVar'' Star
+        newV_ (s' <> s) $ f v
+
+newVar'' k = do
+    (s', k) <- newVar' Star  -- kind var
+    (s, t) <- newVar' k
+    return (s <> s', t)
 
 newVar' k = do
-    v@(TVar n) <- newVar Star
+    v@(TVar _ n) <- newVar Star
     return (Map.singleton n v, v)
 
 -- don't use this, use newV instead

@@ -1,7 +1,7 @@
 data AB = A | B
 
 render choice = let
-  emptyFB           = FrameBuffer (ColorImage #1 (V4F 0.0 0.0 0.4 1.0))
+  emptyFB           = FrameBuffer (colorImage1 (V4F 0.0 0.0 0.4 1.0))
   rasterCtx         = TriangleCtx CullNone PolygonFill NoOffset LastVertex
   fragmentCtx       = AccumulationContext (ColorOp NoBlending (V4B True True True True))
   vertexShader v    = VertexOut v 1.0 () (Smooth v)
