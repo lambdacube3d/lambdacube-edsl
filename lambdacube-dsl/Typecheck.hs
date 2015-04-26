@@ -145,7 +145,7 @@ ambiguityCheck ty = do
 instantiateTyping :: Typing -> TCM STyping
 instantiateTyping ty = do
     let fv = polyVars ty
-    newVars <- replicateM (Set.size fv) (newVar C)
+    newVars <- replicateM (Set.size fv) (newVar Star)
     let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
     return (s, subst s ty)
 
@@ -329,7 +329,10 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     getTag' = (:[]) . snd . getTag
     star = [] ==> Star
 
-    addTypeVar n = newV $ \t -> Typing (Map.singleton n t) mempty t mempty :: Typing
+    addTypeVar n = do
+        (s', k) <- newVar' Star  -- kind var
+        (s, t) <- newVar' k
+        return (s <> s', Typing (Map.singleton n t) mempty t mempty)
 
 inferTyping :: Exp Range -> TCM (Exp STyping)
 -- hack

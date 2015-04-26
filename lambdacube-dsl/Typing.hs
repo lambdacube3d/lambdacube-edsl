@@ -404,12 +404,16 @@ instance NewVar Typing          where newV_ s t = return (s, t)
 instance NewVar Ty              where newV_ s t = return (s, [] ==> t)
 instance NewVar a => NewVar (Ty -> a) where
     newV_ s f = do
-        v@(TVar n) <- newVar C
+        v@(TVar n) <- newVar Star
         newV_ (Map.insert n v s) $ f v
 
+newVar' k = do
+    v@(TVar n) <- newVar Star
+    return (Map.singleton n v, v)
+
 -- don't use this, use newV instead
-newVar :: Frequency -> TCM Ty
-newVar f = do
+newVar :: Ty -> TCM Ty
+newVar k = do
   (d, n: ns) <- get
   put (d, ns)
-  return $ TVar n
+  return $ Ty_ k (TVar_ n)
