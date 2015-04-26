@@ -117,7 +117,7 @@ main = do
     n <- getArgs
     let srcName = case n of
           [fn]  -> fn
-          _     -> "tests/accept/gfx03"
+          _     -> "gfx03"
 
     let inputSchema = 
           PipelineSchema
@@ -135,7 +135,7 @@ main = do
     addMesh pplInput "stream" gpuMonkey []
 
     let setup = do
-          pplRes <- compileMain "." srcName
+          pplRes <- compileMain "./tests/accept" srcName
           case pplRes of
             Left err -> putStrLn ("error: " ++ err) >> return Nothing
             Right ppl -> do
