@@ -7,6 +7,10 @@ id x = x
 uncurry f (x, y) = f x y
 (***) f g (x, y) = (f x, g y)
 
+data Bool = False | True
+
+--data List a = Nil | Cons a (List a)
+
 ifThenElse True a b = a
 ifThenElse False a b = b
 

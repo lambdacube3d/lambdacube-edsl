@@ -292,7 +292,7 @@ primFunMap :: Map EName (TCM (Subst, Typing))
 primFunMap = Map.fromList $ execWriter $ do
 
   -- kind of type constructors
-  ["()", "Char", "String", "Bool", "Word", "Int", "Float"] ----> Star
+  ["()", "Char", "String", "Word", "Int", "Float"] ----> Star
   ["[]", "Depth", "Stencil", "Color"] ----> Star ~> Star
   ["Triangle", "Line", "Point", "TriangleAdjacency", "LineAdjacency"] ----> Star
   ["CullMode", "PolygonMode", "PolygonOffset", "ProvokingVertex", "FrontFace", "PointSize", "BlendingFactor", "BlendEquation", "LogicOperation", "StencilOperation", "ComparisonFunction", "PointSpriteCoordOrigin"] ----> Star
@@ -327,8 +327,6 @@ primFunMap = Map.fromList $ execWriter $ do
   -- temporary?
   "PrimV3FToV4F" --> TVec 3 TFloat ~> TVec 4 TFloat
   ["Tup", "Const"{-, "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"-}]  ---> \a -> a ~> a
-
-  ["True", "False"] ---> TBool
 
   forM_ [2..4] $ \i -> do
     forM_ (zip ["F","I","U","B"] floatIntWordBool) $ \(tn, t) ->
