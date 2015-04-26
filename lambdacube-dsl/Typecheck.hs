@@ -172,11 +172,6 @@ dependentVars ie s = cycle mempty s
 
 type ModuleT = Module Typing STyping
 
-inference :: ModuleR -> Either ErrorMsg ModuleT
-inference = inference_ $ PolyEnv primFunMap
-
-primed = ('\'':)
-
 mkEnv = map $ mangleAx . (id *** generalizeTypeVars . convTy)
 
 mangleAx (n, t) = (if kinded $ res $ typingType t then primed n else n, t)

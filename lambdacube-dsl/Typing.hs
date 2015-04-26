@@ -272,18 +272,6 @@ injType = \case
 vecS = TFVecScalar
 floatVecS d = vecS d TFloat
 
-infix 0 --->, -->
-ss --> m = tell [(ss, newV m)]
-s ---> m = ('\'': s) --> m
-
-isPrimFun n = Map.member n primFunMap
-
-primFunMap :: Map EName (TCM (Subst, Typing))
-primFunMap = Map.fromList $ execWriter $ do
-
-  -- kind of type constructors
-  "()" ---> Star
-
 fieldProjType :: FName -> TCM (Subst, Typing)
 fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
 

@@ -33,6 +33,8 @@ type FName = String
 type MName = String     -- module name
 type ClassName = String
 
+primed = ('\'':)
+
 -- TODO
 isConstr n@(c:_) = isUpper c || c == ':' -- TODO
 

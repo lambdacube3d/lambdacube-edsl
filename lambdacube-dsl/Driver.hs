@@ -16,7 +16,6 @@ import qualified IR as IR
 import qualified CoreToIR as IR
 import Parser
 import Typecheck hiding (Exp(..))
-import Typing (primFunMap)
 
 compileMain :: FilePath -> MName -> IO (Either String IR.Pipeline)
 compileMain path fname = fmap IR.compilePipeline <$> reducedMain path fname
@@ -52,7 +51,7 @@ typeCheckLC mname = do
             Left m -> throwError m
             Right (src, e) -> do
               ms <- mapM (typeCheckLC . qData) $ moduleImports e
-              case joinPolyEnvs $ PolyEnv primFunMap: map exportEnv ms of
+              case joinPolyEnvs $ map exportEnv ms of
                 Left m -> throwError m
                 Right env -> case inference_ env e of
                     Left m    -> throwError $ m src
