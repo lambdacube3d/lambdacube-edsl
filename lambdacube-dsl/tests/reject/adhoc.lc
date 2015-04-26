@@ -1,0 +1,6 @@
+
+data A = A
+
+main = V4 A A A A
+
+

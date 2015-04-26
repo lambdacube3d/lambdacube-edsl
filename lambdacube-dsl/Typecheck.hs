@@ -291,6 +291,10 @@ t .~> s = typing (monoEnv t <> monoEnv s) (constraints t ++ constraints s) (typi
 
 convTy :: Ty' STyping -> Typing
 convTy = f mempty where
+    f sub (Ty' (s, k) (TConstraintArg_ c t)) = typing (monoEnv t') ((typingType {-TODO-} . convTy <$> c): constraints t') $ typingType t'
+      where
+        sub' = s `composeSubst` sub
+        t' = f sub' t
     f sub (Ty' (s, k) t) = typing me cs $ subst1 sub{-TODO: move innerwards-} $ ty_ (subst sub $ typingType k) (typingType <$> t')
       where
         sub' = s `composeSubst` sub
@@ -311,18 +315,21 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     _ -> do
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
+            TConstraintArg_ (CClass c tv) t -> return (mempty, error "tcarg")
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)
             TTuple_ ts -> unifyTypings (map ((star:) . getTag') ts) $ \_ -> Star
 --            TMat_ _ _ b -> unifyTypings [star: getTag' b] $ \_ -> Star
             TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
-            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Type variable " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
+            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (addTypeVar ('\'':n)) . Map.lookup ('\'':n)
             TCon_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Type constructor " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
             x -> error $ " inferKind: " ++ show x
   where
     getTag' = (:[]) . snd . getTag
     star = [] ==> Star
+
+    addTypeVar n = newV $ \t -> Typing (Map.singleton n t) mempty t mempty :: Typing
 
 inferTyping :: Exp Range -> TCM (Exp STyping)
 -- hack

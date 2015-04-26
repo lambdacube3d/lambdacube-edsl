@@ -43,7 +43,7 @@ data Maybe a
 axioms
   CW, CCW :: FrontFace
 
-
+  V4 :: IsComponent a => a -> a -> a -> a -> Vec 4 a
 
 
 

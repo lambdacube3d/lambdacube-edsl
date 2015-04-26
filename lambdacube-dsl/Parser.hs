@@ -1,11 +1,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 module Parser where
 
 import Data.ByteString.Char8 (unpack,pack)
 import Data.Char
 import Data.List
+import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid
@@ -65,8 +67,8 @@ operator = reserve lcOps
 
 void_ a = a >> return ()
 
-typeConstraint :: P ()
-typeConstraint = void_ $ do
+typeConstraint :: P Class
+typeConstraint = do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "type constraint must start with capital letter"
 
@@ -264,20 +266,23 @@ axiom = do
     optional (operator "!") *> typeExp
   return [TypeSig (n, t) | n <- ns]
 
-typePattern :: P ()  -- TODO
-typePattern = choice [void_ (try' "type var" typeVar), void_ typeConstructor, void_ $ parens ((void_ typeConstructor <* some typePattern) <|> typePattern)]
+typePattern :: P TyR
+typePattern = ty -- choice [try' "type var" typeVar, typeConstructor, parens ((void_ typeConstructor <* some typePattern) <|> typePattern)]
 
-tcExp :: P ()   -- TODO
-tcExp = void_ $ try $ do
-  let tyC = void_ $ typeConstraint >> typePattern
-  tyC <|> (void_ $ parens (sepBy1 tyC comma))
+tcExp :: P (TyR -> TyR)   -- TODO
+tcExp = try $ do
+  let tyC = fmap addC $ CClass <$> typeConstraint <*> typePattern
+      addC :: Constraint TyR -> TyR -> TyR
+      addC c = Ty' mempty . TConstraintArg_ c
+  t <- tyC <|> parens (foldr (.) id <$> sepBy tyC comma)
   operator "=>"
+  return t
 
 typeExp :: P TyR
 typeExp = do
   optional (keyword "forall" >> some typeVar >> operator ".")
-  optional (tcExp <?> "type context")
-  ty
+  f <- optional (tcExp <?> "type context")
+  fromMaybe id f <$> ty
 
 dataDef :: P DataDefR
 dataDef = do

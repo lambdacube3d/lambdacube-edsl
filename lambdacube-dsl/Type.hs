@@ -31,6 +31,7 @@ type TCName = String    -- type constructor name; if this turns out to be slow u
 type EName = String
 type FName = String
 type MName = String     -- module name
+type ClassName = String
 
 -- TODO
 isConstr "[]" = True
@@ -210,8 +211,8 @@ data Ty_ a
   | TFunCK_ a
   --
   | TVar_    TName
-  | TApp_    a a
   | TCon_    TCName
+  | TApp_    a a
   | TArr_    a a
   | Forall_ TName a
   | TConstraintArg_ (Constraint a) a
@@ -349,21 +350,19 @@ infix 4 ~~~
 infix 9 @@
 (@@) = CClass
 
-data Class
-  = CNum
-  | CTextual
-  -- lc constraints
-  | IsComponent
-  | IsFloating
-  | IsIntegral
-  | IsNum
-  | IsNumComponent
-  | IsSigned
-  | IsValidOutput
-  | IsTypeLevelNatural
-  | IsValidFrameBuffer
-  | IsInputTuple
-  deriving (Show,Eq,Ord)
+type Class = ClassName
+pattern CNum = "Num"
+pattern CTextual = "Textual"
+pattern IsComponent = "Component"
+pattern IsFloating = "Floating"
+pattern IsIntegral = "Integral"
+pattern IsNum = "Num"
+pattern IsNumComponent = "NumComponent"
+pattern IsSigned = "Signed"
+pattern IsValidOutput = "ValidOutput"
+pattern IsTypeLevelNatural = "TNat"
+pattern IsValidFrameBuffer = "ValidFrameBuffer"
+pattern IsInputTuple = "InputTuple"
 
 data TypeFun a
   = TFMat a a               -- may be data family

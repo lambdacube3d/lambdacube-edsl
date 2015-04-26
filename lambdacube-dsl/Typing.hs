@@ -137,7 +137,7 @@ reduceConstraint x = case x of
 
         _ -> maybe noInstance (iff (discard []) noInstance . Set.member t) $ Map.lookup c builtinInstances
       where
-        noInstance = failure $ "no " ++ show c ++ " instance for " ++ ppShow t
+        noInstance = failure $ "no " ++ c ++ " instance for " ++ ppShow t
 
     CUnify a b -> discard [[a, b]]
 
@@ -306,7 +306,7 @@ primFunMap = Map.fromList $ execWriter $ do
 
   "V2" --> \a -> [IsComponent @@ a] ==> a ~> a ~> TVec 2 a
   "V3" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> TVec 3 a
-  "V4" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> a ~> TVec 4 a
+--  "V4" --> \a -> [IsComponent @@ a] ==> a ~> a ~> a ~> a ~> TVec 4 a
   "[]" --> \a -> TList a
   ":" --> \a -> a ~> TList a ~> TList a
 
@@ -326,7 +326,7 @@ primFunMap = Map.fromList $ execWriter $ do
 
   -- temporary?
   "PrimV3FToV4F" --> TVec 3 TFloat ~> TVec 4 TFloat
-  ["Tup", "Const"{-, "pack'", "unpack'", "singT", "tup2", "untup2", "tup3", "untup3", "tup4", "untup4", "tup5", "untup5", "tup6", "untup6"-}]  ---> \a -> a ~> a
+  ["Tup", "Const"]  ---> \a -> a ~> a
 
   forM_ [2..4] $ \i -> do
     forM_ (zip ["F","I","U","B"] floatIntWordBool) $ \(tn, t) ->
