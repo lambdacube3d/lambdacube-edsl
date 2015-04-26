@@ -52,6 +52,8 @@ writeReduced = testFrame ["./tests/accept"] $ \case
     Right (Left e) -> Right ("typechecked", ppShow e)
     Right (Right e) -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e)
 
+main' x = acceptTests [x]
+
 acceptTests = testFrame ["./tests/accept"] $ \case
     Left e -> Left e
     Right (Left e) -> Right ("typechecked", ppShow e)

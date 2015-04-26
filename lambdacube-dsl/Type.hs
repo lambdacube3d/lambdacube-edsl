@@ -25,6 +25,7 @@ import Control.Monad.RWS
 import Control.Applicative
 import Control.Arrow
 import Text.Trifecta.Delta (Delta)
+import Text.Show.Pretty
 
 type TName = String
 type TCName = String    -- type constructor name; if this turns out to be slow use Int or ADT instead of String
@@ -152,7 +153,7 @@ pattern ENext a = Exp a ENext_
 
 setTag = setTag_ id
 
-setTag_ :: (v -> v') -> (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v' t' p' b
+setTag_ :: (Show v, Show t, Show p, Show b) => (v -> v') -> (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v' t' p' b
 setTag_ vf tf f = \case
     ELit_      x       -> ELit_ x
     EVar_      x       -> EVar_ $ vf x
@@ -166,7 +167,9 @@ setTag_ vf tf f = \case
     ETyping_   x y     -> ETyping_ x $ tf y
     EAlts_     x y     -> EAlts_ x y
     ENext_             -> ENext_
---    EType
+    EType_ t           -> EType_ $ tf t
+    EConstraint_ c     -> EConstraint_ $ tf <$> c
+    e   -> error $ "setTag_: " ++ ppShow e
 
 type STyping = (Subst, Typing)
 

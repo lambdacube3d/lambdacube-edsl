@@ -127,9 +127,9 @@ stripPats = \case
     PVar (VarC _) -> PLit $ LNat 17
     Pat e -> Pat $ stripPats <$> e
 
-patternVars (Pat p) = case p of
+patternEVars (Pat p) = case p of
     PVar_ (VarE v _) -> [v]
-    p -> foldMap patternVars p
+    p -> foldMap patternEVars p
 
 -- TODO
 unifC (CEq t f) (CEq t' f') = runExcept $ unifyTypes_ throwError True $ [t, t']: zipWith (\x y->[x,y]) (toList f) (toList f')
@@ -149,13 +149,13 @@ toCore sub (AST.Exp (s, t) e) = case e of
           ++ map VarC (subst sub' $ constraints ty)
     _ -> Exp $ setTag_ (error "toCore") (error "toCore") (toCorePat sub') $ toCore sub' <$> e
  where
-    sub' = s `composeSubst` sub
+    sub' = sub `composeSubst` s
     t' = typingToTy $ subst sub' t
 
 toCorePat :: Subst -> AST.Pat (Subst, Typing) -> Pat
 toCorePat sub (AST.Pat (s, t) p) = Pat $ mapPat (flip (,) t') (`VarE` t') $ toCorePat sub' <$> p
  where
-    sub' = s `composeSubst` sub
+    sub' = sub `composeSubst` s
     t' = typingToTy $ subst sub' t
 
 eLam (VarT n) (EApp e (EType (TVar _ m))) | n == m = e  -- optimization
@@ -164,81 +164,112 @@ eLam vt x = ELam (PVar vt) x
 
 -------------------------------------------------------------------------------- reduction
 
-data Thunk = Thunk Env Exp
+data Thunk = Thunk Env Thunk'
+  deriving (Show)
 
-data Env = Env {envSubst :: Subst, envMap :: EnvMap}
+type Thunk' = Exp_ Var Ty Pat Thunk
+
+data Env = Env Subst EnvMap
+  deriving (Show)
 
 type EnvMap = Map EName (Maybe Thunk)   -- Nothing: statically unknown but defined
 
 instance Monoid Env where
     mempty = Env mempty mempty
-    e@(Env x y) `mappend` Env x' y' = Env (x' `composeSubst` x) (y <> (fmap (\(Thunk e' x) -> Thunk (e <> e') x) <$> y'))
+    -- semantics: apply (m1 <> m2) = apply m1 . apply m2;  see 'composeSubst'
+    m1@(Env x1 y1) `mappend` Env x2 y2 = Env (x1 `composeSubst` x2) $ ((applyEnv m1 <$>) <$> y2) <> y1
+
+envMap :: Thunk -> EnvMap
+envMap (Thunk (Env _ m) _) = m
 
 subst' :: Substitute a => Env -> a -> a
 subst' (Env s _) = subst s
 
-addSubst s' (Thunk (Env s m) e) = Thunk (Env (s `composeSubst` s') m) e
+applyEnv :: Env -> Thunk -> Thunk
+applyEnv m1 (Thunk m exp) = Thunk (m1 <> m) exp
 
-deleteEnvVars vs (Env s m) = Env s $ foldr (\i m -> Map.insert i Nothing m) m vs
+applyEnvBefore :: Env -> Thunk -> Thunk
+applyEnvBefore m1 (Thunk m exp) = Thunk (m <> m1) exp
+
+--   applySubst s  ===  applyEnv (Env s mempty)
+-- but the following is more efficient
+applySubst s' (Thunk (Env s m) exp) = Thunk (Env (s' `composeSubst` s) m) exp
 
 -- build recursive environment  TODO: generalize
-recEnv (PVar (VarE v _)) env x = th where
-    th = Thunk (Env mempty (Map.singleton v (Just th)) <> env) x
-recEnv _ env x = Thunk env x
+recEnv :: Pat -> Thunk -> Thunk
+recEnv (PVar (VarE v _)) th_ = th where th = applyEnvBefore (Env mempty (Map.singleton v (Just th))) th_
+recEnv _ th = th
+
+mkThunk :: Exp -> Thunk
+mkThunk (Exp e) = thunk $ mkThunk <$> e
+
+thunk :: Thunk' -> Thunk
+thunk = Thunk mempty
+
+peelThunk :: Thunk -> Thunk'
+peelThunk (Thunk env e) = case e of
+--    ELet_ p x e -> ELet_ (subst' env p) (applyEnv env x) (applyEnv env e)
+--    ELam_ p e -> ELam_ (subst' env p) (applyEnv env e)
+    e -> setTag_ vf (subst' env) (subst' env) $ applyEnv env <$> e
+      where
+        vf = \case
+            VarE v t -> VarE v $ subst' env t
 
 -------------------------------------------------------------------------------- reduce to Head Normal Form
 
-reduceHNF :: Thunk -> Either String Thunk       -- Left: pattern match failure
-reduceHNF th@(Thunk env exp) = case exp of
-    ENext -> Left "? err"
-    EAlts 0 (map (reduceHNF . Thunk env) -> es) -> case [e | Right e <- es] of
+reduceHNF :: Thunk -> Either String Thunk'       -- Left: pattern match failure
+reduceHNF th@(peelThunk -> exp) = case exp of
+    ENext_ -> Left "? err"
+    EAlts_ 0 (map reduceHNF -> es) -> case [e | Right e <- es] of
         (thu:_) -> Right thu
         [] -> error $ "pattern match failure " ++ show [err | Left err <- es]
-    EVar v -> case v of
+    EVar_ v -> case v of
         VarE v t
           | isConstr v -> keep
-          | otherwise -> maybe keep reduceHNF $ join $ Map.lookup v $ envMap env
-    ELet p x e' -> case matchPattern (recEnv p env x) p of
+          | otherwise -> maybe keep reduceHNF $ join $ Map.lookup v $ envMap th
+    ELet_ p x e -> case matchPattern (recEnv p x) p of
         Left err -> Left err
-        Right (Just m') -> reduceHNF $ Thunk (m' <> env) e'
+        Right (Just m') -> reduceHNF $ applyEnvBefore m' e
         Right _ -> keep
-    EApp f@(Thunk env -> tf) x@(Thunk env -> tx) -> reduceHNF' tf $ \(Thunk env' exp') -> case exp' of
 
-        EAlts i es | i > 0 -> reduceHNF $ Thunk env' $ EAlts (i-1) $ (`EApp` x) <$> es
-        EFieldProj fi -> reduceHNF' tx $ \(Thunk env'' exp'') -> case exp'' of
-            ERecord Nothing fs -> case [e | (fi', e) <- fs, fi' == fi] of
-                [e] -> reduceHNF $ Thunk env'' e
+    EApp_ f x_@(peelThunk -> x) -> reduceHNF' f $ \f -> case f of
+
+        EAlts_ i es | i > 0 -> reduceHNF $ thunk $ EAlts_ (i-1) $ thunk . (`EApp_` x_) <$> es
+        EFieldProj_ fi -> reduceHNF' x_ $ \x -> case x of
+            ERecord_ Nothing fs -> case [e | (fi', e) <- fs, fi' == fi] of
+                [e] -> reduceHNF e
             _ -> keep
 
-        ELam p e'@(Thunk env' -> te) -> case p of
+        ELam_ p e_@(peelThunk -> e) -> case p of
             PVar (VarT v) -> case x of
-                EType x -> reduceHNF $ addSubst (Map.singleton v (subst' env x)) te
-                x -> error $ "reduce varT: " ++ ppShow (x, e')
+                EType_ x -> reduceHNF $ applySubst (Map.singleton v x) e_
+                x -> error $ "reduce varT: " ++ ppShow (x, e)
             PVar (VarC v) -> case x of
-                EConstraint x -> case unifC (subst' env' v) (subst' env x) of
-                    Right s' -> reduceHNF $ addSubst s' te
+                EConstraint_ x -> case unifC v x of
+                    Right s' -> reduceHNF $ applySubst s' e_
                     Left e -> error $ "reduce_c: " ++ e
-            _ -> case matchPattern tx p of
+            _ -> case matchPattern x_ p of
                 Left err -> Left err
-                Right (Just m') -> reduceHNF $ Thunk (m' <> env') e'
+                Right (Just m') -> reduceHNF $ applyEnvBefore m' e_
                 Right _ -> keep
 
         -- TODO
-        EVar (VarE "fromInt" (TArr _ TFloat)) -> case x of
-            ELit (LInt i) -> Right $ Thunk mempty $ ELit $ LFloat $ fromIntegral i
-        EVar (VarE v ty) -> case ty of
+        EVar_ (VarE "fromInt" (TArr _ TFloat)) -> case x of
+            ELit_ (LInt i) -> Right $ ELit_ $ LFloat $ fromIntegral i
+
+        EVar_ (VarE v ty) -> case ty of
             Forall tv t -> case x of
-                EType x -> Right $ addSubst (Map.singleton tv (subst' env x)) $ Thunk env' $ EVar $ VarE v t
+                EType_ x -> Right $ EVar_ $ VarE v $ subst (Map.singleton tv x) t
             TConstraintArg t ty -> case x of
-                EConstraint t' -> case unifC (subst' env' t) (subst' env t') of
-                    Right s' -> Right $ addSubst s' $ Thunk env' $ EVar $ VarE v ty
+                EConstraint_ t' -> case unifC t t' of
+                    Right s' -> Right $ EVar_ $ VarE v $ subst s' ty
                     Left e -> error $ "reduce (2): " ++ e
                 e -> error $ "reduce constr: " ++ show e
             _ -> keep
         _ -> keep
     _ -> keep
   where
-    keep = Right th
+    keep = Right exp
 
 reduceHNF' x f = case reduceHNF x of
     Left e -> Left e
@@ -246,45 +277,41 @@ reduceHNF' x f = case reduceHNF x of
 
 -- TODO: make this more efficient (memoize reduced expressions)
 matchPattern :: Thunk -> Pat -> Either String (Maybe Env)       -- Left: pattern match failure; Right Nothing: can't reduce
-matchPattern e@(Thunk env _) = \case
+matchPattern e = \case
     Wildcard -> Right $ Just mempty
     PVar (VarE v _) -> Right $ Just $ Env mempty $ Map.singleton v (Just e)
-    PTuple ps -> reduceHNF' e $ \(Thunk env' exp') -> case exp' of
-        ETuple (map (Thunk env) -> xs) -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
+    PTuple ps -> reduceHNF' e $ \e -> case e of
+        ETuple_ xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
         _ -> Right Nothing
     PCon (c, _) ps -> case getApp [] e of
         Left err -> Left err
         Right Nothing -> Right Nothing
         Right (Just (xx, xs)) -> case xx of
-          EVar (VarE c' _)
+          EVar_ (VarE c' _)
             | c == c' -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
             | otherwise -> Left $ "constructors doesn't match: " ++ show (c, c')
           q -> error $ "match rj: " ++ ppShow q
     p -> error $ "matchPattern: " ++ ppShow p
   where
-    getApp acc e = reduceHNF' e $ \(Thunk env' exp') -> case exp' of
-        EApp a b -> getApp (Thunk env' b: acc) $ Thunk env' a
-        EVar (VarE n _) | isConstr n -> Right $ Just (exp', acc)
-        e -> Right Nothing
+    getApp acc e = reduceHNF' e $ \e -> case e of
+        EApp_ a b -> getApp (b: acc) a
+        EVar_ (VarE n _) | isConstr n -> Right $ Just (e, acc)
+        _ -> Right Nothing
 
 -------------------------------------------------------------------------------- full reduction
 
 mkReduce :: Exp -> Exp
-mkReduce = reduce . Thunk mempty
+mkReduce = reduce . mkThunk
 
 reduce = either (error "pattern match failure.") id . reduceEither
-
-reduceDel env vs = reduce . Thunk (deleteEnvVars vs env)
+reduce' p = reduce . applyEnvBefore (Env mempty $ Map.fromList [(v, Nothing) | v <- patternEVars p])
 
 reduceEither :: Thunk -> Either String Exp
-reduceEither t = reduceHNF' t $ \(Thunk env exp) -> Right $ case exp of
-    ELam p e -> ELam (subst' env p) $ reduceDel env (patternVars p) e
-    ELet p x e' -> ELet (subst' env p) (reduceDel env (patternVars p) x) $ reduceDel env (patternVars p) e'
-    EAlts i es -> case [e | Right e <- reduceEither . Thunk env <$> es] of
+reduceEither e = reduceHNF' e $ \e -> Right $ case e of
+    ELam_ p e -> ELam p $ reduce' p e
+    ELet_ p x e' -> ELet p (reduce' p x) $ reduce' p e'
+    EAlts_ i es -> case [e | Right e <- reduceEither <$> es] of
         [e] -> e
         es -> EAlts i es
-    Exp e -> Exp $ setTag_ vf (subst' env) id $ reduce . Thunk env <$> e
-      where
-        vf = \case
-            VarE v t -> VarE v $ subst' env t
+    e -> Exp $ reduce <$> e
 

@@ -46,8 +46,11 @@ instance Substitute a => Substitute (Constraint a)      where subst = fmap . sub
 
 
 -- Note: domain of substitutions is disjunct
+-- semantics:  subst (s1 `composeSubst` s2) = subst s1 . subst s2 
+-- example:  subst ({y -> z} `composeSubst` {x -> y}) = subst {y -> z} . subst {x -> y} = subst {y -> z, x -> z}
+-- example2: subst ({x -> z} `composeSubst` {x -> y}) = subst {x -> z} . subst {x -> y} = subst {x -> y}
 composeSubst :: Subst -> Subst -> Subst
-s1 `composeSubst` s2 = s2 <> (subst s2 <$> s1)
+s1 `composeSubst` s2 = (subst s1 <$> s2) <> s1
 
 subst1 :: Subst -> Ty -> Ty
 subst1 s tv@(TVar _ a) = fromMaybe tv $ Map.lookup a s
@@ -122,7 +125,7 @@ unifyTypings_ bidirectional msg ts f = do
             tell $ concatMap (concatMap transpose . groupByFst) $ groupByFst [(ty, (it, is)) | CEq ty (injType -> Just (it, is)) <- es]
             concat <$> mapM reduceConstraint es
         s <- unifyTypes True (msg ++ "constr solv") w
-        if Map.null s then return (acc, es) else untilNoUnif (acc `composeSubst` s) $ nub $ subst s es
+        if Map.null s then return (acc, es) else untilNoUnif (s `composeSubst` acc) $ nub $ subst s es
 
 -- Ambiguous: (Int ~ F a) => Int
 -- Not ambiguous: (Show a, a ~ F b) => b
@@ -308,11 +311,11 @@ convTy :: Ty' STyping -> Typing
 convTy = f mempty where
     f sub (Ty' (s, k) (TConstraintArg_ c t)) = typing (monoEnv t') ((typingType {-TODO-} . convTy <$> c): constraints t') $ typingType t'
       where
-        sub' = s `composeSubst` sub
+        sub' = sub `composeSubst` s
         t' = f sub' t
     f sub (Ty' (s, k) t) = typing me cs $ subst1 sub{-TODO: move innerwards-} $ simpArr $ Ty_ (subst sub $ typingType k) (typingType <$> t')
       where
-        sub' = s `composeSubst` sub
+        sub' = sub `composeSubst` s
         t' = f sub' <$> t
         me = subst sub (monoEnv k) <> foldMap monoEnv t'
         cs = subst sub (constraints k) <> foldMap constraints t'
