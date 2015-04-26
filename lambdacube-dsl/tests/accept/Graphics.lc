@@ -415,7 +415,7 @@ q3GFX :: [(String,CommonAttrs)] -> (FrameBuffer 1 (Float,Vec 4 Float))
 q3GFX shl = {-blurVH $ PrjFrameBuffer "" tix0 $ -}errorShader $ foldl' mkShader clear ordered
   where
     ordered = sortBy (\(_,a) (_,b) -> caSort a `compare` caSort b) shl
-    clear   = FrameBuffer (DepthImage #1 1000, colorImage1 (zero'::Vec 4 Float))
+    clear   = FrameBuffer (depthImage1 1000, colorImage1 (zero'::Vec 4 Float))
 
 --main :: Output
 main = ScreenOut $ q3GFX [("a",defaultCommonAttrs)]

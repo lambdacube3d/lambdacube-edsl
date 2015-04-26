@@ -128,12 +128,12 @@ axioms
   TrianglesAdjacency  :: FetchPrimitive TriangleAdjacency
 
   AccumulationContext :: (t' ~ FragOps t) => t -> AccumulationContext t'
-{-
-  ColorImage          :: (TNat a, Num t, color ~ VecScalar d t) => a -> color
-                                                 -> Image a (Color color)
-  DepthImage          :: (TNat a) => a -> Float  -> Image a (Depth Float)
-  StencilImage        :: (TNat a) => a -> Int    -> Image a (Stencil Int)
--}
+
+  ColorImage          :: (Num t, color ~ VecScalar d t) => color
+                                -> Image a (Color color)
+  DepthImage          :: Float  -> Image a (Depth Float)
+  StencilImage        :: Int    -> Image a (Stencil Int)
+
   Smooth, NoPerspective
                         :: (Floating t) => t -> Interpolated t
   Flat              ::                       t -> Interpolated t
@@ -153,7 +153,7 @@ axioms
   -- Fragment Filter
   PassAll             ::                 FragmentFilter t
   Filter              :: (t -> Bool) -> FragmentFilter t
-{-
+
   -- Render Operations
   Fetch               :: (InputTuple t, b ~ FTRepr' t) => String -> FetchPrimitive a -> t -> VertexStream a b
   Transform           :: (a -> VertexOut b) -> VertexStream p a -> PrimitiveStream p 1 b
@@ -171,7 +171,7 @@ axioms
   ScreenOut           :: FrameBuffer a b -> Output
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
--}
+
   PrimAdd, PrimSub, PrimMul :: (t ~ MatVecElem a, Num t) => a -> a -> a
   PrimAddS, PrimSubS, PrimMulS  :: (t ~ MatVecScalarElem a, Num t) => a -> t -> a
   PrimDiv, PrimMod                :: (Num t, a ~ VecScalar d t) => a -> a -> a
@@ -249,5 +249,7 @@ axioms
 
 colorImage1 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 1 (Color color)
 colorImage2 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 2 (Color color)
+
+depthImage1 = DepthImage :: Float -> Image 1 (Depth Float)
 
 

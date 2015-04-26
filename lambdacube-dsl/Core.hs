@@ -128,8 +128,7 @@ stripPats = \case
     Pat e -> Pat $ stripPats <$> e
 
 patternVars (Pat p) = case p of
-    PVar_ x -> case x of
-        VarE v _ -> [v]
+    PVar_ (VarE v _) -> [v]
     p -> foldMap patternVars p
 
 -- TODO

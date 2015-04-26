@@ -326,28 +326,6 @@ primFunMap = Map.fromList $ execWriter $ do
         ) $ \(name, t) ->
     name --> TString ~> TInput t                            -- like  "IBool" --> TString ~> TInput (TBool )
 
-  "ColorImage"          --> \a d color t -> [IsTypeLevelNatural @@ a, IsNum @@ t, color ~~ vecS d t] ==> color
-                                                                             ~> TImage a (Color color)
-  "DepthImage"          --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TFloat  ~> TImage a (Depth TFloat)
-  "StencilImage"        --> \a -> [IsTypeLevelNatural @@ a] ==> a ~> TInt    ~> TImage a (Stencil TInt)
-
-  -- Render Operations
-  "Fetch"               --> \a t b -> [IsInputTuple @@ t, b ~~ TFFTRepr' t] ==> TString ~> TFetchPrimitive a ~> t ~> TVertexStream a b
-  "Transform"           --> \a b p -> (a ~> TVertexOut b) ~> TVertexStream p a ~> TPrimitiveStream p (TNat 1) b
-  "Rasterize"           --> \a b c -> TRasterContext a ~> TPrimitiveStream a b c ~> TFragmentStream b c
-
-  "Accumulate"          --> \a b n t -> [IsValidOutput @@ b, t ~~ TFFTRepr' b] ==>
-                           TAccumulationContext b
-                        ~> TFragmentFilter a
-                        ~> (a ~> TFragmentOut b)
-                        ~> TFragmentStream n a
-                        ~> TFrameBuffer n t
-                        ~> TFrameBuffer n t
-  "FrameBuffer"         --> \a t t' n
-                        -> [t' ~~ TFFTRepr' t, IsValidFrameBuffer @@ t, TFrameBuffer n t ~~ TFFrameBuffer a]
-                        ==> a ~> TFrameBuffer n t'
-  "ScreenOut"           --> \a b -> TFrameBuffer a b ~> TOutput
-
   forM_ [2..4] $ \i ->
       "PrimNoise" ++ show i  --> \d a b -> [a ~~ floatVecS d, b ~~ floatVecS (TNat i)] ==> a ~> b
 

@@ -25,6 +25,7 @@ import Control.Monad.RWS
 import Control.Monad.Writer
 import Control.Arrow
 import Text.Show.Pretty
+import Debug.Trace
 
 import Type
 import Typing
@@ -53,10 +54,10 @@ subst1 s tv@(TVar _ a) = fromMaybe tv $ Map.lookup a s
 subst1 _ t = t
 
 -- unify each types in the sublists
-unifyTypes :: Bool -> [[Ty]] -> TCM Subst
-unifyTypes = unifyTypes_ throwErrorTCM
+unifyTypes :: Bool -> String -> [[Ty]] -> TCM Subst
+unifyTypes bd msg = unifyTypes_ (throwErrorTCM . (("during typing of " ++ msg ++ "\n") ++)) bd
 
-unifyTypes_ :: (Monad m, Foldable t) => (String -> m ()) -> Bool -> t [Ty] -> m Subst
+unifyTypes_ :: (Monad m, Foldable t, Show (t [Ty])) => (String -> m ()) -> Bool -> t [Ty] -> m Subst
 unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs -> sequence_ $ zipWith uni xs $ tail xs
   where
 --    uni :: Ty -> Ty -> StateT Subst TCM ()
@@ -94,20 +95,22 @@ unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs ->
         unifyTy (TMat a1 b1 c1) (TMat a2 b2 c2) | a1 == a2 && b1 == b2 = uni c1 c2
         unifyTy a b
           | a == b = return ()
-          | otherwise = lift $ fail $ "cannot unify " ++ ppShow a ++ "\n with " ++ ppShow b
+          | otherwise = lift $ fail $ "cannot unify " ++ ppShow a ++ "\n with " ++ ppShow b ++ "\n----------- equations\n" ++ ppShow xss
 
 unifyTypings = unifyTypings_ True
 
 unifyTypings_
     :: NewVar a
     => Bool         -- bidirectional unification
+    -> String
     -> [[Typing]]   -- unify each group
     -> ([Ty] -> a)  -- main typing types for each unified group -> result typing
     -> TCM STyping
-unifyTypings_ bidirectional ts f = do
+unifyTypings_ bidirectional msg ts f = do
     (s', t) <- newV $ f $ map (typingType . head) ts
     let ms = map monoEnv $ t: concat ts
-    s <- unifyTypes bidirectional $ (map . map) typingType ts ++ unifyMaps ms
+    s <- unifyTypes bidirectional (msg {- ++ "\n---------------- typings\n" ++ ppShow ts-}) $ (map . map) typingType ts ++ unifyMaps ms
+    -- TODO: if not bidirectional, check constraints
     (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints $ t: concat ts
     let ty = typing (Map.unions $ subst s ms) i (subst s $ typingType t)
     ambiguityCheck ty
@@ -123,7 +126,7 @@ unifyTypings_ bidirectional ts f = do
             -- injectivity test:  (t ~ Vec a1 b1, t ~ Vec a2 b2)  -->  a1 ~ a2, b1 ~ b2
             tell $ concatMap (concatMap transpose . groupByFst) $ groupByFst [(ty, (it, is)) | CEq ty (injType -> Just (it, is)) <- es]
             concat <$> mapM reduceConstraint es
-        s <- unifyTypes True w
+        s <- unifyTypes True msg w
         if Map.null s then return (acc, es) else untilNoUnif (acc `composeSubst` s) $ nub $ subst s es
 
 -- Ambiguous: (Int ~ F a) => Int
@@ -188,9 +191,10 @@ inference_ primFunMap m = runExcept $ fst <$>
         axioms <- forM axioms $ \(n, a) -> do
             a' <- inferKind a
             return (n, a')
-        dataDefs <- mapM inferDataDef dataDefs
-        definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs $ selectorDefs d ++ definitions
-        return Module{..}
+        withTyping (Map.fromList $ map (id *** generalizeTypeVars . convTy) axioms) $ do
+            dataDefs <- mapM inferDataDef dataDefs
+            definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs $ selectorDefs d ++ definitions
+            return Module{..}
 
     inferDefs [] = return []
     inferDefs (d:ds) = do
@@ -213,7 +217,7 @@ inference_ primFunMap m = runExcept $ fst <$>
     inferDef (p@(PVar _ n), e) = do
         (p, tr) <- inferPatTyping False p
         (Exp (s'', te) exp) <- withTyping tr $ inferTyping e
-        (s, t) <- unifyTypings [[snd $ getTag p, te]] $ \[t] -> t
+        (s, t) <- unifyTypings "definition" [[snd $ getTag p, te]] $ \[t] -> t
         let e = Exp (s <> s'', removeMonoVars (Set.singleton n) t) exp
         let f = withTyping $ Map.singleton n $ snd . getTag $ e
         return ((PVar (getTag e) n, replCallType n (getTag e) e), f)
@@ -239,12 +243,12 @@ selectorDefs dataDefs =
       )
     | d@(DataDef n vs cs) <- dataDefs
     , ConDef cn tys <- cs
-    , FieldTy (Just sel) t <- tys
+    , FieldTy (Just sel) _ <- tys
     ]
 
 selectorTypes :: [DataDef Typing] -> [(EName, Typing)]
 selectorTypes dataDefs =
-    [ (sel, tyConResTy d .~> t)
+    [ (sel, generalizeTypeVars $ tyConResTy d .~> t)
     | d@(DataDef n vs cs) <- dataDefs
     , ConDef cn tys <- cs
     , FieldTy (Just sel) t <- tys
@@ -274,7 +278,7 @@ exportEnv Module{..}
         ++  tyConKinds dataDefs
         ++  tyConTypes dataDefs
         ++  selectorTypes dataDefs
-        ++  map (id *** convTy) axioms
+        ++  map (id *** generalizeTypeVars . convTy) axioms
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     [] -> Right $ PolyEnv $ head <$> ms
@@ -283,6 +287,12 @@ joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     isSing [_] = True
     isSing _ = False
     ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv e <- ps]
+
+generalizeTypeVars :: Typing -> Typing
+generalizeTypeVars t = removeMonoVars (Set.fromList $ filter isTypeVar $ Map.keys $ monoEnv t) t
+
+isTypeVar ('\'':tv) = True
+isTypeVar _ = False
 
 removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
 
@@ -311,7 +321,7 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     Forall_ n t -> do   -- TODO: make kind polymorph
         let n' = '\'':n
         tf <- withTyping (Map.singleton n' star) $ inferKind t
-        ty <- unifyTypings [[star], getTag' tf] $ \[a, t] -> a ~> t
+        ty <- unifyTypings "forall" [[star], getTag' tf] $ \[a, t] -> a ~> t
         return $ Ty' (id *** removeMonoVars (Set.singleton n) $ ty) $ Forall_ n tf
     _ -> do
         ty' <- T.mapM inferKind ty
@@ -319,9 +329,9 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
             TConstraintArg_ c t -> return (mempty, error "tcarg")
             TNat_ _ -> return (mempty, [] ==> NatKind)
             Star_ C -> return (mempty, [] ==> Star)
-            TTuple_ ts -> unifyTypings (map ((star:) . getTag') ts) $ \_ -> Star
-            TArr_ a b -> unifyTypings [star: getTag' a, star: getTag' b] $ \_ -> Star
-            TApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
+            TTuple_ ts -> unifyTypings "tuple kind" (map ((star:) . getTag') ts) $ \_ -> Star
+            TArr_ a b -> unifyTypings "arrow kind" [star: getTag' a, star: getTag' b] $ \_ -> Star
+            TApp_ tf ta -> unifyTypings "app kind" [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (addTypeVar ('\'':n)) . Map.lookup ('\'':n)
             TCon_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Type constructor " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
             x -> error $ " inferKind: " ++ show x
@@ -341,7 +351,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
     ELam_ p f -> do
         p_@(p, tr) <- inferPatTyping False p
         tf <- withTyping tr $ inferTyping f
-        ty <- unifyTypings [getTagP' p_, getTag' tf] $ \[a, t] -> a ~> t
+        ty <- unifyTypings "lam" [getTagP' p_, getTag' tf] $ \[a, t] -> a ~> t
         return $ ELam (id *** removeMonoVars (Map.keysSet tr) $ ty) p tf
     ELet_ (PVar _ n) x e -> do
         tx <- inferTyping x
@@ -351,12 +361,12 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
         tx <- inferTyping x
         p_@(p, tr) <- inferPatTyping False p
         te <- withTyping tr $ inferTyping e
-        ty <- unifyTypings [getTagP' p_ ++ getTag' tx, getTag' te] $ \[_, te] -> te
+        ty <- unifyTypings "let" [getTagP' p_ ++ getTag' tx, getTag' te] $ \[_, te] -> te
         return $ ELet ty p tx te
     ETyping_ e ty -> do
         te@(Exp _ e') <- inferTyping e
-        ty <- inferKind' ty
-        t <- unifyTypings_ False [getTag' te ++ [ty]] $ \[ty] -> ty
+        ty <- generalizeTypeVars <$> inferKind' ty
+        t <- unifyTypings_ False "typesig" [getTag' te ++ [ty]] $ \[ty] -> ty
         return $ Exp t e'
     ECase_ e cs -> do
         te <- inferTyping e
@@ -365,24 +375,24 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             Exp t exp <- withTyping tr $ inferTyping exp
             let del = id *** removeMonoVars (Map.keysSet tr)
             return (Pat (del pt) p, Exp (del t) exp)
-        ty <- unifyTypings [getTag' te ++ concatMap getTagP' cs, concatMap (getTag' . snd) cs] $ \[_, x] -> x
+        ty <- unifyTypings "case" [getTag' te ++ concatMap getTagP' cs, concatMap (getTag' . snd) cs] $ \[_, x] -> x
         return $ ECase ty te cs
     _ -> do
         e' <- T.mapM inferTyping e
         (\t -> Exp t $ setTag (error "e1") (error "e2") e') <$> case e' of
-            EApp_ tf ta -> unifyTypings [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
+            EApp_ tf ta -> unifyTypings "app" [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             EFieldProj_ fn -> fieldProjType fn
-            ERecord_ Nothing (unzip -> (fs, es)) -> unifyTypings (map getTag' es) $ TRecord . Map.fromList . zip fs
+            ERecord_ Nothing (unzip -> (fs, es)) -> unifyTypings "record" (map getTag' es) $ TRecord . Map.fromList . zip fs
 {-
             ERecord_ (Just n) (unzip -> (fs, es)) -> do -- TODO: handle field names
                 (s', nt) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
                 (s, t) <- unifyTypings ([nt]: map getTag' es) $ \(tf: ts) v -> [tf ~~~ foldr (~>) v ts] ==> v
                 return (s <> s', t)
 -}
-            ETuple_ te -> unifyTypings (map (getTag') te) TTuple
+            ETuple_ te -> unifyTypings "tuple" (map (getTag') te) TTuple
             ELit_ l -> noSubst $ inferLit l
             EVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
-            EAlts_ _ xs -> unifyTypings [concatMap getTag' xs] $ \[x] -> x
+            EAlts_ _ xs -> unifyTypings "alts" [concatMap getTag' xs] $ \[x] -> x
             ENext_ -> newV $ \t -> t :: Ty          -- TODO
             x -> error $ "inferTyping: " ++ ppShow x
   where
@@ -399,11 +409,11 @@ inferPatTyping polymorph p_@(Pat pt p) = local (id *** const [pt]) $ do
         PVar_ n -> addTr (\t -> Map.singleton n (snd t)) $ newV $ \t ->
             if polymorph then [] ==> t else Typing (Map.singleton n t) mempty t mempty :: Typing
         PAt_ n p -> addTr (\t -> Map.singleton n (snd t)) $ newV $ snd . getTag . fst $ p
-        PTuple_ ps -> noTr $ unifyTypings (map getTagP' ps) TTuple
+        PTuple_ ps -> noTr $ unifyTypings "tuple pat" (map getTagP' ps) TTuple
         PCon_ n ps -> noTr $ do
             (_, tn) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Constructor " ++ n ++ " is not in scope.") . Map.lookup n
-            unifyTypings ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ tl ~~> v] ==> v)
-        PRecord_ (unzip -> (fs, ps)) -> noTr $ unifyTypings (map getTagP' ps)
+            unifyTypings "pat constr" ([tn]: map getTagP' ps) (\(tn: tl) v -> [tn ~~~ tl ~~> v] ==> v)
+        PRecord_ (unzip -> (fs, ps)) -> noTr $ unifyTypings "record pat" (map getTagP' ps)
             (\tl v v' -> [Split v v' $ TRecord $ Map.fromList $ zip fs tl] ==> v)
 --            x -> error $ "inferPatTyping: " ++ ppShow x
     let trs = Map.unionsWith (++) . map ((:[]) <$>) $ tr: map snd (toList p')

@@ -1,5 +1,5 @@
 render modelViewProj = let
-  emptyFB           = FrameBuffer (DepthImage #1 1000.0)
+  emptyFB           = FrameBuffer (depthImage1 1000.0)
   rasterCtx         = LineCtx 1.0 LastVertex
   fragmentCtx       = AccumulationContext (DepthOp Less False)
   vertexShader v    = VertexOut v 1.0 () (Flat v)
