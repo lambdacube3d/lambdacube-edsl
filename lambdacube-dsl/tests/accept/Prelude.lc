@@ -48,7 +48,15 @@ axioms
   Triangle, Line, Point, TriangleAdjacency, LineAdjacency :: *
   CullMode, PolygonMode, PolygonOffset, ProvokingVertex, FrontFace, PointSize, BlendingFactor, BlendEquation, LogicOperation, StencilOperation, ComparisonFunction, PointSpriteCoordOrigin :: *
 
-  -- TODO: more precise kinds
+{- TODO: more precise kinds
+  TFetchPrimitive_       :: PrimitiveType -> *
+  TFragmentOperation_    :: Semantic -> *
+  TFragmentOut_          :: Semantic -> *
+  TImage_                :: Nat -> Semantic -> *
+  TRasterContext_        :: PrimitiveType -> *
+  TVertexOut_            :: ???
+  TVertexStream_         :: PrimitiveType -> * -> *
+-}
   Output :: *
   AccumulationContext, Blending, FetchPrimitive, FragmentFilter, FragmentOperation, FragmentOut, Input, Interpolated, RasterContext, VertexOut :: * -> *
   VertexStream :: * -> * -> *

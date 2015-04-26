@@ -224,22 +224,6 @@ data Ty_ a
 
   -- lambdacube types
   | TNat_    Int
---  | TVec_    Int a          -- invariant property: Int = 2,3,4;  a = Bool, Int, Word, Float
---  | TMat_    Int Int a      -- invariant property: Int = 2,3,4;  a = Float
-
-  -- GADT/special (two frequencies)
---  | TPrimitiveStream_      Frequency a{-PrimitiveType-} a{-Nat-} Frequency a -- ???
-{-
-  | TFetchPrimitive_       Frequency a{-PrimitiveType-}
-  | TFragmentOperation_    Frequency a{-Semantic-}
-  | TFragmentOut_          Frequency a{-Semantic-}
-  | TFragmentStream_       Frequency a{-Nat-} a
-  | TFrameBuffer_          Frequency a{-Nat-} a
-  | TImage_                Frequency a{-Nat-} a{-Semantic-}
-  | TRasterContext_        Frequency a{-PrimitiveType-}
-  | TVertexOut_            Frequency a -- ???
-  | TVertexStream_         Frequency a{-PrimitiveType-} a
--}
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 pattern Star = StarToStar 0
