@@ -283,10 +283,6 @@ primFunMap = Map.fromList $ execWriter $ do
 
   -- kind of type constructors
   "()" ---> Star
-  "[]" ---> Star ~> Star
-
-  "[]" --> \a -> TList a
-  ":" --> \a -> a ~> TList a ~> TList a
 
 fieldProjType :: FName -> TCM (Subst, Typing)
 fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing

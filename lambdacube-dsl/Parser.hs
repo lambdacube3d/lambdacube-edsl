@@ -41,7 +41,7 @@ instance TokenParsing p => TokenParsing (LCParser p) where
 lcCommentStyle = haskellCommentStyle
 
 lcOps = haskell98Ops
-  { _styleReserved = HashSet.fromList ["=","\\","#","::",".","@","_","|","->","~"]
+  { _styleReserved = HashSet.fromList ["=","\\","#","::",":",".","@","_","|","->","~"]
   }
 
 lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
@@ -105,12 +105,14 @@ qVar :: P String    -- TODO
 qVar = var <|> runUnspaced (try' "qualified var" $ sepBy (Unspaced upperCaseIdent) dot *> dot *> Unspaced var)
 
 operator' :: P String
-operator' = try' "operator" $ do
-  i <- ident lcOps
-  if head i == ':' then fail "operator cannot start with ':'" else return i
+operator' = try' "operator" (do
+                  i <- ident lcOps
+                  if head i == ':' then fail "operator cannot start with ':'" else return i)
+        <|> (operator "." *> pure ".")
+        <|> (operator ":" *> pure "Cons")
 
 varId :: P String
-varId = var <|> parens ("." <$ operator "." <|> ident lcOps)
+varId = var <|> parens operator'
 
 --------------------------------------------------------------------------------
 
@@ -313,7 +315,7 @@ dataDef = do
   let dataConDef = do
         tc <- typeConstructor
         tys <-   braces (sepBy (FieldTy <$> (Just <$> varId) <*> (keyword "::" *> optional (operator "!") *> typeExp)) comma)
-            <|>  many (optional (operator "!") *> (FieldTy Nothing <$> typeExp))
+            <|>  many (optional (operator "!") *> (FieldTy Nothing <$> typeAtom))
         return $ ConDef tc tys
   operator "="
   ds <- sepBy dataConDef $ operator "|"
@@ -358,7 +360,7 @@ typeAtom = typeRecord
     <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
     <|> addPos Ty' (TCon_ <$> typeConstructor)
     <|> addPos tTuple (parens (sepBy ty comma))
-    <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "[]")) (brackets ty)
+    <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "List")) (brackets ty)
 
 
 tTuple :: Range -> [TyR] -> TyR
@@ -396,7 +398,7 @@ fixityDef = do
         <|> FDRight <$ keyword "infixr"
   localIndentation Gt $ do
     i <- natural
-    ns <- sepBy1 (ident lcOps) comma
+    ns <- sepBy1 operator' comma
     return [DFixity n (dir, fromIntegral i) | n <- ns]
 
 undef msg = (const (error $ "not implemented: " ++ msg) <$>)
@@ -418,10 +420,8 @@ valuePatternOpAtom = do
     f e op e' = appP [op, e, e']
 
     op :: P PatR
-    op = addPos (\p x -> PCon p x []) $
-            ident lcOps
+    op = addPos (\p x -> PCon p x []) operator'
 --        <|> try' "backquote operator" (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
-        <|> (operator ":" *> pure ":")
 
 valuePatternAtom :: P PatR
 valuePatternAtom
@@ -443,8 +443,8 @@ valuePatternAtom
   listPat :: P PatR
   listPat = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep valuePattern
     where
-      nil (p1, p2) = PCon (p2 {- - 1 -}, p2) "[]" []
-      cons a b = PCon mempty ":" [a, b]
+      nil (p1, p2) = PCon (p2 {- - 1 -}, p2) "Nil" []
+      cons a b = PCon mempty "Cons" [a, b]
 
 eLam p e_ ps = ELam (p <-> e) p e where e = e_ ps
 
@@ -550,11 +550,8 @@ expressionOpAtom = do
   where
     f e op e' = application [op, e, e']
 
-    op = addPos eVar $
-            ident lcOps
+    op = addPos eVar $ operator'
         <|> try' "backquote operator" (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
-        <|> (operator "." *> pure ".")
-        <|> (operator ":" *> pure ":")
 
 expressionAtom :: P ExpR
 expressionAtom =
@@ -594,8 +591,8 @@ expressionAtom =
   listExp :: P ExpR
   listExp = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep expression
     where
-      nil (p1, p2) = eVar (p2 {- - 1 -}, p2) "[]"
-      cons a b = eApp (eApp (eVar mempty{-TODO-} ":") a) b
+      nil (p1, p2) = eVar (p2 {- - 1 -}, p2) "Nil"
+      cons a b = eApp (eApp (eVar mempty{-TODO-} "Cons") a) b
 
 eTuple _ [x] ps = x ps
 eTuple p xs ps = ETuple p $ map ($ ps) xs

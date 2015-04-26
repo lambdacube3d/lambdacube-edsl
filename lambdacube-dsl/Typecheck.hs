@@ -104,7 +104,7 @@ unifyTypings_
 unifyTypings_ bidirectional msg ts f = do
     (s', t) <- newV $ f $ map (typingType . head) ts
     let ms = map monoEnv $ t: concat ts
-    s <- unifyTypes bidirectional (msg {- ++ "\n---------------- typings\n" ++ ppShow ts-}) $ (map . map) typingType ts ++ unifyMaps ms
+    s <- unifyTypes bidirectional (msg{- ++ "\n---------------- typings\n" ++ ppShow ts-}) $ (map . map) typingType ts ++ unifyMaps ms
     -- TODO: if not bidirectional, check constraints
     (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints $ t: concat ts
     let ty = typing (Map.unions $ subst s ms) i (subst s $ typingType t)
@@ -121,7 +121,7 @@ unifyTypings_ bidirectional msg ts f = do
             -- injectivity test:  (t ~ Vec a1 b1, t ~ Vec a2 b2)  -->  a1 ~ a2, b1 ~ b2
             tell $ concatMap (concatMap transpose . groupByFst) $ groupByFst [(ty, (it, is)) | CEq ty (injType -> Just (it, is)) <- es]
             concat <$> mapM reduceConstraint es
-        s <- unifyTypes True msg w
+        s <- unifyTypes True (msg ++ "constr solv") w
         if Map.null s then return (acc, es) else untilNoUnif (acc `composeSubst` s) $ nub $ subst s es
 
 -- Ambiguous: (Int ~ F a) => Int
@@ -278,7 +278,7 @@ tyConTypes dataDefs =
     , ConDef cn tys <- cs
     ]
 
-tyConKinds dataDefs = [(primed n, [] ==> foldr (~>) Star (replicate (length vs) Star)) | DataDef n vs _ <- dataDefs]
+tyConKinds dataDefs = [(primed n, [] ==> StarToStar (length vs)) | DataDef n vs _ <- dataDefs]
 
 exportEnv :: ModuleT -> PolyEnv
 exportEnv Module{..}

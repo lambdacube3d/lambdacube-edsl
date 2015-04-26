@@ -34,7 +34,6 @@ type MName = String     -- module name
 type ClassName = String
 
 -- TODO
-isConstr "[]" = True
 isConstr n@(c:_) = isUpper c || c == ':' -- TODO
 
 type Subst = Map TName Ty
@@ -264,7 +263,7 @@ pattern TWord = TCon0 "Word"
 pattern TInt = TCon0 "Int"
 pattern TFloat = TCon0 "Float"
 pattern TArray b = TCon1 "Array" b
-pattern TList a = TCon1 "[]" a
+pattern TList a = TCon1 "List" a
 
 -- Semantic
 pattern Depth a = TCon1 "Depth" a

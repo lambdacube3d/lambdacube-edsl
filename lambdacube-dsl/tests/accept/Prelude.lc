@@ -9,7 +9,7 @@ uncurry f (x, y) = f x y
 
 data Bool = False | True
 
---data List a = Nil | Cons a (List a)
+data List a = Nil | Cons a (List a)
 
 ifThenElse True a b = a
 ifThenElse False a b = b
@@ -49,13 +49,13 @@ axioms
   CullMode, PolygonMode, PolygonOffset, ProvokingVertex, FrontFace, PointSize, BlendingFactor, BlendEquation, LogicOperation, StencilOperation, ComparisonFunction, PointSpriteCoordOrigin :: *
 
 {- TODO: more precise kinds
-  TFetchPrimitive_       :: PrimitiveType -> *
-  TFragmentOperation_    :: Semantic -> *
-  TFragmentOut_          :: Semantic -> *
-  TImage_                :: Nat -> Semantic -> *
-  TRasterContext_        :: PrimitiveType -> *
-  TVertexOut_            :: ???
-  TVertexStream_         :: PrimitiveType -> * -> *
+  FetchPrimitive       :: PrimitiveType -> *
+  FragmentOperation    :: Semantic -> *
+  FragmentOut          :: Semantic -> *
+  Image                :: Nat -> Semantic -> *
+  RasterContext        :: PrimitiveType -> *
+  VertexOut            :: ???
+  VertexStream         :: PrimitiveType -> * -> *
 -}
   Output :: *
   AccumulationContext, Blending, FetchPrimitive, FragmentFilter, FragmentOperation, FragmentOut, Input, Interpolated, RasterContext, VertexOut :: * -> *
@@ -300,12 +300,12 @@ axioms
 
 {-
     -- Vec/Mat (de)construction
-    PrimTupToV2             :: IsComponent a                            => PrimFun stage ((a,a)     -> V2 a)
-    PrimTupToV3             :: IsComponent a                            => PrimFun stage ((a,a,a)   -> V3 a)
-    PrimTupToV4             :: IsComponent a                            => PrimFun stage ((a,a,a,a) -> V4 a)
-    PrimV2ToTup             :: IsComponent a                            => PrimFun stage (V2 a     -> (a,a))
-    PrimV3ToTup             :: IsComponent a                            => PrimFun stage (V3 a   -> (a,a,a))
-    PrimV4ToTup             :: IsComponent a                            => PrimFun stage (V4 a -> (a,a,a,a))
+    PrimTupToV2             :: Component a                            => PrimFun stage ((a,a)     -> V2 a)
+    PrimTupToV3             :: Component a                            => PrimFun stage ((a,a,a)   -> V3 a)
+    PrimTupToV4             :: Component a                            => PrimFun stage ((a,a,a,a) -> V4 a)
+    PrimV2ToTup             :: Component a                            => PrimFun stage (V2 a     -> (a,a))
+    PrimV3ToTup             :: Component a                            => PrimFun stage (V3 a   -> (a,a,a))
+    PrimV4ToTup             :: Component a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
 
 colorImage1 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 1 (Color color)
