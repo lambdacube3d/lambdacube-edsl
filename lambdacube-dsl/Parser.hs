@@ -187,11 +187,12 @@ moduleName = do
 
 moduleDef :: FilePath -> P ModuleR
 moduleDef fname = do
-  optional $ do
+  modn <- optional $ do
     keyword "module"
-    moduleName
+    modn <- moduleName
     optional $ parens (commaSep varId)
     keyword "where"
+    return modn
   localAbsoluteIndentation $ do
     idefs <- many importDef
     -- TODO: unordered definitions
@@ -206,7 +207,7 @@ moduleDef fname = do
         ])
     let ps = Map.fromList [(n, p) | DFixity n p <- defs]
     return $ Module
-      { moduleImports = idefs
+      { moduleImports = (if modn == Just (Q [] "Prelude") then id else (Q [] "Prelude":)) idefs
       , moduleExports = ()
       , typeAliases   = ()
       , definitions   = [id *** ($ ps) $ d | ValueDef d <- defs]

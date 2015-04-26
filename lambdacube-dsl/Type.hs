@@ -402,7 +402,7 @@ instance FreeVars a => FreeVars (Constraint a)      where freeVars = foldMap fre
 
 -- qualified things
 data Q a = Q {qualifier :: [String], qData :: a} -- | UQ a
-    deriving (Show)
+    deriving (Eq, Ord, Show)
 
 type Prec = Map EName (FixityDir, Int)
 

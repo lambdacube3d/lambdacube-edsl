@@ -4,8 +4,6 @@ module Material where
 -- import Data.String (String)
 -- import qualified Data.String.Char8 as SB
 
-import Prelude
-
 identityLight :: Float
 identityLight = 1
 

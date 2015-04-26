@@ -10,7 +10,6 @@ import Data.Vect
 import LambdaCube.GL
 -}
 import Material hiding (Blending)
-import Prelude
 
 --import Debug.Trace
 
