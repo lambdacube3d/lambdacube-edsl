@@ -308,27 +308,6 @@ primFunMap = Map.fromList $ execWriter $ do
   "[]" --> \a -> TList a
   ":" --> \a -> a ~> TList a ~> TList a
 
-  forM_ [2..4] $ \i -> do
-    forM_ (zip ["F","I","U","B"] floatIntWordBool) $ \(tn, t) ->
-        "V" ++ show i ++ tn --> replicate i t ~~> TVec i t      -- like  "V2B" --> TBool ~> TBool ~> TV2B
-    forM_ [2..4] $ \j ->
-        "M" ++ show i ++ show j ++ "F" --> replicate j (TVec i TFloat) ~~> TMat i j TFloat
-                                                                -- like  "M22F" --> TV2F ~> TV2F ~> TM22F
-
-  -- Input declaration
---  "Uni"     --> \t -> TInput t ~> t
-  forM_ (  zip ["IFloat", "IInt", "IWord", "IBool"] floatIntWordBool
-        ++ [("IM" ++ show i ++ show j ++ "F", TMat i j TFloat) | i <- [2..4], j <- [2..4]]
-        ++ [ ("IV" ++ show i ++ tn, TVec i t)
-           | i <- [2..4]
-           , (tn, t) <- zip ["F","I","U","B"] floatIntWordBool
-           ]
-        ) $ \(name, t) ->
-    name --> TString ~> TInput t                            -- like  "IBool" --> TString ~> TInput (TBool )
-
-  forM_ [2..4] $ \i ->
-      "PrimNoise" ++ show i  --> \d a b -> [a ~~ floatVecS d, b ~~ floatVecS (TNat i)] ==> a ~> b
-
 fieldProjType :: FName -> TCM (Subst, Typing)
 fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
 

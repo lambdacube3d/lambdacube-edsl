@@ -288,22 +288,11 @@ pattern Stencil a = TCon1 "Stencil" a
 pattern Color a = TCon1 "Color" a
 
 -- GADT
-pattern TAccumulationContext b = TCon1 "AccumulationContext" b
-pattern TBlending b = TCon1 "Blending" b
-pattern TFetchPrimitive b = TCon1 "FetchPrimitive" b
-pattern TFragmentFilter b = TCon1 "FragmentFilter" b
-pattern TFragmentOperation b = TCon1 "FragmentOperation" b
-pattern TFragmentOut b = TCon1 "FragmentOut" b
-pattern TFragmentStream b c = TCon2' "FragmentStream" b c
-pattern TFrameBuffer b c = TCon2' "FrameBuffer" b c
-pattern TImage b c = TCon2' "Image" b c
 pattern TInput b = TCon1 "Input" b
+pattern TFragmentOperation b = TCon1 "FragmentOperation" b
+pattern TImage b c = TCon2' "Image" b c
 pattern TInterpolated b = TCon1 "Interpolated" b
-pattern TOutput = TCon0 "Output"
-pattern TRasterContext b = TCon1 "RasterContext" b
-pattern TVertexOut b = TCon1 "VertexOut" b
-pattern TVertexStream b c = TCon2 "VertexStream" b c
-pattern TPrimitiveStream a b c = TCon3' "PrimitiveStream" a b c
+pattern TFrameBuffer b c = TCon2' "FrameBuffer" b c
 
 infixr 7 ~>, ~~>
 a ~> b = TArr a b

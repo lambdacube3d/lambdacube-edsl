@@ -57,27 +57,56 @@ axioms
   PrimV3FToV4F :: Vec 3 Float -> Vec 4 Float
   Tup, Const  :: a -> a
 
-{-
-  forM_ [2..4] $ \i -> do
-    forM_ (zip F,I,U,B floatIntWordBool) $ \(tn, t) ->
-        V ++ show i ++ tn :: replicate i t ~-> Vec i t      -- like  V2B :: Bool -> Bool -> V2B
-    forM_ [2..4] $ \j ->
-        M ++ show i ++ show j ++ F :: replicate j (Vec i Float) ~-> Mat i j Float
-                                                               -- like  M22F :: V2F -> V2F -> M22F
--}
+  V2B :: Bool -> Bool -> Vec 2 Bool
+  V3B :: Bool -> Bool -> Bool -> Vec 3 Bool
+  V4B :: Bool -> Bool -> Bool -> Bool -> Vec 4 Bool
+  V2I :: Int -> Int -> Vec 2 Int
+  V3I :: Int -> Int -> Int -> Vec 3 Int
+  V4I :: Int -> Int -> Int -> Int -> Vec 4 Int
+  V2U :: Word -> Word -> Vec 2 Word
+  V3U :: Word -> Word -> Word -> Vec 3 Word
+  V4U :: Word -> Word -> Word -> Word -> Vec 4 Word
+  V2F :: Float -> Float -> Vec 2 Float
+  V3F :: Float -> Float -> Float -> Vec 3 Float
+  V4F :: Float -> Float -> Float -> Float -> Vec 4 Float
+  M22F :: Vec 2 Float -> Vec 2 Float -> Mat 2 2 Float
+  M23F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 3 Float
+  M24F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 4 Float
+  M32F :: Vec 3 Float -> Vec 3 Float -> Mat 3 2 Float
+  M33F :: Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Mat 3 3 Float
+  M34F :: Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Mat 3 4 Float
+  M42F :: Vec 4 Float -> Vec 4 Float -> Mat 4 2 Float
+  M43F :: Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Mat 4 3 Float
+  M44F :: Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Mat 4 4 Float
 
   -- Input declaration
   Uni     :: Input t -> t
-{-
-  forM_ (  zip IFloat, IInt, IWord, IBool floatIntWordBool
-        ++ [(IM ++ show i ++ show j ++ F, Mat i j Float) | i <- [2..4], j <- [2..4]]
-        ++ [ (IV ++ show i ++ tn, Vec i t)
-           | i <- [2..4]
-           , (tn, t) <- zip F,I,U,B floatIntWordBool
-           ]
-        ) $ \(name, t) ->
-    name :: String -> Input t                            -- like  IBool :: String -> Input (Bool )
--}
+  IM22F :: String -> Input (Mat 2 2 Float)
+  IM23F :: String -> Input (Mat 2 3 Float)
+  IM24F :: String -> Input (Mat 2 4 Float)
+  IM32F :: String -> Input (Mat 3 2 Float)
+  IM33F :: String -> Input (Mat 3 3 Float)
+  IM34F :: String -> Input (Mat 3 4 Float)
+  IM42F :: String -> Input (Mat 4 2 Float)
+  IM43F :: String -> Input (Mat 4 3 Float)
+  IM44F :: String -> Input (Mat 4 4 Float)
+  IV2F :: String -> Input (Vec 2 Float)
+  IV3F :: String -> Input (Vec 3 Float)
+  IV4F :: String -> Input (Vec 4 Float)
+  IV2I :: String -> Input (Vec 2 Int)
+  IV3I :: String -> Input (Vec 3 Int)
+  IV4I :: String -> Input (Vec 4 Int)
+  IV2U :: String -> Input (Vec 2 Word)
+  IV3U :: String -> Input (Vec 3 Word)
+  IV4U :: String -> Input (Vec 4 Word)
+  IV2B :: String -> Input (Vec 2 Bool)
+  IV3B :: String -> Input (Vec 3 Bool)
+  IV4B :: String -> Input (Vec 4 Bool)
+  IFloat :: String -> Input Float
+  IInt :: String -> Input Int
+  IWord :: String -> Input Word
+  IBool :: String -> Input Bool
+
   Zero, One, SrcColor, OneMinusSrcColor, DstColor, OneMinusDstColor, SrcAlpha, OneMinusSrcAlpha, DstAlpha, OneMinusDstAlpha, ConstantColor, OneMinusConstantColor, ConstantAlpha, OneMinusConstantAlpha, SrcAlphaSaturate
                         :: BlendingFactor
   FuncAdd, FuncSubtract, FuncReverseSubtract, Min, Max
@@ -242,10 +271,9 @@ axioms
                         :: (a ~ VecScalar d Float) => a -> a
   -- Noise Functions
   PrimNoise1          :: (a ~ VecScalar d Float) => a -> Float
-{-
---  forM_ [2..4] $ \i ->
---      PrimNoise ++ show i  :: (a ~ VecScalar d Float, b ~ VecScalar i Float) => a -> b
--}
+  PrimNoise2          :: (a ~ VecScalar d Float, b ~ VecScalar 2 Float) => a -> b
+  PrimNoise3          :: (a ~ VecScalar d Float, b ~ VecScalar 3 Float) => a -> b
+  PrimNoise4          :: (a ~ VecScalar d Float, b ~ VecScalar 4 Float) => a -> b
 
 colorImage1 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 1 (Color color)
 colorImage2 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 2 (Color color)
