@@ -1,9 +1,6 @@
 data AB = A | B
 
-render l choice = let
-  mask              = case choice of
-                        A -> False
-                        B -> True
- in mask:l
+const = \e x -> e
 
-main = foldl' render [] [A,B]
+main = (\x -> const x A) B  -- should be B
+
