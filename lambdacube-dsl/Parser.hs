@@ -198,6 +198,7 @@ moduleDef fname = do
     -- TODO: unordered definitions
     defs <- groupDefinitions . concat <$> many (choice
         [ (:[]) . DDataDef <$> dataDef
+        , concat <$ keyword "axioms" <*> localIndentation Gt (localAbsoluteIndentation $ many axiom)
         , (:[]) <$> typeSignature
         , const [] <$> typeSynonym
         , const [] <$> typeClassDef
@@ -215,6 +216,7 @@ moduleDef fname = do
       , typeClasses   = ()
       , instances     = ()
       , precedences   = ps     -- TODO: check multiple definitions
+      , axioms        = [d | TypeSig d <- defs]
       , moduleFile    = fname
       }
 
@@ -251,6 +253,16 @@ typeSignature = TypeSig <$> do
   t <- localIndentation Gt $ do
     optional (operator "!") *> typeExp
   return (n, t)
+
+axiom :: P [Definition]
+axiom = do
+  ns <- try' "axiom" $ do
+    ns <- sepBy1 (varId <|> dataConstructor) comma
+    localIndentation Gt $ operator "::"
+    return ns
+  t <- localIndentation Gt $ do
+    optional (operator "!") *> typeExp
+  return [TypeSig (n, t) | n <- ns]
 
 typePattern :: P ()  -- TODO
 typePattern = choice [void_ (try' "type var" typeVar), void_ typeConstructor, void_ $ parens ((void_ typeConstructor <* some typePattern) <|> typePattern)]

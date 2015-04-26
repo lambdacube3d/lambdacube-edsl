@@ -184,6 +184,9 @@ inference_ primFunMap m = runExcept $ fst <$>
   where
     inferModule Module{..} = withTyping (Map.fromList $ tyConKinds dataDefs) $ do
         let d = dataDefs
+        axioms <- forM axioms $ \(n, a) -> do
+            a' <- inferKind a
+            return (n, a')
         dataDefs <- mapM inferDataDef dataDefs
         definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs $ selectorDefs d ++ definitions
         return Module{..}
@@ -270,6 +273,7 @@ exportEnv Module{..}
         ++  tyConKinds dataDefs
         ++  tyConTypes dataDefs
         ++  selectorTypes dataDefs
+        ++  map (id *** convTy) axioms
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     [] -> Right $ PolyEnv $ head <$> ms

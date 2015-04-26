@@ -418,6 +418,7 @@ data Module t a
   , instances     :: ()
   , precedences   :: Prec
   , moduleFile    :: FilePath
+  , axioms        :: [(String, Ty' a)]
   }
     deriving (Show)
 

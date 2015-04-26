@@ -40,4 +40,10 @@ data Maybe a
     | Just a
     deriving (Eq, Ord, Show)
 
+axioms
+  CW, CCW :: FrontFace
+
+
+
+
 

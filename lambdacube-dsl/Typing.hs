@@ -359,7 +359,7 @@ primFunMap = Map.fromList $ execWriter $ do
   ["LastVertex", "FirstVertex"]
                         ---> TProvokingVertex
 
-  ["CW", "CCW"]         ---> TFrontFace
+--  [{-"CW",-} "CCW"]         ---> TFrontFace
   ["CullFront", "CullBack"]
                         ---> TFrontFace ~> TCullMode
   "CullNone"            -->                TCullMode
