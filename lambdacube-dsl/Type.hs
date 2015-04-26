@@ -9,6 +9,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Type where
 
+import Data.Char
 import Data.List
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -31,9 +32,13 @@ type EName = String
 type FName = String
 type MName = String     -- module name
 
+-- TODO
+isConstr "[]" = True
+isConstr n@(c:_) = isUpper c || c == ':' -- TODO
+
 type Subst = Map TName Ty
 type MonoEnv a = Map EName a
-newtype PolyEnv = PolyEnv { getPolyEnv :: Map EName (TCM (Subst, Typing)) }
+newtype PolyEnv = PolyEnv { getPolyEnv :: Map EName (TCM STyping) }
     deriving Monoid
 type Typing = Typing_ Ty
 
@@ -90,6 +95,16 @@ data Pat_ c v b
   | Wildcard_
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
+mapPat :: (c -> c') -> (v -> v') -> Pat_ c v b -> Pat_ c' v' b
+mapPat f g = \case
+    PLit_ l -> PLit_ l
+    PVar_ v -> PVar_ $ g v
+    PCon_ c p -> PCon_ (f c) p
+    PTuple_ p -> PTuple_ p
+    PRecord_ p -> PRecord_ p
+    PAt_ v p -> PAt_ (g v) p
+    Wildcard_ -> Wildcard_
+
 pattern PAt t a b = Pat t (PAt_ a b)
 pattern PVar a b = Pat a (PVar_ b)
 pattern PLit a b = Pat a (PLit_ b)
@@ -133,10 +148,12 @@ pattern ETyping a b c = Exp a (ETyping_ b c)
 pattern EAlts a i b = Exp a (EAlts_ i b)
 pattern ENext a = Exp a ENext_
 
-setTag :: (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v t' p' b
-setTag tf f = \case
+setTag = setTag_ id
+
+setTag_ :: (v -> v') -> (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v' t' p' b
+setTag_ vf tf f = \case
     ELit_      x       -> ELit_ x
-    EVar_      x       -> EVar_ x
+    EVar_      x       -> EVar_ $ vf x
     EApp_      x y     -> EApp_ x y
     ELam_      x y     -> ELam_ (f x) y
     ELet_      x y z   -> ELet_ (f x) y z
@@ -148,6 +165,11 @@ setTag tf f = \case
     EAlts_     x y     -> EAlts_ x y
     ENext_             -> ENext_
 --    EType
+
+type STyping = (Subst, Typing)
+
+buildLet :: [(Pat STyping, Exp STyping)] -> Exp STyping -> Exp STyping
+buildLet es e = foldr (\(p, e) x -> ELet (getTag e) p e x) e es
 
 data Frequency -- frequency kind
   -- frequency values

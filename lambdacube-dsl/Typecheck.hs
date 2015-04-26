@@ -222,8 +222,6 @@ replCallType n nt = \case
 
 modTag f (Exp t x) = Exp (f t) x
 
-type STyping = (Subst, Typing)
-
 selectorTypes :: [DataDef Typing] -> [(EName, Typing)]
 selectorTypes dataDefs =
     [ (sel, tyConResTy d .~> t)
