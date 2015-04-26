@@ -1,0 +1,30 @@
+render fb = let
+  modelViewProj = Uni (IM44F "MVP")
+  blendFun x = Blend x ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
+  blend'' = blendFun (FuncAdd,FuncAdd)
+  blend = Blend (FuncAdd,FuncAdd) ((SrcAlpha,OneMinusSrcAlpha),(SrcAlpha,OneMinusSrcAlpha)) (V4F 1.0 1.0 1.0 1.0)
+  blend' = NoBlending
+  polyMode          = PolygonLine 20.0
+  polyMode'         = PolygonFill
+  polyMode''        = PolygonPoint (PointSize 10.0)
+  cull = CullNone
+  cull' = CullFront CW
+  rasterCtx         = TriangleCtx cull polyMode' NoOffset LastVertex
+  fragmentCtx       = AccumulationContext (DepthOp Less False, ColorOp blend (V4B True True True True))
+  vertexShader (v,n) = let v2 = PrimV3FToV4F v
+                           n2 = PrimV3FToV4F n
+                       in VertexOut (PrimMulMatVec modelViewProj v2) 1.0 () (Smooth n2,Flat v2)
+  vertexStream      = Fetch "stream" Triangles (IV3F "position",IV3F "normal")
+  primitiveStream   = Transform vertexShader vertexStream
+  fragmentStream    = Rasterize rasterCtx primitiveStream
+  fragmentShader (v,a) = FragmentOutRastDepth (PrimMul v (Const (V4F 1.0 1.4 1.0 0.6)))
+  frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
+  in frame
+
+main = let
+  bgColor = V4F 0.5 0.0 0.4 1.0
+  bgColor' = V4F 0.2 0.2 0.4 1.0
+  emptyFB = FrameBuffer (DepthImage #1 1000.0,ColorImage #1 bgColor)
+  modelViewProj = Uni (IM44F "MVP")
+  out = render emptyFB
+  in ScreenOut out
