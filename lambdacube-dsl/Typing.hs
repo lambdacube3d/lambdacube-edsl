@@ -97,7 +97,9 @@ iff x y b = if b then x else y
 type TCMC = WriterT [[Ty]] TCM
 
 reduceConstraint :: Constraint Ty -> TCMC [Constraint Ty]
-reduceConstraint x = case x of
+reduceConstraint x = do
+  builtinInstances <- asks $ instanceDefs . fst
+  case x of
 
     Split (TRecord a) (TRecord b) (TRecord c) ->
       case (Map.keys $ Map.intersection b c, Map.keys $ a Map.\\ (b <> c), Map.keys $ (b <> c) Map.\\ a) of
@@ -135,9 +137,10 @@ reduceConstraint x = case x of
                 | otherwise -> noInstance
             _ -> discard []
 
-        _ -> maybe noInstance (iff (discard []) noInstance . Set.member t) $ Map.lookup c builtinInstances
+        _ -> maybe noInstance (\s -> iff (discard []) (noInstance' s) . Set.member t $ s) $ Map.lookup c builtinInstances
       where
         noInstance = failure $ "no " ++ c ++ " instance for " ++ ppShow t
+        noInstance' s = failure $ "no " ++ c ++ " instance for " ++ ppShow t ++ "\npossible instances:\n" ++ ppShow s
 
     CUnify a b -> discard [[a, b]]
 
@@ -238,23 +241,9 @@ reduceConstraint x = case x of
     observe TVar{} _ = nothing
     observe x f = f x
 
-builtinInstances :: Map Class (Set Ty)
-builtinInstances = Map.fromList
-    [ item CNum         [TInt, TFloat]
-    , item IsIntegral   [TInt, TWord]
-    , item IsComponent  $ floatIntWordBool ++ floatVectors -- ++ vectors TBool
-    , item IsNumComponent $ floatIntWord ++ floatVectors
-    , item IsSigned     [TFloat, TInt]
-    , item IsNum        floatIntWord
-    , item IsFloating   $ TFloat: floatVectors ++ matrices
-    ]
-  where
-    item a b = (a, Set.fromList b)
-
 nat234 = [TNat i | i <-[2..4]]
 floatIntWord = [TFloat, TInt, TWord]
 floatIntWordBool = [TFloat, TInt, TWord, TBool]
-matrices = [TMat i j TFloat | i <- [2..4], j <- [2..4]]
 vectors t = [TVec i t | i <- [2..4]]
 floatVectors = vectors TFloat
 

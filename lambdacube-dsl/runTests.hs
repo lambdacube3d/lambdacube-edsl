@@ -54,7 +54,7 @@ writeReduced = testFrame ["./tests/accept"] $ \case
 
 main' x = acceptTests [x]
 
-acceptTests = testFrame ["./tests/accept"] $ \case
+acceptTests = testFrame ["./tests/accept", "./tests/reject"] $ \case
     Left e -> Left e
     Right (Left e) -> Right ("typechecked", ppShow e)
     Right (Right e)

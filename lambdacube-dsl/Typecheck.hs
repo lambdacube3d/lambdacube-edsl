@@ -194,8 +194,13 @@ inference_ primFunMap m = runExcept $ fst <$>
         let d = dataDefs
         inferAxioms [] axioms $ \axioms -> do
             dataDefs <- mapM inferDataDef dataDefs
+            instances <- mapM (fmap Set.fromList . mapM inferInst . toList) instances
             definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs $ selectorDefs d ++ definitions
             return Module{..}
+
+    inferInst t = do
+        t <- inferKind' t
+        return t
 
     inferAxioms acc [] cont = cont $ reverse acc
     inferAxioms acc ((n, a): ds) cont = do
@@ -280,20 +285,23 @@ tyConKinds dataDefs = [(primed n, [] ==> StarToStar (length vs)) | DataDef n vs 
 
 exportEnv :: ModuleT -> PolyEnv
 exportEnv Module{..}
-    = PolyEnv $ fmap instantiateTyping $ Map.fromList $
+    = PolyEnv
+    { getPolyEnv = fmap instantiateTyping $ Map.fromList $
             [(n, snd $ getTag e) | (PVar _ n, e) <- definitions]
         ++  tyConKinds dataDefs
         ++  tyConTypes dataDefs
         ++  selectorTypes dataDefs
         ++  mkEnv axioms
+    , instanceDefs = Set.fromList . fmap typingType{-TODO-} . toList <$> instances
+    }
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
-    [] -> Right $ PolyEnv $ head <$> ms
+    [] -> Right $ PolyEnv (foldMap instanceDefs ps) $ head <$> ms
     xss -> Left $ "Definition clash: " ++ show (map fst xss)
   where
     isSing [_] = True
     isSing _ = False
-    ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv e <- ps]
+    ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv _ e <- ps]
 
 generalizeTypeVars :: Typing -> Typing
 generalizeTypeVars t = removeMonoVars (Set.fromList $ filter isTypeVar $ Map.keys $ monoEnv t) t
@@ -439,8 +447,8 @@ inferPatTyping polymorph p_@(Pat pt p) = local (id *** const [pt]) $ do
 
 withTyping :: Map EName Typing -> TCM a -> TCM a
 withTyping ts m = do
-    penv <- asks $ getPolyEnv . fst
-    case toList $ Map.keysSet ts `Set.intersection` Map.keysSet penv of
-        [] -> local ((<> PolyEnv (instantiateTyping <$> ts)) *** id) m
-        ks -> throwErrorTCM $ "Variable name clash: " ++ show ks
+    env <- asks fst
+    case joinPolyEnvs [env, PolyEnv mempty (instantiateTyping <$> ts)] of
+        Right env -> local (const env *** id) m
+        Left e -> throwErrorTCM e
 

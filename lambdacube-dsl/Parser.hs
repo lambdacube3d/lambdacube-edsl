@@ -10,6 +10,8 @@ import Data.List
 import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Monoid
 import Control.Applicative
 import Control.Arrow
@@ -134,6 +136,7 @@ data Definition
   | TypeSig (String, TyR)
   | DDataDef DataDefR
   | DFixity EName (FixityDir, Int)
+  | InstanceDef Class TyR
 
 --------------------------------------------------------------------------------
 
@@ -208,17 +211,17 @@ moduleDef fname = do
         , const [] <$> typeClassDef
         , (:[]) <$> valueDef
         , fixityDef
-        , const [] <$> typeClassInstanceDef
+        , (:[]) <$> typeClassInstanceDef
         ])
     let ps = Map.fromList [(n, p) | DFixity n p <- defs]
     return $ Module
       { moduleImports = (if modn == Just (Q [] "Prelude") then id else (Q [] "Prelude":)) idefs
-      , moduleExports = ()
-      , typeAliases   = ()
+      , moduleExports = mempty
+      , typeAliases   = mempty
       , definitions   = [id *** ($ ps) $ d | ValueDef d <- defs]
       , dataDefs      = [d | DDataDef d <- defs]
-      , typeClasses   = ()
-      , instances     = ()
+      , typeClasses   = mempty
+      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
       , precedences   = ps     -- TODO: check multiple definitions
       , axioms        = [d | TypeSig d <- defs]
       , moduleFile    = fname
@@ -379,17 +382,18 @@ typeClassDef = void_ $ do
       localAbsoluteIndentation $ do
         many typeSignature
 
-typeClassInstanceDef :: P ()
-typeClassInstanceDef = void_ $ do
+typeClassInstanceDef :: P Definition
+typeClassInstanceDef = do
   keyword "instance"
   localIndentation Gt $ do
     optional tcExp
-    typeConstraint
-    typePattern
+    c <- typeConstraint
+    t <- typeAtom
     optional $ do
       keyword "where"
       localAbsoluteIndentation $ do
         many valueDef
+    return $ InstanceDef c t
 
 fixityDef :: P [Definition]
 fixityDef = do

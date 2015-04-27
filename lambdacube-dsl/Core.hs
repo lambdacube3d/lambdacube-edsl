@@ -162,7 +162,7 @@ eLam (VarT n) (EApp e (EType (TVar _ m))) | n == m = e  -- optimization
 eLam (VarC c) (EApp e (EConstraint c')) | c == c' = e  -- optimization
 eLam vt x = ELam (PVar vt) x
 
--------------------------------------------------------------------------------- reduction
+-------------------------------------------------------------------------------- thunks
 
 data Thunk = Thunk Env Thunk'
   deriving (Show)
@@ -193,6 +193,7 @@ applyEnvBefore m1 (Thunk m exp) = Thunk (m <> m1) exp
 
 --   applySubst s  ===  applyEnv (Env s mempty)
 -- but the following is more efficient
+applySubst :: Subst -> Thunk -> Thunk
 applySubst s' (Thunk (Env s m) exp) = Thunk (Env (s' `composeSubst` s) m) exp
 
 -- build recursive environment  TODO: generalize
@@ -207,13 +208,10 @@ thunk :: Thunk' -> Thunk
 thunk = Thunk mempty
 
 peelThunk :: Thunk -> Thunk'
-peelThunk (Thunk env e) = case e of
---    ELet_ p x e -> ELet_ (subst' env p) (applyEnv env x) (applyEnv env e)
---    ELam_ p e -> ELam_ (subst' env p) (applyEnv env e)
-    e -> setTag_ vf (subst' env) (subst' env) $ applyEnv env <$> e
-      where
-        vf = \case
-            VarE v t -> VarE v $ subst' env t
+peelThunk (Thunk env e) = setTag_ vf (subst' env) (subst' env) $ applyEnv env <$> e
+  where
+    vf = \case
+        VarE v t -> VarE v $ subst' env t
 
 -------------------------------------------------------------------------------- reduce to Head Normal Form
 

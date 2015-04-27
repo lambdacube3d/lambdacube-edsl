@@ -41,8 +41,10 @@ isConstr n@(c:_) = isUpper c || c == ':' -- TODO
 
 type Subst = Map TName Ty
 type MonoEnv a = Map EName a
-newtype PolyEnv = PolyEnv { getPolyEnv :: Map EName (TCM STyping) }
-    deriving Monoid
+data PolyEnv = PolyEnv
+    { instanceDefs :: Map Class (Set Ty)
+    , getPolyEnv :: Map EName (TCM STyping)
+    }
 type Typing = Typing_ Ty
 
 data Typing_ a
@@ -169,7 +171,7 @@ setTag_ vf tf f = \case
     ENext_             -> ENext_
     EType_ t           -> EType_ $ tf t
     EConstraint_ c     -> EConstraint_ $ tf <$> c
-    e   -> error $ "setTag_: " ++ ppShow e
+--    e   -> error $ "setTag_: " ++ ppShow e
 
 type STyping = (Subst, Typing)
 
@@ -371,7 +373,7 @@ data Module t a
   , definitions   :: [ValueDef a]
   , dataDefs      :: [DataDef t]
   , typeClasses   :: ()
-  , instances     :: ()
+  , instances     :: Map Class (Set t)
   , precedences   :: Prec
   , moduleFile    :: FilePath
   , axioms        :: [(String, Ty' a)]

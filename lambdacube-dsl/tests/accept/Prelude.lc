@@ -40,6 +40,65 @@ data Maybe a
     | Just a
     deriving (Eq, Ord, Show)
 
+--------------------------------------- type classes
+
+class CNum a
+
+instance CNum           Int
+instance CNum           Float
+
+class Signed a
+
+instance Signed         Int
+instance Signed         Float
+
+class Num a
+
+instance Num            Int
+instance Num            Word
+instance Num            Float
+
+class Integral a
+
+instance Integral       Int
+instance Integral       Word
+
+class NumComponent a
+
+instance NumComponent   Int
+instance NumComponent   Word
+instance NumComponent   Float
+instance NumComponent   (Vec 2 Float)
+instance NumComponent   (Vec 3 Float)
+instance NumComponent   (Vec 4 Float)
+
+class Component a
+
+instance Component      Bool -- ++ vectors TBool
+instance Component      Int
+instance Component      Word
+instance Component      Float
+instance Component      (Vec 2 Float)
+instance Component      (Vec 3 Float)
+instance Component      (Vec 4 Float)
+
+class Floating a
+
+instance Floating       Float
+instance Floating       (Vec 2 Float)
+instance Floating       (Vec 3 Float)
+instance Floating       (Vec 4 Float)
+instance Floating       (Mat 2 2 Float)
+instance Floating       (Mat 2 3 Float)
+instance Floating       (Mat 2 4 Float)
+instance Floating       (Mat 3 2 Float)
+instance Floating       (Mat 3 3 Float)
+instance Floating       (Mat 3 4 Float)
+instance Floating       (Mat 4 2 Float)
+instance Floating       (Mat 4 3 Float)
+instance Floating       (Mat 4 4 Float)
+
+
 axioms
 
   NatKind :: *
