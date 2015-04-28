@@ -428,9 +428,7 @@ data Module t a
   , moduleExports :: ()
   , typeAliases   :: ()
   , definitions   :: [Definition t (Exp a) a]
---  , axioms        :: [(String, Ty' a)]
   , typeClasses   :: ()
---  , instances     :: Map Class (Set t)
   , precedences   :: Prec
   , moduleFile    :: FilePath
   }
@@ -446,7 +444,7 @@ data GuardedRHS e
 data Definition t e r
   = PreValueDef (Range, EName) [PatR] (WhereRHS t e r)   -- before group
   | ValueDef (Pat r, e)
-  | TypeSig (String, (Ty' r){-FIXME:t-})
+  | TypeSig (String, t)
   | DDataDef (DataDef t)
   | InstanceDef Class t
   | DFixity EName (FixityDir, Int)

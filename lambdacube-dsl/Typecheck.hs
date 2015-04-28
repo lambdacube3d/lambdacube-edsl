@@ -201,10 +201,10 @@ inferDefs (DDataDef d@(DataDef con vars cdefs): ds) = withTyping (uncurry Map.si
     ds <- withTyping (Map.fromList $ tyConTypes d') $ inferDefs $ selectorDefs d ++ ds
     return (DDataDef d': ds)
 inferDefs (TypeSig (n, a): ds) = do
-    a' <- inferKind a
-    let (n', a'') = mangleAx . (id *** generalizeTypeVars . convTy) $ (n, a')
+    a' <- inferKind' a
+    let (n', a'') = mangleAx . (id *** generalizeTypeVars) $ (n, a')
     ds <- withTyping (Map.singleton n' a'') $ inferDefs ds
-    return (TypeSig (n, a'): ds)
+    return (TypeSig (n', a''): ds)
 inferDefs (InstanceDef c t: ds) = do
     t <- inferKind' t
     ds <- local ((\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton $ typingType{-TODO-} t) (Set.insert $ typingType{-TODO-} t)) c $ instanceDefs pe}) *** id) $ inferDefs ds
@@ -284,10 +284,8 @@ exportEnv Module{..}
 axs = \case
     ValueDef (PVar _ n, e) -> [(n, snd $ getTag e)]
     DDataDef d -> tyConKind d: tyConTypes d ++ selectorTypes d
-    TypeSig x -> [mkEnv x]
+    TypeSig x -> [x]
     _ -> []
-
-mkEnv = mangleAx . (id *** generalizeTypeVars . convTy)
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     [] -> Right $ PolyEnv (foldMap instanceDefs ps) $ head <$> ms

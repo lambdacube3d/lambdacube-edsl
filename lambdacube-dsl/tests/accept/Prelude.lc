@@ -46,10 +46,14 @@ data Maybe a
 axioms
 
   NatKind :: *
+
+axioms
+
   Char, String, Word, Int, Float :: *
 
+axioms
+
   Vec :: NatKind -> * -> *
-  Mat :: NatKind -> NatKind -> * -> *
 
   V2 :: Component a => a -> a -> Vec 2 a
   V3 :: Component a => a -> a -> a -> Vec 3 a
@@ -67,6 +71,11 @@ axioms
   V2F :: Float -> Float -> Vec 2 Float
   V3F :: Float -> Float -> Float -> Vec 3 Float
   V4F :: Float -> Float -> Float -> Float -> Vec 4 Float
+
+axioms
+
+  Mat :: NatKind -> NatKind -> * -> *
+
   M22F :: Vec 2 Float -> Vec 2 Float -> Mat 2 2 Float
   M23F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 3 Float
   M24F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 4 Float
@@ -257,7 +266,7 @@ axioms
   PrimZero, PrimOne :: {- (Component a) => -- TODO -} a
   PrimTexture :: () -> Vec 2 Float -> Vec 4 Float
 
-  -- temporary?
+  -- TODO: eliminate?
   PrimV3FToV4F :: Vec 3 Float -> Vec 4 Float
 
   -- Input declaration
