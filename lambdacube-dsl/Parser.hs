@@ -556,10 +556,10 @@ expressionOpAtom = do
 expressionAtom :: P ExpR
 expressionAtom = do
     e <- expressionAtom_
-    t <- optional $ do
+    ts <- many $ do
         operator "@"
         typeAtom
-    return $ maybe e (eTyApp e) t
+    return $ foldl eTyApp e ts
 
 eTyApp a_ b ps = ETyApp (a <-> b) a b where a = a_ ps
 
