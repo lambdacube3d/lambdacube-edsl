@@ -15,8 +15,8 @@ renderWire fb = let
   vertexStream      = Fetch "stream" Triangles (IV3F "position")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
-  fragmentShader' v = FragmentOutRastDepth (Const (V4F 1.0 0.4 0.0 0.2))
-  fragmentShader v  = FragmentOutRastDepth ((Const (V4F 0.0 0.4 0.0 1.0)))
+  fragmentShader' v = FragmentOutRastDepth (V4F 1.0 0.4 0.0 0.2)
+  fragmentShader v  = FragmentOutRastDepth (V4F 0.0 0.4 0.0 1.0)
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
   in frame
 
@@ -37,8 +37,8 @@ render fb = let
   vertexStream      = Fetch "stream" Triangles (IV3F "position")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
-  fragmentShader' v = FragmentOutRastDepth (Const (V4F 1.0 0.4 0.0 0.2))
-  fragmentShader v  = FragmentOutRastDepth (PrimAdd v (Const (V4F 1.0 1.4 1.0 0.6)))
+  fragmentShader' v = FragmentOutRastDepth (V4F 1.0 0.4 0.0 0.2)
+  fragmentShader v  = FragmentOutRastDepth (PrimAdd v (V4F 1.0 1.4 1.0 0.6))
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
   in frame
 
@@ -60,8 +60,8 @@ render' fb = let
   vertexStream      = Fetch "stream4" Triangles (IV4F "position4")
   primitiveStream   = Transform vertexShader vertexStream
   fragmentStream    = Rasterize rasterCtx primitiveStream
-  fragmentShader' v = FragmentOutRastDepth (Const (V4F 1.0 0.4 0.0 0.2))
-  fragmentShader v  = FragmentOutRastDepth (PrimMul v (Const (V4F 1.0 1.4 1.0 0.6)))
+  fragmentShader' v = FragmentOutRastDepth (V4F 1.0 0.4 0.0 0.2)
+  fragmentShader v  = FragmentOutRastDepth (PrimMul v (V4F 1.0 1.4 1.0 0.6))
   frame             = Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
   in frame
 

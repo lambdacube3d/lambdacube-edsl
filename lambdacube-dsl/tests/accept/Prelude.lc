@@ -137,7 +137,6 @@ axioms
 
   -- temporary?
   PrimV3FToV4F :: Vec 3 Float -> Vec 4 Float
-  Tup, Const  :: a -> a
 
   V2B :: Bool -> Bool -> Vec 2 Bool
   V3B :: Bool -> Bool -> Bool -> Vec 3 Bool
