@@ -45,7 +45,7 @@ data Maybe a
 
 axioms
 
-  NatKind :: *
+  Nat :: *
 
 axioms
 
@@ -53,7 +53,7 @@ axioms
 
 axioms
 
-  Vec :: NatKind -> * -> *
+  Vec :: Nat -> * -> *
 
   V2 :: Component a => a -> a -> Vec 2 a
   V3 :: Component a => a -> a -> a -> Vec 3 a
@@ -74,7 +74,7 @@ axioms
 
 axioms
 
-  Mat :: NatKind -> NatKind -> * -> *
+  Mat :: Nat -> Nat -> * -> *
 
   M22F :: Vec 2 Float -> Vec 2 Float -> Mat 2 2 Float
   M23F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 3 Float
@@ -256,8 +256,8 @@ axioms
   Output :: *
   AccumulationContext, Blending, FetchPrimitive, FragmentFilter, FragmentOperation, FragmentOut, Input, Interpolated, RasterContext, VertexOut :: * -> *
   VertexStream :: * -> * -> *
-  PrimitiveStream :: * -> NatKind -> * -> *
-  Image, FragmentStream, FrameBuffer :: NatKind -> * -> *
+  PrimitiveStream :: * -> Nat -> * -> *
+  Image, FragmentStream, FrameBuffer :: Nat -> * -> *
 
   -- TODO: eliminate
   fromInt :: Num a => Int -> a
@@ -319,10 +319,10 @@ axioms
 
   AccumulationContext :: (t' ~ FragOps t) => t -> AccumulationContext t'
 
-  ColorImage          :: (Num t, color ~ VecScalar d t) => forall (a :: NatKind) . color
+  ColorImage          :: (Num t, color ~ VecScalar d t) => forall (a :: Nat) . color
                                 -> Image a (Color color)
-  DepthImage          :: forall (a :: NatKind) . Float  -> Image a (Depth Float)
-  StencilImage        :: forall (a :: NatKind) . Int    -> Image a (Stencil Int)
+  DepthImage          :: forall (a :: Nat) . Float  -> Image a (Depth Float)
+  StencilImage        :: forall (a :: Nat) . Int    -> Image a (Stencil Int)
 
   Smooth, NoPerspective
                         :: (Floating t) => t -> Interpolated t

@@ -270,7 +270,7 @@ pattern TApp k a b = Ty_ k (TApp_ a b)
 pattern TCon k a = Ty_ k (TCon_ a)
 pattern TVar k b = Ty_ k (TVar_ b)
 
-pattern NatKind = TCon0 "NatKind"
+pattern NatKind = TCon0 "Nat"
 pattern VecKind = TArr NatKind StarStar
 pattern MatKind = TArr NatKind (TArr NatKind StarStar)
 
