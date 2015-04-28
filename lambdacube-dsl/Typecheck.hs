@@ -336,11 +336,12 @@ inferKind' t = convTy <$> inferKind t
 
 inferKind :: Ty' Range -> TCM (Ty' STyping)
 inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
-    Forall_ n t -> do   -- TODO: make kind polymorph
-        let n' = '\'':n
-        tf <- withTyping (Map.singleton n' star) $ inferKind t
-        ty <- unifyTypings "forall" [[star], getTag' tf] $ \[a, t] -> a ~> t
-        return $ Ty' (id *** removeMonoVars (Set.singleton n) $ ty) $ Forall_ n tf
+    Forall_ n k t -> do
+        let n' = primed n
+        tk <- inferKind k
+        tt <- withTyping (Map.singleton n' $ convTy tk) $ inferKind t
+        ty <- unifyTypings "forall" [getTag' tk, getTag' tt] $ \[k, t] -> k ~> t
+        return $ Ty' (id *** removeMonoVars (Set.singleton n'{-FIXME: or n?-}) $ ty) $ Forall_ n tk tt
     _ -> do
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
@@ -399,6 +400,7 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
         e' <- T.mapM inferTyping e
         (\t -> Exp t $ setTag (error "e1") (error "e2") e') <$> case e' of
             EApp_ tf ta -> unifyTypings "app" [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
+--            ETyApp_ tf ta -> unifyTypings "app" [getTag' tf, _ ta] $ \[tf, ta] v w -> [tf ~~~ Forall' ta w v] ==> v
             EFieldProj_ fn -> fieldProjType fn
             ERecord_ Nothing (unzip -> (fs, es)) -> unifyTypings "record" (map getTag' es) $ TRecord . Map.fromList . zip fs
 {-
@@ -451,4 +453,11 @@ withTyping ts m = do
     case joinPolyEnvs [env, PolyEnv mempty (instantiateTyping <$> ts)] of
         Right env -> local (const env *** id) m
         Left e -> throwErrorTCM e
+
+{-
+Type application:
+                              parsing                 typecheck
+   forall v :: ty1 . ty2      Forall Name TyR TyR     Forall Name Typing Typing
+   exp @ ty                   ETyApp ExpR TyR         ETyApp ExpT Typing
+-}
 

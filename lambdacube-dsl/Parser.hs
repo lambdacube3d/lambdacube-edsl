@@ -558,7 +558,17 @@ expressionOpAtom = do
         <|> try' "backquote operator" (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
 
 expressionAtom :: P ExpR
-expressionAtom =
+expressionAtom = do
+    e <- expressionAtom_
+    t <- optional $ do
+        operator "@"
+        typeAtom
+    return $ maybe e (eTyApp e) t
+
+eTyApp a_ b ps = ETyApp (a <-> b) a b where a = a_ ps
+
+expressionAtom_ :: P ExpR
+expressionAtom_ =
   listExp <|>
   addPos (ret eLit) literalExp <|>
   recordExp <|>

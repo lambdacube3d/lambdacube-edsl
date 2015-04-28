@@ -256,7 +256,7 @@ reduceHNF th@(peelThunk -> exp) = case exp of
             ELit_ (LInt i) -> Right $ ELit_ $ LFloat $ fromIntegral i
 
         EVar_ (VarE v ty) -> case ty of
-            Forall tv t -> case x of
+            Forall tv _ t -> case x of
                 EType_ x -> Right $ EVar_ $ VarE v $ subst (Map.singleton tv x) t
             TConstraintArg t ty -> case x of
                 EConstraint_ t' -> case unifC t t' of

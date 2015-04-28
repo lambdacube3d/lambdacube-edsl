@@ -10,6 +10,7 @@
 module Type where
 
 import Data.Char
+import Data.Maybe
 import Data.List
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -45,8 +46,30 @@ data PolyEnv = PolyEnv
     { instanceDefs :: Map Class (Set Ty)
     , getPolyEnv :: Map EName (TCM STyping)
     }
-type Typing = Typing_ Ty
 
+{- typing
+
+poly vars      env                                        type
+|              |                                          |
+poly a b ... . {a :: k, x :: ty, C ty, ty ~ F ty, ...} -> ty
+
+Administration of poly vars are needed for instantiation,
+which replaces poly vars with fresh variables.
+
+Questions:
+ - Only type variables may be polymorphic?
+
+Examples
+
+I)
+    x + y  :: {a :: *, x :: a, y :: a, Num a} -> a                 a is fresh
+
+II)
+    (\x -> 2 * x) :: poly a . {a :: *, Num a} -> a -> a
+
+III)
+    flipImage :: poly i . {i :: Nat} -> Image i -> Image i
+-}
 data Typing_ a
   = Typing
     { monoEnv     :: MonoEnv a
@@ -55,6 +78,8 @@ data Typing_ a
     , polyVars    :: Set TName      -- subset of free vars; tells which free vars should be instantiated
     }
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+
+type Typing = Typing_ Ty
 {-
 instance Show Typing where
     show (Typing me cs t) = sh me' " |- " $ sh cs' " => " t'
@@ -125,6 +150,7 @@ data Exp_ v t p b
   = ELit_      Lit
   | EVar_      v
   | EApp_      b b
+  | ETyApp_    b t
   | ELam_      p b
   | ELet_      p b b
   | ECase_     b [(p, b)]       -- Not used
@@ -142,6 +168,7 @@ data Exp_ v t p b
 pattern ELit a b = Exp a (ELit_ b)
 pattern EVar a b = Exp a (EVar_ b)
 pattern EApp a b c = Exp a (EApp_ b c)
+pattern ETyApp a b c = Exp a (ETyApp_ b c)
 pattern ELam a b c = Exp a (ELam_ b c)
 pattern ELet a b c d = Exp a (ELet_ b c d)
 pattern ECase a b c = Exp a (ECase_ b c)
@@ -203,7 +230,9 @@ pattern Ty_ a b <- Ty a b where
     Ty_ a b = Ty a b
 
 typingToTy :: Typing -> Ty
-typingToTy ty = foldr Forall (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
+typingToTy ty = foldr forall_ (foldr TConstraintArg (typingType ty) $ constraints ty) $ Set.toList $ polyVars ty
+  where
+    forall_ n t = Forall n (fromMaybe (error $ "typingToTy: " ++ n) $ Map.lookup (primed n) $ monoEnv ty) t
 
 data Ty' a = Ty' a (Ty_ (Ty' a))
   deriving (Show,Eq,Ord)
@@ -220,7 +249,7 @@ data Ty_ a
   | TCon_    TCName
   | TApp_    a a
   | TArr_    a a
-  | Forall_ TName a
+  | Forall_ TName a a
   | TConstraintArg_ (Constraint a) a
   -- composit
   | TTuple_  [a]
@@ -244,7 +273,7 @@ pattern NatKind = TCon0 "NatKind"
 pattern VecKind = TArr NatKind StarStar
 pattern MatKind = TArr NatKind (TArr NatKind StarStar)
 
-pattern Forall a b = TyStar (Forall_ a b)
+pattern Forall a b c = TyStar (Forall_ a b c)
 pattern TConstraintArg a b = TyStar (TConstraintArg_ a b)
 pattern TArr a b <- TyStar (TArr_ a b) where
     TArr Star (StarToStar i) = StarToStar (i + 1)
