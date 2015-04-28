@@ -43,7 +43,7 @@ instance TokenParsing p => TokenParsing (LCParser p) where
 lcCommentStyle = haskellCommentStyle
 
 lcOps = haskell98Ops
-  { _styleReserved = HashSet.fromList ["=","\\","#","::",":",".","@","_","|","->","~"]
+  { _styleReserved = HashSet.fromList ["=","\\","::",":",".","@","_","|","->","~"]
   }
 
 lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
@@ -595,8 +595,7 @@ expressionAtom_ =
       LFloat <$> try double <|>
       LInt <$> try integer <|>
       LChar <$> charLiteral <|>
-      LString <$> stringLiteral <|>
-      (LNat . fromIntegral <$ operator "#" <*> integer) <?> "type level nat"
+      LString <$> stringLiteral
 
   listExp :: P ExpR
   listExp = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep expression
