@@ -233,10 +233,12 @@ inferDefs (TypeSig (n, a): ds) = do
     let (n', a'') = mangleAx . (id *** generalizeTypeVars) $ (n, a')
     ds <- withTyping (Map.singleton n' a'') $ inferDefs ds
     return (TypeSig (n', a''): ds)
-inferDefs (InstanceDef c t: ds) = do
+inferDefs (InstanceDef c t xs: ds) = do
     t <- inferKind' t
-    ds <- local ((\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton $ typingToTy t) (Set.insert $ typingToTy t)) c $ instanceDefs pe}) *** id) $ inferDefs ds
-    return (InstanceDef c t: ds)
+    local ((\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton $ typingToTy t) (Set.insert $ typingToTy t)) c $ instanceDefs pe}) *** id) $ do
+        xs <- inferDefs xs      -- TODO: check types
+        ds <- withTyping (Map.fromList $ concatMap axs xs) $ inferDefs ds
+        return (InstanceDef c t xs: ds)
 
 addConstr cs ty = typing (monoEnv ty) (cs ++ constraints ty) $ typingType ty
 
@@ -307,7 +309,7 @@ exportEnv :: ModuleT -> PolyEnv
 exportEnv Module{..}
     = PolyEnv
     { getPolyEnv = fmap instantiateTyping $ Map.fromList $ concatMap axs definitions
-    , instanceDefs = Map.unionsWith (<>) [Map.singleton c $ Set.singleton $ typingToTy t | InstanceDef c t <- definitions]
+    , instanceDefs = Map.unionsWith (<>) [Map.singleton c $ Set.singleton $ typingToTy t | InstanceDef c t _ <- definitions]
             -- TODO: check clash
     }
 

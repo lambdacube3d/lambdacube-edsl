@@ -196,7 +196,7 @@ moduleDef fname = do
             ValueDef d -> [ValueDef $ id *** ($ ps) $ d]
             DDataDef d -> [DDataDef d]
             GADT a b c -> [GADT a b c]
-            InstanceDef c t -> [InstanceDef c t]
+            InstanceDef c t ds -> [InstanceDef c t $ concatMap mkDef ds]
             TypeSig d -> [TypeSig d]
             ClassDef a b c -> [ClassDef a b $ concatMap mkDef c]
             _ -> []
@@ -406,11 +406,11 @@ typeClassInstanceDef = do
     optional tcExp
     c <- typeConstraint
     t <- typeAtom
-    optional $ do
+    ds <- optional $ do
       keyword "where"
-      localAbsoluteIndentation $ do
-        many valueDef
-    return $ InstanceDef c t
+      localIndentation Ge $ localAbsoluteIndentation $ many $ do
+        valueDef
+    return $ InstanceDef c t $ fromMaybe [] ds
 
 fixityDef :: P [DefinitionR]
 fixityDef = do

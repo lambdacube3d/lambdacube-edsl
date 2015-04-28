@@ -96,9 +96,22 @@ class Num a where
   fromInt :: Int -> a
   compare :: a -> a -> Ordering
 
-instance Num            Int
-instance Num            Word
-instance Num            Float
+axioms
+  primIntToWord  :: Int -> Word
+  primIntToFlaot :: Int -> Float
+  primCompareInt   :: Int   -> Int   -> Ordering
+  primCompareWord  :: Word  -> Word  -> Ordering
+  primCompareFloat :: Float -> Float -> Ordering
+
+instance Num Int where
+  fromInt = id
+  compare = primCompareInt
+instance Num Word where
+  fromInt = primIntToWord
+  compare = primCompareWord
+instance Num Float where
+  fromInt = primIntToFloat
+  compare = primCompareFloat
 
 class Integral a
 

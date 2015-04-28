@@ -443,7 +443,7 @@ data Definition t e r
   | DDataDef (DataDef t)
   | GADT EName [(TName, t)] [(EName, t)]
   | ClassDef Class [(TName, t)] [Definition t e r]
-  | InstanceDef Class t
+  | InstanceDef Class t [Definition t e r]
   | DFixity EName (FixityDir, Int)
     deriving Show
 
