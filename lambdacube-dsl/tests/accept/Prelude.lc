@@ -236,11 +236,12 @@ data Depth a where
 data Stencil a where
 data Color a where
 
-data Triangle where
-data Line where
-data Point where
-data TriangleAdjacency where
-data LineAdjacency where
+data PrimitiveType
+    = Triangle
+    | Line
+    | Point
+    | TriangleAdjacency
+    | LineAdjacency
 
 axioms
 
@@ -303,12 +304,12 @@ data FragmentOut a where
 data VertexOut a where
   VertexOut           :: (t ~ FTRepr' a) => Vec 4 Float -> Float -> (){-TODO-} -> a -> VertexOut t
 
-data RasterContext a where
+data RasterContext (a :: PrimitiveType) where
   TriangleCtx         :: CullMode -> PolygonMode -> PolygonOffset -> ProvokingVertex -> RasterContext Triangle
   PointCtx            :: PointSize -> Float -> PointSpriteCoordOrigin                -> RasterContext Point
   LineCtx             :: Float -> ProvokingVertex                                    -> RasterContext Line
 
-data FetchPrimitive a where
+data FetchPrimitive (a :: PrimitiveType) where
    Points              :: FetchPrimitive Point
    Lines               :: FetchPrimitive Line
    Triangles           :: FetchPrimitive Triangle
@@ -346,10 +347,10 @@ data FragmentFilter t where
   PassAll             ::                FragmentFilter t
   Filter              :: (t -> Bool) -> FragmentFilter t
 
-data VertexStream a b where
+data VertexStream (a :: PrimitiveType) b where
   Fetch               :: (InputTuple t, b ~ FTRepr' t) => String -> FetchPrimitive a -> t -> VertexStream a b
 
-data PrimitiveStream p (n :: Nat) b where
+data PrimitiveStream (p :: PrimitiveType) (n :: Nat) b where
   Transform           :: (a -> VertexOut b) -> VertexStream p a -> PrimitiveStream p 1 b
 
   -- Render Operations

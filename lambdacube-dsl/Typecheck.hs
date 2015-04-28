@@ -372,8 +372,9 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
             TTuple_ ts -> unifyTypings "tuple kind" (map ((star:) . getTag') ts) $ \_ -> Star
             TArr_ a b -> unifyTypings "arrow kind" [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings "app kind" [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
-            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (addTypeVar ('\'':n)) . Map.lookup ('\'':n)
-            TCon_ n -> asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Type constructor " ++ n ++ " is not in scope.") . Map.lookup ('\'':n)
+            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (addTypeVar ('\'':n)) . Map.lookup (primed n)
+            TCon_ n -> asks (getPolyEnv . fst) >>= \env ->
+                fromMaybe (fromMaybe (throwErrorTCM $ "Type constructor " ++ n ++ " is not in scope.") $ Map.lookup n env) $ Map.lookup (primed n) env
             x -> error $ " inferKind: " ++ show x
   where
     getTag' = (:[]) . snd . getTag
