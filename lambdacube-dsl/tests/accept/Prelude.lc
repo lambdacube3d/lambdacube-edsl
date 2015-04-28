@@ -43,18 +43,14 @@ data Maybe a
 
 ---------------------------------------
 
-axioms
+data Nat where
+data Char where
+data String where
+data Word where
+data Int where
+data Float where
 
-  Nat :: *
-
-axioms
-
-  Char, String, Word, Int, Float :: *
-
-axioms
-
-  Vec :: Nat -> * -> *
-
+data Vec (n :: Nat) a where
   V2 :: Component a => a -> a -> Vec 2 a
   V3 :: Component a => a -> a -> a -> Vec 3 a
   V4 :: Component a => a -> a -> a -> a -> Vec 4 a
@@ -72,10 +68,7 @@ axioms
   V3F :: Float -> Float -> Float -> Vec 3 Float
   V4F :: Float -> Float -> Float -> Float -> Vec 4 Float
 
-axioms
-
-  Mat :: Nat -> Nat -> * -> *
-
+data Mat (i :: Nat) (j :: Nat) a where
   M22F :: Vec 2 Float -> Vec 2 Float -> Mat 2 2 Float
   M23F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 3 Float
   M24F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 4 Float
@@ -239,25 +232,31 @@ data PointSpriteCoordOrigin
     | UpperLeft
 
 
-axioms
+data Depth a where
+data Stencil a where
+data Color a where
 
-  Depth, Stencil, Color :: * -> *
-  Triangle, Line, Point, TriangleAdjacency, LineAdjacency :: *
+data Triangle where
+data Line where
+data Point where
+data TriangleAdjacency where
+data LineAdjacency where
+
+axioms
 
 {- TODO: more precise kinds
   FetchPrimitive       :: PrimitiveType -> *
   FragmentOperation    :: Semantic -> *
   FragmentOut          :: Semantic -> *
-  Image                :: Nat -> Semantic -> *
   RasterContext        :: PrimitiveType -> *
   VertexOut            :: ???
   VertexStream         :: PrimitiveType -> * -> *
 -}
   Output :: *
-  AccumulationContext, Blending, FetchPrimitive, FragmentFilter, FragmentOperation, FragmentOut, Input, Interpolated, RasterContext, VertexOut :: * -> *
+  AccumulationContext, Blending, FragmentFilter, FragmentOperation, FragmentOut, Input, Interpolated, VertexOut :: * -> *
   VertexStream :: * -> * -> *
   PrimitiveStream :: * -> Nat -> * -> *
-  Image, FragmentStream, FrameBuffer :: Nat -> * -> *
+  FragmentStream, FrameBuffer :: Nat -> * -> *
 
   -- TODO: eliminate
   fromInt :: Num a => Int -> a
@@ -305,28 +304,33 @@ axioms
 
   VertexOut           :: (t ~ FTRepr' a) => Vec 4 Float -> Float -> (){-TODO-} -> a -> VertexOut t
 
-  -- GADT RasterContext
+data RasterContext a where
   TriangleCtx         :: CullMode -> PolygonMode -> PolygonOffset -> ProvokingVertex -> RasterContext Triangle
-  PointCtx            :: PointSize -> Float -> PointSpriteCoordOrigin                 -> RasterContext Point
-  LineCtx             :: Float -> ProvokingVertex                                      -> RasterContext Line
+  PointCtx            :: PointSize -> Float -> PointSpriteCoordOrigin                -> RasterContext Point
+  LineCtx             :: Float -> ProvokingVertex                                    -> RasterContext Line
 
-  -- GADT FetchPrimitive
-  Points              :: FetchPrimitive Point
-  Lines               :: FetchPrimitive Line
-  Triangles           :: FetchPrimitive Triangle
-  LinesAdjacency      :: FetchPrimitive LineAdjacency
-  TrianglesAdjacency  :: FetchPrimitive TriangleAdjacency
+data FetchPrimitive a where
+   Points              :: FetchPrimitive Point
+   Lines               :: FetchPrimitive Line
+   Triangles           :: FetchPrimitive Triangle
+   LinesAdjacency      :: FetchPrimitive LineAdjacency
+   TrianglesAdjacency  :: FetchPrimitive TriangleAdjacency
+
+axioms
 
   AccumulationContext :: (t' ~ FragOps t) => t -> AccumulationContext t'
 
-  ColorImage          :: (Num t, color ~ VecScalar d t) => forall (a :: Nat) . color
-                                -> Image a (Color color)
+data Image (a :: Nat) b{-Semantic-} where
+  ColorImage          :: (Num t, color ~ VecScalar d t)
+                      => forall (a :: Nat) . color  -> Image a (Color color)
   DepthImage          :: forall (a :: Nat) . Float  -> Image a (Depth Float)
   StencilImage        :: forall (a :: Nat) . Int    -> Image a (Stencil Int)
 
+axioms
+
   Smooth, NoPerspective
-                        :: (Floating t) => t -> Interpolated t
-  Flat              ::                       t -> Interpolated t
+                      :: (Floating t) => t -> Interpolated t
+  Flat                ::                 t -> Interpolated t
 
   ColorOp             :: (mask ~ VecScalar d Bool, color ~ VecScalar d c, Num c) => Blending c -> mask
                                                             -> FragmentOperation (Color color)

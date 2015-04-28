@@ -191,17 +191,34 @@ inference_ penv m = runExcept $ fst <$>
         definitions <- inferDefs definitions
         return Module{..}
 
+trace' s = trace (show s) s
+
 inferDefs :: [Definition TyR (Exp Range) Range] -> TCM [Definition Typing (Exp STyping) STyping]
 inferDefs [] = return []
 inferDefs (ValueDef d: ds) = do
     (d, f) <- inferDef d
     ds <- f $ inferDefs ds
     return (ValueDef d: ds)
-inferDefs (DDataDef d@(DataDef con vars cdefs): ds) = withTyping (uncurry Map.singleton $ tyConKind d) $ do
-    cdefs <- withTyping (Map.fromList [(primed v, [] ==> Star) | v <- vars]) $ mapM inferConDef cdefs
+inferDefs (DDataDef d@(DataDef con vars cdefs): ds) = do
+  vars <- forM vars $ \(n, k) -> do
+    k <- inferKind' k
+    return (n, k)
+  withTyping (uncurry Map.singleton $ tyConKind con vars) $ do
+    cdefs <- withTyping (Map.fromList [(primed v, k) | (v, k) <- vars]) $ mapM inferConDef cdefs
     let d' = DataDef con vars cdefs
     ds <- withTyping (Map.fromList $ tyConTypes d') $ inferDefs $ selectorDefs d ++ ds
     return (DDataDef d': ds)
+inferDefs (GADT con vars cdefs: ds) = do
+  vars <- forM vars $ \(n, k) -> do
+    k <- inferKind' k
+    return (n, k)
+  withTyping (uncurry Map.singleton $ tyConKind con vars) $ do
+    cdefs <- forM cdefs $ \(c, t) -> do
+        t <- inferKind' t
+        return (c, t)
+    let d' = GADT con vars cdefs
+    ds <- withTyping (Map.fromList cdefs) $ inferDefs ds
+    return (d': ds)
 inferDefs (TypeSig (n, a): ds) = do
     a' <- inferKind' a
     let (n', a'') = mangleAx . (id *** generalizeTypeVars) $ (n, a')
@@ -238,7 +255,7 @@ replCallType n nt = \case
 modTag f (Exp t x) = Exp (f t) x
 
 selectorDefs :: DataDef (Ty' Range) -> [Definition TyR (Exp Range) Range]
-selectorDefs d@(DataDef n vs cs) =
+selectorDefs d@(DataDef n _ cs) =
     [ ValueDef
       ( PVar mempty sel
       , ELam mempty
@@ -253,27 +270,27 @@ selectorDefs d@(DataDef n vs cs) =
     ]
 
 selectorTypes :: DataDef Typing -> [(EName, Typing)]
-selectorTypes d@(DataDef n vs cs) =
+selectorTypes d@(DataDef n _ cs) =
     [ (sel, generalizeTypeVars $ tyConResTy d .~> t)
     | ConDef cn tys <- cs
     , FieldTy (Just sel) t <- tys
     ]
 
-tyConResTy :: DataDef a -> Typing
+tyConResTy :: DataDef Typing -> Typing
 tyConResTy (DataDef n vs _)
-    = [] ==> foldl app (Ty_ k $ TCon_ n) (zip [i-1,i-2..] $ map (Ty_ Star . TVar_) vs)
+    = [] ==> foldl app (Ty_ k $ TCon_ n) (zip [i-1,i-2..] [TVar (typingToTy k) n | (n, k) <- vs])
   where
     app x (i, y) = TApp (StarToStar i) x y
     k = StarToStar i
     i = length vs
 
 tyConTypes :: DataDef Typing -> [(EName, Typing)]
-tyConTypes d@(DataDef n vs cs) =
+tyConTypes d@(DataDef n _ cs) =
     [ (cn, foldr (.~>) (tyConResTy d) $ map fieldType tys)
     | ConDef cn tys <- cs
     ]
 
-tyConKind (DataDef n vs _) = (primed n, [] ==> StarToStar (length vs))
+tyConKind n vs = (primed n, foldr (.~>) ([] ==> Star) $ map snd vs)
 
 exportEnv :: ModuleT -> PolyEnv
 exportEnv Module{..}
@@ -285,7 +302,8 @@ exportEnv Module{..}
 
 axs = \case
     ValueDef (PVar _ n, e) -> [(n, snd $ getTag e)]
-    DDataDef d -> tyConKind d: tyConTypes d ++ selectorTypes d
+    DDataDef d@(DataDef n vs _) -> tyConKind n vs: tyConTypes d ++ selectorTypes d
+    GADT n vs defs -> tyConKind n vs: defs
     TypeSig x -> [x]
     _ -> []
 

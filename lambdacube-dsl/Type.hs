@@ -395,7 +395,7 @@ data Q a = Q {qualifier :: [String], qData :: a} -- | UQ a
 
 type Prec = Map EName (FixityDir, Int)
 
-data DataDef a = DataDef String [String] [ConDef a]
+data DataDef t = DataDef EName [(TName, t)] [ConDef t]
     deriving (Show)
 data ConDef a = ConDef EName [FieldTy a]
     deriving (Show)
@@ -448,6 +448,7 @@ data Definition t e r
   | ValueDef (Pat r, e)
   | TypeSig (String, t)
   | DDataDef (DataDef t)
+  | GADT EName [(TName, t)] [(EName, t)]
   | InstanceDef Class t
   | DFixity EName (FixityDir, Int)
     deriving Show

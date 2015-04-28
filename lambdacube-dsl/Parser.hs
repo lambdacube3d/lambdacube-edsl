@@ -182,7 +182,7 @@ moduleDef fname = do
     idefs <- many importDef
     -- TODO: unordered definitions
     defs <- groupDefinitions . concat <$> many (choice
-        [ (:[]) . DDataDef <$> dataDef
+        [ (:[]) <$> dataDef
         , concat <$ keyword "axioms" <*> localIndentation Gt (localAbsoluteIndentation $ many axiom)
         , (:[]) <$> typeSignature
         , const [] <$> typeSynonym
@@ -195,6 +195,7 @@ moduleDef fname = do
         mkDef = \case
             ValueDef d -> [ValueDef $ id *** ($ ps) $ d]
             DDataDef d -> [DDataDef d]
+            GADT a b c -> [GADT a b c]
             InstanceDef c t -> [InstanceDef c t]
             TypeSig d -> [TypeSig d]
             _ -> []
@@ -310,21 +311,38 @@ ty = do
   where
     tArr t a = Ty' (t <-> a) $ TArr_ t a
 
-dataDef :: P DataDefR
+dataDef :: P DefinitionR
 dataDef = do
  keyword "data"
  localIndentation Gt $ do
   tc <- typeConstructor
-  tvs <- many typeVar
+  tvs <- many $ parens ((,) <$> typeVar <* operator "::" <*> ty)
+            <|> (,) <$> typeVar <*> pure (Ty' mempty $ Star_ C)
   let dataConDef = do
-        tc <- typeConstructor
+        tc <- upperCaseIdent
         tys <-   braces (sepBy (FieldTy <$> (Just <$> varId) <*> (keyword "::" *> optional (operator "!") *> typeExp)) comma)
             <|>  many (optional (operator "!") *> (FieldTy Nothing <$> typeAtom))
         return $ ConDef tc tys
-  operator "="
-  ds <- sepBy dataConDef $ operator "|"
-  derivingStm
-  return $ DataDef tc tvs ds
+  do
+    do
+      keyword "where"
+      ds <- localIndentation Ge $ localAbsoluteIndentation $ many $ do
+        c <- do
+            c <- upperCaseIdent
+            localIndentation Gt $ do
+                operator "::"
+            return c
+        localIndentation Gt $ do
+            t <- typeExp
+            return (c, t)
+      return $ GADT tc tvs ds
+   <|>
+    do
+      operator "="
+      ds <- sepBy dataConDef $ operator "|"
+      derivingStm
+      return $ DDataDef $ DataDef tc tvs ds
+
 
 derivingStm = optional $ keyword "deriving" <* (void_ typeConstructor <|> void_ (parens $ sepBy typeConstructor comma))
 
