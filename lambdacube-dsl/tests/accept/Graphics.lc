@@ -1,17 +1,6 @@
-{-# LANGUAGE TypeOperators, OverloadedStrings, DataKinds #-}
 module Graphics where
-{-
-import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as SB
-import Data.List
-import Data.Digest.CRC32
-import Data.Maybe
-import Data.Vect
-import LambdaCube.GL
--}
-import Material hiding (Blending)
 
---import Debug.Trace
+import Material hiding (Blending)
 
 infixl 6 +., +, -., -
 infixl 7 *., *, /., /
@@ -39,39 +28,27 @@ normalize' = PrimNormalize
 texture' = PrimTexture
 negate x = 0 -. x
 
-pack' = id
-unpack' = id
 singT = id
-tup2 = id
-untup2 = id
-tup3 = id
-untup3 = id
-tup4 = id
-untup4 = id
-tup5 = id
-untup5 = id
-tup6 = id
-untup6 = id
 
 -- specialized snoc
 v3v4 :: Vec 3 Float -> Vec 4 Float
-v3v4 v = let V3 x y z = unpack' v in pack' $ V4 x y z (Const 1)
+v3v4 (V3 x y z) = V4 x y z 1
 
 v4v3 :: Vec 4 Float -> Vec 3 Float
-v4v3 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
+v4v3 (V4 x y z _) = V3 x y z
 
 -- specialized snoc
 snoc :: Vec 3 Float -> Float -> Vec 4 Float
-snoc v s = let V3 x y z = unpack' v in pack' $ V4 x y z (Const s)
+snoc (V3 x y z) s = V4 x y z s
 
 snoc' :: Vec 3 Float -> Float -> Vec 4 Float
-snoc' v s = let V3 x y z = unpack' v in pack' $ V4 x y z s
+snoc' (V3 x y z) s = V4 x y z s
 
 drop4 :: Vec 4 Float -> Vec 3 Float
-drop4 v = let V4 x y z _ = unpack' v in pack' $ V3 x y z
+drop4 (V4 x y z _) = V3 x y z
 
 drop3 :: Vec 3 Float -> Vec 2 Float
-drop3 v = let V3 x y _ = unpack' v in pack' $ V2 x y
+drop3 (V3 x y _) = V2 x y
 
 mkRasterContext :: CommonAttrs -> RasterContext Triangle
 mkRasterContext ca = TriangleCtx cull PolygonFill offset LastVertex
@@ -108,54 +85,15 @@ mkAccumulationContext sa = AccumulationContext (DepthOp depthFunc depthWrite, Co
             srcF    = cvt src
             dstF    = cvt dst
 
-{-
-data CommonAttrs
-    = CommonAttrs
-    { caSkyParms        :: !()
-    , caFogParms        :: !()
-    , caPortal          :: !Bool
-    , caSort            :: !Int             -- done
-    , caEntityMergable  :: !Bool
-    , caFogOnly         :: !Bool
-    , caCull            :: !CullType
-    , caDeformVertexes  :: ![Deform]
-    , caNoMipMaps       :: !Bool
-    , caPolygonOffset   :: !Bool            -- done
-    , caStages          :: ![StageAttrs]
-    }
-
-data StageAttrs
-    = StageAttrs
-    { saBlend       :: !(Maybe (Blending,Blending))
-    , saRGBGen      :: !RGBGen
-    , saAlphaGen    :: !AlphaGen
-    , saTCGen       :: !TCGen
-    , saTCMod       :: ![TCMod]
-    , saTexture     :: !StageTexture
-    , saDepthWrite  :: !Bool
-    , saDepthFunc   :: !DepthFunction
-    , saAlphaFunc   :: !(Maybe AlphaFunction)
-    }
--}
-
-v3V :: Vec 3 Float -> Vec 3 Float     -- V freq
-v3V = Const
-
-floatV :: Float -> Float   -- V freq
-floatV = Const
-
-floatF :: Float -> Float  -- V freq
-floatF = Const
-
 mkWave' :: Float -> Wave -> Float
-mkWave' off (Wave wFunc base amplitude phase freq) = floatV base +. a *. floatV amplitude
+mkWave' off (Wave wFunc base amplitude phase freq) = base +. a *. amplitude
   where
     time        = Uni (IFloat "time") :: Float
-    u           = off +. floatV phase +. floatV freq *. time
-    uv          = pack' $ V2 u (Const 0)
+    u           = off +. phase +. freq *. time
+    uv          = V2 u 0
     sampler     = () -- TODO --  Sampler LinearFilter Repeat $ TextureSlot name (Texture2D (Float RGBA) n1)
-    V4 v _ _ _  = unpack' $ texture' sampler uv
-    a           = v *. floatV 2 -. floatV 1
+    V4 v _ _ _  = texture' sampler uv
+    a           = v *. 2 -. 1
     name        = case wFunc of
         WT_Sin              -> "SinTable"
         WT_Triangle         -> "TriangleTable"
@@ -165,7 +103,7 @@ mkWave' off (Wave wFunc base amplitude phase freq) = floatV base +. a *. floatV 
         WT_Noise            -> "Noise"
 
 mkWave :: Wave -> Float
-mkWave = mkWave' $ floatV 0
+mkWave = mkWave' 0
 
 mkColor :: CommonAttrs -> StageAttrs -> Vec 4 Float -> Vec 4 Float      -- V frequency
 mkColor ca sa rgbaV = snoc' rgb alpha
@@ -173,18 +111,18 @@ mkColor ca sa rgbaV = snoc' rgb alpha
     entityRGB       = Uni (IV3F "entityRGB") :: Vec 3 Float
     entityAlpha     = Uni (IFloat "entityAlpha") :: Float
     identityLight'   = Uni (IFloat "identityLight") :: Float
-    --red             = Const $ V3 1 0 0
-    green           = Const $ V3 0 1 0
-    V4 rV gV bV aV  = unpack' rgbaV
+    --red             = V3 1 0 0
+    green           = V3 0 1 0
+    V4 rV gV bV aV  = rgbaV
     rgb = case saRGBGen sa of
-        RGB_Wave w              -> let c = mkWave w in pack' $ V3 c c c
-        RGB_Const r g b         -> v3V $ V3 r g b
-        RGB_Identity            -> v3V one'
-        RGB_IdentityLighting    -> pack' $ V3 identityLight' identityLight' identityLight'
+        RGB_Wave w              -> let c = mkWave w in V3 c c c
+        RGB_Const r g b         -> V3 r g b
+        RGB_Identity            -> one'
+        RGB_IdentityLighting    -> V3 identityLight' identityLight' identityLight'
         RGB_Entity              -> entityRGB
-        RGB_OneMinusEntity      -> v3V one' - entityRGB
-        RGB_ExactVertex         -> pack' $ V3 rV gV bV
-        RGB_Vertex              -> (pack' $ V3 rV gV bV) *. identityLight'
+        RGB_OneMinusEntity      -> one' - entityRGB
+        RGB_ExactVertex         -> V3 rV gV bV
+        RGB_Vertex              -> (V3 rV gV bV) *. identityLight'
         RGB_LightingDiffuse     -> green -- TODO
         {-  input:
                 entity: ambientLight
@@ -193,53 +131,38 @@ mkColor ca sa rgbaV = snoc' rgb alpha
                 model:  position
                         normal
         -}
-        RGB_OneMinusVertex      -> v3V one' - ((pack' $ V3 rV gV bV) *. identityLight')
+        RGB_OneMinusVertex      -> one' - ((V3 rV gV bV) *. identityLight')
 
     alpha = case saAlphaGen sa of
-        A_Wave w            -> let a = mkWave w in clamp' a (floatV 0) (floatV 1)
-        A_Const a           -> floatV a
-        A_Portal            -> floatV 1 -- TODO
-        A_Identity          -> floatV 1
+        A_Wave w            -> let a = mkWave w in clamp' a 0 1
+        A_Const a           -> a
+        A_Portal            -> 1 -- TODO
+        A_Identity          -> 1
         A_Entity            -> entityAlpha
-        A_OneMinusEntity    -> floatV 1 -. entityAlpha
+        A_OneMinusEntity    -> 1 -. entityAlpha
         A_Vertex            -> aV
-        A_LightingSpecular  -> floatV 1 -- TODO
+        A_LightingSpecular  -> 1 -- TODO
         {-  input:
                 model:  position
                         normal
                 user:   viewOrigin
         -}
-        A_OneMinusVertex    -> floatV 1 -. aV
+        A_OneMinusVertex    -> 1 -. aV
 
-{-
-data Deform
-    = D_AutoSprite
-    | D_AutoSprite2
-    | D_Normal !Float !Float
-    | D_ProjectionShadow
-    | D_Text0
-    | D_Text1
-    | D_Text2
-    | D_Text3
-    | D_Text4
-    | D_Text5
-    | D_Text6
-    | D_Text7
--}
 mkDeform :: Vec 2 Float -> Vec 3 Float -> Vec 3 Float -> Deform -> Vec 3 Float
 mkDeform uv normal pos d = case d of
-    D_Move (V3 x y z) w   -> pos + (v3V (V3 x y z) *. mkWave w)
+    D_Move (V3 x y z) w   -> pos + ((V3 x y z) *. mkWave w)
     D_Wave spread w@(Wave _ _ _ _ f)
         | f < 0.000001  -> pos + (normal *. mkWave w)
         | otherwise     ->
-            let V3 x y z    = unpack' pos
-                off         = (x +. y +. z) *. floatV spread
+            let V3 x y z    = pos
+                off         = (x +. y +. z) *. spread
             in pos + (normal *. mkWave' off w)
     D_Bulge w h s   -> let time     = Uni (IFloat "time") :: Float
-                           V2 u _   = unpack' uv
-                           now      = time *. floatV s
-                           off      = u *. floatV w +. now
-                       in pos + (normal *. sin' off *. floatV h)
+                           V2 u _   = uv
+                           now      = time *. s
+                           off      = u *. w +. now
+                       in pos + (normal *. sin' off *. h)
     _ -> pos
 
 {-
@@ -248,34 +171,34 @@ data TCMod
 -}
 mkTCMod :: Vec 3 Float -> Vec 2 Float -> TCMod -> Vec 2 Float
 mkTCMod pos uv m = {- trace (show m) $ -} case m of
-    TM_Scroll su sv -> uv + ((Const $ V2 su sv :: Vec 2 Float) *. (Uni (IFloat "time") :: Float))
-    TM_Scale su sv  -> uv * (Const $ V2 su sv :: Vec 2 Float)
-    TM_Stretch w    -> let p    = floatV 1 /. mkWave w 
-                           v0_5 = floatV 0.5
+    TM_Scroll su sv -> uv + ((V2 su sv :: Vec 2 Float) *. (Uni (IFloat "time") :: Float))
+    TM_Scale su sv  -> uv * (V2 su sv :: Vec 2 Float)
+    TM_Stretch w    -> let p    = 1 /. mkWave w 
+                           v0_5 = 0.5
                            off  = v0_5 -. v0_5 *. p
                        in (uv *. p) +. off
     TM_Rotate speed -> let time = Uni (IFloat "time") :: Float
-                           fi   = floatV (-speed *. pi /. 180) *. time
+                           fi   = (-speed *. pi /. 180) *. time
                            s    = sin' fi
-                           ms   = s *. floatV (-1)
+                           ms   = s *. (-1)
                            c    = cos' fi
-                           mA   = pack' $ V2 c s
-                           mB   = pack' $ V2 ms c
+                           mA   = V2 c s
+                           mB   = V2 ms c
                            m'   = M22F mA mB
-                           v0_5 = floatV 0.5
-                           off  = pack' $ V2 (v0_5 -. v0_5 *. c +. v0_5 *. s) (v0_5 -. v0_5 *. s -. v0_5 *. c)
+                           v0_5 = 0.5
+                           off  = V2 (v0_5 -. v0_5 *. c +. v0_5 *. s) (v0_5 -. v0_5 *. s -. v0_5 *. c)
                        in (m' `PrimMulMatVec` uv) + off
-    TM_Transform m00 m01 m10 m11 t0 t1  -> let V2 u v   = unpack' uv
-                                               u'       = u *. floatV m00 +. v *. floatV m10 +. floatV t0
-                                               v'       = u *. floatV m01 +. v *. floatV m11 +. floatV t1
-                                           in pack' $ V2 u' v'
-    TM_Turb base amp phase freq ->  let V2 u v      = unpack' uv
-                                        V3 x y z    = unpack' pos
+    TM_Transform m00 m01 m10 m11 t0 t1  -> let V2 u v   = uv
+                                               u'       = u *. m00 +. v *. m10 +. t0
+                                               v'       = u *. m01 +. v *. m11 +. t1
+                                           in V2 u' v'
+    TM_Turb base amp phase freq ->  let V2 u v      = uv
+                                        V3 x y z    = pos
                                         time        = Uni (IFloat "time") :: Float
-                                        now         = floatV phase +. time *. floatV freq
-                                        offU        = floatV (2 *. pi) *. ((x +. z) *. floatV (0.125 /. 128) +. now)
-                                        offV        = floatV (2 *. pi) *. (y *. floatV (0.125 /. 128) +. now)
-                                    in uv + (sin' (pack' $ V2 offU offV) *. floatV amp)
+                                        now         = phase +. time *. freq
+                                        offU        = (2 *. pi) *. ((x +. z) *. (0.125 /. 128) +. now)
+                                        offV        = (2 *. pi) *. (y *. (0.125 /. 128) +. now)
+                                    in uv + (sin' (V2 offU offV) *. amp)
     _ -> uv
 
 mkTexCoord :: Vec 3 Float -> Vec 3 Float -> StageAttrs -> Vec 2 Float -> Vec 2 Float -> Vec 2 Float
@@ -287,21 +210,20 @@ mkTexCoord pos normal sa uvD uvL = foldl' (mkTCMod pos) uv $ saTCMod sa
         TG_Environment  ->  let viewOrigin  = Uni (IV3F "viewOrigin")
                                 viewer      = normalize' $ viewOrigin - pos
                                 d           = normal `PrimDot` viewer
-                                reflected   = (normal *. (floatV 2 *. d)) - viewer
-                                V3 _ y z    = unpack' reflected
-                                v0_5        = floatV 0.5
-                            in pack' $ V2 (v0_5 +. y *. v0_5) (v0_5 -. z *. v0_5)
-        TG_Vector (V3 sx sy sz) (V3 tx ty tz)       -> let s    = Const $ V3 sx sy sz :: Vec 3 Float
-                                                           t    = Const $ V3 tx ty tz :: Vec 3 Float
-                                                       in pack' $ V2 (pos `PrimDot` s) (pos `PrimDot` t)
+                                reflected   = (normal *. (2 *. d)) - viewer
+                                V3 _ y z    = reflected
+                                v0_5        = 0.5
+                            in V2 (v0_5 +. y *. v0_5) (v0_5 -. z *. v0_5)
+        TG_Vector (V3 sx sy sz) (V3 tx ty tz)       -> let s    = V3 sx sy sz :: Vec 3 Float
+                                                           t    = V3 tx ty tz :: Vec 3 Float
+                                                       in V2 (pos `PrimDot` s) (pos `PrimDot` t)
 
 mkVertexShader :: CommonAttrs -> StageAttrs -> (Vec 3 Float,Vec 3 Float,Vec 2 Float,Vec 2 Float,Vec 4 Float) -> VertexOut (Vec 2 Float,Vec 4 Float)
-mkVertexShader ca sa pndlc = VertexOut screenPos (Const 1) () (Smooth uv, Smooth color)
+mkVertexShader ca sa (p,n,d,l,c) = VertexOut screenPos 1 () (Smooth uv, Smooth color)
   where
     worldMat    = Uni (IM44F "worldMat")
     viewMat     = Uni (IM44F "viewMat")
     viewProj    = Uni (IM44F "viewProj")
-    (p,n,d,l,c) = untup5 pndlc
     pos         = foldl' (mkDeform d n) p $ caDeformVertexes ca
     screenPos   = viewProj `PrimMulMatVec` (worldMat `PrimMulMatVec` snoc pos 1)
     norm        = drop4 $ (viewMat `PrimMulMatVec` (worldMat `PrimMulMatVec` snoc n 0))
@@ -313,7 +235,7 @@ data EdgeMode = Repeat | MirroredRepeat | ClampToEdge | ClampToBorder
 mkFragmentShader :: StageAttrs -> (Vec 2 Float,Vec 4 Float) -> FragmentOut (Depth Float, Color (Vec 4 Float))
 mkFragmentShader sa uvrgba = FragmentOutRastDepth color
   where
-    (uv,rgba)   = untup2 uvrgba
+    (uv,rgba)   = uvrgba
     stageTex    = saTexture sa
     stageTexN   = "" -- TODO -- SB.pack $ "Tex_" ++ show (crc32 $ SB.pack $ show stageTex)
     texColor em name = texture' sampler uv
@@ -331,7 +253,7 @@ mkFilterFunction sa = case saAlphaFunc sa of
     Nothing -> PassAll
     Just f  -> Filter $ \uvrgba ->
         let
-            (uv,rgba)   = untup2 uvrgba
+            (uv,rgba)   = uvrgba
             stageTex    = saTexture sa
             stageTexN   = "" -- TODO -- SB.pack $ "Tex_" ++ show (crc32 $ SB.pack $ show stageTex)
             texColor em name = texture' sampler uv
@@ -343,11 +265,11 @@ mkFilterFunction sa = case saAlphaFunc sa of
                 ST_Map _        -> rgba * texColor Repeat  stageTexN
                 ST_ClampMap _   -> rgba * texColor ClampToEdge stageTexN
                 ST_AnimMap _ _  -> rgba * texColor Repeat  stageTexN
-            V4 _ _ _ a  = unpack' color
+            V4 _ _ _ a  = color
         in case {- trace ("alpha filter: " ++ show f) -} f of
-            A_Gt0   -> a > floatF 0
-            A_Lt128 -> a < floatF 0.5
-            A_Ge128 -> a >= floatF 0.5
+            A_Gt0   -> a > 0
+            A_Lt128 -> a < 0.5
+            A_Ge128 -> a >= 0.5
 
 mkStage :: String -> CommonAttrs -> (FrameBuffer 1 (Float,Vec 4 Float)) -> StageAttrs -> (FrameBuffer 1 (Float,Vec 4 Float))
 mkStage name ca prevFB sa = Accumulate aCtx fFun fSh (Rasterize rCtx (Transform vSh input)) prevFB
@@ -369,11 +291,11 @@ errorShaderFill fb = Accumulate fragCtx PassAll frag rast fb
     viewProj = Uni (IM44F "viewProj")
 
     vert :: (Vec 3 Float,Vec 4 Float) -> VertexOut (Vec 4 Float)
-    vert (p,c) = VertexOut v4 (Const 1) () (singT $ Smooth c')
+    vert (p,c) = VertexOut v4 1 () (singT $ Smooth c')
       where
         v4    = viewProj `PrimMulMatVec` (worldMat `PrimMulMatVec` snoc p 1)
-        V4 r g b _  = unpack' c
-        c'          = pack' $ V4 r g b $ floatV 0.5
+        V4 r g b _  = c
+        c'          = V4 r g b 0.5
 
     blend   = Blend (FuncAdd,Min) ((One,One),(One,One)) one'
     fragCtx = AccumulationContext (DepthOp Less False, ColorOp blend (one' :: Vec 4 Bool))
@@ -392,7 +314,7 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
     worldMat = Uni (IM44F "worldMat")
 
     vert :: (Vec 3 Float,Vec 4 Float) -> VertexOut (Vec 4 Float)
-    vert (p,c) = VertexOut v4 (Const 1) () (Smooth c)
+    vert (p,c) = VertexOut v4 1 () (Smooth c)
       where
         v4    = viewProj `PrimMulMatVec` (worldMat `PrimMulMatVec` snoc p 1)
 
@@ -406,9 +328,9 @@ errorShader fb = Accumulate fragCtx PassAll frag rast $ errorShaderFill fb
     frag :: Vec 4 Float -> FragmentOut (Depth Float, Color (Vec 4 Float))
     frag v = FragmentOutRastDepth $ v'
       where
-        V4 r g b _  = unpack' v
-        one         = floatF 1
-        v'          = pack' $ V4 (one -. r) (one -. g) (one -. b) one
+        V4 r g b _  = v
+        one         = 1
+        v'          = V4 (one -. r) (one -. g) (one -. b) one
 q3GFX :: [(String,CommonAttrs)] -> (FrameBuffer 1 (Float,Vec 4 Float))
 q3GFX shl = {-blurVH $ PrjFrameBuffer "" tix0 $ -}errorShader $ foldl' mkShader clear ordered
   where
