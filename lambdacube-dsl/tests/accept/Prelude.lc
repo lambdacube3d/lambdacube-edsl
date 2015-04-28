@@ -252,7 +252,6 @@ axioms
   VertexOut            :: ???
   VertexStream         :: PrimitiveType -> * -> *
 -}
-  Output :: *
   AccumulationContext, Blending, FragmentFilter, FragmentOperation, FragmentOut, Input, Interpolated, VertexOut :: * -> *
   VertexStream :: * -> * -> *
   PrimitiveStream :: * -> Nat -> * -> *
@@ -362,7 +361,11 @@ axioms
                         -> FrameBuffer n t
   FrameBuffer         :: (t' ~ FTRepr' t, ValidFrameBuffer t, FrameBuffer n t ~ TFFrameBuffer a)
                         => a -> FrameBuffer n t'
+
+data Output where
   ScreenOut           :: FrameBuffer a b -> Output
+
+axioms
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
 

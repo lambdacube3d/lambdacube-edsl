@@ -215,7 +215,7 @@ inferDefs (GADT con vars cdefs: ds) = do
   withTyping (uncurry Map.singleton $ tyConKind con vars) $ do
     cdefs <- forM cdefs $ \(c, t) -> do
         t <- inferKind' t
-        return (c, t)
+        return (c, generalizeTypeVars t)
     let d' = GADT con vars cdefs
     ds <- withTyping (Map.fromList cdefs) $ inferDefs ds
     return (d': ds)
@@ -286,7 +286,7 @@ tyConResTy (DataDef n vs _)
 
 tyConTypes :: DataDef Typing -> [(EName, Typing)]
 tyConTypes d@(DataDef n _ cs) =
-    [ (cn, foldr (.~>) (tyConResTy d) $ map fieldType tys)
+    [ (cn, generalizeTypeVars $ foldr (.~>) (tyConResTy d) $ map fieldType tys)
     | ConDef cn tys <- cs
     ]
 
