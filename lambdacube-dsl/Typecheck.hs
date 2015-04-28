@@ -70,7 +70,8 @@ unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs ->
         singSubst _ _ (StarToStar n) = StarToStar n
 
         -- make single tvar substitution; check infinite types
-        bindVar n t = do
+        bindVar n k t = do
+            uni k (kindOf' t)
             s <- get
             let t' = subst s t
             if n `Set.member` freeVars t
@@ -81,9 +82,10 @@ unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs ->
         unifyTy (StarToStar i) (TArr a b) | i > 0 = uni Star a >> uni (StarToStar $ i-1) b
         unifyTy Star Star = return ()
 
+        unifyTy (Forall a k t) (Forall a' k' t') = bindVar a k (TVar k' a') >> uni k k' >> uni t t'
         unifyTy (TVar k u) (TVar k' v) | u == v = uni k k'
-        unifyTy (TVar _ u) _ = bindVar u b
-        unifyTy _ (TVar _ u) | bidirectional = bindVar u a
+        unifyTy (TVar k u) _ = bindVar u k b
+        unifyTy _ (TVar k u) | bidirectional = bindVar u k a
         unifyTy (TCon k u) (TCon k' v) | u == v = uni k k' --return ()
         unifyTy (TTuple t1) (TTuple t2) = sequence_ $ zipWith uni t1 t2
         unifyTy (TApp k1 a1 b1) (TApp k2 a2 b2) = uni a1 a2 >> uni b1 b2
@@ -123,7 +125,7 @@ unifyTypings_ bidirectional msg ts f = do
             -- injectivity test:  (t ~ Vec a1 b1, t ~ Vec a2 b2)  -->  a1 ~ a2, b1 ~ b2
             tell $ concatMap (concatMap transpose . groupByFst) $ groupByFst [(ty, (it, is)) | CEq ty (injType -> Just (it, is)) <- es]
             concat <$> mapM reduceConstraint es
-        s <- unifyTypes True (msg ++ "constr solv") w
+        s <- unifyTypes True (msg ++ " constr solv") w
         if Map.null s then return (acc, es) else untilNoUnif (s `composeSubst` acc) $ nub $ subst s es
 
 -- Ambiguous: (Int ~ F a) => Int
@@ -146,7 +148,7 @@ ambiguityCheck ty = do
 instantiateTyping :: Typing -> TCM STyping
 instantiateTyping ty = do
     let fv = polyVars ty
-    (_, newVars) <- unzip <$> replicateM (Set.size fv) (newVar'' Star)
+    (_, newVars) <- unzip <$> replicateM (Set.size fv) (newVar'')
     let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
     return (s, subst s ty)
 
@@ -207,7 +209,7 @@ inferDefs (TypeSig (n, a): ds) = do
     return (TypeSig (n', a''): ds)
 inferDefs (InstanceDef c t: ds) = do
     t <- inferKind' t
-    ds <- local ((\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton $ typingType{-TODO-} t) (Set.insert $ typingType{-TODO-} t)) c $ instanceDefs pe}) *** id) $ inferDefs ds
+    ds <- local ((\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton $ typingToTy t) (Set.insert $ typingToTy t)) c $ instanceDefs pe}) *** id) $ inferDefs ds
     return (InstanceDef c t: ds)
 
 inferConDef (ConDef n tys) = do
@@ -277,7 +279,7 @@ exportEnv :: ModuleT -> PolyEnv
 exportEnv Module{..}
     = PolyEnv
     { getPolyEnv = fmap instantiateTyping $ Map.fromList $ concatMap axs definitions
-    , instanceDefs = Map.unionsWith (<>) [Map.singleton c $ Set.singleton $ typingType{-TODO-} t | InstanceDef c t <- definitions]
+    , instanceDefs = Map.unionsWith (<>) [Map.singleton c $ Set.singleton $ typingToTy t | InstanceDef c t <- definitions]
             -- TODO: check clash
     }
 
@@ -323,6 +325,16 @@ convTy = f mempty where
 simpArr (TArr a b) = TArr a b   -- patt syn trick
 simpArr x = x
 
+kindOf' :: Ty -> Ty
+kindOf' = \case
+    Ty_ k _ -> k
+    StarToStar _ -> Star
+
+
+-- TODO
+kindOf :: Typing -> Typing
+kindOf (typingType -> Ty_ k _) = [] ==> k
+
 inferKind' :: Ty' Range -> TCM Typing
 inferKind' t = convTy <$> inferKind t
 
@@ -331,9 +343,8 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     Forall_ n k t -> do
         let n' = primed n
         tk <- inferKind k
-        tt <- withTyping (Map.singleton n' $ convTy tk) $ inferKind t
-        ty <- unifyTypings "forall" [getTag' tk, getTag' tt] $ \[k, t] -> k ~> t
-        return $ Ty' (id *** removeMonoVars (Set.singleton n'{-FIXME: or n?-}) $ ty) $ Forall_ n tk tt
+        (Ty' ttk tt) <- withTyping (Map.singleton n' $ convTy tk) $ inferKind t
+        return $ Ty' (mempty, star) $ Forall_ n tk $ Ty' (id *** removeMonoVars (Set.singleton n'{-FIXME: or n?-}) $ ttk) tt
     _ -> do
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
@@ -351,7 +362,7 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     star = [] ==> Star
 
     addTypeVar n = do
-        (s, t) <- newVar'' Star
+        (s, t) <- newVar''
         return (s, Typing (Map.singleton n t) mempty t mempty)
 
 inferTyping :: Exp Range -> TCM (Exp STyping)
@@ -388,11 +399,34 @@ inferTyping (Exp r e) = local (id *** const [r]) $ case e of
             return (Pat (del pt) p, Exp (del t) exp)
         ty <- unifyTypings "case" [getTag' te ++ concatMap getTagP' cs, concatMap (getTag' . snd) cs] $ \[_, x] -> x
         return $ ECase ty te cs
+{-
+t :: k
+f :: tf
+tf ~ forall (a :: k) . t'       -- a, t' is fresh
+-----------------
+f @ t :: t' [a |-> t]
+
+1 :: Nat
+ColorImage :: forall (a :: Nat) . color' -> Image a (Color color')        -- a is not fresh; color' is fresh
+forall (a :: Nat) . color' -> Image a (Color color')   ~  forall (a' :: Nat) . t'
+  a ~ a'
+  k ~ Nat
+  t' ~ Image a (Color color')
+-------------------------
+ColorImage @ 1 :: color' -> Image a' (Color color') [a' |-> 1]
+ColorImage @ 1 :: color' -> Image 1 (Color color')   -- color' is fresh
+-}
+    ETyApp_ f ta -> do
+        tf <- inferTyping f
+        t_ <- inferKind ta
+        let t = convTy t_
+        ty <- unifyTypings ("tyapp\n" ++ ppShow (tf, ta, t)) [getTag' tf, [t], [kindOf t]]
+            $ \[tf, t, k] v u@(TVar _ x) -> [tf ~~~ Forall x k v, u ~~~ t] ==> v
+        return $ ETyApp ty tf t_
     _ -> do
         e' <- T.mapM inferTyping e
         (\t -> Exp t $ setTag (error "e1") (error "e2") e') <$> case e' of
             EApp_ tf ta -> unifyTypings "app" [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
---            ETyApp_ tf ta -> unifyTypings "app" [getTag' tf, _ ta] $ \[tf, ta] v w -> [tf ~~~ Forall' ta w v] ==> v
             EFieldProj_ fn -> fieldProjType fn
             ERecord_ Nothing (unzip -> (fs, es)) -> unifyTypings "record" (map getTag' es) $ TRecord . Map.fromList . zip fs
 {-

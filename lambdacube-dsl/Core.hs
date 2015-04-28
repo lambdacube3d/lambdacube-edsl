@@ -28,7 +28,7 @@ import Data.Foldable (Foldable, toList)
 import Text.Show.Pretty
 import Debug.Trace
 
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EFieldProj, EAlts, ENext, Exp, Pat, PAt, PVar, PLit, PTuple, PCon, Wildcard)
+import Type hiding (ELet, EApp, ETyApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EFieldProj, EAlts, ENext, Exp, Pat, PAt, PVar, PLit, PTuple, PCon, Wildcard)
 import qualified Type as AST
 import Typecheck
 
@@ -71,6 +71,7 @@ newtype Exp = Exp (Exp_ Var Ty Pat Exp)
 pattern ELit a = Exp (ELit_ a)
 pattern EVar a = Exp (EVar_ a)
 pattern EApp a b = Exp (EApp_ a b)
+pattern ETyApp a b = Exp (ETyApp_ a b)
 pattern ELam a b = Exp (ELam_ a b)
 pattern ELet a b c = Exp (ELet_ a b c)
 pattern ECase a b = Exp (ECase_ a b)
@@ -85,8 +86,10 @@ pattern ENext = Exp ENext_
 pattern Va x <- VarE x _
 pattern A0 x <- EVar (Va x)
 pattern A0t x t <- EVar (VarE x t)
+pattern At0 x t <- ETyApp (A0 x) t
 pattern A1 f x <- EApp (A0 f) x
 pattern A1t f t x <- EApp (A0t f t) x
+pattern At1 f t x <- EApp (At0 f t) x
 pattern A2 f x y <- EApp (A1 f x) y
 pattern A3 f x y z <- EApp (A2 f x y) z
 pattern A4 f x y z v <- EApp (A3 f x y z) v
@@ -147,7 +150,7 @@ toCore sub (AST.Exp (s, t) e) = case e of
       where
         pv = map VarT (toList $ polyVars ty)
           ++ map VarC (subst sub' $ constraints ty)
-    _ -> Exp $ setTag_ (error "toCore") (error "toCore") (toCorePat sub') $ toCore sub' <$> e
+    _ -> Exp $ setTag_ (error "toCore 1") (subst sub' . typingToTy . convTy) (toCorePat sub') $ toCore sub' <$> e
  where
     sub' = sub `composeSubst` s
     t' = typingToTy $ subst sub' t

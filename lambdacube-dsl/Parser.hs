@@ -254,13 +254,10 @@ axiom = do
     optional (operator "!") *> typeExp
   return [TypeSig (n, t) | n <- ns]
 
-typePattern :: P TyR
-typePattern = ty -- choice [try' "type var" typeVar, typeConstructor, parens ((void_ typeConstructor <* some typePattern) <|> typePattern)]
-
 tcExp :: P (TyR -> TyR)   -- TODO
 tcExp = try $ do
-  let tyC = addC <$> (eqC <$> try (typePattern <* operator "~") <*> typePattern)
-        <|> addC <$> (CClass <$> typeConstraint <*> typePattern)
+  let tyC = addC <$> (eqC <$> try (ty <* operator "~") <*> ty)
+        <|> addC <$> (CClass <$> typeConstraint <*> ty)
       addC :: Constraint TyR -> TyR -> TyR
       addC c = Ty' mempty . TConstraintArg_ c
       eqC t1 t2 = CEq t1 (mkTypeFun t2)
@@ -287,10 +284,31 @@ mkTypeFun = \case
     x -> error $ "mkTypeFun: " ++ ppShow x
 
 typeExp :: P TyR
-typeExp = do
-  optional (keyword "forall" >> some typeVar >> operator ".")
-  f <- optional (tcExp <?> "type context")
-  fromMaybe id f <$> ty
+typeExp = choice
+  [ do
+        keyword "forall"
+        choice
+            [ addPos Ty' $ do
+                (v, k) <- parens ((,) <$> typeVar <* operator "::" <*> ty)
+                operator "."
+                t <- typeExp
+                return $ Forall_ v k t
+            , do
+                some typeVar
+                operator "."
+                typeExp
+            ]
+  , (tcExp <?> "type context") <*> typeExp
+  , ty
+  ]
+
+
+ty :: P TyR
+ty = do
+    t <- tyApp
+    maybe t (tArr t) <$> optional (operator "->" *> typeExp)
+  where
+    tArr t a = Ty' (t <-> a) $ TArr_ t a
 
 dataDef :: P DataDefR
 dataDef = do
@@ -313,11 +331,6 @@ derivingStm = optional $ keyword "deriving" <* (void_ typeConstructor <|> void_ 
 typeRecord :: P TyR
 typeRecord = undef "trec" $ do
   braces (commaSep1 typeSignature >> optional (operator "|" >> void_ typeVar))
-
-ty :: P TyR
-ty = foldr1 tArr <$> sepBy1 tyApp (operator "->")
-  where
-    tArr t a = Ty' (t <-> a) $ TArr_ t a
 
 -- compose ranges through getTag
 infixl 9 <->, <-->

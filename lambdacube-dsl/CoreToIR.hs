@@ -239,8 +239,8 @@ compFetchPrimitive x = case x of
 
 compImg x = case x of
   ETuple a -> concatMap compImg a
-  A1t "DepthImage" (TArr _ (TApp _ (TApp _ _ (TNat i)) _)) (ELit (LFloat a)) -> [IR.DepthImage i (realToFrac a)]
-  A1t "ColorImage" (TArr _ (TApp _ (TApp _ _ (TNat i)) _)) a -> [IR.ColorImage i (compValue a)]
+  At1 "DepthImage" (TNat i) (ELit (LFloat a)) -> [IR.DepthImage i (realToFrac a)]
+  At1 "ColorImage" (TNat i) a -> [IR.ColorImage i (compValue a)]
   x -> error $ "compImg " ++ ppShow x
 
 compValue x = case x of

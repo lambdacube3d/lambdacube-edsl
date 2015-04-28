@@ -198,6 +198,7 @@ setTag_ vf tf f = \case
     ENext_             -> ENext_
     EType_ t           -> EType_ $ tf t
     EConstraint_ c     -> EConstraint_ $ tf <$> c
+    ETyApp_ x y        -> ETyApp_ x $ tf y
 --    e   -> error $ "setTag_: " ++ ppShow e
 
 type STyping = (Subst, Typing)
@@ -370,6 +371,7 @@ class FreeVars a where freeVars :: a -> Set TName
 instance FreeVars a => FreeVars (Ty_ a) where
     freeVars = \case
         TVar_ a -> Set.singleton a
+        Forall_ v k t -> freeVars k <> Set.delete v (freeVars t)
         x -> foldMap freeVars x
 instance FreeVars a => FreeVars (Ty' a) where
     freeVars = \case

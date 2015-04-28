@@ -319,10 +319,10 @@ axioms
 
   AccumulationContext :: (t' ~ FragOps t) => t -> AccumulationContext t'
 
-  ColorImage          :: (Num t, color ~ VecScalar d t) => color
+  ColorImage          :: (Num t, color ~ VecScalar d t) => forall (a :: NatKind) . color
                                 -> Image a (Color color)
-  DepthImage          :: Float  -> Image a (Depth Float)
-  StencilImage        :: Int    -> Image a (Stencil Int)
+  DepthImage          :: forall (a :: NatKind) . Float  -> Image a (Depth Float)
+  StencilImage        :: forall (a :: NatKind) . Int    -> Image a (Stencil Int)
 
   Smooth, NoPerspective
                         :: (Floating t) => t -> Interpolated t
@@ -446,9 +446,9 @@ axioms
     PrimV4ToTup             :: Component a                            => PrimFun stage (V4 a -> (a,a,a,a))
 -}
 
-colorImage1 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 1 (Color color)
-colorImage2 = ColorImage :: (Num t, color ~ VecScalar d t) => color -> Image 2 (Color color)
+colorImage1 = ColorImage @1
+colorImage2 = ColorImage @2
 
-depthImage1 = DepthImage :: Float -> Image 1 (Depth Float)
+depthImage1 = DepthImage @1
 
 
