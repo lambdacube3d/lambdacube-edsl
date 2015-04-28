@@ -3,7 +3,7 @@
 import Data.List
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Trans
+import Control.Monad.Reader
 
 --import Text.Trifecta (Result (..))
 
@@ -42,18 +42,19 @@ main = do
       return (map dropExtension toAccept,map dropExtension toReject)
     _ -> return (samplesToAccept,[])
 
-  putStrLn $ "Checking valid pipelines"
-  acceptTests testToAccept
+  runMM' $ do
+      liftIO $ putStrLn $ "Checking valid pipelines"
+      acceptTests testToAccept
 
-  putStrLn $ "Catching errors (must get an error)"
-  rejectTests testToReject
+      liftIO $ putStrLn $ "Catching errors (must get an error)"
+      rejectTests testToReject
 
-writeReduced = testFrame ["./tests/accept"] $ \case
+writeReduced = runMM' . (testFrame ["./tests/accept"] $ \case
     Left e -> Left e
     Right (Left e) -> Right ("typechecked", ppShow e)
-    Right (Right e) -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e)
+    Right (Right e) -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e))
 
-main' x = acceptTests [x]
+main' x = runMM' $ acceptTests [x]
 
 acceptTests = testFrame ["./tests/accept", "./tests/reject"] $ \case
     Left e -> Left e
@@ -70,7 +71,9 @@ rejectTests = testFrame ["./tests/reject", "./tests/accept"] $ \case
     Left e -> Right ("error message", e)
     _ -> Left "failed to catch error"
 
-testFrame dirs f tests = fmap (either (error "impossible") id) $ runMM dirs $ forM_ (zip [1..] (tests :: [String])) $ \(i, n) -> do
+runMM' = fmap (either (error "impossible") id) . runMM []
+
+testFrame dirs f tests = local (const dirs) $ forM_ (zip [1..] (tests :: [String])) $ \(i, n) -> do
     liftIO $ putStr $ " # " ++ pad 4 (show i) ++ pad 15 n ++ " ... "
     result <- catchMM $ getDef_ n "main"
     case f result of

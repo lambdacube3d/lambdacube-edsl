@@ -1,9 +1,12 @@
 module Driver where
 
 import Data.List
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
+import Control.Arrow
 import Text.Show.Pretty
 import System.Directory
 import System.FilePath
@@ -33,37 +36,41 @@ catchMM = mapReaderT $ \m -> lift $ runExceptT m
 parseAndToCoreMain :: MName -> MM Exp
 parseAndToCoreMain m = toCore mempty <$> getDef m "main"
 
-type Modules = [(MName, ModuleT)]
+type Modules = ([FilePath], Map FilePath ModuleT)
 
 type MM = ReaderT [FilePath] (ExceptT String (StateT Modules IO))
 
-typeCheckLC :: MName -> MM ModuleT
-typeCheckLC mname = do
- c <- gets $ lookup mname
- case c of
-    Just m -> return m
-    _ -> do
-     fnames <- asks $ map $ flip lcModuleFile mname
-     let
-        find [] = throwError $ "can't find module " ++ intercalate "; " fnames
-        find (fname: fs) = do
-         b <- liftIO $ doesFileExist fname
-         if not b then find fs
-         else do
+clearImports = modify (const [] *** id)
+
+loadModule :: MName -> MM (FilePath, ModuleT)
+loadModule mname = do
+  fnames <- asks $ map $ flip lcModuleFile mname
+  let
+    find [] = throwError $ "can't find module " ++ intercalate "; " fnames
+    find (fname: fs) = do
+     b <- liftIO $ doesFileExist fname
+     if not b then find fs
+     else do
+       c <- gets $ Map.lookup fname . snd
+       case c of
+         Just m -> do
+            modify $ (\x -> if fname `elem` x then x else fname: x) *** id
+            return (fname, m)
+         _ -> do
           res <- liftIO $ parseLC fname
           case res of
             Left m -> throwError m
             Right (src, e) -> do
-              ms <- mapM (typeCheckLC . qData) $ moduleImports e
-              case joinPolyEnvs $ map exportEnv ms of
+              ms <- mapM (loadModule . qData) $ moduleImports e
+              case joinPolyEnvs $ map (exportEnv .snd) ms of
                 Left m -> throwError m
                 Right env -> case inference_ env e of
                     Left m    -> throwError $ m src
                     Right x   -> do
-                        modify ((mname, x):)
-                        return x
+                        modify $ (fname:) *** Map.insert fname x
+                        return (fname, x)
 
-     find fnames
+  find fnames
 
 lcModuleFile path n = path </> (n ++ ".lc")
 
@@ -73,11 +80,13 @@ getDef m d = do
 
 getDef_ :: MName -> EName -> MM (Either String (AST.Exp (Subst, Typing)))
 getDef_ m d = do
-    typeCheckLC m
-    ms <- get
+    clearImports
+    (fm, _) <- loadModule m
+    (ms_, mods) <- get
+    let ms = zip ms_ $ map (mods Map.!) ms_
     return $ case
         [ buildLet ((\ds -> [d | ValueDef d <- ds]) (concatMap (definitions . snd) (reverse dss) ++ reverse ps)) e
-         | ((m', defs): dss) <- tails ms, m' == m
+         | ((m', defs): dss) <- tails ms, m' == fm
          , (ValueDef (AST.PVar (_, t) d', e):ps) <- tails $ reverse $ definitions defs, d' == d
          ] of
         [e] -> Right e
