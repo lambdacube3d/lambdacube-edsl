@@ -219,6 +219,15 @@ inferDefs (GADT con vars cdefs: ds) = do
     let d' = GADT con vars cdefs
     ds <- withTyping (Map.fromList cdefs) $ inferDefs ds
     return (d': ds)
+inferDefs (ClassDef con vars cdefs: ds) = do
+  vars <- forM vars $ \(n, k) -> do
+    k <- inferKind' k
+    return (n, k)
+  do --withTyping (uncurry Map.singleton $ tyConKind con vars) $ do
+    cdefs <- inferDefs cdefs
+    let d' = ClassDef con vars cdefs
+    ds <- withTyping (Map.fromList $ classTypings d') $ inferDefs ds
+    return (d': ds)
 inferDefs (TypeSig (n, a): ds) = do
     a' <- inferKind' a
     let (n', a'') = mangleAx . (id *** generalizeTypeVars) $ (n, a')
@@ -228,6 +237,8 @@ inferDefs (InstanceDef c t: ds) = do
     t <- inferKind' t
     ds <- local ((\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton $ typingToTy t) (Set.insert $ typingToTy t)) c $ instanceDefs pe}) *** id) $ inferDefs ds
     return (InstanceDef c t: ds)
+
+addConstr cs ty = typing (monoEnv ty) (cs ++ constraints ty) $ typingType ty
 
 inferConDef (ConDef n tys) = do
     tys <- mapM inferFieldKind tys
@@ -305,7 +316,12 @@ axs = \case
     DDataDef d@(DataDef n vs _) -> tyConKind n vs: tyConTypes d ++ selectorTypes d
     GADT n vs defs -> tyConKind n vs: defs
     TypeSig x -> [x]
+    c@ClassDef{} -> classTypings c
     _ -> []
+
+classTypings (ClassDef c vs cdefs) = [(n, addConstr [CClass c $ head{-TODO-} $ map g vs] t) | TypeSig (n, t) <- cdefs]
+  where
+    g (n, k) = TVar (typingToTy k) n
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     [] -> Right $ PolyEnv (foldMap instanceDefs ps) $ head <$> ms

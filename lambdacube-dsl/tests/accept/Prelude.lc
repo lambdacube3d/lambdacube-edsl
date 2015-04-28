@@ -92,7 +92,9 @@ class Signed a
 instance Signed         Int
 instance Signed         Float
 
-class Num a
+class Num a where
+  fromInt :: Int -> a
+  compare :: a -> a -> Ordering
 
 instance Num            Int
 instance Num            Word
@@ -244,20 +246,6 @@ data PrimitiveType
     | LineAdjacency
 
 axioms
-
-{- TODO: more precise kinds
-  FetchPrimitive       :: PrimitiveType -> *
-  FragmentOperation    :: Semantic -> *
-  FragmentOut          :: Semantic -> *
-  RasterContext        :: PrimitiveType -> *
-  VertexOut            :: ???
-  VertexStream         :: PrimitiveType -> * -> *
--}
-  -- TODO: eliminate
-  fromInt :: Num a => Int -> a
-  compare :: Num a => a -> a -> Ordering
-
-  PrimZero, PrimOne :: {- (Component a) => -- TODO -} a
   PrimTexture :: () -> Vec 2 Float -> Vec 4 Float
 
   -- TODO: eliminate?
@@ -337,6 +325,11 @@ data Blending a where
                          -> ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
                          -> Vec 4 Float ->                 Blending Float
 
+{- TODO: more precise kinds
+  FragmentOperation    :: Semantic -> *
+  FragmentOut          :: Semantic -> *
+  VertexOut            :: ???
+-}
 data FragmentOperation a where
   ColorOp             :: (mask ~ VecScalar d Bool, color ~ VecScalar d c, Num c) => Blending c -> mask
                                                                    -> FragmentOperation (Color color)
@@ -372,6 +365,8 @@ data Output where
   ScreenOut           :: FrameBuffer a b -> Output
 
 axioms
+  PrimZero, PrimOne :: {- (Component a) => -- TODO -} a
+
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
 

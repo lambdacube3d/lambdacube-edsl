@@ -184,9 +184,9 @@ moduleDef fname = do
     defs <- groupDefinitions . concat <$> many (choice
         [ (:[]) <$> dataDef
         , concat <$ keyword "axioms" <*> localIndentation Gt (localAbsoluteIndentation $ many axiom)
-        , (:[]) <$> typeSignature
+        , typeSignature
         , const [] <$> typeSynonym
-        , const [] <$> typeClassDef
+        , (:[]) <$> typeClassDef
         , (:[]) <$> valueDef
         , fixityDef
         , (:[]) <$> typeClassInstanceDef
@@ -198,13 +198,13 @@ moduleDef fname = do
             GADT a b c -> [GADT a b c]
             InstanceDef c t -> [InstanceDef c t]
             TypeSig d -> [TypeSig d]
+            ClassDef a b c -> [ClassDef a b $ concatMap mkDef c]
             _ -> []
     return $ Module
       { moduleImports = (if modn == Just (Q [] "Prelude") then id else (Q [] "Prelude":)) idefs
       , moduleExports = mempty
       , typeAliases   = mempty
       , definitions   = concatMap mkDef defs
-      , typeClasses   = mempty
 --      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
       , precedences   = ps     -- TODO: check multiple definitions
 --      , axioms        = [d | TypeSig d <- defs]
@@ -235,15 +235,15 @@ typeSynonym = void_ $ do
     operator "="
     void_ typeExp
 
-typeSignature :: P DefinitionR
-typeSignature = TypeSig <$> do
-  n <- try' "type signature" $ do
-    n <- varId
+typeSignature :: P [DefinitionR]
+typeSignature = do
+  ns <- try' "type signature" $ do
+    ns <- sepBy1 varId comma
     localIndentation Gt $ operator "::"
-    return n
+    return ns
   t <- localIndentation Gt $ do
     optional (operator "!") *> typeExp
-  return (n, t)
+  return [TypeSig (n, t) | n <- ns]
 
 axiom :: P [DefinitionR]
 axiom = do
@@ -256,9 +256,9 @@ axiom = do
   return [TypeSig (n, t) | n <- ns]
 
 tcExp :: P (TyR -> TyR)   -- TODO
-tcExp = try $ do
+tcExp = try' "type context" $ do
   let tyC = addC <$> (eqC <$> try (ty <* operator "~") <*> ty)
-        <|> addC <$> (CClass <$> typeConstraint <*> ty)
+        <|> addC <$> (CClass <$> typeConstraint <*> typeAtom)
       addC :: Constraint TyR -> TyR -> TyR
       addC c = Ty' mempty . TConstraintArg_ c
       eqC t1 t2 = CEq t1 (mkTypeFun t2)
@@ -299,7 +299,7 @@ typeExp = choice
                 operator "."
                 typeExp
             ]
-  , (tcExp <?> "type context") <*> typeExp
+  , tcExp <*> typeExp
   , ty
   ]
 
@@ -311,13 +311,33 @@ ty = do
   where
     tArr t a = Ty' (t <-> a) $ TArr_ t a
 
+tyApp :: P TyR
+tyApp = typeAtom >>= f
+  where
+    f t = do
+        a <- typeAtom
+        f $ Ty' (t <-> a) $ TApp_ t a
+      <|> return t
+
+typeAtom :: P TyR
+typeAtom = typeRecord
+    <|> addPos Ty' (Star_ C <$ operator "*")
+    <|> addPos Ty' (TVar_ <$> try' "type var" typeVar)
+    <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
+    <|> addPos Ty' (TCon_ <$> typeConstructor)
+    <|> addPos tTuple (parens (sepBy ty comma))
+    <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "List")) (brackets ty)
+
+tTuple :: Range -> [TyR] -> TyR
+tTuple p [t] = t
+tTuple p ts = Ty' p $ TTuple_ ts
+
 dataDef :: P DefinitionR
 dataDef = do
  keyword "data"
  localIndentation Gt $ do
   tc <- typeConstructor
-  tvs <- many $ parens ((,) <$> typeVar <* operator "::" <*> ty)
-            <|> (,) <$> typeVar <*> pure (Ty' mempty $ Star_ C)
+  tvs <- many typeVarKind
   let dataConDef = do
         tc <- upperCaseIdent
         tys <-   braces (sepBy (FieldTy <$> (Just <$> varId) <*> (keyword "::" *> optional (operator "!") *> typeExp)) comma)
@@ -356,45 +376,28 @@ a <-> b = getTag a <--> getTag b
 (<-->) :: Range -> Range -> Range
 (a1, a2) <--> (b1, b2) = (min a1 a2, max b1 b2)
 
-tyApp :: P TyR
-tyApp = typeAtom >>= f
-  where
-    f t = do
-        a <- typeAtom
-        f $ Ty' (t <-> a) $ TApp_ t a
-      <|> return t
-
 addPos f m = do
     p1 <- position
     a <- m
     p2 <- position
     return $ f (p1, p2) a
 
-typeAtom :: P TyR
-typeAtom = typeRecord
-    <|> addPos Ty' (Star_ C <$ operator "*")
-    <|> addPos Ty' (TVar_ <$> try' "type var" typeVar)
-    <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
-    <|> addPos Ty' (TCon_ <$> typeConstructor)
-    <|> addPos tTuple (parens (sepBy ty comma))
-    <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "List")) (brackets ty)
-
-
-tTuple :: Range -> [TyR] -> TyR
-tTuple p [t] = t
-tTuple p ts = Ty' p $ TTuple_ ts
-
-typeClassDef :: P ()
-typeClassDef = void_ $ do
+typeClassDef :: P DefinitionR
+typeClassDef = do
   keyword "class"
   localIndentation Gt $ do
     optional tcExp
-    typeConstraint
-    typeVar
-    optional $ do
+    c <- typeConstraint
+    tvs <- many typeVarKind
+    ds <- optional $ do
       keyword "where"
-      localAbsoluteIndentation $ do
-        many typeSignature
+      localIndentation Ge $ localAbsoluteIndentation $ many $ do
+        typeSignature
+    return $ ClassDef c tvs $ maybe [] concat ds
+
+typeVarKind =
+      parens ((,) <$> typeVar <* operator "::" <*> ty)
+  <|> (,) <$> typeVar <*> pure (Ty' mempty $ Star_ C)
 
 typeClassInstanceDef :: P DefinitionR
 typeClassInstanceDef = do
@@ -493,8 +496,8 @@ whereRHS delim = do
     do
         do
           keyword "where"
-          l <- localIndentation Ge $ localAbsoluteIndentation $ some (valueDef <|> typeSignature)
-          return (WhereRHS d $ Just l)
+          l <- localIndentation Ge $ localAbsoluteIndentation $ some ((:[]) <$> valueDef <|> typeSignature)
+          return (WhereRHS d $ Just $ concat l)
       <|> return (WhereRHS d Nothing)
 
 rhs :: P () -> P GuardedRHSR

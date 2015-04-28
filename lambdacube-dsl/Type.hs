@@ -403,12 +403,6 @@ data FieldTy a
     = FieldTy {fieldName :: Maybe EName, fieldType :: a}
     deriving (Show)
 
-data TypeClassDefinition
-  = TypeClassDefinition -- name, [base class], [type signature (declaration)]
-
-data TypeClassInstance -- name, type, [definition]
-  = TypeClassInstance
-
 data FixityDir = FNoDir | FDLeft | FDRight
     deriving (Show)
 
@@ -430,7 +424,6 @@ data Module t a
   , moduleExports :: ()
   , typeAliases   :: ()
   , definitions   :: [Definition t (Exp a) a]
-  , typeClasses   :: ()
   , precedences   :: Prec
   , moduleFile    :: FilePath
   }
@@ -446,9 +439,10 @@ data GuardedRHS e
 data Definition t e r
   = PreValueDef (Range, EName) [PatR] (WhereRHS t e r)   -- before group
   | ValueDef (Pat r, e)
-  | TypeSig (String, t)
+  | TypeSig (EName, t)
   | DDataDef (DataDef t)
   | GADT EName [(TName, t)] [(EName, t)]
+  | ClassDef Class [(TName, t)] [Definition t e r]
   | InstanceDef Class t
   | DFixity EName (FixityDir, Int)
     deriving Show
