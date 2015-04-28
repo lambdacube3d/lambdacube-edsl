@@ -24,14 +24,18 @@ reducedMain :: FilePath -> MName -> IO (Either String Exp)
 reducedMain path fname =
     runMM [path] $ mkReduce <$> parseAndToCoreMain fname
 
-runMM paths = runExceptT . flip evalStateT mempty . flip runReaderT paths
+runMM :: [FilePath] -> MM a -> IO (Either String a) 
+runMM paths = flip evalStateT mempty . runExceptT . flip runReaderT paths
+
+catchMM :: MM a -> MM (Either String a)
+catchMM = mapReaderT $ \m -> lift $ runExceptT m
 
 parseAndToCoreMain :: MName -> MM Exp
 parseAndToCoreMain m = toCore mempty <$> getDef m "main"
 
 type Modules = [(MName, ModuleT)]
 
-type MM = ReaderT [FilePath] (StateT Modules (ExceptT String IO))
+type MM = ReaderT [FilePath] (ExceptT String (StateT Modules IO))
 
 typeCheckLC :: MName -> MM ModuleT
 typeCheckLC mname = do

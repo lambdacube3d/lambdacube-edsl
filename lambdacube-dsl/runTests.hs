@@ -3,6 +3,7 @@
 import Data.List
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Trans
 
 --import Text.Trifecta (Result (..))
 
@@ -69,12 +70,12 @@ rejectTests = testFrame ["./tests/reject", "./tests/accept"] $ \case
     Left e -> Right ("error message", e)
     _ -> Left "failed to catch error"
 
-testFrame dirs f tests = forM_ (zip [1..] (tests :: [String])) $ \(i, n) -> do
-    putStr $ " # " ++ pad 4 (show i) ++ pad 15 n ++ " ... "
-    result <- runMM dirs $ getDef_ n "main"
+testFrame dirs f tests = fmap (either (error "impossible") id) $ runMM dirs $ forM_ (zip [1..] (tests :: [String])) $ \(i, n) -> do
+    liftIO $ putStr $ " # " ++ pad 4 (show i) ++ pad 15 n ++ " ... "
+    result <- catchMM $ getDef_ n "main"
     case f result of
-      Left e -> putStrLn $ "\n!FAIL\n" ++ e
-      Right (op, x) -> catch (length x `seq` compareResult (pad 15 op) (head dirs </> (n ++ ".out")) x) getErr
+      Left e -> liftIO $ putStrLn $ "\n!FAIL\n" ++ e
+      Right (op, x) -> liftIO $ catch (length x `seq` compareResult (pad 15 op) (head dirs </> (n ++ ".out")) x) getErr
   where
     getErr :: ErrorCall -> IO ()
     getErr e = putStrLn $ "\n!FAIL\n" ++ limit "\n..." 4000 (show e)
