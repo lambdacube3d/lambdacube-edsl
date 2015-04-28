@@ -327,15 +327,15 @@ dataDef = do
     do
       keyword "where"
       ds <- localIndentation Ge $ localAbsoluteIndentation $ many $ do
-        c <- do
-            c <- upperCaseIdent
+        cs <- do
+            cs <- sepBy1 upperCaseIdent comma
             localIndentation Gt $ do
                 operator "::"
-            return c
+            return cs
         localIndentation Gt $ do
             t <- typeExp
-            return (c, t)
-      return $ GADT tc tvs ds
+            return [(c, t) | c <- cs]
+      return $ GADT tc tvs $ concat ds
    <|>
     do
       operator "="

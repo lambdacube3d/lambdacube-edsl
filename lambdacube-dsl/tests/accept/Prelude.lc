@@ -252,11 +252,6 @@ axioms
   VertexOut            :: ???
   VertexStream         :: PrimitiveType -> * -> *
 -}
-  AccumulationContext, Blending, FragmentFilter, FragmentOperation, FragmentOut, Input, Interpolated, VertexOut :: * -> *
-  VertexStream :: * -> * -> *
-  PrimitiveStream :: * -> Nat -> * -> *
-  FragmentStream, FrameBuffer :: Nat -> * -> *
-
   -- TODO: eliminate
   fromInt :: Num a => Int -> a
   compare :: Num a => a -> a -> Ordering
@@ -267,8 +262,8 @@ axioms
   -- TODO: eliminate?
   PrimV3FToV4F :: Vec 3 Float -> Vec 4 Float
 
+data Input t where
   -- Input declaration
-  Uni     :: Input t -> t
   IM22F :: String -> Input (Mat 2 2 Float)
   IM23F :: String -> Input (Mat 2 3 Float)
   IM24F :: String -> Input (Mat 2 4 Float)
@@ -295,12 +290,17 @@ axioms
   IWord :: String -> Input Word
   IBool :: String -> Input Bool
 
-  FragmentOut         :: (a ~ ColorRepr t) => t  -> FragmentOut a
+axioms
+  Uni     :: Input t -> t
+
+data FragmentOut a where
+  FragmentOut         :: (a ~ ColorRepr t) => t                 -> FragmentOut a
   FragmentOutDepth    :: (a ~ ColorRepr t, b ~ JoinTupleType (Depth Float) a) => Float -> t
                                                                 -> FragmentOut b
   FragmentOutRastDepth :: (a ~ ColorRepr t, b ~ JoinTupleType (Depth Float) a) => t
                                                                 -> FragmentOut b
 
+data VertexOut a where
   VertexOut           :: (t ~ FTRepr' a) => Vec 4 Float -> Float -> (){-TODO-} -> a -> VertexOut t
 
 data RasterContext a where
@@ -315,8 +315,7 @@ data FetchPrimitive a where
    LinesAdjacency      :: FetchPrimitive LineAdjacency
    TrianglesAdjacency  :: FetchPrimitive TriangleAdjacency
 
-axioms
-
+data AccumulationContext a where
   AccumulationContext :: (t' ~ FragOps t) => t -> AccumulationContext t'
 
 data Image (a :: Nat) b{-Semantic-} where
@@ -325,33 +324,39 @@ data Image (a :: Nat) b{-Semantic-} where
   DepthImage          :: forall (a :: Nat) . Float  -> Image a (Depth Float)
   StencilImage        :: forall (a :: Nat) . Int    -> Image a (Stencil Int)
 
-axioms
-
+data Interpolated t where
   Smooth, NoPerspective
                       :: (Floating t) => t -> Interpolated t
   Flat                ::                 t -> Interpolated t
 
-  ColorOp             :: (mask ~ VecScalar d Bool, color ~ VecScalar d c, Num c) => Blending c -> mask
-                                                            -> FragmentOperation (Color color)
-  DepthOp             :: ComparisonFunction -> Bool    -> FragmentOperation (Depth Float)
-    -- StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
-
-  -- Blending
-  NoBlending          ::                                          Blending t
+data Blending a where
+  NoBlending          ::                                   Blending t
   BlendLogicOp        :: (Integral t) => LogicOperation -> Blending t
   Blend               :: (BlendEquation, BlendEquation)
                          -> ((BlendingFactor, BlendingFactor), (BlendingFactor, BlendingFactor))
-                         -> Vec 4 Float ->                             Blending Float
+                         -> Vec 4 Float ->                 Blending Float
 
-  -- Fragment Filter
-  PassAll             ::                 FragmentFilter t
+data FragmentOperation a where
+  ColorOp             :: (mask ~ VecScalar d Bool, color ~ VecScalar d c, Num c) => Blending c -> mask
+                                                                   -> FragmentOperation (Color color)
+  DepthOp             :: ComparisonFunction -> Bool                -> FragmentOperation (Depth Float)
+    -- StencilOp       :: StencilTests -> StencilOps -> StencilOps -> FragmentOperation (Stencil Int32)
+
+data FragmentFilter t where
+  PassAll             ::                FragmentFilter t
   Filter              :: (t -> Bool) -> FragmentFilter t
 
-  -- Render Operations
+data VertexStream a b where
   Fetch               :: (InputTuple t, b ~ FTRepr' t) => String -> FetchPrimitive a -> t -> VertexStream a b
+
+data PrimitiveStream p (n :: Nat) b where
   Transform           :: (a -> VertexOut b) -> VertexStream p a -> PrimitiveStream p 1 b
+
+  -- Render Operations
+data FragmentStream (n :: Nat) a where
   Rasterize           :: RasterContext a -> PrimitiveStream a b c -> FragmentStream b c
 
+data FrameBuffer (n :: Nat) a where
   Accumulate          :: (ValidOutput b, t ~ FTRepr' b) =>
                            AccumulationContext b
                         -> FragmentFilter a
