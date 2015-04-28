@@ -393,23 +393,6 @@ data Q a = Q {qualifier :: [String], qData :: a} -- | UQ a
 
 type Prec = Map EName (FixityDir, Int)
 
--- AST
-data Module t a
-  = Module
-  { moduleImports :: [Q MName]
-  , moduleExports :: ()
-  , typeAliases   :: ()
-  , definitions   :: [ValueDef a]
-  , dataDefs      :: [DataDef t]
-  , typeClasses   :: ()
-  , instances     :: Map Class (Set t)
-  , precedences   :: Prec
-  , moduleFile    :: FilePath
-  , axioms        :: [(String, Ty' a)]
-  }
-    deriving (Show)
-
-type ValueDef a = (Pat a, Exp a)
 data DataDef a = DataDef String [String] [ConDef a]
     deriving (Show)
 data ConDef a = ConDef EName [FieldTy a]
@@ -427,6 +410,49 @@ data TypeClassInstance -- name, type, [definition]
 data FixityDir = FNoDir | FDLeft | FDRight
     deriving (Show)
 
+type PatR = Pat Range
+type ExpR' = Exp Range
+type ExpR = Prec -> ExpR'
+type TyR = Ty' Range
+type DataDefR = DataDef TyR
+type ModuleR = Module TyR Range
+type DefinitionR = Definition TyR ExpR Range
+type WhereRHSR = WhereRHS TyR ExpR Range
+type GuardedRHSR = GuardedRHS ExpR
+
+type ModuleT = Module Typing STyping
+
+data Module t a
+  = Module
+  { moduleImports :: [Q MName]
+  , moduleExports :: ()
+  , typeAliases   :: ()
+  , definitions   :: [Definition t (Exp a) a]
+--  , axioms        :: [(String, Ty' a)]
+  , typeClasses   :: ()
+--  , instances     :: Map Class (Set t)
+  , precedences   :: Prec
+  , moduleFile    :: FilePath
+  }
+    deriving (Show)
+
+data WhereRHS t e r= WhereRHS (GuardedRHS e) (Maybe [Definition t e r])
+    deriving Show
+data GuardedRHS e
+    = Guards [(e, e)]
+    | NoGuards e
+    deriving Show
+
+data Definition t e r
+  = PreValueDef (Range, EName) [PatR] (WhereRHS t e r)   -- before group
+  | ValueDef (Pat r, e)
+  | TypeSig (String, (Ty' r){-FIXME:t-})
+  | DDataDef (DataDef t)
+  | InstanceDef Class t
+  | DFixity EName (FixityDir, Int)
+    deriving Show
+
+-----------------------------------------
 
 class GetTag c where getTag :: c a -> a
 

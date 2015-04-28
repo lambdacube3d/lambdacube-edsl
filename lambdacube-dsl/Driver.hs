@@ -72,9 +72,9 @@ getDef_ m d = do
     typeCheckLC m
     ms <- get
     return $ case
-        [ buildLet (concatMap (definitions . snd) (reverse dss) ++ reverse ps) e
+        [ buildLet ((\ds -> [d | ValueDef d <- ds]) (concatMap (definitions . snd) (reverse dss) ++ reverse ps)) e
          | ((m', defs): dss) <- tails ms, m' == m
-         , ((AST.PVar (_, t) d', e):ps) <- tails $ reverse $ definitions defs, d' == d
+         , (ValueDef (AST.PVar (_, t) d', e):ps) <- tails $ reverse $ definitions defs, d' == d
          ] of
         [e] -> Right e
         [] -> Left "not found"

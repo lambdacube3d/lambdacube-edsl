@@ -29,7 +29,6 @@ import Debug.Trace
 
 import Type
 import Typing
-import Parser (ModuleR)
 
 class Substitute a where subst :: Subst -> a -> a
 
@@ -173,10 +172,6 @@ dependentVars ie s = cycle mempty s
         a --> b = \s -> if Set.null $ a `Set.intersection` s then mempty else b
         a <-> b = (a --> b) <> (b --> a)
 
-type ModuleT = Module Typing STyping
-
-mkEnv = map $ mangleAx . (id *** generalizeTypeVars . convTy)
-
 mangleAx (n, t) = (if kinded $ res $ typingType t then primed n else n, t)
   where
     res (TArr a b) = res b
@@ -187,52 +182,49 @@ mangleAx (n, t) = (if kinded $ res $ typingType t then primed n else n, t)
         _ -> False
 
 inference_ :: PolyEnv -> ModuleR -> Either ErrorMsg ModuleT
-inference_ primFunMap m = runExcept $ fst <$>
-    evalRWST (inferModule m) (primFunMap, mempty) (mempty, ['t':show i | i <- [0..]])
+inference_ penv m = runExcept $ fst <$>
+    evalRWST (inferModule m) (penv, mempty) (mempty, ['t':show i | i <- [0..]])
   where
-    inferModule Module{..} = withTyping (Map.fromList $ tyConKinds dataDefs) $ do
-        let d = dataDefs
-        inferAxioms [] axioms $ \axioms -> do
-            dataDefs <- mapM inferDataDef dataDefs
-            instances <- mapM (fmap Set.fromList . mapM inferInst . toList) instances
-            definitions <- withTyping (Map.fromList $ tyConTypes dataDefs) $ inferDefs $ selectorDefs d ++ definitions
-            return Module{..}
+    inferModule Module{..} = do
+        definitions <- inferDefs definitions
+        return Module{..}
 
-    inferInst t = do
-        t <- inferKind' t
-        return t
+inferDefs :: [Definition TyR (Exp Range) Range] -> TCM [Definition Typing (Exp STyping) STyping]
+inferDefs [] = return []
+inferDefs (ValueDef d: ds) = do
+    (d, f) <- inferDef d
+    ds <- f $ inferDefs ds
+    return (ValueDef d: ds)
+inferDefs (DDataDef d@(DataDef con vars cdefs): ds) = withTyping (uncurry Map.singleton $ tyConKind d) $ do
+    cdefs <- withTyping (Map.fromList [(primed v, [] ==> Star) | v <- vars]) $ mapM inferConDef cdefs
+    let d' = DataDef con vars cdefs
+    ds <- withTyping (Map.fromList $ tyConTypes d') $ inferDefs $ selectorDefs d ++ ds
+    return (DDataDef d': ds)
+inferDefs (TypeSig (n, a): ds) = do
+    a' <- inferKind a
+    let (n', a'') = mangleAx . (id *** generalizeTypeVars . convTy) $ (n, a')
+    ds <- withTyping (Map.singleton n' a'') $ inferDefs ds
+    return (TypeSig (n, a'): ds)
+inferDefs (InstanceDef c t: ds) = do
+    t <- inferKind' t
+    ds <- local ((\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton $ typingType{-TODO-} t) (Set.insert $ typingType{-TODO-} t)) c $ instanceDefs pe}) *** id) $ inferDefs ds
+    return (InstanceDef c t: ds)
 
-    inferAxioms acc [] cont = cont $ reverse acc
-    inferAxioms acc ((n, a): ds) cont = do
-        a' <- inferKind a
-        let (n', a'') = mangleAx . (id *** generalizeTypeVars . convTy) $ (n, a')
-        withTyping (Map.singleton n' a'') $ inferAxioms ((n, a'): acc) ds cont
+inferConDef (ConDef n tys) = do
+    tys <- mapM inferFieldKind tys
+    return $ ConDef n tys
 
-    inferDefs [] = return []
-    inferDefs (d: ds) = do
-        (d, f) <- inferDef d
-        ds <- f $ inferDefs ds
-        return (d: ds)
+inferFieldKind (FieldTy mn t) = do
+    t <- inferKind' t
+    return $ FieldTy mn t
 
-    inferDataDef (DataDef con vars cdefs) = do
-        cdefs <- withTyping (Map.fromList [(primed v, [] ==> Star) | v <- vars]) $ mapM inferConDef cdefs
-        return $ DataDef con vars cdefs
-
-    inferConDef (ConDef n tys) = do
-        tys <- mapM inferFieldKind tys
-        return $ ConDef n tys
-
-    inferFieldKind (FieldTy mn t) = do
-        t <- inferKind' t
-        return $ FieldTy mn t
-
-    inferDef (p@(PVar _ n), e) = do
-        (p, tr) <- inferPatTyping False p
-        (Exp (s'', te) exp) <- withTyping tr $ inferTyping e
-        (s, t) <- unifyTypings "definition" [[snd $ getTag p, te]] $ \[t] -> t
-        let e = Exp (s <> s'', removeMonoVars (Set.singleton n) t) exp
-        let f = withTyping $ Map.singleton n $ snd . getTag $ e
-        return ((PVar (getTag e) n, replCallType n (getTag e) e), f)
+inferDef (p@(PVar _ n), e) = do
+    (p, tr) <- inferPatTyping False p
+    (Exp (s'', te) exp) <- withTyping tr $ inferTyping e
+    (s, t) <- unifyTypings "definition" [[snd $ getTag p, te]] $ \[t] -> t
+    let e = Exp (s <> s'', removeMonoVars (Set.singleton n) t) exp
+    let f = withTyping $ Map.singleton n $ snd . getTag $ e
+    return ((PVar (getTag e) n, replCallType n (getTag e) e), f)
 
 -- TODO
 replCallType n nt = \case
@@ -243,9 +235,10 @@ replCallType n nt = \case
 
 modTag f (Exp t x) = Exp (f t) x
 
-selectorDefs :: [DataDef (Ty' Range)] -> [ValueDef Range]
-selectorDefs dataDefs =
-    [ ( PVar mempty sel
+selectorDefs :: DataDef (Ty' Range) -> [Definition TyR (Exp Range) Range]
+selectorDefs d@(DataDef n vs cs) =
+    [ ValueDef
+      ( PVar mempty sel
       , ELam mempty
             (PCon mempty cn
                 [ if sel == sel' then PVar mempty "x" else Wildcard mempty
@@ -253,16 +246,14 @@ selectorDefs dataDefs =
             )
             (EVar mempty "x")
       )
-    | d@(DataDef n vs cs) <- dataDefs
-    , ConDef cn tys <- cs
+    | ConDef cn tys <- cs
     , FieldTy (Just sel) _ <- tys
     ]
 
-selectorTypes :: [DataDef Typing] -> [(EName, Typing)]
-selectorTypes dataDefs =
+selectorTypes :: DataDef Typing -> [(EName, Typing)]
+selectorTypes d@(DataDef n vs cs) =
     [ (sel, generalizeTypeVars $ tyConResTy d .~> t)
-    | d@(DataDef n vs cs) <- dataDefs
-    , ConDef cn tys <- cs
+    | ConDef cn tys <- cs
     , FieldTy (Just sel) t <- tys
     ]
 
@@ -274,26 +265,29 @@ tyConResTy (DataDef n vs _)
     k = StarToStar i
     i = length vs
 
-tyConTypes :: [DataDef Typing] -> [(EName, Typing)]
-tyConTypes dataDefs =
+tyConTypes :: DataDef Typing -> [(EName, Typing)]
+tyConTypes d@(DataDef n vs cs) =
     [ (cn, foldr (.~>) (tyConResTy d) $ map fieldType tys)
-    | d@(DataDef n vs cs) <- dataDefs
-    , ConDef cn tys <- cs
+    | ConDef cn tys <- cs
     ]
 
-tyConKinds dataDefs = [(primed n, [] ==> StarToStar (length vs)) | DataDef n vs _ <- dataDefs]
+tyConKind (DataDef n vs _) = (primed n, [] ==> StarToStar (length vs))
 
 exportEnv :: ModuleT -> PolyEnv
 exportEnv Module{..}
     = PolyEnv
-    { getPolyEnv = fmap instantiateTyping $ Map.fromList $
-            [(n, snd $ getTag e) | (PVar _ n, e) <- definitions]
-        ++  tyConKinds dataDefs
-        ++  tyConTypes dataDefs
-        ++  selectorTypes dataDefs
-        ++  mkEnv axioms
-    , instanceDefs = Set.fromList . fmap typingType{-TODO-} . toList <$> instances
+    { getPolyEnv = fmap instantiateTyping $ Map.fromList $ concatMap axs definitions
+    , instanceDefs = Map.unionsWith (<>) [Map.singleton c $ Set.singleton $ typingType{-TODO-} t | InstanceDef c t <- definitions]
+            -- TODO: check clash
     }
+
+axs = \case
+    ValueDef (PVar _ n, e) -> [(n, snd $ getTag e)]
+    DDataDef d -> tyConKind d: tyConTypes d ++ selectorTypes d
+    TypeSig x -> [mkEnv x]
+    _ -> []
+
+mkEnv = mangleAx . (id *** generalizeTypeVars . convTy)
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     [] -> Right $ PolyEnv (foldMap instanceDefs ps) $ head <$> ms

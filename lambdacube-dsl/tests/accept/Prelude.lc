@@ -40,6 +40,44 @@ data Maybe a
     | Just a
     deriving (Eq, Ord, Show)
 
+
+---------------------------------------
+
+axioms
+
+  NatKind :: *
+  Char, String, Word, Int, Float :: *
+
+  Vec :: NatKind -> * -> *
+  Mat :: NatKind -> NatKind -> * -> *
+
+  V2 :: Component a => a -> a -> Vec 2 a
+  V3 :: Component a => a -> a -> a -> Vec 3 a
+  V4 :: Component a => a -> a -> a -> a -> Vec 4 a
+
+  V2B :: Bool -> Bool -> Vec 2 Bool
+  V3B :: Bool -> Bool -> Bool -> Vec 3 Bool
+  V4B :: Bool -> Bool -> Bool -> Bool -> Vec 4 Bool
+  V2I :: Int -> Int -> Vec 2 Int
+  V3I :: Int -> Int -> Int -> Vec 3 Int
+  V4I :: Int -> Int -> Int -> Int -> Vec 4 Int
+  V2U :: Word -> Word -> Vec 2 Word
+  V3U :: Word -> Word -> Word -> Vec 3 Word
+  V4U :: Word -> Word -> Word -> Word -> Vec 4 Word
+  V2F :: Float -> Float -> Vec 2 Float
+  V3F :: Float -> Float -> Float -> Vec 3 Float
+  V4F :: Float -> Float -> Float -> Float -> Vec 4 Float
+  M22F :: Vec 2 Float -> Vec 2 Float -> Mat 2 2 Float
+  M23F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 3 Float
+  M24F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 4 Float
+  M32F :: Vec 3 Float -> Vec 3 Float -> Mat 3 2 Float
+  M33F :: Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Mat 3 3 Float
+  M34F :: Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Mat 3 4 Float
+  M42F :: Vec 4 Float -> Vec 4 Float -> Mat 4 2 Float
+  M43F :: Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Mat 4 3 Float
+  M44F :: Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Mat 4 4 Float
+
+
 --------------------------------------- type classes
 
 class CNum a
@@ -99,13 +137,103 @@ instance Floating       (Mat 4 3 Float)
 instance Floating       (Mat 4 4 Float)
 
 
+data BlendingFactor
+    = Zero
+    | One
+    | SrcColor
+    | OneMinusSrcColor
+    | DstColor
+    | OneMinusDstColor
+    | SrcAlpha
+    | OneMinusSrcAlpha
+    | DstAlpha
+    | OneMinusDstAlpha
+    | ConstantColor
+    | OneMinusConstantColor
+    | ConstantAlpha
+    | OneMinusConstantAlpha
+    | SrcAlphaSaturate
+
+data BlendEquation
+    = FuncAdd
+    | FuncSubtract
+    | FuncReverseSubtract
+    | Min
+    | Max
+
+data LogicOperation
+    = Clear
+    | And
+    | AndReverse
+    | Copy
+    | AndInverted
+    | Noop
+    | Xor
+    | Or
+    | Nor
+    | Equiv
+    | Invert
+    | OrReverse
+    | CopyInverted
+    | OrInverted
+    | Nand
+    | Set
+
+data StencilOperation
+    = OpZero
+    | OpKeep
+    | OpReplace
+    | OpIncr
+    | OpIncrWrap
+    | OpDecr
+    | OpDecrWrap
+    | OpInvert
+
+data ComparisonFunction
+    = Never
+    | Less
+    | Equal
+    | Lequal
+    | Greater
+    | Notequal
+    | Gequal
+    | Always
+
+data ProvokingVertex
+    = LastVertex
+    | FirstVertex
+
+data FrontFace
+    = CW
+    | CCW
+
+data CullMode
+    = CullFront FrontFace
+    | CullBack FrontFace
+    | CullNone
+
+data PointSize
+    = PointSize Float
+    | ProgramPointSize
+
+data PolygonMode
+    = PolygonFill
+    | PolygonPoint PointSize
+    | PolygonLine Float
+
+data PolygonOffset
+    = NoOffset
+    | Offset Float Float
+
+data PointSpriteCoordOrigin
+    = LowerLeft
+    | UpperLeft
+
+
 axioms
 
-  NatKind :: *
-  Char, String, Word, Int, Float :: *
   Depth, Stencil, Color :: * -> *
   Triangle, Line, Point, TriangleAdjacency, LineAdjacency :: *
-  CullMode, PolygonMode, PolygonOffset, ProvokingVertex, FrontFace, PointSize, BlendingFactor, BlendEquation, LogicOperation, StencilOperation, ComparisonFunction, PointSpriteCoordOrigin :: *
 
 {- TODO: more precise kinds
   FetchPrimitive       :: PrimitiveType -> *
@@ -121,44 +249,16 @@ axioms
   VertexStream :: * -> * -> *
   PrimitiveStream :: * -> NatKind -> * -> *
   Image, FragmentStream, FrameBuffer :: NatKind -> * -> *
-  Vec :: NatKind -> * -> *
-  Mat :: NatKind -> NatKind -> * -> *
 
   -- TODO: eliminate
   fromInt :: Num a => Int -> a
   compare :: Num a => a -> a -> Ordering
-
-  V2 :: Component a => a -> a -> Vec 2 a
-  V3 :: Component a => a -> a -> a -> Vec 3 a
-  V4 :: Component a => a -> a -> a -> a -> Vec 4 a
 
   PrimZero, PrimOne :: {- (Component a) => -- TODO -} a
   PrimTexture :: () -> Vec 2 Float -> Vec 4 Float
 
   -- temporary?
   PrimV3FToV4F :: Vec 3 Float -> Vec 4 Float
-
-  V2B :: Bool -> Bool -> Vec 2 Bool
-  V3B :: Bool -> Bool -> Bool -> Vec 3 Bool
-  V4B :: Bool -> Bool -> Bool -> Bool -> Vec 4 Bool
-  V2I :: Int -> Int -> Vec 2 Int
-  V3I :: Int -> Int -> Int -> Vec 3 Int
-  V4I :: Int -> Int -> Int -> Int -> Vec 4 Int
-  V2U :: Word -> Word -> Vec 2 Word
-  V3U :: Word -> Word -> Word -> Vec 3 Word
-  V4U :: Word -> Word -> Word -> Word -> Vec 4 Word
-  V2F :: Float -> Float -> Vec 2 Float
-  V3F :: Float -> Float -> Float -> Vec 3 Float
-  V4F :: Float -> Float -> Float -> Float -> Vec 4 Float
-  M22F :: Vec 2 Float -> Vec 2 Float -> Mat 2 2 Float
-  M23F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 3 Float
-  M24F :: Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Vec 2 Float -> Mat 2 4 Float
-  M32F :: Vec 3 Float -> Vec 3 Float -> Mat 3 2 Float
-  M33F :: Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Mat 3 3 Float
-  M34F :: Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Vec 3 Float -> Mat 3 4 Float
-  M42F :: Vec 4 Float -> Vec 4 Float -> Mat 4 2 Float
-  M43F :: Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Mat 4 3 Float
-  M44F :: Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Vec 4 Float -> Mat 4 4 Float
 
   -- Input declaration
   Uni     :: Input t -> t
@@ -188,34 +288,6 @@ axioms
   IWord :: String -> Input Word
   IBool :: String -> Input Bool
 
-  Zero, One, SrcColor, OneMinusSrcColor, DstColor, OneMinusDstColor, SrcAlpha, OneMinusSrcAlpha, DstAlpha, OneMinusDstAlpha, ConstantColor, OneMinusConstantColor, ConstantAlpha, OneMinusConstantAlpha, SrcAlphaSaturate
-                        :: BlendingFactor
-  FuncAdd, FuncSubtract, FuncReverseSubtract, Min, Max
-                        :: BlendEquation
-  Clear, And, AndReverse, Copy, AndInverted, Noop, Xor, Or, Nor, Equiv, Invert, OrReverse, CopyInverted, OrInverted, Nand, Set
-                        :: LogicOperation
-  OpZero, OpKeep, OpReplace, OpIncr, OpIncrWrap, OpDecr, OpDecrWrap, OpInvert
-                        :: StencilOperation
-  Never, Less, Equal, Lequal, Greater, Notequal, Gequal, Always
-                        :: ComparisonFunction
-  LastVertex, FirstVertex
-                        :: ProvokingVertex
-  CW, CCW             :: FrontFace
-
-  CullFront, CullBack
-                        :: FrontFace -> CullMode
-  CullNone            ::                CullMode
-
-  PolygonFill         ::               PolygonMode
-  PolygonPoint        :: PointSize -> PolygonMode
-  PolygonLine         :: Float ->     PolygonMode
-
-  NoOffset            ::                     PolygonOffset
-  Offset              :: Float -> Float -> PolygonOffset
-
-  PointSize           :: Float -> PointSize
-  ProgramPointSize    ::           PointSize
-
   FragmentOut         :: (a ~ ColorRepr t) => t  -> FragmentOut a
   FragmentOutDepth    :: (a ~ ColorRepr t, b ~ JoinTupleType (Depth Float) a) => Float -> t
                                                                 -> FragmentOut b
@@ -224,13 +296,12 @@ axioms
 
   VertexOut           :: (t ~ FTRepr' a) => Vec 4 Float -> Float -> (){-TODO-} -> a -> VertexOut t
 
-  LowerLeft, UpperLeft
-                        :: PointSpriteCoordOrigin
-
+  -- GADT RasterContext
   TriangleCtx         :: CullMode -> PolygonMode -> PolygonOffset -> ProvokingVertex -> RasterContext Triangle
   PointCtx            :: PointSize -> Float -> PointSpriteCoordOrigin                 -> RasterContext Point
   LineCtx             :: Float -> ProvokingVertex                                      -> RasterContext Line
 
+  -- GADT FetchPrimitive
   Points              :: FetchPrimitive Point
   Lines               :: FetchPrimitive Line
   Triangles           :: FetchPrimitive Triangle

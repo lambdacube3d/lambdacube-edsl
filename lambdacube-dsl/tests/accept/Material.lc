@@ -50,40 +50,19 @@ data CullType
     | CT_TwoSided
     deriving Show
 
-data CommonAttrs
-    = CommonAttrs
-    { caSkyParms        :: !() -- TODO
-    , caFogParms        :: !() -- TODO
-    , caPortal          :: !Bool
-    , caSort            :: !Int -- default: 3 or 6 depends on blend function
-    , caEntityMergable  :: !Bool
-    , caFogOnly         :: !Bool
-    , caCull            :: !CullType -- default: front
-    , caDeformVertexes  :: ![Deform]
-    , caNoMipMaps       :: !Bool
-    , caPolygonOffset   :: !Bool
-    , caStages          :: ![StageAttrs]
-
-    -- parser internals
-    , caIsSky           :: Bool
-    }
-    deriving Show
-
-defaultCommonAttrs :: CommonAttrs
-defaultCommonAttrs = CommonAttrs
-    { caSkyParms        = ()
-    , caFogParms        = ()
-    , caPortal          = False
-    , caSort            = 0
-    , caEntityMergable  = False
-    , caFogOnly         = False
-    , caCull            = CT_FrontSided
-    , caDeformVertexes  = []
-    , caNoMipMaps       = False
-    , caPolygonOffset   = False
-    , caStages          = []
-    , caIsSky           = False
-    }
+data Blending'
+    = B_DstAlpha
+    | B_DstColor
+    | B_One
+    | B_OneMinusDstAlpha
+    | B_OneMinusDstColor
+    | B_OneMinusSrcAlpha
+    | B_OneMinusSrcColor
+    | B_SrcAlpha
+    | B_SrcAlphaSaturate
+    | B_SrcColor
+    | B_Zero
+    deriving (Show, Eq)
 
 data RGBGen
     = RGB_Wave !Wave
@@ -148,20 +127,6 @@ data DepthFunction
     | D_Lequal
     deriving Show
 
-data Blending'
-    = B_DstAlpha
-    | B_DstColor
-    | B_One
-    | B_OneMinusDstAlpha
-    | B_OneMinusDstColor
-    | B_OneMinusSrcAlpha
-    | B_OneMinusSrcColor
-    | B_SrcAlpha
-    | B_SrcAlphaSaturate
-    | B_SrcColor
-    | B_Zero
-    deriving (Show, Eq)
-
 data StageAttrs
     = StageAttrs
     { saBlend       :: !(Maybe (Blending', Blending'))
@@ -191,5 +156,40 @@ defaultStageAttrs = StageAttrs
     , saDepthFunc   = D_Lequal
     , saAlphaFunc   = Nothing
     , saDepthMaskExplicit   = False
+    }
+
+data CommonAttrs
+    = CommonAttrs
+    { caSkyParms        :: !() -- TODO
+    , caFogParms        :: !() -- TODO
+    , caPortal          :: !Bool
+    , caSort            :: !Int -- default: 3 or 6 depends on blend function
+    , caEntityMergable  :: !Bool
+    , caFogOnly         :: !Bool
+    , caCull            :: !CullType -- default: front
+    , caDeformVertexes  :: ![Deform]
+    , caNoMipMaps       :: !Bool
+    , caPolygonOffset   :: !Bool
+    , caStages          :: ![StageAttrs]
+
+    -- parser internals
+    , caIsSky           :: Bool
+    }
+    deriving Show
+
+defaultCommonAttrs :: CommonAttrs
+defaultCommonAttrs = CommonAttrs
+    { caSkyParms        = ()
+    , caFogParms        = ()
+    , caPortal          = False
+    , caSort            = 0
+    , caEntityMergable  = False
+    , caFogOnly         = False
+    , caCull            = CT_FrontSided
+    , caDeformVertexes  = []
+    , caNoMipMaps       = False
+    , caPolygonOffset   = False
+    , caStages          = []
+    , caIsSky           = False
     }
 

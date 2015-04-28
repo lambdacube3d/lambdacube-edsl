@@ -118,45 +118,23 @@ varId = var <|> parens operator'
 
 --------------------------------------------------------------------------------
 
-type PatR = Pat Range
-type ExpR' = Exp Range
-type ExpR = Prec -> ExpR'
-type TyR = Ty' Range
-type DataDefR = DataDef TyR
-type ModuleR = Module TyR Range
-
-data WhereRHS = WhereRHS GuardedRHS (Maybe [Definition])
-data GuardedRHS
-    = Guards [(ExpR, ExpR)]
-    | NoGuards ExpR
-
-data Definition
-  = ValueDef (PatR, ExpR)
-  | PreValueDef (Range, EName) [PatR] WhereRHS --(PatR, Prec -> Exp Range -> Exp Range)  -- before group
-  | TypeSig (String, TyR)
-  | DDataDef DataDefR
-  | DFixity EName (FixityDir, Int)
-  | InstanceDef Class TyR
-
---------------------------------------------------------------------------------
-
 alts :: Int -> [ExpR] -> ExpR
 alts i es_ ps = EAlts (foldr1 (<-->) $ map getTag es) i es  where es = map ($ ps) es_
 
-compileWhereRHS :: WhereRHS -> ExpR
+compileWhereRHS :: WhereRHSR -> ExpR
 compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
     x = compileGuardedRHS r
 
-compileGuardedRHS :: GuardedRHS -> ExpR
+compileGuardedRHS :: GuardedRHSR -> ExpR
 compileGuardedRHS (NoGuards e) = e
 compileGuardedRHS (Guards gs) = foldr addGuard (\ps -> Exp mempty ENext_) gs
   where
     addGuard (b, x) y = eApp (eApp (eApp (eVar mempty "ifThenElse") b) x) y
 
-compileCases :: Range -> ExpR -> [(PatR, WhereRHS)] -> ExpR
+compileCases :: Range -> ExpR -> [(PatR, WhereRHSR)] -> ExpR
 compileCases r e rs = eApp (alts 1 [eLam p $ compileWhereRHS r | (p, r) <- rs]) e
 
-compileRHS :: [Definition] -> Definition
+compileRHS :: [DefinitionR] -> DefinitionR
 compileRHS ds = case ds of
     (TypeSig (_, t): ds@(PreValueDef{}: _)) -> mkAlts (`eTyping` t) ds
     ds@(PreValueDef{}: _) -> mkAlts id ds
@@ -170,7 +148,7 @@ compileRHS ds = case ds of
 
 allSame (n:ns) | all (==n) ns = n
 
-groupDefinitions :: [Definition] -> [Definition]
+groupDefinitions :: [DefinitionR] -> [DefinitionR]
 groupDefinitions = map compileRHS . groupBy f
   where
     f (h -> Just x) (h -> Just y) = x == y
@@ -214,16 +192,21 @@ moduleDef fname = do
         , (:[]) <$> typeClassInstanceDef
         ])
     let ps = Map.fromList [(n, p) | DFixity n p <- defs]
+        mkDef = \case
+            ValueDef d -> [ValueDef $ id *** ($ ps) $ d]
+            DDataDef d -> [DDataDef d]
+            InstanceDef c t -> [InstanceDef c t]
+            TypeSig d -> [TypeSig d]
+            _ -> []
     return $ Module
       { moduleImports = (if modn == Just (Q [] "Prelude") then id else (Q [] "Prelude":)) idefs
       , moduleExports = mempty
       , typeAliases   = mempty
-      , definitions   = [id *** ($ ps) $ d | ValueDef d <- defs]
-      , dataDefs      = [d | DDataDef d <- defs]
+      , definitions   = concatMap mkDef defs
       , typeClasses   = mempty
-      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
+--      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
       , precedences   = ps     -- TODO: check multiple definitions
-      , axioms        = [d | TypeSig d <- defs]
+--      , axioms        = [d | TypeSig d <- defs]
       , moduleFile    = fname
       }
 
@@ -251,7 +234,7 @@ typeSynonym = void_ $ do
     operator "="
     void_ typeExp
 
-typeSignature :: P Definition
+typeSignature :: P DefinitionR
 typeSignature = TypeSig <$> do
   n <- try' "type signature" $ do
     n <- varId
@@ -261,7 +244,7 @@ typeSignature = TypeSig <$> do
     optional (operator "!") *> typeExp
   return (n, t)
 
-axiom :: P [Definition]
+axiom :: P [DefinitionR]
 axiom = do
   ns <- try' "axiom" $ do
     ns <- sepBy1 (varId <|> dataConstructor) comma
@@ -382,7 +365,7 @@ typeClassDef = void_ $ do
       localAbsoluteIndentation $ do
         many typeSignature
 
-typeClassInstanceDef :: P Definition
+typeClassInstanceDef :: P DefinitionR
 typeClassInstanceDef = do
   keyword "instance"
   localIndentation Gt $ do
@@ -395,7 +378,7 @@ typeClassInstanceDef = do
         many valueDef
     return $ InstanceDef c t
 
-fixityDef :: P [Definition]
+fixityDef :: P [DefinitionR]
 fixityDef = do
   dir <-    FNoDir  <$ keyword "infix" 
         <|> FDLeft  <$ keyword "infixl"
@@ -452,7 +435,7 @@ valuePatternAtom
 
 eLam p e_ ps = ELam (p <-> e) p e where e = e_ ps
 
-valueDef :: P Definition
+valueDef :: P DefinitionR
 valueDef = do
   f <- 
     try' "definition" (do
@@ -473,7 +456,7 @@ valueDef = do
     e <- whereRHS $ operator "="
     return $ f e
 
-whereRHS :: P () -> P WhereRHS
+whereRHS :: P () -> P WhereRHSR
 whereRHS delim = do
     d <- rhs delim
     do
@@ -483,7 +466,7 @@ whereRHS delim = do
           return (WhereRHS d $ Just l)
       <|> return (WhereRHS d Nothing)
 
-rhs :: P () -> P GuardedRHS
+rhs :: P () -> P GuardedRHSR
 rhs delim = NoGuards <$> xx
   <|> Guards <$> many ((,) <$> (operator "|" *> expression) <*> xx)
   where
@@ -539,7 +522,7 @@ expression = do
       a <- expression
       return $ eLets l a
 
-eLets :: [Definition] -> ExpR -> ExpR
+eLets :: [DefinitionR] -> ExpR -> ExpR
 eLets l a ps = foldr ($) (a ps) . map eLet $ groupDefinitions l
   where
     eLet (ValueDef (a, b_)) = ELet (a <-> b) a b where b = b_ ps
