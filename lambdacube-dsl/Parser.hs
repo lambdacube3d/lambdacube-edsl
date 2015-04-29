@@ -69,7 +69,7 @@ operator = reserve lcOps
 
 void_ a = a >> return ()
 
-typeConstraint :: P Class
+typeConstraint :: P ClassName
 typeConstraint = do
   i <- ident lcIdents
   if isUpper $ head i then return i else fail "type constraint must start with capital letter"
@@ -323,7 +323,7 @@ typeAtom :: P TyR
 typeAtom = typeRecord
     <|> addPos Ty' (Star_ C <$ operator "*")
     <|> addPos Ty' (TVar_ <$> try' "type var" typeVar)
-    <|> addPos Ty' (TNat_ . fromIntegral <$> natural)
+    <|> addPos Ty' (TLit_ <$> (LNat . fromIntegral <$> natural <|> literal))
     <|> addPos Ty' (TCon_ <$> typeConstructor)
     <|> addPos tTuple (parens (sepBy ty comma))
     <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ "List")) (brackets ty)
@@ -587,7 +587,7 @@ eTyApp a_ b ps = ETyApp (a <-> b) a b where a = a_ ps
 expressionAtom_ :: P ExpR
 expressionAtom_ =
   listExp <|>
-  addPos (ret eLit) literalExp <|>
+  addPos (ret eLit) literal <|>
   recordExp <|>
   recordExp' <|>
   recordFieldProjection <|>
@@ -611,18 +611,18 @@ expressionAtom_ =
   eLit p l@LInt{} = eApp' (EVar p "fromInt") $ ELit p l
   eLit p l = ELit p l
 
-  literalExp :: P Lit
-  literalExp =
-      LFloat <$> try double <|>
-      LInt <$> try integer <|>
-      LChar <$> charLiteral <|>
-      LString <$> stringLiteral
-
   listExp :: P ExpR
   listExp = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep expression
     where
       nil (p1, p2) = eVar (p2 {- - 1 -}, p2) "Nil"
       cons a b = eApp (eApp (eVar mempty{-TODO-} "Cons") a) b
+
+literal :: P Lit
+literal =
+    LFloat <$> try double <|>
+    LInt <$> try integer <|>
+    LChar <$> charLiteral <|>
+    LString <$> stringLiteral
 
 eTuple _ [x] ps = x ps
 eTuple p xs ps = ETuple p $ map ($ ps) xs

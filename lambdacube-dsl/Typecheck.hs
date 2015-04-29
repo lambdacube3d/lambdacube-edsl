@@ -86,6 +86,7 @@ unifyTypes_ fail bidirectional xss = flip execStateT mempty $ forM_ xss $ \xs ->
         unifyTy (TVar k u) (TVar k' v) | u == v = uni k k'
         unifyTy (TVar k u) _ = bindVar u k b
         unifyTy _ (TVar k u) | bidirectional = bindVar u k a
+        unifyTy (TLit k l) (TLit k' l') | l == l' = uni k k'
         unifyTy (TCon k u) (TCon k' v) | u == v = uni k k' --return ()
         unifyTy (TTuple t1) (TTuple t2) = sequence_ $ zipWith uni t1 t2
         unifyTy (TApp k1 a1 b1) (TApp k2 a2 b2) = uni a1 a2 >> uni b1 b2
@@ -339,7 +340,8 @@ generalizeTypeVars t = removeMonoVars (Set.fromList $ filter isTypeVar $ Map.key
 isTypeVar ('\'':tv) = True
 isTypeVar _ = False
 
-removeMonoVars vs (Typing me cs t pvs) = typing (foldr Map.delete me $ Set.toList vs) cs t
+removeMonoVars vs (Typing me cs t pvs) = --Typing me cs t $ pvs <> vs --
+    typing (foldr Map.delete me $ Set.toList vs) cs t
 
 -- TODO: unification
 (.~>) :: Typing -> Typing -> Typing
@@ -374,6 +376,19 @@ kindOf (typingType -> Ty_ k _) = [] ==> k
 inferKind' :: Ty' Range -> TCM Typing
 inferKind' t = convTy <$> inferKind t
 
+fieldProjType :: FName -> TCM (Subst, Typing)
+fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
+
+inferLit :: Lit -> TCM Typing
+inferLit a = case a of
+  LInt _    -> ty TInt
+  LChar   _ -> ty TChar
+  LFloat  _ -> ty TFloat
+  LString _ -> ty TString
+  LNat _    -> ty TNat
+ where
+  ty t = return $ [] ==> t
+
 inferKind :: Ty' Range -> TCM (Ty' STyping)
 inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     Forall_ n k t -> do
@@ -385,11 +400,11 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
         ty' <- T.mapM inferKind ty
         (\t -> Ty' t ty') <$> case ty' of
             TConstraintArg_ c t -> return (mempty, error "tcarg")
-            TNat_ _ -> return (mempty, [] ==> NatKind)
+            TLit_ l -> (,) mempty <$> inferLit l
             Star_ C -> return (mempty, [] ==> Star)
             TTuple_ ts -> unifyTypings "tuple kind" (map ((star:) . getTag') ts) $ \_ -> Star
             TArr_ a b -> unifyTypings "arrow kind" [star: getTag' a, star: getTag' b] $ \_ -> Star
-            TApp_ tf ta -> unifyTypings "app kind" [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
+            TApp_ tf ta -> unifyTypings ("app kind\n" ++ ppShow (tf, ta)) [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
             TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (addTypeVar ('\'':n)) . Map.lookup (primed n)
             TCon_ n -> asks (getPolyEnv . fst) >>= \env ->
                 fromMaybe (fromMaybe (throwErrorTCM $ "Type constructor " ++ n ++ " is not in scope.") $ Map.lookup n env) $ Map.lookup (primed n) env

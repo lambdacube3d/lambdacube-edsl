@@ -43,7 +43,7 @@ isConstr n@(c:_) = isUpper c || c == ':' -- TODO
 type Subst = Map TName Ty
 type MonoEnv a = Map EName a
 data PolyEnv = PolyEnv
-    { instanceDefs :: Map Class (Set Ty)
+    { instanceDefs :: Map ClassName (Set Ty)
     , getPolyEnv :: Map EName (TCM STyping)
     }
 
@@ -239,27 +239,17 @@ data Ty' a = Ty' a (Ty_ (Ty' a))
   deriving (Show,Eq,Ord)
 
 data Ty_ a
-  -- kinds
   = Star_ Frequency      -- type of types
-  -- constraint kinds
-  | ClassCK_
-  | EqCK_ a a
-  | TFunCK_ a
-  --
   | TVar_    TName
   | TCon_    TCName
   | TApp_    a a
   | TArr_    a a
   | Forall_ TName a a
-  | TConstraintArg_ (Constraint a) a
-  -- composit
+  | ConstraintKind (Constraint a)
+  | TConstraintArg_ (Constraint a) a    -- TODO: replace with Forall + ConstraintKind
   | TTuple_  [a]
   | TRecord_ (Map FName a)
-  -- type families are placed in constraints
-  -- | TFun    (TypeFun a)
-
-  -- lambdacube types
-  | TNat_    Int
+  | TLit_ Lit
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 pattern Star = StarToStar 0
@@ -269,10 +259,10 @@ pattern TyStar a = Ty_ Star a
 pattern TApp k a b = Ty_ k (TApp_ a b)
 pattern TCon k a = Ty_ k (TCon_ a)
 pattern TVar k b = Ty_ k (TVar_ b)
+pattern TLit k b = Ty_ k (TLit_ b)
 
-pattern NatKind = TCon0 "Nat"
-pattern VecKind = TArr NatKind StarStar
-pattern MatKind = TArr NatKind (TArr NatKind StarStar)
+pattern VecKind = TArr TNat StarStar
+pattern MatKind = TArr TNat (TArr TNat StarStar)
 
 pattern Forall a b c = TyStar (Forall_ a b c)
 pattern TConstraintArg a b = TyStar (TConstraintArg_ a b)
@@ -288,9 +278,9 @@ pattern TCon3' a b c d = TApp Star (TApp StarStar (TApp VecKind (TCon (TArr Star
 pattern TRecord b = TyStar (TRecord_ b)
 pattern TTuple b = TyStar (TTuple_ b)
 pattern TUnit = TTuple []
-pattern TNat a = Ty_ NatKind (TNat_ a)
-pattern TVec a b = TCon2' "Vec" (TNat a) b
-pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TNat a)) (TNat b)) c
+pattern TENat a = Ty_ TNat (TLit_ (LNat a))
+pattern TVec a b = TCon2' "Vec" (TENat a) b
+pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TENat a)) (TENat b)) c
 
 -- basic types
 pattern TChar = TCon0 "Char"
@@ -298,6 +288,7 @@ pattern TString = TCon0 "String"
 pattern TBool = TCon0 "Bool"
 pattern TWord = TCon0 "Word"
 pattern TInt = TCon0 "Int"
+pattern TNat = TCon0 "Nat"
 pattern TFloat = TCon0 "Float"
 pattern TArray b = TCon1 "Array" b
 pattern TList a = TCon1 "List" a
@@ -323,7 +314,7 @@ args ~~> res = foldr (~>) res args
 data Constraint a
   = CEq a (TypeFun a)   -- unification between a type and a fully applied type function; CEq t f:  t ~ f
   | CUnify a a          -- unification between (non-type-function) types; CUnify t s:  t ~ s
-  | CClass Class a      -- class constraint
+  | CClass ClassName a      -- class constraint
   | Split a a a         -- Split x y z:  x, y, z are records; fields of x = disjoint union of the fields of y and z
   deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
@@ -339,7 +330,6 @@ infix 4 ~~~
 infix 9 @@
 (@@) = CClass
 
-type Class = ClassName
 pattern CNum = "Num"
 pattern CTextual = "Textual"
 pattern IsComponent = "Component"
@@ -442,8 +432,8 @@ data Definition t e r
   | TypeSig (EName, t)
   | DDataDef (DataDef t)
   | GADT EName [(TName, t)] [(EName, t)]
-  | ClassDef Class [(TName, t)] [Definition t e r]
-  | InstanceDef Class t [Definition t e r]
+  | ClassDef ClassName [(TName, t)] [Definition t e r]
+  | InstanceDef ClassName t [Definition t e r]
   | DFixity EName (FixityDir, Int)
     deriving Show
 

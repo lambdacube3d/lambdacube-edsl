@@ -44,11 +44,11 @@ data Maybe a
 ---------------------------------------
 
 data Nat where
+data Int where
+data Word where
+data Float where
 data Char where
 data String where
-data Word where
-data Int where
-data Float where
 
 data Vec (n :: Nat) a where
   V2 :: Component a => a -> a -> Vec 2 a
@@ -98,7 +98,7 @@ class Num a where
 
 axioms
   primIntToWord  :: Int -> Word
-  primIntToFlaot :: Int -> Float
+  primIntToFloat :: Int -> Float
   primCompareInt   :: Int   -> Int   -> Ordering
   primCompareWord  :: Word  -> Word  -> Ordering
   primCompareFloat :: Float -> Float -> Ordering

@@ -151,17 +151,17 @@ reduceConstraint x = do
             TMat n m t -> keep [[a, TVec n t], [b, TVec m t]]
             _ -> fail "no instance"
 
-        TFVec (TNat n) ty | n `elem` [2,3,4] && ty `elem` floatIntWordBool -> reduced $ TVec n ty
+        TFVec (TENat n) ty | n `elem` [2,3,4] && ty `elem` floatIntWordBool -> reduced $ TVec n ty
         TFVec a b -> check (a `matches` nat234 && b `matches` floatIntWordBool {- -- FIXME -}) $ observe res $ \case
-            TVec n t -> keep [[a, TNat n], [b, t]]
+            TVec n t -> keep [[a, TENat n], [b, t]]
             _ -> fail "no instance tfvec"
 
         TFVecScalar a b -> case a of
-            TNat 1 -> case b of
+            TENat 1 -> case b of
                 TVar{} | res `matches` floatIntWordBool -> keep [[b, res]]
                 b -> check (b `elem` floatIntWordBool) $ reduced b
             TVar{} -> check (b `matches` floatIntWordBool) $ observe res $ \case
-                t | t `elem` floatIntWordBool -> keep [[a, TNat 1], [b, t]]
+                t | t `elem` floatIntWordBool -> keep [[a, TENat 1], [b, t]]
                 _ -> like $ TFVec a b
             _ -> like $ TFVec a b
 
@@ -191,12 +191,12 @@ reduceConstraint x = do
 
         TFFrameBuffer ty -> caseTuple "expected (Image Nat)" ty end $ \case
             TImage a b -> observe' a $ \case
-                TNat n -> reduce' (n, b)
+                TENat n -> reduce' (n, b)
                 _ -> fail'
             _ -> fail'
           where
             end (unzip -> (n: ns, tys))
-                | all (==n) ns = reduced $ TFrameBuffer (TNat n) $ tTuple tys
+                | all (==n) ns = reduced $ TFrameBuffer (TENat n) $ tTuple tys
                 | otherwise = fail "frambuffer number of layers differ"
 
         TFJoinTupleType (TTuple []) x -> reduced x
@@ -241,7 +241,7 @@ reduceConstraint x = do
     observe TVar{} _ = nothing
     observe x f = f x
 
-nat234 = [TNat i | i <-[2..4]]
+nat234 = [TENat i | i <-[2..4]]
 floatIntWord = [TFloat, TInt, TWord]
 floatIntWordBool = [TFloat, TInt, TWord, TBool]
 vectors t = [TVec i t | i <- [2..4]]
@@ -260,22 +260,6 @@ injType = \case
 
 vecS = TFVecScalar
 floatVecS d = vecS d TFloat
-
-fieldProjType :: FName -> TCM (Subst, Typing)
-fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM Typing
-
-inferLit :: Lit -> TCM Typing
-inferLit a = case a of
-  LInt _ -> do
-    --t <- newVar
-    --return (mempty,[(CNum,t)],t) -- ????
-    ty TInt
-  LChar   _ -> ty TChar
-  LFloat  _ -> ty TFloat
-  LString _ -> ty TString
-  LNat i    -> ty $ TNat i
- where
-  ty t = return $ [] ==> t
 
 checkUnambError = do
     cs <- gets fst
