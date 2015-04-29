@@ -287,31 +287,4 @@ errorTCM = do
           se = fromIntegral $ bytes e
     in concat sl
 
-class NewVar a where
-    newV_ :: Subst -> a -> TCM (Subst, Typing)
 
-newV = newV_ mempty
-
-instance NewVar (TCM Typing)    where newV_ s = fmap $ (,) s
-instance NewVar Typing          where newV_ s t = return (s, t)
-instance NewVar Ty              where newV_ s t = return (s, [] ==> t)
-instance NewVar a => NewVar (Ty -> a) where
-    newV_ s f = do
-        (s', v) <- newVar''
-        newV_ (s' <> s) $ f v
-
-newVar'' = do
-    (s', k) <- newVar' Star  -- kind var
-    (s, t) <- newVar' k
-    return (s <> s', t)
-
-newVar' k = do
-    v@(TVar _ n) <- newVar k
-    return (Map.singleton n v, v)
-
--- don't use this, use newV instead
-newVar :: Ty -> TCM Ty
-newVar k = do
-  (d, n: ns) <- get
-  put (d, ns)
-  return $ Ty_ k (TVar_ n)

@@ -107,14 +107,14 @@ unifyTypings_
     -> ([Ty] -> a)  -- main typing types for each unified group -> result typing
     -> TCM STyping
 unifyTypings_ bidirectional msg ts f = do
-    (s', t) <- newV $ f $ map (typingType . head) ts
+    t <- newV_ $ f $ map (typingType . head) ts
     let ms = map monoEnv $ t: concat ts
     s <- unifyTypes bidirectional (msg{- ++ "\n---------------- typings\n" ++ ppShow ts-}) $ (map . map) typingType ts ++ unifyMaps ms
     -- TODO: if not bidirectional, check constraints
     (s, i) <- untilNoUnif s $ nub $ subst s $ concatMap constraints $ t: concat ts
     let ty = typing (Map.unions $ subst s ms) i (subst s $ typingType t)
     ambiguityCheck ty
-    return (s <> s', ty)
+    return (s, ty)
   where
     groupByFst :: Ord a => [(a, b)] -> [[b]]
     groupByFst = unifyMaps . map (uncurry Map.singleton)
@@ -149,7 +149,7 @@ ambiguityCheck ty = do
 instantiateTyping :: Typing -> TCM STyping
 instantiateTyping ty = do
     let fv = polyVars ty
-    (_, newVars) <- unzip <$> replicateM (Set.size fv) (newVar'')
+    newVars <- replicateM (Set.size fv) (newVar'')
     let s = Map.fromDistinctAscList $ zip (Set.toList fv) newVars
     return (s, subst s ty)
 
@@ -405,7 +405,7 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
             TTuple_ ts -> unifyTypings "tuple kind" (map ((star:) . getTag') ts) $ \_ -> Star
             TArr_ a b -> unifyTypings "arrow kind" [star: getTag' a, star: getTag' b] $ \_ -> Star
             TApp_ tf ta -> unifyTypings ("app kind\n" ++ ppShow (tf, ta)) [getTag' tf, getTag' ta] $ \[tf, ta] v -> [tf ~~~ ta ~> v] ==> v
-            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (addTypeVar ('\'':n)) . Map.lookup (primed n)
+            TVar_ n -> asks (getPolyEnv . fst) >>= fromMaybe (addTypeVar (primed n)) . Map.lookup (primed n)
             TCon_ n -> asks (getPolyEnv . fst) >>= \env ->
                 fromMaybe (fromMaybe (throwErrorTCM $ "Type constructor " ++ n ++ " is not in scope.") $ Map.lookup n env) $ Map.lookup (primed n) env
             x -> error $ " inferKind: " ++ show x
@@ -413,9 +413,9 @@ inferKind (Ty' r ty) = local (id *** const [r]) $ case ty of
     getTag' = (:[]) . snd . getTag
     star = [] ==> Star
 
-    addTypeVar n = do
-        (s, t) <- newVar''
-        return (s, Typing (Map.singleton n t) mempty t mempty)
+addTypeVar n = do
+    t <- newVar''
+    return (mempty, Typing (Map.singleton n t) mempty t mempty)
 
 inferTyping :: Exp Range -> TCM (Exp STyping)
 -- hack
@@ -532,10 +532,21 @@ withTyping ts m = do
         Right env -> local (const env *** id) m
         Left e -> throwErrorTCM e
 
-{-
-Type application:
-                              parsing                 typecheck
-   forall v :: ty1 . ty2      Forall Name TyR TyR     Forall Name Typing Typing
-   exp @ ty                   ETyApp ExpR TyR         ETyApp ExpT Typing
--}
+class NewVar a where
+    newV_ :: a -> TCM Typing
 
+newV = fmap ((,) mempty) . newV_
+
+instance NewVar (TCM Typing)    where newV_ = id
+instance NewVar Typing          where newV_ = return
+instance NewVar Ty              where newV_ t = return ([] ==> t)
+instance NewVar a => NewVar (Ty -> a) where
+    newV_ f = newV_ . f =<< newVar''
+
+newVar'' = newVar =<< newVar Star
+
+newVar :: Ty -> TCM Ty
+newVar k = do
+  (d, n: ns) <- get
+  put (d, ns)
+  return $ Ty_ k (TVar_ n)
