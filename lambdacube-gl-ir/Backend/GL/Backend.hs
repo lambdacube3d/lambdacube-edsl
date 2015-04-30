@@ -351,12 +351,12 @@ compileRenderTarget texs glTexs (RenderTarget targets) = do
 allocPipeline :: Pipeline -> IO GLPipeline
 allocPipeline p = do
     let uniTrie = uniforms $ schemaFromPipeline p
-    smps <- V.mapM compileSampler $ samplers p
-    texs <- V.mapM compileTexture $ textures p
-    trgs <- V.mapM (compileRenderTarget (textures p) texs) $ targets p
-    prgs <- V.mapM (compileProgram uniTrie) $ programs p
+    smps <- V.mapM compileSampler $ V.fromList $ samplers p
+    texs <- V.mapM compileTexture $ V.fromList $ textures p
+    trgs <- V.mapM (compileRenderTarget (V.fromList $ textures p) texs) $ V.fromList $ targets p
+    prgs <- V.mapM (compileProgram uniTrie) $ V.fromList $ programs p
     -- texture unit mapping ioref trie
-    texUnitMapRefs <- T.fromList <$> mapM (\k -> (k,) <$> newIORef 0) (S.toList $ S.fromList $ concat $ V.toList $ V.map (T.keys . toTrie . programInTextures) $ programs p)
+    texUnitMapRefs <- T.fromList <$> mapM (\k -> (k,) <$> newIORef 0) (S.toList $ S.fromList $ concat $ V.toList $ V.map (T.keys . toTrie . programInTextures) $ V.fromList $ programs p)
     let (cmds,st) = runState (mapM (compileCommand texUnitMapRefs smps texs trgs prgs) $ commands p) initCGState
     input <- newIORef Nothing
     -- default Vertex Array Object
@@ -367,9 +367,9 @@ allocPipeline p = do
         , glSamplers        = smps
         , glTargets         = trgs
         , glCommands        = cmds
-        , glSlotPrograms    = V.map slotPrograms $ IR.slots p
+        , glSlotPrograms    = V.map slotPrograms $ V.fromList $ IR.slots p
         , glInput           = input
-        , glSlotNames       = V.map (pack . slotName) $ IR.slots p
+        , glSlotNames       = V.map (pack . slotName) $ V.fromList $ IR.slots p
         , glVAO             = vao
         , glTexUnitMapping  = texUnitMapRefs
         }

@@ -30,7 +30,7 @@ import qualified IR as IR
 schemaFromPipeline :: IR.Pipeline -> PipelineSchema
 schemaFromPipeline a = PipelineSchema (T.fromList sl) (foldl T.unionL T.empty ul)
   where
-    (sl,ul) = unzip [((pack n,SlotSchema p (fmap cvt (toTrie s))),toTrie u) | IR.Slot n u s p _ <- V.toList $ IR.slots a]
+    (sl,ul) = unzip [((pack n,SlotSchema p (fmap cvt (toTrie s))),toTrie u) | IR.Slot n u s p _ <- IR.slots a]
     cvt a = case toStreamType a of
         Just v  -> v
         Nothing -> error "internal error (schemaFromPipeline)"
