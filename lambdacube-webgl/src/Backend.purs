@@ -1,6 +1,7 @@
 module Backend where
 
 import Debug.Trace
+import Prelude.Unsafe (unsafeIndex)
 
 import qualified Graphics.WebGLRaw as GL
 import Control.Monad.Eff.WebGL
@@ -8,6 +9,7 @@ import Control.Monad.Eff
 import Control.Monad
 import Data.Foldable
 import Data.Traversable
+import qualified Data.StrMap as StrMap
 
 import IR
 import Util
@@ -170,14 +172,72 @@ clearRenderTarget values = do
     m <- foldM setClearValue {mask:0,index:0} values
     GL.clear_ m.mask
 
-{-
-compileProgram :: Trie InputType -> Program -> IO GLProgram
+type GLProgram =
+  { program :: GL.WebGLProgram
+  , objects :: [GL.WebGLShader]
+  }
 
-compileSampler :: SamplerDescriptor -> IO GLSampler
--}
+compileProgram :: StrMap.StrMap InputType -> Program -> GFX GLProgram
+compileProgram uniTrie p = do
+    po <- GL.createProgram_
+    let createAndAttach src t = do
+          o <- GL.createShader_ t
+          GL.shaderSource_ o src
+          GL.compileShader_ o
+          log <- GL.getShaderInfoLog_ o
+          trace log
+          {-
+            TODO
+          status <- glGetShaderiv1 gl_COMPILE_STATUS o
+          when (status /= fromIntegral gl_TRUE) $ fail "compileShader failed!"
+          -}
+          GL.attachShader_ po o
+          --putStr "    + compile shader source: " >> printGLStatus
+          return o
+
+    objV <- createAndAttach p.vertexShader GL._VERTEX_SHADER
+    objF <- createAndAttach p.fragmentShader GL._FRAGMENT_SHADER
+
+    {-
+    forM_ (zip (programOutput p) [0..]) $ \((pack -> n,t),i) -> SB.useAsCString n $ \pn -> do
+        putStrLn ("variable " ++ show n ++ " attached to color number #" ++ show i)
+        glBindFragDataLocation po i $ castPtr pn
+    putStr "    + setup shader output mapping: " >> printGLStatus
+    -}
+    GL.linkProgram_ po
+    prgLog <- GL.getProgramInfoLog_ po
+    trace prgLog
+    return {program: po, objects: [objV,objF]}
+
+    {-
+    -- check link status
+    status <- glGetProgramiv1 gl_LINK_STATUS po
+    when (status /= fromIntegral gl_TRUE) $ fail "link program failed!"
+
+    -- check program input
+    (uniforms,uniformsType) <- queryUniforms po
+    (attributes,attributesType) <- queryStreams po
+    print uniforms
+    print attributes
+    when (uniformsType /= (toTrie $ programUniforms p) `unionL` (toTrie $ programInTextures p)) $ fail "shader program uniform input mismatch!"
+    when (attributesType /= fmap snd (toTrie $ programStreams p)) $ fail $ "shader program stream input mismatch! " ++ show (attributesType,fmap snd (toTrie $ programStreams p))
+    -- the public (user) pipeline and program input is encoded by the slots, therefore the programs does not distinct the render and slot textures input
+    let inUniNames = toTrie $ programUniforms p
+        (inUniforms,inTextures) = L.partition (\(n,v) -> T.member n inUniNames) $ T.toList $ uniforms
+        texUnis = [n | (n,_) <- inTextures, T.member n uniTrie]
+    return $ GLProgram
+        { shaderObjects         = objs
+        , programObject         = po
+        , inputUniforms         = T.fromList inUniforms
+        , inputTextures         = T.fromList inTextures
+        , inputTextureUniforms  = S.fromList $ texUnis
+        , inputStreams          = T.fromList [(n,(idx,pack attrName)) | ((n,idx),(_,(attrName,_))) <- zip (T.toList $ attributes) (T.toList $ toTrie $ programStreams p)]
+        }
+    -}
 
 type WebGLPipeline =
   { targets   :: [RenderTarget]
+  , programs  :: [GLProgram]
   , commands  :: [Command]
   }
 
@@ -197,7 +257,8 @@ allocPipeline p = do
     - programs
     - commands
   -}
-  return {targets: p.targets, commands: p.commands}
+  prgs <- traverse (compileProgram StrMap.empty) p.programs
+  return {targets: p.targets, programs: prgs, commands: p.commands}
 {-
 allocPipeline p = do
     let uniTrie = uniforms $ schemaFromPipeline p
@@ -232,6 +293,7 @@ renderPipeline p = do
       SetRasterContext rCtx -> setupRasterContext rCtx
       SetAccumulationContext aCtx -> setupAccumulationContext aCtx
       ClearRenderTarget t -> clearRenderTarget t
+      SetProgram i -> GL.useProgram_ $ (p.programs `unsafeIndex` i).program
       _ -> return unit
   return unit
 

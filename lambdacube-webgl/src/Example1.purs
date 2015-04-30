@@ -22,7 +22,7 @@ samplePipeline =
   , slots : []
   , commands :
       [ SetRenderTarget 0
-      , ClearRenderTarget [ {semantic: Color , value: VV4F (V4 1.0 0.0 0.4 1.0) } ]
+      , ClearRenderTarget [ {semantic: Color , value: VV4F (V4 0.0 0.0 0.4 1.0) } ]
       ]
   }
 
@@ -135,7 +135,7 @@ main :: Eff (trace :: Trace, alert :: Alert) Unit
 main = GL.runWebGL "glcanvas" (\s -> alert s)
   \ context -> do
     trace "WebGL ready"
-    ppl <- allocPipeline samplePipeline
+    ppl <- allocPipeline gfx03Pipeline -- samplePipeline
     trace "Pipeline allocated"
     renderPipeline ppl
     trace "WebGL completed"

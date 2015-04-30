@@ -255,7 +255,6 @@ data ImageSemantic
     | Stencil
     | Color
 
-
 data Command
     = SetRasterContext          RasterContext
     | SetAccumulationContext    AccumulationContext
