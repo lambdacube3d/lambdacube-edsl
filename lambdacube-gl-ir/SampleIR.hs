@@ -136,7 +136,7 @@ main = do
     addMesh pplInput "stream" gpuMonkey []
 
     let setup = do
-          pplRes <- compileMain "./tests/accept" srcName
+          pplRes <- compileMain "../lambdacube-dsl/tests/accept" srcName
           case pplRes of
             Left err -> putStrLn ("error: " ++ err) >> return Nothing
             Right ppl -> do
