@@ -1,0 +1,23 @@
+{
+  "name": "lambdacube-webgl",
+  "version": "0.1.0",
+  "authors": [
+    "Csaba Hruska <csaba.hruska@gmail.com>"
+  ],
+  "moduleType": [
+    "node"
+  ],
+  "license": "BSD3",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-webgl": "~0.6.21",
+    "purescript-maps": "~0.3.4"
+  }
+}

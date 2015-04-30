@@ -1,0 +1,2 @@
+build:
+  pulp build -O --to foo.js
