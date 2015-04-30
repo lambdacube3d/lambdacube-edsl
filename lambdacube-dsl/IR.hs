@@ -4,7 +4,6 @@ module IR where
 import Data.Int
 import Data.Word
 import Data.Map
-import Data.Vector (Vector)
 
 data V2 a = V2 !a !a deriving (Eq,Ord,Show,Read,Functor)
 data V3 a = V3 !a !a !a deriving (Eq,Ord,Show,Read,Functor)
@@ -371,11 +370,11 @@ data RenderTarget
 
 data Pipeline
     = Pipeline
-    { textures      :: Vector TextureDescriptor
-    , samplers      :: Vector SamplerDescriptor
-    , targets       :: Vector RenderTarget
-    , programs      :: Vector Program
-    , slots         :: Vector Slot
+    { textures      :: [TextureDescriptor]
+    , samplers      :: [SamplerDescriptor]
+    , targets       :: [RenderTarget]
+    , programs      :: [Program]
+    , slots         :: [Slot]
     , commands      :: [Command]
     }
     deriving Show

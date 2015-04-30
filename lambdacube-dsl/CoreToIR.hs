@@ -3,12 +3,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 module CoreToIR where
 
+import Data.List
 import Debug.Trace
 import Control.Applicative
 import Control.Monad.State
 import Data.Monoid
 import Text.Show.Pretty
-import qualified Data.Vector as V
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as F
 import Data.Set (Set)
@@ -25,6 +25,7 @@ import qualified IR as IR
 type CG = State IR.Pipeline
 
 emptyPipeline = IR.Pipeline mempty mempty mempty mempty mempty mempty
+updateList i x xs = take i xs ++ x : drop (i+1) xs
 
 imageToSemantic :: IR.Image -> (IR.ImageSemantic, IR.Value)
 imageToSemantic a = case a of
@@ -36,8 +37,8 @@ newRenderTarget :: [IR.Image] -> CG IR.RenderTargetName
 newRenderTarget a = do
   tv <- gets IR.targets
   let t = IR.RenderTarget [(s,Just (IR.Framebuffer s)) | i <- a, let s = fst (imageToSemantic i)]
-  modify (\s -> s {IR.targets = tv `V.snoc` t})
-  return $ V.length tv
+  modify (\s -> s {IR.targets = tv ++ [t]})
+  return $ length tv
 
 compilePipeline :: Exp -> IR.Pipeline
 compilePipeline e = flip execState emptyPipeline $ do
@@ -61,12 +62,12 @@ getSlot (A3 "Fetch" (ELit (LString slotName)) prim attrs) = do
         , IR.slotPrograms   = []
         }
   sv <- gets IR.slots
-  case V.findIndex ((slotName ==) . IR.slotName) sv of
+  case findIndex ((slotName ==) . IR.slotName) sv of
     Nothing -> do
-      modify (\s -> s {IR.slots = sv `V.snoc` slot})
-      return (V.length sv,input)
+      modify (\s -> s {IR.slots = sv ++ [slot]})
+      return (length sv,input)
     Just i -> do
-      modify (\s -> s {IR.slots = sv V.// [(i,mergeSlot (sv V.! i) slot)]})
+      modify (\s -> s {IR.slots = updateList i (mergeSlot (sv !! i) slot) sv})
       return (i,input)
 getSlot x = error $ "getSlot: " ++ ppShow x
 
@@ -74,13 +75,13 @@ addProgramToSlot :: IR.ProgramName -> IR.SlotName -> CG ()
 addProgramToSlot prgName slotName = do
   sv <- gets IR.slots
   pv <- gets IR.programs
-  let slot = sv V.! slotName
-      prg = pv V.! prgName
+  let slot = sv !! slotName
+      prg = pv !! prgName
       slot' = slot
         { IR.slotUniforms = IR.slotUniforms slot <> IR.programUniforms prg
         , IR.slotPrograms = IR.slotPrograms slot <> [prgName]
         }
-  modify (\s -> s {IR.slots = sv V.// [(slotName,slot')]})
+  modify (\s -> s {IR.slots = updateList slotName slot' sv})
 
 getProgram :: [(String,IR.InputType)] -> IR.SlotName -> Exp -> Exp -> CG IR.ProgramName
 getProgram input slot vert frag = do
@@ -96,8 +97,8 @@ getProgram input slot vert frag = do
         , IR.fragmentShader     = fragSrc
         }
   pv <- gets IR.programs
-  modify (\s -> s {IR.programs = pv `V.snoc` prg})
-  let prgName = V.length pv
+  modify (\s -> s {IR.programs = pv ++ [prg]})
+  let prgName = length pv
   addProgramToSlot prgName slot
   return prgName
 

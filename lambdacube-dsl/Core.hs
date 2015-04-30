@@ -23,7 +23,6 @@ import Control.Arrow
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
-import Control.DeepSeq
 import Data.Foldable (Foldable, toList)
 import Text.Show.Pretty
 import Debug.Trace

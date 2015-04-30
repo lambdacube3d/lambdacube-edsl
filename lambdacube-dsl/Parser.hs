@@ -25,7 +25,6 @@ import Text.Trifecta.Delta
 import Text.Trifecta.Indentation (IndentationRel (Ge, Gt), localIndentation, localAbsoluteIndentation, mkIndentationState, infIndentation, IndentationParserT, evalIndentationParserT)
 import Text.Show.Pretty
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.HashSet as HashSet
 
 import Type
 
@@ -43,23 +42,8 @@ instance TokenParsing p => TokenParsing (LCParser p) where
 lcCommentStyle = haskellCommentStyle
 
 lcOps = haskell98Ops
-  { _styleReserved = HashSet.fromList ["=","\\","::",":",".","@","_","|","->","~"]
-  }
 
-lcIdents = haskell98Idents { _styleReserved = HashSet.fromList reservedIdents }
-  where
-    reservedIdents =
-      [ "module", "import"
-      , "let", "in"
-      , "where"
-      , "if", "then", "else"
-      , "class", "instance"
-      , "case", "of"
-      , "type", "data"
-      , "forall"
-      , "infix", "infixl", "infixr"
-      , "deriving"
-      ]
+lcIdents = haskell98Idents
 
 keyword :: String -> P ()
 keyword = reserve lcIdents

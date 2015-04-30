@@ -6,7 +6,6 @@ module CoreToGLSL where
 
 import Debug.Trace
 import Text.Show.Pretty (ppShow)
-import "pretty" Text.PrettyPrint.HughesPJClass (pPrint)
 
 import Data.List
 import Data.Set (Set)
@@ -22,37 +21,34 @@ import qualified Data.Foldable as F
 
 import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp, Exp_ (..), Pat, PVar, PLit, PTuple)
 import Core
-import GLSLUtil
-import qualified Language.GLSL.Syntax as GLSL
-import qualified Language.GLSL.Pretty as GLSL
 
-toGLSLType msg t = show $ pPrint $ case t of
-  TBool             -> GLSL.Bool
-  TWord             -> GLSL.UInt
-  TInt              -> GLSL.Int
-  TFloat            -> GLSL.Float
-  TVec 2 (TBool)    -> GLSL.BVec2
-  TVec 3 (TBool)    -> GLSL.BVec3
-  TVec 4 (TBool)    -> GLSL.BVec4
-  TVec 2 (TWord)    -> GLSL.UVec2
-  TVec 3 (TWord)    -> GLSL.UVec3
-  TVec 4 (TWord)    -> GLSL.UVec4
-  TVec 2 (TInt)     -> GLSL.IVec2
-  TVec 3 (TInt)     -> GLSL.IVec3
-  TVec 4 (TInt)     -> GLSL.IVec4
-  TVec 2 (TFloat)   -> GLSL.Vec2
-  TVec 3 (TFloat)   -> GLSL.Vec3
-  TVec 4 (TFloat)   -> GLSL.Vec4
-  TMat 2 2 (TFloat) -> GLSL.Mat2
-  TMat 2 3 (TFloat) -> GLSL.Mat2x3
-  TMat 2 4 (TFloat) -> GLSL.Mat2x4
-  TMat 3 2 (TFloat) -> GLSL.Mat3x2
-  TMat 3 3 (TFloat) -> GLSL.Mat3
-  TMat 3 4 (TFloat) -> GLSL.Mat3x4
-  TMat 4 2 (TFloat) -> GLSL.Mat4x2
-  TMat 4 3 (TFloat) -> GLSL.Mat4x3
-  TMat 4 4 (TFloat) -> GLSL.Mat4
-  TTuple []         -> GLSL.Void
+toGLSLType msg t = case t of
+  TBool  -> "bool"
+  TWord  -> "uint"
+  TInt   -> "int"
+  TFloat -> "float"
+  TVec 2 (TBool) -> "bvec2"
+  TVec 3 (TBool) -> "bvec3"
+  TVec 4 (TBool) -> "bvec4"
+  TVec 2 (TWord) -> "uvec2"
+  TVec 3 (TWord) -> "uvec3"
+  TVec 4 (TWord) -> "uvec4"
+  TVec 2 (TInt) -> "ivec2"
+  TVec 3 (TInt) -> "ivec3"
+  TVec 4 (TInt) -> "ivec4"
+  TVec 2 (TFloat) -> "vec2"
+  TVec 3 (TFloat) -> "vec3"
+  TVec 4 (TFloat) -> "vec4"
+  TMat 2 2 (TFloat) -> "mat2"
+  TMat 2 3 (TFloat) -> "mat2x3"
+  TMat 2 4 (TFloat) -> "mat2x4"
+  TMat 3 2 (TFloat) -> "mat3x2"
+  TMat 3 3 (TFloat) -> "mat3"
+  TMat 3 4 (TFloat) -> "mat3x4"
+  TMat 4 2 (TFloat) -> "mat4x2"
+  TMat 4 3 (TFloat) -> "mat4x3"
+  TMat 4 4 (TFloat) -> "mat4"
+  TTuple []         -> "void"
   t -> error $ "toGLSLType: " ++ msg ++ " " ++ ppShow t
 
 pattern ELString s = ELit (LString s)

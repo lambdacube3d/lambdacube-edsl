@@ -38,7 +38,7 @@ r = case (a (A c a) q) of
 one :: Int
 one = n1 :: Int
 
-infix 5 ..
+infix 5 ...
 
 ($) :: forall a b. (a -> b) -> a -> b
 ($) f x = f x
