@@ -19,6 +19,7 @@
   "dependencies": {
     "purescript-webgl": "~0.6.21",
     "purescript-maps": "~0.3.4",
-    "purescript-exceptions" : "~0.2.3"
+    "purescript-exceptions" : "~0.2.3",
+    "purescript-refs" : "~0.1.3"
   }
 }

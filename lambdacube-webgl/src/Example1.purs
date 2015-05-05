@@ -13,6 +13,97 @@ import Data.Maybe
 import Data.StrMap
 import Data.Tuple
 
+--  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
+--  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
+g_vertex_buffer_data =
+    [ V4   1.0    1.0  (-1.0) 1.0
+    , V4   1.0  (-1.0) (-1.0) 1.0
+    , V4 (-1.0) (-1.0) (-1.0) 1.0
+    , V4   1.0    1.0  (-1.0) 1.0
+    , V4 (-1.0) (-1.0) (-1.0) 1.0
+    , V4 (-1.0)   1.0  (-1.0) 1.0
+    , V4   1.0    1.0  (-1.0) 1.0
+    , V4   1.0    1.0    1.0  1.0
+    , V4   1.0  (-1.0)   1.0  1.0
+    , V4   1.0    1.0  (-1.0) 1.0
+    , V4   1.0  (-1.0)   1.0  1.0
+    , V4   1.0  (-1.0) (-1.0) 1.0
+    , V4   1.0    1.0    1.0  1.0
+    , V4 (-1.0) (-1.0)   1.0  1.0
+    , V4   1.0  (-1.0)   1.0  1.0
+    , V4   1.0    1.0    1.0  1.0
+    , V4 (-1.0)   1.0    1.0  1.0
+    , V4 (-1.0) (-1.0)   1.0  1.0
+    , V4 (-1.0)   1.0    1.0  1.0
+    , V4 (-1.0) (-1.0) (-1.0) 1.0
+    , V4 (-1.0) (-1.0)   1.0  1.0
+    , V4 (-1.0)   1.0    1.0  1.0
+    , V4 (-1.0)   1.0  (-1.0) 1.0
+    , V4 (-1.0) (-1.0) (-1.0) 1.0
+    , V4   1.0    1.0  (-1.0) 1.0
+    , V4 (-1.0)   1.0  (-1.0) 1.0
+    , V4 (-1.0)   1.0    1.0  1.0
+    , V4   1.0    1.0  (-1.0) 1.0
+    , V4 (-1.0)   1.0    1.0  1.0
+    , V4   1.0    1.0    1.0  1.0
+    , V4   1.0    1.0  (-1.0) 1.0
+    , V4   1.0    1.0    1.0  1.0
+    , V4 (-1.0)   1.0    1.0  1.0
+    , V4   1.0    1.0  (-1.0) 1.0
+    , V4 (-1.0)   1.0    1.0  1.0
+    , V4 (-1.0)   1.0  (-1.0) 1.0
+    ]
+
+--  Two UV coordinatesfor each vertex. They were created with Blender.
+g_uv_buffer_data =
+    [ V2 0.0 0.0
+    , V2 0.0 1.0
+    , V2 1.0 1.0
+    , V2 0.0 0.0
+    , V2 1.0 1.0
+    , V2 1.0 0.0
+    , V2 0.0 0.0
+    , V2 1.0 0.0
+    , V2 1.0 1.0
+    , V2 0.0 0.0
+    , V2 1.0 1.0
+    , V2 0.0 1.0
+    , V2 1.0 0.0
+    , V2 0.0 1.0
+    , V2 1.0 1.0
+    , V2 1.0 0.0
+    , V2 0.0 0.0
+    , V2 0.0 1.0
+    , V2 0.0 0.0
+    , V2 1.0 1.0
+    , V2 0.0 1.0
+    , V2 0.0 0.0
+    , V2 1.0 0.0
+    , V2 1.0 1.0
+    , V2 0.0 0.0
+    , V2 1.0 0.0
+    , V2 1.0 1.0
+    , V2 0.0 0.0
+    , V2 1.0 1.0
+    , V2 0.0 1.0
+    , V2 0.0 0.0
+    , V2 0.0 1.0
+    , V2 1.0 1.0
+    , V2 0.0 0.0
+    , V2 1.0 1.0
+    , V2 1.0 0.0
+    ]
+{-
+myCube :: Mesh
+myCube =
+    { mAttributes: StrMap.fromList
+        [ Tuple "position4" (A_V4F g_vertex_buffer_data)
+        , Tuple "vertexUV"  (A_V2F g_uv_buffer_data)
+        ]
+    , mPrimitive: P_Triangles
+    , mGPUData: Nothing
+    }
+-}
 samplePipeline =
   { textures : []
   , samplers : []

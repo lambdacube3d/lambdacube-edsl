@@ -13,10 +13,9 @@ import Data.Traversable
 import qualified Data.StrMap as StrMap
 import Data.Tuple
 
+import Type
 import IR
 import Util
-
-type GFX a = forall e . Eff (webgl :: WebGl, trace :: Trace, err :: Exception | e) a
 
 setupRasterContext :: RasterContext -> GFX Unit
 setupRasterContext = cvt
@@ -174,13 +173,6 @@ clearRenderTarget values = do
     m <- foldM setClearValue {mask:0,index:0} values
     GL.clear_ m.mask
 
-type GLProgram =
-  { program       :: GL.WebGLProgram
-  , objects       :: [GL.WebGLShader]
-  , inputUniforms :: StrMap.StrMap GL.WebGLUniformLocation
-  , inputStreams  :: StrMap.StrMap {location :: GL.GLint, slotAttribute :: String}
-  }
-
 compileProgram :: StrMap.StrMap InputType -> Program -> GFX GLProgram
 compileProgram uniTrie p = do
     po <- GL.createProgram_
@@ -216,12 +208,6 @@ compileProgram uniTrie p = do
       return $ Tuple streamName {location: loc, slotAttribute: s.name})
 
     return {program: po, objects: [objV,objF], inputUniforms: uniformLocation, inputStreams: streamLocation}
-
-type WebGLPipeline =
-  { targets   :: [RenderTarget]
-  , programs  :: [GLProgram]
-  , commands  :: [Command]
-  }
 
 allocPipeline :: Pipeline -> GFX WebGLPipeline
 allocPipeline p = do

@@ -1,9 +1,22 @@
 module Type where
 
-import Data.StrMap (StrMap(..))
+import Debug.Trace
+import Control.Monad.Eff
+import Control.Monad.Eff.Ref
+import Control.Monad.Eff.Exception
+import Control.Monad.Eff.WebGL
+import qualified Data.StrMap as StrMap
 import qualified Graphics.WebGLRaw as GL
 
+import qualified Data.Map as Map
+import Data.Tuple
+import Data.Maybe
+
 import IR
+
+type GFX a = forall e . Eff (webgl :: WebGl, trace :: Trace, err :: Exception | e) a
+
+type IntMap a = Map.Map Int a
 
 type Buffer = -- internal type
     { bufArrays :: [ArrayDesc]
@@ -83,10 +96,72 @@ data Primitive
 
 type SlotSchema =
     { primitive     :: FetchPrimitive
-    , attributes    :: StrMap StreamType
+    , attributes    :: StrMap.StrMap StreamType
     }
 
 type PipelineSchema =
-    { slots     :: StrMap SlotSchema
-    , uniforms  :: StrMap InputType
+    { slots     :: StrMap.StrMap SlotSchema
+    , uniforms  :: StrMap.StrMap InputType
     }
+
+data OrderJob
+    = Generate
+    | Reorder
+    | Ordered
+
+type GLSlot =
+    { objectMap     :: IntMap GLObject
+    , sortedObjects :: [Tuple Int GLObject]
+    , orderJob      :: OrderJob
+    }
+
+data GLUniform = GLUniform InputType (forall a . RefVal a)
+
+data InputSetter = InputSetter -- TODO
+
+type GLPipelineInput =
+    { schema        :: PipelineSchema
+    , slotMap       :: StrMap.StrMap String
+    , slotVector    :: [RefVal GLSlot]
+    , objSeed       :: RefVal Int
+    , uniformSetter :: StrMap.StrMap InputSetter
+    , uniformSetup  :: StrMap.StrMap GLUniform
+    , screenSize    :: RefVal V2U
+    , pipelines     :: RefVal [(Maybe WebGLPipeline)] -- attached pipelines
+    }
+
+type GLObject = -- internal type
+    { slot       :: String
+    , primitive  :: Primitive
+    , indices    :: Maybe (IndexStream Buffer)
+    , attributes :: StrMap.StrMap (Stream Buffer)
+    , uniSetter  :: StrMap.StrMap InputSetter
+    , uniSetup   :: StrMap.StrMap GLUniform
+    , order      :: RefVal Int
+    , enabled    :: RefVal Bool
+    , id         :: Int
+    , commands   :: RefVal [[[GLObjectCommand]]]  -- pipeline id, program name, commands
+    }
+
+type WebGLPipeline =
+  { targets   :: [RenderTarget]
+  , programs  :: [GLProgram]
+  , commands  :: [Command]
+  }
+
+type GLProgram =
+  { program       :: GL.WebGLProgram
+  , objects       :: [GL.WebGLShader]
+  , inputUniforms :: StrMap.StrMap GL.WebGLUniformLocation
+  , inputStreams  :: StrMap.StrMap {location :: GL.GLint, slotAttribute :: String}
+  }
+
+data GLObjectCommand = GLObjectCommand
+{-
+    = GLSetUniform              !GLint !GLUniform
+    | GLBindTexture             !GLenum !(IORef GLint) !GLUniform               -- binds the texture from the gluniform to the specified texture unit and target
+    | GLSetVertexAttribArray    !GLuint !GLuint !GLint !GLenum !(Ptr ())        -- index buffer size type pointer
+    | GLSetVertexAttrib         !GLuint !(Stream Buffer)                        -- index value
+    | GLDrawArrays              !GLenum !GLint !GLsizei                         -- mode first count
+    | GLDrawElements            !GLenum !GLsizei !GLenum !GLuint !(Ptr ())      -- mode count type buffer indicesPtr
+-}
