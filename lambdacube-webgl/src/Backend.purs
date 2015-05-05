@@ -4,17 +4,19 @@ import Debug.Trace
 import Prelude.Unsafe (unsafeIndex)
 
 import qualified Graphics.WebGLRaw as GL
+import Control.Monad.Eff.Exception
 import Control.Monad.Eff.WebGL
 import Control.Monad.Eff
 import Control.Monad
 import Data.Foldable
 import Data.Traversable
 import qualified Data.StrMap as StrMap
+import Data.Tuple
 
 import IR
 import Util
 
-type GFX a = forall e . Eff (webgl :: WebGl, trace :: Trace | e) a
+type GFX a = forall e . Eff (webgl :: WebGl, trace :: Trace, err :: Exception | e) a
 
 setupRasterContext :: RasterContext -> GFX Unit
 setupRasterContext = cvt
@@ -173,8 +175,10 @@ clearRenderTarget values = do
     GL.clear_ m.mask
 
 type GLProgram =
-  { program :: GL.WebGLProgram
-  , objects :: [GL.WebGLShader]
+  { program       :: GL.WebGLProgram
+  , objects       :: [GL.WebGLShader]
+  , inputUniforms :: StrMap.StrMap GL.WebGLUniformLocation
+  , inputStreams  :: StrMap.StrMap {location :: GL.GLint, slotAttribute :: String}
   }
 
 compileProgram :: StrMap.StrMap InputType -> Program -> GFX GLProgram
@@ -186,11 +190,8 @@ compileProgram uniTrie p = do
           GL.compileShader_ o
           log <- GL.getShaderInfoLog_ o
           trace log
-          {-
-            TODO
-          status <- glGetShaderiv1 gl_COMPILE_STATUS o
-          when (status /= fromIntegral gl_TRUE) $ fail "compileShader failed!"
-          -}
+          status <- GL.getShaderParameter_ o GL._COMPILE_STATUS
+          when (status /= true) $ throwException $ error "compileShader failed!"
           GL.attachShader_ po o
           --putStr "    + compile shader source: " >> printGLStatus
           return o
@@ -198,42 +199,23 @@ compileProgram uniTrie p = do
     objV <- createAndAttach p.vertexShader GL._VERTEX_SHADER
     objF <- createAndAttach p.fragmentShader GL._FRAGMENT_SHADER
 
-    {-
-    forM_ (zip (programOutput p) [0..]) $ \((pack -> n,t),i) -> SB.useAsCString n $ \pn -> do
-        putStrLn ("variable " ++ show n ++ " attached to color number #" ++ show i)
-        glBindFragDataLocation po i $ castPtr pn
-    putStr "    + setup shader output mapping: " >> printGLStatus
-    -}
     GL.linkProgram_ po
     prgLog <- GL.getProgramInfoLog_ po
     trace prgLog
-    return {program: po, objects: [objV,objF]}
 
-    {-
     -- check link status
-    status <- glGetProgramiv1 gl_LINK_STATUS po
-    when (status /= fromIntegral gl_TRUE) $ fail "link program failed!"
+    status <- GL.getProgramParameter_ po GL._LINK_STATUS
+    when (status /= true) $ throwException $ error "link program failed!"
 
-    -- check program input
-    (uniforms,uniformsType) <- queryUniforms po
-    (attributes,attributesType) <- queryStreams po
-    print uniforms
-    print attributes
-    when (uniformsType /= (toTrie $ programUniforms p) `unionL` (toTrie $ programInTextures p)) $ fail "shader program uniform input mismatch!"
-    when (attributesType /= fmap snd (toTrie $ programStreams p)) $ fail $ "shader program stream input mismatch! " ++ show (attributesType,fmap snd (toTrie $ programStreams p))
-    -- the public (user) pipeline and program input is encoded by the slots, therefore the programs does not distinct the render and slot textures input
-    let inUniNames = toTrie $ programUniforms p
-        (inUniforms,inTextures) = L.partition (\(n,v) -> T.member n inUniNames) $ T.toList $ uniforms
-        texUnis = [n | (n,_) <- inTextures, T.member n uniTrie]
-    return $ GLProgram
-        { shaderObjects         = objs
-        , programObject         = po
-        , inputUniforms         = T.fromList inUniforms
-        , inputTextures         = T.fromList inTextures
-        , inputTextureUniforms  = S.fromList $ texUnis
-        , inputStreams          = T.fromList [(n,(idx,pack attrName)) | ((n,idx),(_,(attrName,_))) <- zip (T.toList $ attributes) (T.toList $ toTrie $ programStreams p)]
-        }
-    -}
+    uniformLocation <- StrMap.fromList <$> flip traverse (StrMap.toList p.programUniforms) (\(Tuple uniName uniType) -> do
+      loc <- GL.getUniformLocation_ po uniName
+      return $ Tuple uniName loc)
+
+    streamLocation <- StrMap.fromList <$> flip traverse (StrMap.toList p.programStreams) (\(Tuple streamName s) -> do
+      loc <- GL.getAttribLocation_ po streamName
+      return $ Tuple streamName {location: loc, slotAttribute: s.name})
+
+    return {program: po, objects: [objV,objF], inputUniforms: uniformLocation, inputStreams: streamLocation}
 
 type WebGLPipeline =
   { targets   :: [RenderTarget]

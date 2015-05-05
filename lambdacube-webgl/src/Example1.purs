@@ -1,5 +1,6 @@
 module Main where
 
+import Control.Monad.Eff.Exception
 import Control.Monad.Eff.Alert
 import Control.Monad.Eff
 import Debug.Trace
@@ -40,32 +41,32 @@ gfx03Pipeline =
       [   { programUniforms : fromList [ Tuple "MVP2" M44F ]
           , programStreams : fromList [ Tuple "v" {name: "position" , ty: V3F } ]
           , programInTextures : fromList []
-          , programOutput : [ {name: "f0" , ty: V4F } ]
+          , programOutput : [ {name: "gl_FragColor" , ty: V4F } ]
           , vertexShader :
-              "#version 330 core\nuniform mat4 MVP2 ;\nin vec3 v ;\nvoid main() {\ngl_Position = ( MVP2 ) * ( vec4( v ,1.0) );\ngl_PointSize = 1.0;\n}\n"
+              "#version 100\nprecision highp float;\nprecision highp int;\nuniform mat4 MVP2 ;\nattribute vec3 v ;\nvoid main() {\ngl_Position = ( MVP2 ) * (vec4( v ,1.0) );\ngl_PointSize = 1.0;\n}\n"
           , geometryShader : Nothing
           , fragmentShader :
-              "#version 330 core\nout vec4 f0 ;\nvoid main() {\nf0 = vec4 ( 0.0,0.4,0.0,1.0 );\n}\n"
+              "#version 100\nprecision highp float;\nprecision highp int;\nvoid main() {\ngl_FragColor = vec4 ( 0.0,0.4,0.0,1.0 );\n}\n"
           }
       ,   { programUniforms : fromList [ Tuple "MVP2" M44F ]
           , programStreams : fromList [ Tuple "v" {name: "position" , ty: V3F } ]
           , programInTextures : fromList []
-          , programOutput : [ {name: "f0" , ty: V4F } ]
+          , programOutput : [ {name: "gl_FragColor" , ty: V4F } ]
           , vertexShader :
-              "#version 330 core\nuniform mat4 MVP2 ;\nin vec3 v ;\nsmooth out vec4 v0 ;\nvoid main() {\nv0 = vec4( v ,1.0);\ngl_Position = ( MVP2 ) * ( vec4( v ,1.0) );\ngl_PointSize = 1.0;\n}\n"
+              "#version 100\nprecision highp float;\nprecision highp int;\nuniform mat4 MVP2 ;\nattribute vec3 v ;\nvarying vec4 v0 ;\nvoid main() {\nv0 = vec4( v ,1.0);\ngl_Position = ( MVP2 ) * ( vec4( v ,1.0) );\ngl_PointSize = 1.0;\n}\n"
           , geometryShader : Nothing
           , fragmentShader :
-              "#version 330 core\nsmooth in vec4 v0 ;\nout vec4 f0 ;\nvoid main() {\nf0 = ( v0 ) + ( vec4 ( 1.0,1.4,1.0,0.6 ) );\n}\n"
+              "#version 100\nprecision highp float;\nprecision highp int;\nvarying vec4 v0 ;\nvoid main() {\ngl_FragColor = ( v0 ) + ( vec4 ( 1.0,1.4,1.0,0.6 ) );\n}\n"
           }
       ,   { programUniforms : fromList [ Tuple "MVP" M44F ]
           , programStreams : fromList [ Tuple "v" {name: "position4" , ty: V4F } ]
           , programInTextures : fromList []
-          , programOutput : [ {name: "f0" , ty: V4F } ]
+          , programOutput : [ {name: "gl_FragColor" , ty: V4F } ]
           , vertexShader :
-              "#version 330 core\nuniform mat4 MVP ;\nin vec4 v ;\nflat out vec4 v0 ;\nvoid main() {\nv0 = v;\ngl_Position = ( MVP ) * ( v );\ngl_PointSize = 1.0;\n}\n"
+              "#version 100\nprecision highp float;\nprecision highp int;\nuniform mat4 MVP ;\nattribute vec4 v ;\nvarying vec4 v0 ;\nvoid main() {\nv0 = v;\ngl_Position = ( MVP ) * ( v );\ngl_PointSize = 1.0;\n}\n"
           , geometryShader : Nothing
           , fragmentShader :
-              "#version 330 core\nflat in vec4 v0 ;\nout vec4 f0 ;\nvoid main() {\nf0 = ( v0 ) * ( vec4 ( 1.0,1.4,1.0,0.6 ) );\n}\n"
+              "#version 100\nprecision highp float;\nprecision highp int;\nvarying vec4 v0 ;\nvoid main() {\ngl_FragColor = ( v0 ) * ( vec4 ( 1.0,1.4,1.0,0.6 ) );\n}\n"
           }
       ]
   , slots:
@@ -131,7 +132,13 @@ gfx03Pipeline =
       ]
   }
 
-main :: Eff (trace :: Trace, alert :: Alert) Unit
+{-
+  TODO
+    load models
+    setup pipeline input
+    
+-}
+main :: Eff (trace :: Trace, alert :: Alert, err :: Exception) Unit
 main = GL.runWebGL "glcanvas" (\s -> alert s)
   \ context -> do
     trace "WebGL ready"
