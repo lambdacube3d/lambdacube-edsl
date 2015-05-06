@@ -1,5 +1,8 @@
 module Mesh where
 
+import Control.Monad.Eff
+import Control.Monad.Eff.Exception
+
 import Data.StrMap (StrMap(..))
 import Data.Maybe
 
@@ -36,4 +39,8 @@ type GPUData =
     , indices   :: Maybe (IndexStream Buffer)
     }
 
---addMesh :: GLPipelineInput -> String -> Mesh -> [String] -> GFX Object
+addMesh :: WebGLPipelineInput -> String -> Mesh -> [String] -> GFX GLObject
+addMesh _ _ _ _ = throwException $ error "not implemented"
+
+compileMesh :: Mesh -> GFX Mesh
+compileMesh _ = throwException $ error "not implemented"

@@ -7,11 +7,15 @@ import Debug.Trace
 
 import qualified Graphics.WebGL as GL
 
-import Backend
-import IR
 import Data.Maybe
 import Data.StrMap
 import Data.Tuple
+
+import Backend
+import IR
+import Mesh
+import Type
+import Input
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
 --  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
@@ -93,17 +97,17 @@ g_uv_buffer_data =
     , V2 1.0 1.0
     , V2 1.0 0.0
     ]
-{-
+
 myCube :: Mesh
 myCube =
-    { mAttributes: StrMap.fromList
+    { attributes: fromList
         [ Tuple "position4" (A_V4F g_vertex_buffer_data)
         , Tuple "vertexUV"  (A_V2F g_uv_buffer_data)
         ]
-    , mPrimitive: P_Triangles
-    , mGPUData: Nothing
+    , primitive: P_Triangles
+    , gpuData: Nothing
     }
--}
+
 samplePipeline =
   { textures : []
   , samplers : []
@@ -223,18 +227,30 @@ gfx03Pipeline =
       ]
   }
 
-{-
-  TODO
-    load models
-    setup pipeline input
-    
--}
 main :: Eff (trace :: Trace, alert :: Alert, err :: Exception) Unit
 main = GL.runWebGL "glcanvas" (\s -> alert s)
   \ context -> do
+
+    let inputSchema = 
+          { slots : fromList [ Tuple "stream"  {primitive: Triangles, attributes: fromList [Tuple "position"  TV3F, Tuple "normal" TV3F, Tuple "UVTex" TV2F]}
+                             , Tuple "stream4" {primitive: Triangles, attributes: fromList [Tuple "position4" TV4F, Tuple "vertexUV" TV2F]}
+                             ]
+          , uniforms : fromList [Tuple "MVP" M44F, Tuple "MVP2" M44F]
+          }
+    pplInput <- mkWebGLPipelineInput inputSchema
+
+    gpuCube <- compileMesh myCube
+
+    addMesh pplInput "stream4" gpuCube []
+
     trace "WebGL ready"
     ppl <- allocPipeline gfx03Pipeline -- samplePipeline
     trace "Pipeline allocated"
+
+    setPipelineInput ppl (Just pplInput)
+    sortSlotObjects pplInput
+    trace "Setup pipeline input"
+
     renderPipeline ppl
     trace "WebGL completed"
     disposePipeline ppl

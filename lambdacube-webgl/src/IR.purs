@@ -4,6 +4,7 @@ import Data.Maybe
 import Data.StrMap
 
 type Int = Number
+type Word = Number
 type Float = Number
 type Int32 = Number
 type Word32 = Number

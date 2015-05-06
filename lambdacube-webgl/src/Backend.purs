@@ -12,6 +12,7 @@ import Data.Foldable
 import Data.Traversable
 import qualified Data.StrMap as StrMap
 import Data.Tuple
+import Data.Maybe
 
 import Type
 import IR
@@ -267,6 +268,9 @@ renderPipeline p = do
 
 disposePipeline :: WebGLPipeline -> GFX Unit
 disposePipeline _ = return unit
+
+setPipelineInput :: WebGLPipeline -> Maybe WebGLPipelineInput -> GFX Unit
+setPipelineInput _ _ = throwException $ error "not implemnted"
 
 {-
 shaders :: Shaders {aVertexPosition :: Attribute Vec3, uPMatrix :: Uniform Mat4, uMVMatrix:: Uniform Mat4}

@@ -117,9 +117,7 @@ type GLSlot =
 
 data GLUniform = GLUniform InputType (forall a . RefVal a)
 
-data InputSetter = InputSetter -- TODO
-
-type GLPipelineInput =
+type WebGLPipelineInput =
     { schema        :: PipelineSchema
     , slotMap       :: StrMap.StrMap String
     , slotVector    :: [RefVal GLSlot]
@@ -165,3 +163,23 @@ data GLObjectCommand = GLObjectCommand
     | GLDrawArrays              !GLenum !GLint !GLsizei                         -- mode first count
     | GLDrawElements            !GLenum !GLsizei !GLenum !GLuint !(Ptr ())      -- mode count type buffer indicesPtr
 -}
+
+type SetterFun a = a -> GFX Unit
+
+-- user will provide scalar input data via this type
+data InputSetter
+    = SBool  (SetterFun Bool)
+    | SV2B   (SetterFun V2B)
+    | SV3B   (SetterFun V3B)
+    | SV4B   (SetterFun V4B)
+    | SInt   (SetterFun Int32)
+    | SV2I   (SetterFun V2I)
+    | SV3I   (SetterFun V3I)
+    | SV4I   (SetterFun V4I)
+    | SFloat (SetterFun Float)
+    | SV2F   (SetterFun V2F)
+    | SV3F   (SetterFun V3F)
+    | SV4F   (SetterFun V4F)
+    | SM22F  (SetterFun M22F)
+    | SM33F  (SetterFun M33F)
+    | SM44F  (SetterFun M44F)
