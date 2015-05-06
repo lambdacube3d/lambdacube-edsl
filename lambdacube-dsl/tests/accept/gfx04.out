@@ -1,0 +1,63 @@
+Pipeline
+  { textures = []
+  , samplers = []
+  , targets =
+      [ RenderTarget
+          { renderTargets =
+              [ ( Depth , Just (Framebuffer Depth) )
+              , ( Color , Just (Framebuffer Color) )
+              ]
+          }
+      ]
+  , programs =
+      [ Program
+          { programUniforms = fromList [ ( "MVP" , M44F ) ]
+          , programStreams =
+              fromList
+                [ ( "n" , ( "normal" , V3F ) ) , ( "v" , ( "position" , V3F ) ) ]
+          , programInTextures = fromList []
+          , programOutput = [ ( "f0" , V4F ) ]
+          , vertexShader =
+              "#version 330 core\nuniform mat4 MVP ;\nin vec3 v ;\nin vec3 n ;\nsmooth out vec4 v0 ;\nflat out vec4 v1 ;\nvoid main() {\nv0 = vec4( n ,1.0);\nv1 = vec4( v ,1.0);\ngl_Position = ( MVP ) * ( vec4( v ,1.0) );\ngl_PointSize = 1.0;\n}\n"
+          , geometryShader = Nothing
+          , fragmentShader =
+              "#version 330 core\nsmooth in vec4 v0 ;\nflat in vec4 v1 ;\nout vec4 f0 ;\nvoid main() {\nf0 = ( v0 ) * ( vec4 ( 1.0,1.4,1.0,0.6 ) );\n}\n"
+          }
+      ]
+  , slots =
+      [ Slot
+          { slotName = "stream"
+          , slotUniforms = fromList [ ( "MVP" , M44F ) ]
+          , slotStreams =
+              fromList [ ( "normal" , V3F ) , ( "position" , V3F ) ]
+          , slotPrimitive = Triangles
+          , slotPrograms = [ 0 ]
+          }
+      ]
+  , commands =
+      [ SetRenderTarget 0
+      , ClearRenderTarget
+          [ ( Depth , VFloat 1000.0 )
+          , ( Color , VV4F (V4 0.5 0.0 0.4 1.0) )
+          ]
+      , SetRasterContext
+          (TriangleCtx CullNone PolygonFill NoOffset LastVertex)
+      , SetAccumulationContext
+          AccumulationContext
+            { accViewportName = Nothing
+            , accOperations =
+                [ DepthOp Less False
+                , ColorOp
+                    (Blend
+                       ( FuncAdd , FuncAdd )
+                       ( ( SrcAlpha , OneMinusSrcAlpha )
+                       , ( SrcAlpha , OneMinusSrcAlpha )
+                       )
+                       (V4 1.0 1.0 1.0 1.0))
+                    (VV4B (V4 True True True True))
+                ]
+            }
+      , SetProgram 0
+      , RenderSlot 0
+      ]
+  }

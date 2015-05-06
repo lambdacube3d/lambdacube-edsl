@@ -1,0 +1,42 @@
+Pipeline
+  { textures = []
+  , samplers = []
+  , targets =
+      [ RenderTarget
+          { renderTargets = [ ( Depth , Just (Framebuffer Depth) ) ] }
+      ]
+  , programs =
+      [ Program
+          { programUniforms = fromList []
+          , programStreams = fromList [ ( "v" , ( "position4" , V4F ) ) ]
+          , programInTextures = fromList []
+          , programOutput = [ ( "f0" , V4F ) ]
+          , vertexShader =
+              "#version 330 core\nin vec4 v ;\nflat out vec4 v0 ;\nvoid main() {\nv0 = v;\ngl_Position = v;\ngl_PointSize = 1.0;\n}\n"
+          , geometryShader = Nothing
+          , fragmentShader =
+              "#version 330 core\nflat in vec4 v0 ;\nvoid main() {\n}\n"
+          }
+      ]
+  , slots =
+      [ Slot
+          { slotName = "stream4"
+          , slotUniforms = fromList []
+          , slotStreams = fromList [ ( "position4" , V4F ) ]
+          , slotPrimitive = Lines
+          , slotPrograms = [ 0 ]
+          }
+      ]
+  , commands =
+      [ SetRenderTarget 0
+      , ClearRenderTarget [ ( Depth , VFloat 1000.0 ) ]
+      , SetRasterContext (LineCtx 1.0 LastVertex)
+      , SetAccumulationContext
+          AccumulationContext
+            { accViewportName = Nothing
+            , accOperations = [ DepthOp Less False ]
+            }
+      , SetProgram 0
+      , RenderSlot 0
+      ]
+  }
