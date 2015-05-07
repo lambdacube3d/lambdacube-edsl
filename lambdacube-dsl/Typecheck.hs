@@ -24,7 +24,6 @@ import Control.Monad.State
 import Control.Monad.RWS
 import Control.Monad.Writer
 import Control.Arrow
-import Text.Show.Pretty
 import Debug.Trace
 
 import Type

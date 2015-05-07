@@ -4,7 +4,6 @@
 {-# LANGUAGE LambdaCase #-}
 module Parser where
 
-import Data.ByteString.Char8 (unpack,pack)
 import Data.Char
 import Data.List
 import Data.Maybe
@@ -13,43 +12,16 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Monoid
-import Control.Applicative
+import Control.Applicative (some,liftA2,Alternative())
 import Control.Arrow
 import Control.Monad
-import Text.Parser.Expression
-import Text.Parser.Token.Style
-import Text.Parser.LookAhead
-import Text.PrettyPrint.ANSI.Leijen (pretty)
-import Text.Trifecta
-import Text.Trifecta.Delta
-import Text.Trifecta.Indentation (IndentationRel (Ge, Gt), localIndentation, localAbsoluteIndentation, mkIndentationState, infIndentation, IndentationParserT, evalIndentationParserT)
-import Text.Show.Pretty
-import qualified Data.ByteString.Char8 as BS
+
+import qualified Text.Parsec.Indentation.Char as I
+import Text.Parsec.Indentation
+import Text.Parsec hiding (optional)
 
 import Type
-
-type P a = IndentationParserT Char (LCParser Parser) a
-
-newtype LCParser p a = LCParser { runLCParser :: p a }
-  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, LookAheadParsing, DeltaParsing)
-
-instance TokenParsing p => TokenParsing (LCParser p) where
-  someSpace = LCParser $ buildSomeSpaceParser someSpace lcCommentStyle
-  nesting = LCParser . nesting . runLCParser
-  highlight h = LCParser . highlight h . runLCParser
-  token p = p <* whiteSpace
-
-lcCommentStyle = haskellCommentStyle
-
-lcOps = haskell98Ops
-
-lcIdents = haskell98Idents
-
-keyword :: String -> P ()
-keyword = reserve lcIdents
-
-operator :: String -> P ()
-operator = reserve lcOps
+import ParserUtil
 
 void_ a = a >> return ()
 
@@ -88,7 +60,7 @@ var = try' "variable" $ do
 
 -- qualified variable
 qVar :: P String    -- TODO
-qVar = var <|> runUnspaced (try' "qualified var" $ sepBy (Unspaced upperCaseIdent) dot *> dot *> Unspaced var)
+qVar = var <|> {-runUnspaced-} (try' "qualified var" $ sepBy ({-Unspaced-} upperCaseIdent) dot *> dot *> {-Unspaced-} var)
 
 operator' :: P String
 operator' = try' "operator" (do
@@ -556,7 +528,7 @@ expressionOpAtom = do
     f e op e' = application [op, e, e']
 
     op = addPos eVar $ operator'
-        <|> try' "backquote operator" (runUnspaced (Unspaced (operator "`") *> Unspaced (var <|> upperCaseIdent) <* Unspaced (operator "`")))
+        <|> try' "backquote operator" ({-runUnspaced-} ({-Unspaced-} (operator "`") *> {-Unspaced-} (var <|> upperCaseIdent) <* {-Unspaced-} (operator "`")))
 
 expressionAtom :: P ExpR
 expressionAtom = do
@@ -590,7 +562,7 @@ expressionAtom_ =
 
   recordFieldProjection :: P ExpR
   recordFieldProjection = try $ flip eApp <$> addPos eVar var <*>
-        addPos (ret EFieldProj) (runUnspaced $ dot *> Unspaced var)
+        addPos (ret EFieldProj) ({-runUnspaced $-} dot *> {-Unspaced-} var)
 
   eLit p l@LInt{} = eApp' (EVar p "fromInt") $ ELit p l
   eLit p l = ELit p l
@@ -616,12 +588,10 @@ ret f x y = const $ f x y
 ret' f x y ps = f x (y ps)
 eVar p n = \ps -> EVar p n
 
-indentState = mkIndentationState 0 infIndentation True Ge
-
-parseLC :: String -> IO (Either String (BS.ByteString, ModuleR))
+parseLC :: String -> IO (Either String (String, ModuleR))
 parseLC fname = do
-  src <- BS.readFile fname
-  case parseByteString (runLCParser $ evalIndentationParserT (whiteSpace *> moduleDef fname <* eof) indentState) (Directed (pack fname) 0 0 0 0) src of
-    Failure m -> return $ Left $ show m
-    Success e -> return $ Right (src, e)
-
+  src <- readFile fname
+  let setName = setPosition =<< flip setSourceName fname <$> getPosition
+  case runParser (setName *> whiteSpace *> moduleDef fname <* eof) () "" (mkIndentStream 0 infIndentation True Ge $ I.mkCharIndentStream src) of
+    Left err -> return $ Left $ show err
+    Right e  -> return $ Right (src,e)

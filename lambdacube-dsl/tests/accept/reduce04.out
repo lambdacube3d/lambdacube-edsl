@@ -1,14 +1,1 @@
-Pipeline
-  { textures = []
-  , samplers = []
-  , targets =
-      [ RenderTarget
-          { renderTargets = [ ( Color , Just (Framebuffer Color) ) ] }
-      ]
-  , programs = []
-  , slots = []
-  , commands =
-      [ SetRenderTarget 0
-      , ClearRenderTarget [ ( Color , VV4F (V4 1.0 0.0 0.4 1.0) ) ]
-      ]
-  }
+Pipeline {textures = [], samplers = [], targets = [RenderTarget {renderTargets = [(Color,Just (Framebuffer Color))]}], programs = [], slots = [], commands = [SetRenderTarget 0,ClearRenderTarget [(Color,VV4F (V4 1.0 0.0 0.4 1.0))]]}

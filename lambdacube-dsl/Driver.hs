@@ -7,7 +7,6 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Arrow
-import Text.Show.Pretty
 import System.Directory
 import System.FilePath
 import Debug.Trace

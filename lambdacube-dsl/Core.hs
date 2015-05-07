@@ -24,7 +24,6 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
 import Data.Foldable (Foldable, toList)
-import Text.Show.Pretty
 import Debug.Trace
 
 import Type hiding (ELet, EApp, ETyApp, ELam, EVar, ELit, ETuple, ECase, ERecord, EFieldProj, EAlts, ENext, Exp, Pat, PAt, PVar, PLit, PTuple, PCon, Wildcard)

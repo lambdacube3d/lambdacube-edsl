@@ -5,7 +5,6 @@
 module CoreToGLSL where
 
 import Debug.Trace
-import Text.Show.Pretty (ppShow)
 
 import Data.List
 import Data.Set (Set)

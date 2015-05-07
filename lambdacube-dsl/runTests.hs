@@ -5,15 +5,12 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Reader
 
---import Text.Trifecta (Result (..))
-
 import System.Environment
 import System.Directory
 import System.FilePath
 import System.IO
 import Control.Exception
 --import Prelude
-import Text.Show.Pretty
 
 import Type
 import Typecheck

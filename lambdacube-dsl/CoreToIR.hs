@@ -8,7 +8,6 @@ import Debug.Trace
 import Control.Applicative
 import Control.Monad.State
 import Data.Monoid
-import Text.Show.Pretty
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as F
 import Data.Set (Set)

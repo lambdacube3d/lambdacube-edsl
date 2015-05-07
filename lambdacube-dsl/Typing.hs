@@ -11,9 +11,6 @@ module Typing where
 import Data.List
 import Data.Maybe
 import Data.Monoid
-import Text.PrettyPrint.ANSI.Leijen (pretty)
-import qualified Data.ByteString.Char8 as BS
-import Data.ByteString.Char8 (ByteString)
 import qualified Data.Traversable as T
 import Control.Monad.Except
 import Control.Monad.RWS
@@ -23,10 +20,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Text.Trifecta.Delta
-import Text.Trifecta hiding (err)
-import Text.Show.Pretty
 
+import Text.Parsec.Pos
 import Type
 
 matches TVar{} _ = True
@@ -275,16 +270,9 @@ errorTCM = do
   rl <- asks snd
   return $ \src -> let
       sl = map mkSpan rl
-      fullCode = True
-      mkSpan (s,e) = unlines [show $ pretty (s,e), if fullCode then BS.unpack str else show $ pretty r]
+      mkSpan (s,e) = unlines [show s, str]
         where
-          r = render spn
-          str = x -- <> BS.takeWhile (\a -> notElem a ['\n','\r']) y
-          spn = Span s e str
-          (x,y) = BS.splitAt (se - sb) $ BS.drop sb src
-          b = rewind s
-          sb = fromIntegral $ bytes b
-          se = fromIntegral $ bytes e
+          startLine = sourceLine s - 1
+          endLine = sourceLine e - 1
+          str = unlines $ take (endLine - startLine) $ drop startLine $ lines src
     in concat sl
-
-

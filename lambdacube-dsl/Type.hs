@@ -19,14 +19,20 @@ import qualified Data.Map as Map
 import Data.Monoid
 import Data.Foldable hiding (foldr)
 import Data.Traversable
-import Data.ByteString (ByteString)
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.RWS
 import Control.Applicative
 import Control.Arrow
-import Text.Trifecta.Delta (Delta)
-import Text.Show.Pretty
+import Text.Parsec.Pos
+
+type Delta = SourcePos
+instance Monoid Delta where
+  mempty = initialPos ""
+  mappend = error "mappend for Delta is not implemented"
+
+ppShow = show
+type Name = String
 
 type TName = String
 type TCName = String    -- type constructor name; if this turns out to be slow use Int or ADT instead of String
@@ -97,7 +103,7 @@ instance Show Typing where
 -}
 type Range = (Delta, Delta)
 
-type ErrorMsg = ByteString -> String    -- complete source -> message
+type ErrorMsg = String -> String    -- complete source -> message
 
 -- type checking monad
 type TCM =

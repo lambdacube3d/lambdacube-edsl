@@ -17,12 +17,19 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
+  -- indentation parser modules
+  exposed-modules:   Text.Parser.Indentation.Implementation,
+                     Text.Parsec.Indentation,
+                     Text.Parsec.Indentation.Char,
+                     Text.Parsec.Indentation.Token
+
   exposed-modules:
     -- Compiler
     Type
     Typing
     Typecheck
     Parser
+    ParserUtil
     Core
     IR
     CoreToIR
@@ -55,12 +62,7 @@ library
     directory,
     filepath,
     mtl >=2.2 && <2.3, 
-    bytestring >=0.10 && <0.11, 
-    pretty-show >=1.6 && <1.7, 
-    trifecta >=1.5 && <1.6, 
-    parsers >=0.12 && <0.13, 
-    indentation >=0.2 && <0.3,
-    ansi-wl-pprint >=0.6 && <0.7
+    parsec >= 3.1 && <3.2
   hs-source-dirs:      .
   default-language:    Haskell2010
 
