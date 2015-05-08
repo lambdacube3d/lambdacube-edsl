@@ -31,7 +31,6 @@ import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Identity
 import Control.Monad.Reader
-import Control.Monad.RWS
 import Control.Applicative
 import Control.Arrow hiding ((<+>))
 import Text.Parsec.Pos
@@ -172,15 +171,6 @@ newtype Pat' c n m = Pat' (m (Pat_ c n (Pat' c n m)))
 pattern Pat a b = Pat' (a, b)
 pattern PVar' a b = Pat a (PVar_ b)
 pattern PCon' a b c = Pat a (PCon_ b c)
-{-
-pattern PAt t a b = Pat' t (PAt_ a b)
-pattern PVar a b = Pat' a (PVar_ b)
-pattern PLit a b = Pat' a (PLit_ b)
-pattern PCon a b c = Pat' a (PCon_ b c)
-pattern PTuple a b = Pat' a (PTuple_ b)
-pattern PRecord a b = Pat' a (PRecord_ b)
-pattern Wildcard a = Pat' a Wildcard_
--}
 
 --------------------------------------------
 
@@ -213,18 +203,7 @@ data Exp_ v t p b
     | EAlts_     Int [b]  -- function alternatives; Int: arity
     | ENext_              -- go to next alternative
     deriving (Functor,Foldable,Traversable)
-{-
-    = TLit_    Lit                        -- ok
-    | TVar_    n                          -- ok
-    | TCon_    c                          -- ok
-    | TApp_    a a                        -- ok
-    | TTuple_  [a]                        -- ok
 
-    | Star_
-    | Forall_  (Maybe n) a a
-    | TRecord_ (Map n a)
-    | ConstraintKind_ (Constraint n a)        -- flatten?
--}
 mapExp :: (v -> v') -> (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v' t' p' b
 mapExp vf tf f = \case
     ELit_      x       -> ELit_ x
@@ -312,36 +291,6 @@ instance GetTag (Pat' c n ((,) a)) where
     getTag (Pat a _) = a
 
 
--------------------------------------------------------------------------------- modules
-
--- TODO: this need not be polymorphic; use only as parser output
-data Module n t p e
-  = Module
-  { moduleImports :: [n]    -- TODO
-  , moduleExports :: ()     -- TODO
-  , typeAliases   :: ()     -- TODO: remove
-  , definitions   :: [Definition n t p e]
-  , precedences   :: PrecMap    -- TODO: remove
-  , moduleFile    :: FilePath    -- TODO: remove
-  }
-
-type PrecMap = Map Name Fixity
-
-data Definition n t p e
-  = DValueDef (ValueDef p e)
-  | DAxiom (TypeSig n t)
-  | DDataDef (DataDef n t)      -- TODO: remove, use GADT
-  | GADT n [(n, t)] [(n, t)]
-  | ClassDef ClassName [(n, t)] [TypeSig n t]  -- TODO: allow fixity def
-  | InstanceDef ClassName t [ValueDef p e]
-  | DFixity n Fixity            -- TODO: remove?
-
-data ValueDef p e = ValueDef p e
-data TypeSig n t = TypeSig n t
-data DataDef n t = DataDef n [(n, t)] [ConDef n t]
-data ConDef n t = ConDef n [FieldTy n t]
-data FieldTy n t = FieldTy {fieldName :: Maybe n, fieldType :: t}
-
 -------------------------------------------------------------------------------- names
 
 -- TODO: add definition range info
@@ -393,7 +342,6 @@ data Range
     = Range SourcePos SourcePos
     | NoRange
 
--- TODO: remove this
 instance Monoid Range where
     mempty = NoRange
     Range a1 a2 `mappend` Range b1 b2 = Range (min a1 a2) (max b1 b2)
@@ -446,14 +394,36 @@ showRange (Just src) (Just (Range s e)) = str
 
 -------------------------------------------------------------------------------- parser output
 
+data ValueDef p e = ValueDef p e
+data TypeSig n t = TypeSig n t
+
+data ModuleR
+  = Module
+  { moduleImports :: [Name]    -- TODO
+  , moduleExports :: ()     -- TODO
+  , definitions   :: [DefinitionR]
+  }
+
+type PrecMap = Map Name Fixity
+
+type DefinitionR = Definition ExpR
+data Definition e
+  = DValueDef (ValueDef PatR e)
+  | DAxiom (TypeSig Name TyR)
+  | DDataDef Name [(Name, TyR)] [ConDef]      -- TODO: remove, use GADT
+  | GADT Name [(Name, TyR)] [(Name, TyR)]
+  | ClassDef ClassName [(Name, TyR)] [TypeSig Name TyR]  -- TODO: allow fixity def
+  | InstanceDef ClassName TyR [ValueDef PatR e]
+  | DFixity Name Fixity
+
+data ConDef = ConDef Name [FieldTy]
+data FieldTy = FieldTy {fieldName :: Maybe Name, fieldType :: TyR}
+
 type TyR = Ty' Name Name ((,) Range)
 type PatR = Pat' Name Name ((,) Range)
 type ExpR = Exp' Name TyR PatR ((,) Range)
-type DataDefR = DataDef TyR
-type DefinitionR = Definition Name TyR PatR ExpR
 type ConstraintR = Constraint Name TyR
 type TypeFunR = TypeFun Name TyR
-type ModuleR = Module Name TyR PatR ExpR
 type ValueDefR = ValueDef PatR ExpR
 
 -------------------------------------------------------------------------------- names with unique ids
@@ -484,13 +454,14 @@ type SubstEnv = Env (Either Ty Ty)  -- either substitution or type signature
 
 type Subst = Env Ty  -- substitutions
 
-data TEnv = TEnv Subst EnvMap       -- TODO: merge into this?   Env (Either Ty (Maybe Thunk))
+data TEnv = TEnv Subst EnvMap       -- TODO: merge into this:   Env (Either Ty (Maybe Thunk))
 
 type EnvMap = Env (Maybe Thunk)   -- Nothing: statically unknown but defined
 
 data PolyEnv = PolyEnv
     { instanceDefs :: InstanceDefs
     , getPolyEnv :: Env InstType
+    , precedences :: PrecMap
     , thunkEnv :: EnvMap
     }
 
@@ -530,8 +501,6 @@ type ExpT = (Exp, Ty)
 type PatT = Pat
 type ConstraintT = Constraint IdN Ty
 type TypeFunT = TypeFun IdN Ty
-type ModuleT = Module IdN Ty PatT ExpT
-type DefinitionT = Definition IdN Ty PatT ExpT
 type ValueDefT = ValueDef PatT ExpT
 
 -------------------------------------------------------------------------------- LambdaCube specific definitions
@@ -692,10 +661,7 @@ instance (PShow n, PShow a) => PShow (Constraint n a) where
         CUnify a b -> pShow a <+> "~" <+> pShow b
         CClass a b -> pShow a <+> pShow b
 --        | Split a a a         -- Split x y z:  x, y, z are records; fields of x = disjoint union of the fields of y and z
-{-
-instance PShow Typing where
-    pShowPrec p (TypingConstr env t) = pShow env </> "|-" <+> pShow t
--}
+
 instance (PShow c, PShow n) => PShow (Ty' c n ((,) a)) where
     pShowPrec p (Ty' a b) = pShowPrec p b
 
@@ -724,12 +690,6 @@ instance Replace a => Replace (Env a) where
       where
         r x = fromMaybe x $ Map.lookup x st
 
-{-
-instance Replace Typing where
-    repl st (TypingConstr e t) = TypingConstr (Map.fromList $ map (r *** repl st) $ Map.toList e) $ repl st t
-      where
-        r x = fromMaybe x $ Map.lookup x st
--}
 -------------------------------------------------------------------------------- pre-substitution
 
 -- TODO: review usage (use only after unification)
@@ -758,10 +718,6 @@ instance Substitute SubstEnv where
 
         me f = either (fmap Left . f) (fmap Right . f)
 
-{-
-instance Substitute Typing where
-    subst_ st (TypingConstr e t) = TypingConstr <$> subst_ st e <*> subst_ st t
--}
 instance Substitute a => Substitute (Constraint n a) where subst_ = traverse . subst_
 instance Substitute a => Substitute [a]              where subst_ = traverse . subst_
 
@@ -822,12 +778,7 @@ tyOfPat = \case
 patternEVars (Pat'' p) = case p of
     PVar_ (VarE v _) -> [v]
     p -> foldMap patternEVars p
-{-
--- TODO: eliminate
-unifC (CEq t f) (CEq t' f') = runExcept $ unifyTypes_ throwError True $ [t, t']: zipWith (\x y->[x,y]) (toList f) (toList f')
-unifC (CClass c t) (CClass c' t') | c == c' = runExcept $ unifyTypes_ throwError True $ [t, t']: []
-unifC a b = error $ "unifC: " ++ ppShow a ++ "\n ~ \n" ++ ppShow b
--}
+
 -------------------------------------------------------------------------------- thunks
 
 instance Monoid TEnv where

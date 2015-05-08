@@ -429,17 +429,17 @@ newStarV = lift (newVar Star)
 addTypeVar n = newStarV >>= \t -> TypingT $ pure (Map.singleton n $ Right t, t)
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
-    [] -> return $ PolyEnv (foldMap instanceDefs ps) (head <$> ms) mempty{-TODO-}
+    [] -> return $ PolyEnv (foldMap instanceDefs ps) (head <$> ms) mempty{-TODO-} mempty{-TODO-}
     xss -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xss)
   where
     isSing [_] = True
     isSing _ = False
-    ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv _ e _ <- ps]
+    ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv _ e _ _ <- ps]
 
 --withTyping :: Env InstType -> TCM a -> TCM a
 withTyping ts m = do
     env <- ask
-    env <- joinPolyEnvs [env, PolyEnv mempty ts mempty]
+    env <- joinPolyEnvs [env, PolyEnv mempty ts mempty mempty]
     local (const env) m
 
 --withTyping' :: Env InstType -> TCMS a -> TCMS a
@@ -696,7 +696,7 @@ trace' s = trace (show s) s
 tyConKind :: [TyR] -> TCM InstType
 tyConKind vs = instantiateTyping $ foldr (liftA2 (~>)) star $ map (fmap kindOf . inferKind) vs
 
-inferConDef :: Name -> [(Name, TyR)] -> ConDef Name TyR -> TCM (Env InstType)
+inferConDef :: Name -> [(Name, TyR)] -> ConDef -> TCM (Env InstType)
 inferConDef con (unzip -> (vn, vt)) (ConDef n tys) = do
     ty <- instantiateTyping $ do
         ks <- mapM inferKind vt
@@ -774,7 +774,7 @@ inferDefs [] = ask
 inferDefs (DValueDef d: ds) = do
     (d, f) <- inferDef d
     f $ inferDefs ds
-inferDefs (DDataDef d@(DataDef con vars cdefs): ds) = do
+inferDefs (DDataDef con vars cdefs: ds) = do
   tk <- tyConKind $ map snd vars
   withTyping (Map.singleton con tk) $ do
     ev <- mapM (inferConDef con vars) cdefs

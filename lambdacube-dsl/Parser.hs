@@ -34,7 +34,7 @@ data PreValueDef
     | DTypeSig (TypeSig EName TyR)
     | PreInstanceDef ClassName TyR [PreDefinitionR]
 
-type PreDefinitionR = Either PreValueDef (Definition Name TyR PatR PrecExpR)
+type PreDefinitionR = Either PreValueDef (Definition PrecExpR)
 type PrecExpR = PrecMap -> ExpR
 
 data WhereRHS = WhereRHS GuardedRHS (Maybe [PreDefinitionR])
@@ -146,7 +146,7 @@ groupDefinitions ps' defs = concatMap mkDef . map compileRHS . groupBy f $ defs
     ps = Map.fromList [(n, p) | Right (DFixity n p) <- defs] <> ps'
     mkDef = \case
         Right (DValueDef (ValueDef p e)) -> [DValueDef $ ValueDef p $ e ps]
-        Right (DDataDef d) -> [DDataDef d]
+        Right (DDataDef a b c) -> [DDataDef a b c]
         Right (GADT a b c) -> [GADT a b c]
         Left (PreInstanceDef c t ds) -> [InstanceDef c t [v | DValueDef v <- groupDefinitions ps ds]]
         Right (DAxiom t) -> [DAxiom t]
@@ -185,12 +185,9 @@ moduleDef fname = do
     return $ Module
       { moduleImports = (if modn == Just (N ExpNS [] "Prelude" Nothing) then id else (N ExpNS [] "Prelude" Nothing:)) idefs
       , moduleExports = mempty
-      , typeAliases   = mempty
       , definitions   = defs
 --      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
-      , precedences   = Map.fromList [(n, p) | DFixity n p <- defs]     -- TODO: check multiple definitions
---      , axioms        = [d | TypeSig d <- defs]
-      , moduleFile    = fname
+--      , precedences   = Map.fromList [(n, p) | DFixity n p <- defs]     -- TODO: check multiple definitions
       }
 
 
@@ -343,7 +340,7 @@ dataDef = do
       operator "="
       ds <- sepBy dataConDef $ operator "|"
       derivingStm
-      return $ Right $ DDataDef $ DataDef tc tvs ds
+      return $ Right $ DDataDef tc tvs ds
 
 
 derivingStm = optional $ keyword "deriving" <* (void_ typeConstraint <|> void_ (parens $ sepBy typeConstraint comma))
