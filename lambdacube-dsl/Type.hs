@@ -412,9 +412,8 @@ data Definition e
   | DAxiom (TypeSig Name TyR)
   | DDataDef Name [(Name, TyR)] [ConDef]      -- TODO: remove, use GADT
   | GADT Name [(Name, TyR)] [(Name, TyR)]
-  | ClassDef ClassName [(Name, TyR)] [TypeSig Name TyR]  -- TODO: allow fixity def
+  | ClassDef ClassName [(Name, TyR)] [TypeSig Name TyR]
   | InstanceDef ClassName TyR [ValueDef PatR e]
-  | DFixity Name Fixity
 
 data ConDef = ConDef Name [FieldTy]
 data FieldTy = FieldTy {fieldName :: Maybe Name, fieldType :: TyR}

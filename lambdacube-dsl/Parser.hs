@@ -29,13 +29,15 @@ import ParserUtil
 
 -------------------------------------------------------------------------------- parser specific types
 
+type P = P_ PrecMap
+
 data PreValueDef
     = PreValueDef (Range, EName) [PatR] WhereRHS
     | DTypeSig (TypeSig EName TyR)
     | PreInstanceDef ClassName TyR [PreDefinitionR]
 
 type PreDefinitionR = Either PreValueDef (Definition PrecExpR)
-type PrecExpR = PrecMap -> ExpR
+type PrecExpR = ExpR
 
 data WhereRHS = WhereRHS GuardedRHS (Maybe [PreDefinitionR])
 
@@ -99,8 +101,8 @@ varId = var <|> parens operator'
 sepBy2 a b = (:) <$> a <* b <*> sepBy1 a b
 
 alts :: Int -> [PrecExpR] -> PrecExpR
-alts _ [e] ps = e ps
-alts i es_ ps = EAlts' (foldMap getTag es) i es  where es = map ($ ps) es_
+alts _ [e] = e
+alts i es = EAlts' (foldMap getTag es) i es
 
 compileWhereRHS :: WhereRHS -> PrecExpR
 compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
@@ -108,7 +110,7 @@ compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
 
 compileGuardedRHS :: GuardedRHS -> PrecExpR
 compileGuardedRHS (NoGuards e) = e
-compileGuardedRHS (Guards p gs) = foldr addGuard (\ps -> Exp p{-TODO-} ENext_) gs
+compileGuardedRHS (Guards p gs) = foldr addGuard (Exp p{-TODO-} ENext_) gs
   where
     addGuard (b, x) y = eApp (eApp (eApp (eVar p{-TODO-} (ExpN "ifThenElse")) b) x) y
 
@@ -129,8 +131,8 @@ compileRHS ds = case ds of
 
 allSame (n:ns) | all (==n) ns = n
 
-groupDefinitions :: PrecMap -> [PreDefinitionR] -> [DefinitionR]
-groupDefinitions ps' defs = concatMap mkDef . map compileRHS . groupBy f $ defs
+groupDefinitions :: [PreDefinitionR] -> [DefinitionR]
+groupDefinitions defs = concatMap mkDef . map compileRHS . groupBy f $ defs
   where
     f (h -> Just x) (h -> Just y) = x == y
     f _ _ = False
@@ -143,12 +145,11 @@ groupDefinitions ps' defs = concatMap mkDef . map compileRHS . groupBy f $ defs
     name (PVar' _ n) = Just n
     name _ = Nothing
 
-    ps = Map.fromList [(n, p) | Right (DFixity n p) <- defs] <> ps'
     mkDef = \case
-        Right (DValueDef (ValueDef p e)) -> [DValueDef $ ValueDef p $ e ps]
+        Right (DValueDef (ValueDef p e)) -> [DValueDef $ ValueDef p e]
         Right (DDataDef a b c) -> [DDataDef a b c]
         Right (GADT a b c) -> [GADT a b c]
-        Left (PreInstanceDef c t ds) -> [InstanceDef c t [v | DValueDef v <- groupDefinitions ps ds]]
+        Left (PreInstanceDef c t ds) -> [InstanceDef c t [v | DValueDef v <- groupDefinitions ds]]
         Right (DAxiom t) -> [DAxiom t]
         Right (ClassDef a b c) -> [ClassDef a b c]
 --        _ -> []
@@ -172,14 +173,14 @@ moduleDef fname = do
   localAbsoluteIndentation $ do
     idefs <- many importDef
     -- TODO: unordered definitions
-    defs <- groupDefinitions mempty . concat <$> many (choice
+    defs <- groupDefinitions . concat <$> many (choice
         [ (:[]) <$> dataDef
         , concat <$ keyword "axioms" <*> localIndentation Gt (localAbsoluteIndentation $ many axiom)
         , typeSignature
         , const [] <$> typeSynonym
         , (:[]) <$> typeClassDef
         , (:[]) <$> valueDef
-        , fixityDef
+        , const [] <$> fixityDef
         , (:[]) <$> typeClassInstanceDef
         ])
     return $ Module
@@ -392,7 +393,7 @@ typeClassInstanceDef = do
         valueDef
     return $ Left $ PreInstanceDef c t $ fromMaybe [] ds
 
-fixityDef :: P [PreDefinitionR]
+fixityDef :: P ()
 fixityDef = do
   dir <-    Nothing      <$ keyword "infix" 
         <|> Just FDLeft  <$ keyword "infixl"
@@ -400,7 +401,7 @@ fixityDef = do
   localIndentation Gt $ do
     i <- natural
     ns <- sepBy1 operator' comma
-    return [Right $ DFixity n (dir, fromIntegral i) | n <- ns]
+    modifyState $ Map.union $ Map.fromList [(n, (dir, fromIntegral i)) | n <- ns]
 
 undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
@@ -446,7 +447,7 @@ valuePatternAtom
       nil r = PCon' r{-TODO-} (ExpN "Nil") []
       cons a b = PCon' mempty (ExpN "Cons") [a, b]
 
-eLam p e_ ps = ELam' (p <-> e) p e where e = e_ ps
+eLam p e = ELam' (p <-> e) p e
 
 valueDef :: P PreDefinitionR
 valueDef = do
@@ -490,7 +491,7 @@ application [e] = e
 application es = eApp (application $ init es) (last es)
 
 eApp :: PrecExpR -> PrecExpR -> PrecExpR
-eApp = liftA2 eApp'
+eApp = eApp'
 
 eApp' :: ExpR -> ExpR -> ExpR
 eApp' a b = EApp' (a <-> b) a b
@@ -536,12 +537,12 @@ expression = do
       return $ eLets l a
 
 eLets :: [PreDefinitionR] -> PrecExpR -> PrecExpR
-eLets l a ps = foldr ($) (a ps) $ map eLet $ groupDefinitions ps l
+eLets l a = foldr ($) a $ map eLet $ groupDefinitions l
   where
     eLet (DValueDef (ValueDef a b)) = ELet' (a <-> b) a b
 
 eTyping :: PrecExpR -> TyR -> PrecExpR
-eTyping a_ b ps = ETypeSig' (a <-> b) a b  where a = a_ ps
+eTyping a b = ETypeSig' (a <-> b) a b
 
 expressionOpAtom :: P PrecExpR
 expressionOpAtom = do
@@ -561,12 +562,12 @@ expressionAtom = do
         typeAtom
     return $ foldl eTyApp e ts
 
-eTyApp a_ b ps = EApp' (a <-> b) a $ EType' (getTag b) b where a = a_ ps
+eTyApp a b = EApp' (a <-> b) a $ EType' (getTag b) b
 
 expressionAtom_ :: P PrecExpR
 expressionAtom_ =
   listExp <|>
-  addPos (ret eLit) literal <|>
+  addPos eLit literal <|>
   recordExp <|>
   recordExp' <|>
   recordFieldProjection <|>
@@ -585,7 +586,7 @@ expressionAtom_ =
 
   recordFieldProjection :: P PrecExpR
   recordFieldProjection = try $ flip eApp <$> addPos eVar var <*>
-        addPos (ret EFieldProj') ({-runUnspaced $-} dot *> {-Unspaced-} var)
+        addPos EFieldProj' ({-runUnspaced $-} dot *> {-Unspaced-} var)
 
   eLit p l@LInt{} = eApp' (EVar' p (ExpN "fromInt")) $ ELit' p l
   eLit p l = ELit' p l
@@ -603,18 +604,18 @@ literal =
     LChar <$> charLiteral <|>
     LString <$> stringLiteral
 
-eTuple _ [x] ps = x ps
-eTuple p xs ps = ETuple' p $ map ($ ps) xs
-eRecord p xs ps = ERecord' p (map (id *** ($ ps)) xs)
-eNamedRecord p n xs ps = ENamedRecord' p n (map (id *** ($ ps)) xs)
+eTuple _ [x] = x
+eTuple p xs = ETuple' p xs
+eRecord p xs = ERecord' p xs
+eNamedRecord p n xs = ENamedRecord' p n xs
 ret f x y = const $ f x y
-ret' f x y ps = f x (y ps)
-eVar p n = \ps -> EVar' p n
+ret' f x y = f x y
+eVar p n = EVar' p n
 
 parseLC :: FilePath -> ErrorT IO (String, ModuleR)
 parseLC fname = do
   src <- liftIO $ readFile fname
   let setName = setPosition =<< flip setSourceName fname <$> getPosition
-  case runParser (setName *> whiteSpace *> moduleDef fname <* eof) () "" (mkIndentStream 0 infIndentation True Ge $ I.mkCharIndentStream src) of
+  case runParser (setName *> whiteSpace *> moduleDef fname <* eof) mempty "" (mkIndentStream 0 infIndentation True Ge $ I.mkCharIndentStream src) of
     Left err -> throwParseError err
     Right e  -> return (src, e)
