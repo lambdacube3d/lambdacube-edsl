@@ -1,4 +1,7 @@
-module ParserUtil where
+module ParserUtil
+    ( module ParserUtil
+    , ParseError
+    ) where
 
 import qualified Text.Parsec.Indentation.Char as I
 import qualified Text.Parsec.Indentation.Token as I
@@ -6,13 +9,12 @@ import qualified Text.Parsec.Token as P
 import Text.Parsec.Indentation as I
 import Text.Parsec.Language (haskellDef)
 import Text.Parsec hiding (optional)
-import Type
 
 type P = Parsec (I.IndentStream (I.CharIndentStream String)) ()
 
 lexer = I.makeTokenParser $ I.makeIndentLanguageDef haskellDef
 
-position :: P Delta
+position :: P SourcePos
 position = getPosition
 
 optional :: P a -> P (Maybe a)

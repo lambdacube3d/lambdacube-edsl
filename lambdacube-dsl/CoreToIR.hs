@@ -1,6 +1,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 module CoreToIR where
 
 import Data.List
@@ -15,8 +16,9 @@ import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import Pretty
 import qualified Type as AST
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp, Exp_ (..), Pat, PVar, PLit, PTuple)
+import Type
 import Core
 import CoreToGLSL
 import qualified IR as IR
@@ -117,18 +119,18 @@ getCommands e = case e of
 getUniforms :: Exp -> Set (String,IR.InputType)
 getUniforms e = case e of
   A1 "Uni" a -> Set.fromList $ compInput a
-  Exp e -> F.foldMap getUniforms e
+  Exp'' e -> F.foldMap getUniforms e
 
 compAC x = case x of
   A1 "AccumulationContext" (ETuple a) -> IR.AccumulationContext Nothing (map compFrag a)
   A1 "AccumulationContext" a -> IR.AccumulationContext Nothing [compFrag a]
-  x -> error $ "compAC " ++ show x
+  x -> error $ "compAC " ++ ppShow x
 
 compBlending x = case x of
   A0 "NoBlending" -> IR.NoBlending
   A1 "BlendLogicOp" a -> IR.BlendLogicOp (compLO a)
   A3 "Blend" (ETuple [a,b]) (ETuple [ETuple [c,d],ETuple [e,f]]) (compValue -> IR.VV4F g) -> IR.Blend (compBE a,compBE b) ((compBF c,compBF d),(compBF e,compBF f)) g
-  x -> error $ "compBlending " ++ show x
+  x -> error $ "compBlending " ++ ppShow x
 
 compBF x = case x of
   A0 "Zero" -> IR.Zero
@@ -146,7 +148,7 @@ compBF x = case x of
   A0 "ConstantAlpha" -> IR.ConstantAlpha
   A0 "OneMinusConstantAlpha" -> IR.OneMinusConstantAlpha
   A0 "SrcAlphaSaturate" -> IR.SrcAlphaSaturate
-  x -> error $ "compBF " ++ show x
+  x -> error $ "compBF " ++ ppShow x
 
 compBE x = case x of
   A0 "FuncAdd" -> IR.FuncAdd
@@ -154,7 +156,7 @@ compBE x = case x of
   A0 "FuncReverseSubtract" -> IR.FuncReverseSubtract
   A0 "Min" -> IR.Min
   A0 "Max" -> IR.Max
-  x -> error $ "compBE " ++ show x
+  x -> error $ "compBE " ++ ppShow x
 
 compLO x = case x of
   A0 "Clear" -> IR.Clear
@@ -173,7 +175,7 @@ compLO x = case x of
   A0 "OrInverted" -> IR.OrInverted
   A0 "Nand" -> IR.Nand
   A0 "Set" -> IR.Set
-  x -> error $ "compLO " ++ show x
+  x -> error $ "compLO " ++ ppShow x
 
 compComparisonFunction x = case x of
   A0 "Never" -> IR.Never
@@ -184,12 +186,12 @@ compComparisonFunction x = case x of
   A0 "Notequal" -> IR.Notequal
   A0 "Gequal" -> IR.Gequal
   A0 "Always" -> IR.Always
-  x -> error $ "compComparisonFunction " ++ show x
+  x -> error $ "compComparisonFunction " ++ ppShow x
 
 compBool x = case x of
   A0 "True" -> True
   A0 "False" -> False
-  x -> error $ "compBool " ++ show x
+  x -> error $ "compBool " ++ ppShow x
 
 compFrag x = case x of
   A2 "DepthOp" (compComparisonFunction -> a) (compBool -> b) -> IR.DepthOp a b
@@ -227,7 +229,7 @@ compInput x = case x of
   A1 "IM42F" (ELit (LString s)) -> [(s, IR.M42F)]
   A1 "IM43F" (ELit (LString s)) -> [(s, IR.M43F)]
   A1 "IM44F" (ELit (LString s)) -> [(s, IR.M44F)]
-  x -> error $ "compInput " ++ show x
+  x -> error $ "compInput " ++ ppShow x
 
 compFetchPrimitive x = case x of
   A0 "Points" -> IR.Points
@@ -235,7 +237,7 @@ compFetchPrimitive x = case x of
   A0 "Triangles" -> IR.Triangles
   A0 "LinesAdjacency" -> IR.LinesAdjacency
   A0 "TrianglesAdjacency" -> IR.TrianglesAdjacency
-  x -> error $ "compFetchPrimitive " ++ show x
+  x -> error $ "compFetchPrimitive " ++ ppShow x
 
 compImg x = case x of
   ETuple a -> concatMap compImg a
@@ -254,41 +256,41 @@ compRC x = case x of
   A3 "PointCtx" a (ELit (LFloat b)) c -> IR.PointCtx (compPS a) (realToFrac b) (compPSCO c)
   A2 "LineCtx" (ELit (LFloat a)) b -> IR.LineCtx (realToFrac a) (compPV b)
   A4 "TriangleCtx" a b c d -> IR.TriangleCtx (compCM a) (compPM b) (compPO c) (compPV d)
-  x -> error $ "compRC " ++ show x
+  x -> error $ "compRC " ++ ppShow x
 
 compPSCO x = case x of
   A0 "LowerLeft" -> IR.LowerLeft
   A0 "UpperLeft" -> IR.UpperLeft
-  x -> error $ "compPSCO " ++ show x
+  x -> error $ "compPSCO " ++ ppShow x
 
 compCM x = case x of
   A0 "CullNone" -> IR.CullNone
   A1 "CullFront" a -> IR.CullFront $ compFF a
   A1 "CullBack" a -> IR.CullBack $ compFF a
-  x -> error $ "compCM " ++ show x
+  x -> error $ "compCM " ++ ppShow x
 
 compFF x = case x of
   A0 "CW" -> IR.CW
   A0 "CCW" -> IR.CCW
-  x -> error $ "compFF " ++ show x
+  x -> error $ "compFF " ++ ppShow x
 
 compPM x = case x of
   A0 "PolygonFill" -> IR.PolygonFill
   A1 "PolygonLine" (ELit (LFloat a)) -> IR.PolygonLine $ realToFrac a
   A1 "PolygonPoint" a  -> IR.PolygonPoint $ compPS a
-  x -> error $ "compPM " ++ show x
+  x -> error $ "compPM " ++ ppShow x
 
 compPS x = case x of
   A1 "PointSize" (ELit (LFloat a)) -> IR.PointSize $ realToFrac a
   A0 "ProgramPointSize" -> IR.ProgramPointSize
-  x -> error $ "compPS " ++ show x
+  x -> error $ "compPS " ++ ppShow x
 
 compPO x = case x of
   A2 "Offset" (ELit (LFloat a)) (ELit (LFloat b)) -> IR.Offset (realToFrac a) (realToFrac b)
   A0 "NoOffset" -> IR.NoOffset
-  x -> error $ "compPO " ++ show x
+  x -> error $ "compPO " ++ ppShow x
 
 compPV x = case x of
     A0 "FirstVertex" -> IR.FirstVertex
     A0 "LastVertex" -> IR.LastVertex
-    x -> error $ "compPV " ++ show x
+    x -> error $ "compPV " ++ ppShow x

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PackageImports #-}
@@ -18,7 +19,8 @@ import Control.Monad.Writer
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as F
 
-import Type hiding (ELet, EApp, ELam, EVar, ELit, ETuple, Exp, Exp_ (..), Pat, PVar, PLit, PTuple)
+import Pretty
+import Type
 import Core
 
 toGLSLType msg t = case t of
@@ -54,10 +56,10 @@ pattern ELString s = ELit (LString s)
 
 genUniforms e = case e of
   A1 "Uni" (A1 _ (ELString s)) -> Set.singleton [unwords ["uniform",toGLSLType "1" $ tyOf e,s,";"]]
-  Exp e -> F.foldMap genUniforms e
+  Exp'' e -> F.foldMap genUniforms e
 
 genStreamInput i = do
-  let input (PVar (x@(VarE n t))) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]] >> return [n]
+  let input (PVar (x@(VarE (showN -> n) t))) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]] >> return [n]
       input a = error $ "genStreamInput " ++ ppShow a
   case i of
     PTuple l -> foldM (\a b -> (a ++) <$> input b) [] l
@@ -102,11 +104,11 @@ genFragmentGLSL s e@(ELam i fragOut) = unlines $ execWriter $ do
   let o = case fragOut of
         A1 "FragmentOutRastDepth" o -> o
         A1 "FragmentOut" o -> o
-      makeSubst (PVar (VarE x _)) [(_,_,n)] = Map.singleton x n
+      makeSubst (PVar (VarE (showN -> x) _)) [(_,_,n)] = Map.singleton x n
       makeSubst (PTuple l) x = Map.fromList $ go l x where
         go [] [] = []
-        go (PVar (VarE x _):al) ((_,_,n):bl) = (x,n) : go al bl
-        go _ _ = error $ "genFragmentGLSL illegal input " ++ ppShow (i,s)
+        go (PVar (VarE (showN -> x) _):al) ((_,_,n):bl) = (x,n) : go al bl
+        go _ _ = error $ "genFragmentGLSL illegal input " ++ ppShow i ++ " " ++ show s
   tell ["#version 330 core"]
   F.mapM_ tell $ genUniforms e
   genFragmentInput s
@@ -133,7 +135,7 @@ genGLSLSubst s e = case e of
   ELit (LFloat a) -> [show a]
   ELit (LChar a) -> [show a]
   ELit (LString a) -> [show a]
-  EVar (VarE a _) -> [Map.findWithDefault a a s]
+  EVar (VarE (showN -> a) _) -> [Map.findWithDefault a a s]
   A1 "Uni" (A1 _ (ELString s)) -> [s]
   A1 "Smooth" a -> genGLSLSubst s a
   A1 "Flat" a -> genGLSLSubst s a
