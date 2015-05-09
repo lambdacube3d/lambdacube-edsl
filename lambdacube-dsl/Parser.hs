@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Parser where
 
+import Data.Function
 import Data.Char
 import Data.List
 import Data.Maybe
@@ -31,19 +32,8 @@ import ParserUtil
 
 type P = P_ PrecMap
 
-data PreValueDef
-    = PreValueDef (Range, EName) [PatR] WhereRHS
-    | DTypeSig (TypeSig EName TyR)
-    | PreInstanceDef ClassName TyR [PreDefinitionR]
-
-type PreDefinitionR = Either PreValueDef (Definition PrecExpR)
+type PreDefinitionR = DefinitionR
 type PrecExpR = ExpR
-
-data WhereRHS = WhereRHS GuardedRHS (Maybe [PreDefinitionR])
-
-data GuardedRHS
-    = Guards Range [(PrecExpR, PrecExpR)]
-    | NoGuards PrecExpR
 
 ---------------------
 
@@ -119,40 +109,35 @@ compileCases r e rs = eApp (alts 1 [eLam p $ compileWhereRHS r | (p, r) <- rs]) 
 
 compileRHS :: [PreDefinitionR] -> PreDefinitionR
 compileRHS ds = case ds of
-    (Left (DTypeSig (TypeSig _ t)): ds@(Left (PreValueDef{}): _)) -> mkAlts (`eTyping` t) ds
-    ds@(Left (PreValueDef{}): _) -> mkAlts id ds
+    ((r1, DTypeSig (TypeSig _ t)): ds@((r2, PreValueDef{}): _)) -> (r1 `mappend` r2, mkAlts (`eTyping` t) ds)
+    ds@((r, PreValueDef{}): _) -> (r, mkAlts id ds)
     [x] -> x
   where
-    mkAlts f ds@(Left (PreValueDef (r, n) _ _): _)
-        = Right $ DValueDef $ ValueDef (PVar' r n) $ f $ alts i als
+    mkAlts f ds@( (_, PreValueDef (r, n) _ _): _)
+        = DValueDef $ ValueDef (PVar' r n) $ f $ alts i als
       where
         i = allSame is
-        (als, is) = unzip [(foldr eLam (compileWhereRHS rhs) pats, length pats) | Left (PreValueDef _ pats rhs) <- ds]
+        (als, is) = unzip [(foldr eLam (compileWhereRHS rhs) pats, length pats) |  (_, PreValueDef _ pats rhs) <- ds]
 
 allSame (n:ns) | all (==n) ns = n
 
 groupDefinitions :: [PreDefinitionR] -> [DefinitionR]
-groupDefinitions defs = concatMap mkDef . map compileRHS . groupBy f $ defs
+groupDefinitions defs = concatMap mkDef . map compileRHS . groupBy (f `on` snd) $ defs
   where
     f (h -> Just x) (h -> Just y) = x == y
     f _ _ = False
 
-    h (Left (PreValueDef (_, n) _ _)) = Just n
-    h (Right (DValueDef (ValueDef p _))) = name p        -- TODO
-    h (Left (DTypeSig (TypeSig n _))) = Just n
+    h ( (PreValueDef (_, n) _ _)) = Just n
+    h ( (DValueDef (ValueDef p _))) = name p        -- TODO
+    h ( (DTypeSig (TypeSig n _))) = Just n
     h _ = Nothing
 
     name (PVar' _ n) = Just n
     name _ = Nothing
 
     mkDef = \case
-        Right (DValueDef (ValueDef p e)) -> [DValueDef $ ValueDef p e]
-        Right (DDataDef a b c) -> [DDataDef a b c]
-        Right (GADT a b c) -> [GADT a b c]
-        Left (PreInstanceDef c t ds) -> [InstanceDef c t [v | DValueDef v <- groupDefinitions ds]]
-        Right (DAxiom t) -> [DAxiom t]
-        Right (ClassDef a b c) -> [ClassDef a b c]
---        _ -> []
+         (r, PreInstanceDef c t ds) -> [(r, InstanceDef c t [v | (r, DValueDef v) <- groupDefinitions ds])]
+         x -> [x]
 
 --------------------------------------------------------------------------------
 
@@ -223,7 +208,7 @@ typeSignature = do
     return ns
   t <- localIndentation Gt $ do
     optional (operator "!") *> typeExp
-  return [Left $ DTypeSig $ TypeSig n t | n <- ns]
+  return [(mempty, DTypeSig $ TypeSig n t) | n <- ns]
 
 axiom :: P [PreDefinitionR]
 axiom = do
@@ -233,7 +218,7 @@ axiom = do
     return ns
   t <- localIndentation Gt $ do
     optional (operator "!") *> typeExp
-  return [Right $ DAxiom $ TypeSig n t | n <- ns]
+  return [(mempty, DAxiom $ TypeSig n t) | n <- ns]
 
 tcExp :: P (TyR -> TyR)   -- TODO
 tcExp = try' "type context" $ do
@@ -312,8 +297,10 @@ tTuple :: Range -> [TyR] -> TyR
 tTuple p [t] = t
 tTuple p ts = Ty' p $ TTuple_ ts
 
+addDPos m = addPos (,) m
+
 dataDef :: P PreDefinitionR
-dataDef = do
+dataDef = addDPos $ do
  keyword "data"
  localIndentation Gt $ do
   tc <- typeConstructor
@@ -335,13 +322,13 @@ dataDef = do
         localIndentation Gt $ do
             t <- typeExp
             return [(c, t) | c <- cs]
-      return $ Right $ GADT tc tvs $ concat ds
+      return $ GADT tc tvs $ concat ds
    <|>
     do
       operator "="
       ds <- sepBy dataConDef $ operator "|"
       derivingStm
-      return $ Right $ DDataDef tc tvs ds
+      return $ DDataDef tc tvs ds
 
 
 derivingStm = optional $ keyword "deriving" <* (void_ typeConstraint <|> void_ (parens $ sepBy typeConstraint comma))
@@ -364,7 +351,7 @@ addPos f m = do
     return $ f (Range p1 p2) a
 
 typeClassDef :: P PreDefinitionR
-typeClassDef = do
+typeClassDef = addDPos $ do
   keyword "class"
   localIndentation Gt $ do
     optional tcExp
@@ -374,14 +361,14 @@ typeClassDef = do
       keyword "where"
       localIndentation Ge $ localAbsoluteIndentation $ many $ do
         typeSignature
-    return $ Right $ ClassDef c tvs [d | Left (DTypeSig d) <- maybe [] concat ds]
+    return $ ClassDef c tvs [d | (_, DTypeSig d) <- maybe [] concat ds]
 
 typeVarKind =
       parens ((,) <$> typeVar <* operator "::" <*> ty)
   <|> (,) <$> typeVar <*> addPos Ty' (pure StarC)
 
 typeClassInstanceDef :: P PreDefinitionR
-typeClassInstanceDef = do
+typeClassInstanceDef = addDPos $ do
   keyword "instance"
   localIndentation Gt $ do
     optional tcExp
@@ -391,7 +378,7 @@ typeClassInstanceDef = do
       keyword "where"
       localIndentation Ge $ localAbsoluteIndentation $ many $ do
         valueDef
-    return $ Left $ PreInstanceDef c t $ fromMaybe [] ds
+    return $ PreInstanceDef c t $ fromMaybe [] ds
 
 fixityDef :: P ()
 fixityDef = do
@@ -407,7 +394,7 @@ undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
 valuePattern :: P PatR
 valuePattern
-    =   appP <$> some valuePatternOpAtom
+    = appP <$> some valuePatternOpAtom
 
 appP :: [PatR] -> PatR
 appP [p] = p
@@ -450,21 +437,21 @@ valuePatternAtom
 eLam p e = ELam' (p <-> e) p e
 
 valueDef :: P PreDefinitionR
-valueDef = do
+valueDef = addDPos $ do
   f <- 
     try' "definition" (do
       n <- addPos (,) varId
       localIndentation Gt $ do
         pats <- many valuePatternAtom
         lookAhead $ operator "=" <|> operator "|"
-        return $ Left . PreValueDef n pats
+        return $ PreValueDef n pats
     )
    <|>
     try' "node definition" (do
       n <- valuePattern
       localIndentation Gt $ do
         lookAhead $ operator "=" <|> operator "|"
-        return $ \e -> Right $ DValueDef $ ValueDef n $ alts 0 [compileWhereRHS e]
+        return $ \e -> DValueDef $ ValueDef n $ alts 0 [compileWhereRHS e]
     )
   localIndentation Gt $ do
     e <- whereRHS $ operator "="
@@ -539,7 +526,7 @@ expression = do
 eLets :: [PreDefinitionR] -> PrecExpR -> PrecExpR
 eLets l a = foldr ($) a $ map eLet $ groupDefinitions l
   where
-    eLet (DValueDef (ValueDef a b)) = ELet' (a <-> b) a b
+    eLet (r, DValueDef (ValueDef a b)) = ELet' r a b
 
 eTyping :: PrecExpR -> TyR -> PrecExpR
 eTyping a b = ETypeSig' (a <-> b) a b

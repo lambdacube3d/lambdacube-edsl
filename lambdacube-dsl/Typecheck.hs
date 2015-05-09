@@ -744,7 +744,7 @@ inferConDef con (unzip -> (vn, vt)) (ConDef n tys) = do
         , FieldTy (Just sel) t <- tys
         ]
 -}
-inferDef :: ValueDefR -> TCM (ValueDefT, TCM a -> TCM a)
+inferDef :: ValueDefR -> TCM (TCM a -> TCM a)
 inferDef (ValueDef p@(PVar' _ n) e) = do
     (se, (exp, te)) <- runTypingT $ do
         ((p, tp), (ns, tr)) <- inferPatTyping False p
@@ -754,7 +754,7 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
     -- TODO: removeMonoVars?
     -- TODO: subst down
     f <- instantiateTyping' se te
-    return (ValueDef (PVar $ VarE n te) (exp, te), withTyping $ Map.singleton n f) -- TODO: replCallType n (getTag e) e
+    return ({-ValueDef (PVar $ VarE n te) (exp, te), -}withTyping $ Map.singleton n f) -- TODO: replCallType n (getTag e) e
 
 {-
 -- TODO: revise
@@ -771,16 +771,16 @@ modTag f (Exp' t x) = Exp' (f t) x
 
 inferDefs :: [DefinitionR] -> TCM PolyEnv
 inferDefs [] = ask
-inferDefs (DValueDef d: ds) = do
-    (d, f) <- inferDef d
-    f $ inferDefs ds
-inferDefs (DDataDef con vars cdefs: ds) = do
-  tk <- tyConKind $ map snd vars
-  withTyping (Map.singleton con tk) $ do
-    ev <- mapM (inferConDef con vars) cdefs
-    withTyping (mconcat ev) $ inferDefs ds
-
-inferDefs (GADT con vars cdefs: ds) = error "ddef gadt" -- do
+inferDefs ((r, d): ds) = do
+    f <- addRange r $ case d of
+        DValueDef d -> do
+            inferDef d
+        DDataDef con vars cdefs -> do
+          tk <- tyConKind $ map snd vars
+          withTyping (Map.singleton con tk) $ do
+            ev <- mapM (inferConDef con vars) cdefs
+            return $ withTyping (mconcat ev)
+        GADT con vars cdefs -> error "ddef gadt" -- do
 {-
   vars <- forM vars $ \(n, k) -> do
     k <- inferKind' k
@@ -793,7 +793,7 @@ inferDefs (GADT con vars cdefs: ds) = error "ddef gadt" -- do
     ds <- withTyping (instantiateTyping <$> Map.fromList cdefs) $ inferDefs ds
     return (d': ds)
 -}
-inferDefs (ClassDef con vars cdefs: ds) = error "ddef class" -- do
+        ClassDef con vars cdefs -> error "ddef class" -- do
 {-
   vars <- forM vars $ \(n, k) -> do
     k <- inferKind' k
@@ -807,14 +807,14 @@ inferDefs (ClassDef con vars cdefs: ds) = error "ddef class" -- do
     ds <- withTyping (Map.fromList $ classTypings d') $ inferDefs ds
     return (d': ds)
 -}
-inferDefs (DAxiom (TypeSig n a): ds) = error "ddef axiom" -- do
+        DAxiom (TypeSig n a) -> error "ddef axiom" -- do
 {-
     a' <- inferKind' a
     let (n', a'') = mangleAx . (id *** generalizeTypeVars) $ (n, a')
     ds <- withTyping (Map.singleton n' $ instantiateTyping a'') $ inferDefs ds
     return (TypeSig (n', a''): ds)
 -}
-inferDefs (InstanceDef c t xs: ds) = error "ddef instance" -- do
+        InstanceDef c t xs -> error "ddef instance" -- do
 {-
     t <- inferKind' t
     let tt = typingToTy t
@@ -823,6 +823,8 @@ inferDefs (InstanceDef c t xs: ds) = error "ddef instance" -- do
         ds <- withTyping (Map.fromList $ concatMap axs xs) $ inferDefs ds
         return (InstanceDef c t xs: ds)
 -}
+    f $ inferDefs ds
+
 {-
 addConstr :: [ConstraintT] -> Typing -> TCM Typing
 addConstr cs ty = foldrM f ty cs  where

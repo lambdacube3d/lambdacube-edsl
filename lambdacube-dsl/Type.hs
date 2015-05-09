@@ -406,14 +406,26 @@ data ModuleR
 
 type PrecMap = Map Name Fixity
 
-type DefinitionR = Definition ExpR
-data Definition e
-  = DValueDef (ValueDef PatR e)
-  | DAxiom (TypeSig Name TyR)
-  | DDataDef Name [(Name, TyR)] [ConDef]      -- TODO: remove, use GADT
-  | GADT Name [(Name, TyR)] [(Name, TyR)]
-  | ClassDef ClassName [(Name, TyR)] [TypeSig Name TyR]
-  | InstanceDef ClassName TyR [ValueDef PatR e]
+type DefinitionR = (Range, Definition)
+data Definition
+    = DValueDef (ValueDef PatR ExpR)
+    | DAxiom (TypeSig Name TyR)
+    | DDataDef Name [(Name, TyR)] [ConDef]      -- TODO: remove, use GADT
+    | GADT Name [(Name, TyR)] [(Name, TyR)]
+    | ClassDef ClassName [(Name, TyR)] [TypeSig Name TyR]
+    | InstanceDef ClassName TyR [ValueDef PatR ExpR]
+-- used only during parsing
+    | PreValueDef (Range, EName) [PatR] WhereRHS
+    | DTypeSig (TypeSig EName TyR)
+    | PreInstanceDef ClassName TyR [DefinitionR]
+
+-- used only during parsing
+data WhereRHS = WhereRHS GuardedRHS (Maybe [DefinitionR])
+
+-- used only during parsing
+data GuardedRHS
+    = Guards Range [(ExpR, ExpR)]
+    | NoGuards ExpR
 
 data ConDef = ConDef Name [FieldTy]
 data FieldTy = FieldTy {fieldName :: Maybe Name, fieldType :: TyR}
