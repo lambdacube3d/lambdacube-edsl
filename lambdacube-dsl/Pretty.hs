@@ -2,7 +2,7 @@
 module Pretty
     ( module Pretty
     , Doc
-    , (<+>), (</>)
+    , (<+>), (</>), (<$$>)
     , hsep, hcat, vcat
     , punctuate
     , tupled, braces

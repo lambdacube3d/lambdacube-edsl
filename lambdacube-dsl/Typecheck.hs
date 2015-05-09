@@ -60,8 +60,11 @@ matches x ts = x `elem'` ts
 
 elem' a b = b a
 
-unifyMaps :: Ord a => [Map a b] -> [[b]]
-unifyMaps = Map.elems . Map.unionsWith (++) . map ((:[]) <$>)
+unifyMaps :: (Ord a, PShow a) => [Map a b] -> [WithExplanation [b]]
+unifyMaps = map (pShow *** id) . Map.toList . Map.unionsWith (++) . map ((:[]) <$>)
+
+groupByFst :: (Ord a, PShow a) => [(a, b)] -> [WithExplanation [b]]
+groupByFst = unifyMaps . map (uncurry Map.singleton)
 
 isRec TRecord{} = True
 isRec t = isVar t
@@ -125,7 +128,7 @@ iff x y b = if b then x else y
 
 -------------------------------------------------------------------------------- constraints reduction
 
-type ConstraintSolvRes = TCM (Subst, [[Ty]])
+type ConstraintSolvRes = TCM (Subst, [WithExplanation [Ty]])
 
 reduceConstraint :: IdN -> ConstraintT -> ConstraintSolvRes
 reduceConstraint cvar x = do
@@ -138,7 +141,7 @@ reduceConstraint cvar x = do
     Split (TRecord a) (TRecord b) c@TVar{} -> diff a b c
     Split (TRecord a) c@TVar{} (TRecord b) -> diff a b c
     Split c@TVar{} (TRecord a) (TRecord b) -> case Map.keys $ Map.intersection a b of
-        [] -> discard Refl [[c, TRecord $ a <> b]]
+        [] -> discard Refl [WithExplanation "???" [c, TRecord $ a <> b]]
 --        ks -> failure $ "extra keys:" <+> pShow ks
     Split a b c
         | isRec a && isRec b && isRec c -> nothing
@@ -174,26 +177,26 @@ reduceConstraint cvar x = do
         noInstance = failure msg'
         noInstance' s = failure $ msg' </> "possible instances:" </> pShow s
 
-    CUnify a b -> discard Refl [[a, b]]
+    CUnify a b -> discard Refl [WithExplanation "~~~" [a, b]]
 
     CEq res f -> case f of
 
         TFMat (TVec n t1) (TVec m t2) | t1 `elem` [TFloat] && t1 == t2 -> reduced $ TMat n m t1
         TFMat a b -> check (a `matches` floatVectors && b `matches` floatVectors) $ observe res $ \case
-            TMat n m t -> keep [[a, TVec n t], [b, TVec m t]]
+            TMat n m t -> keep [WithExplanation "Mat res 1" [a, TVec n t], WithExplanation "Mat res 2" [b, TVec m t]]
             _ -> fail "no instance"
 
         TFVec (TENat n) ty | n `elem` [2,3,4] && ty `elem'` floatIntWordBool -> reduced $ TVec n ty
         TFVec a b -> check (a `matches` nat234 && b `matches` floatIntWordBool {- -- FIXME -}) $ observe res $ \case
-            TVec n t -> keep [[a, TENat n], [b, t]]
+            TVec n t -> keep [WithExplanation "Vec res 1" [a, TENat n], WithExplanation "Vec res 2" [b, t]]
             _ -> fail "no instance tfvec"
 
         TFVecScalar a b -> case a of
             TENat 1 -> case b of
-                TVar{} | res `matches` floatIntWordBool -> keep [[b, res]]
+                TVar{} | res `matches` floatIntWordBool -> keep [WithExplanation "VecScalar dim 1" [b, res]]
                 b -> check (b `elem'` floatIntWordBool) $ reduced b
             TVar{} -> check (b `matches` floatIntWordBool) $ observe res $ \case
-                t | t `elem'` floatIntWordBool -> keep [[a, TENat 1], [b, t]]
+                t | t `elem'` floatIntWordBool -> keep [WithExplanation "VecScalar res 1" [a, TENat 1], WithExplanation "VecScalar res 2" [b, t]]
                 _ -> like $ TFVec a b
             _ -> like $ TFVec a b
 
@@ -242,7 +245,7 @@ reduceConstraint cvar x = do
 
       where
         like f = reduceConstraint cvar (CEq res f)
-        reduced t = discard Refl [[res, t]]
+        reduced t = discard Refl [WithExplanation "type family reduction" [res, t]]
         check b m = if b then m else fail "no instance (1)"
         fail :: Doc -> ConstraintSolvRes
         fail = failure . (("error during reduction of" </> pShow res <+> "~" <+> pShow f) </>)
@@ -264,7 +267,7 @@ reduceConstraint cvar x = do
 
   where
     diff a b c = case Map.keys $ b Map.\\ a of
-        [] -> discard Refl $ [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
+        [] -> discard Refl $ WithExplanation "???" [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
 --        ks -> failure $ "extra keys:" <+> pShow ks
     discard w xs = return (Map.singleton cvar $ Ty_ (ConstraintKind x) $ Witness w, xs)
     keep xs = return (mempty, xs)
@@ -289,7 +292,9 @@ floatVectors _ = False
 
 data InjType
     = ITMat | ITVec | ITVecScalar
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord)
+
+instance PShow InjType where
 
 injType :: TypeFunT -> Maybe (InjType, [Ty])
 injType = \case
@@ -303,8 +308,8 @@ injType = \case
 pairsWith f xs = zipWith f xs $ drop 1 xs
 
 -- unify each types in the sublists
-unifyTypes :: Bool -> [[Ty]] -> TCM Subst
-unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . pairsWith uni
+unifyTypes :: Bool -> [WithExplanation [Ty]] -> TCM Subst
+unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . pairsWith uni . snd
   where
 --    uni :: Ty -> Ty -> StateT Subst TCM ()
     uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
@@ -343,7 +348,7 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
         unifyTy (TMat a1 b1 c1) (TMat a2 b2 c2) | a1 == a2 && b1 == b2 = uni c1 c2
         unifyTy a b
           | a == b = return ()      -- TODO: eliminate this
-          | otherwise = lift $ throwErrorTCM $ "cannot unify" <+> pShow a </> "with" <+> pShow b </> "----------- equation" </> pShow tys
+          | otherwise = throwError $ UnificationError a b tys
 
 subst1 :: Subst -> Ty -> Ty
 subst1 s tv@(TVar _ a) = fromMaybe tv $ Map.lookup a s
@@ -351,37 +356,35 @@ subst1 _ t = t
 
 joinSubsts :: [Subst] -> TCM (Subst, Subst)
 joinSubsts ss = do
-    s <- unifyTypes True $ unifyMaps ss
+    s <- addCtx "joinSubsts" $ unifyTypes True $ unifyMaps ss
     return (s, foldMap (subst s <$>) ss <> s)
 
 appSubst :: Subst -> SubstEnv -> SubstEnv
 appSubst s e = (Left <$> s) <> subst s e
 
-groupByFst :: Ord a => [(a, b)] -> [[b]]
-groupByFst = unifyMaps . map (uncurry Map.singleton)
-
 joinSE :: [SubstEnv] -> TCM SubstEnv
 joinSE ss = do
-    s <- unifyTypes True $ concatMap (pairsWith ff) $ unifyMaps ss
+    s <- addCtx "joinSE" $ unifyTypes True $ concatMap ff $ unifyMaps ss
     untilNoUnif $ appSubst s $ Map.unionsWith gg ss
   where
     gg (Left s) _ = Left s
     gg Right{} b = b
 
-    ff (Left s) (Left s') = [s, s']
-    ff (Left s) (Right s') = [kindOf s, s']
-    ff (Right s) (Left s') = [s, kindOf s']
-    ff (Right s) (Right s') = [s, s']
+    ff (expl, ss) = case (WithExplanation (expl <+> "subst") [s | Left s <- ss], WithExplanation (expl <+> "typesig") [s | Right s <- ss]) of 
+        (WithExplanation _ [], ss) -> [ss]
+        (ss, WithExplanation _ []) -> [ss]
+        (subs@(WithExplanation _ (s:_)), sigs@(WithExplanation _ (s':_))) -> [subs, sigs, WithExplanation "subskind" [kindOf s, s']]
 
     untilNoUnif :: SubstEnv -> TCM SubstEnv
     untilNoUnif es = do
         (unzip -> (ss, concat -> eqs)) <- sequence [reduceConstraint n c | (n, Right (ConstraintKind c)) <- Map.toList es]
-        s0 <- unifyTypes True
+        s0 <- addCtx "untilNoUnif" $ unifyTypes True
             -- unify left hand sides where the right hand side is equal:  (t1 ~ F a, t2 ~ F a)  -->  t1 ~ t2
              $ groupByFst [(f, ty) | Right (ConstraintKind (CEq ty f)) <- toList es]
             -- injectivity test:  (t ~ Vec a1 b1, t ~ Vec a2 b2)  -->  a1 ~ a2, b1 ~ b2
-            ++ concatMap (concatMap transpose . groupByFst) (groupByFst
-                    [(ty, (it, is)) | Right (ConstraintKind (CEq ty (injType -> Just (it, is)))) <- toList es])
+            ++ concatMap (\(s, l) -> map ((,) s) $ transpose l)
+                    (groupByFst
+                    [((ty, it), is) | Right (ConstraintKind (CEq ty (injType -> Just (it, is)))) <- toList es])
             ++ eqs
 
         (_, s) <- joinSubsts $ s0: ss
@@ -522,7 +525,7 @@ lookEnv n m = asks (fmap toTCMS . Map.lookup n . getPolyEnv) >>= fromMaybe m
 
 -- TODO: ambiguity check
 inferKind :: TyR -> TCMS Ty
-inferKind (Ty' r ty) = addRange r $ case ty of
+inferKind (Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ case ty of
     Forall_ (Just n) k t -> do
         k <- inferKind k
         t <- withTyping' (Map.singleton n $ pure k) $ inferKind t

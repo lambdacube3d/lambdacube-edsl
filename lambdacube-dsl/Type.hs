@@ -352,26 +352,38 @@ type WithRange = (,) Range
 
 ---------------------------------------
 
+type WithExplanation = (,) Doc
+
+pattern WithExplanation d x = (d, x)
+
 -- TODO: add more structure
 data ErrorMsg
-    = ErrorMsg Doc
-    | AddRange Range ErrorMsg
+    = AddRange Range ErrorMsg
     | InFile String ErrorMsg
+    | ErrorCtx Doc ErrorMsg
+    | ErrorMsg Doc
     | EParseError ParseError
+    | UnificationError Ty Ty [WithExplanation [Ty]]
 
 instance Show ErrorMsg where
-    show = f Nothing Nothing where
+    show = show . f Nothing Nothing where
         f file rng = \case
             InFile s e -> f (Just s) Nothing e
-            AddRange r e -> f file (Just r) e
-            EParseError pe -> show pe
-            ErrorMsg d -> showRange file rng ++ "\n" ++ show d
+            AddRange r e -> showRange file (Just r) <$$> f file (Just r) e
+            ErrorCtx d e -> "during" <+> d <$$> f file rng e
+            EParseError pe -> text $ show pe
+            ErrorMsg d -> d
+            UnificationError a b tys -> "cannot unify" <+> pShow a </> "with" <+> pShow b
+                <$$> "----------- equations"
+                <$$> vcat (map (\(s, l) -> s <$$> vcat (map pShow l)) tys)
 
 type ErrorT = ExceptT ErrorMsg
 
 throwParseError = throwError . EParseError
 
 mapError f m = catchError m $ throwError . f
+
+addCtx d = mapError (ErrorCtx d)
 
 addRange :: MonadError ErrorMsg m => Range -> m a -> m a
 addRange NoRange = id
@@ -387,15 +399,18 @@ checkUnambError = do
 --throwErrorTCM :: Doc -> TCM a
 throwErrorTCM = throwError . ErrorMsg
 
+showRange :: Maybe String -> Maybe Range -> Doc
 showRange Nothing Nothing = "no file position"
 showRange Nothing (Just _) = "no file"
 showRange (Just _) Nothing = "no position"
 showRange (Just src) (Just (Range s e)) = str
     where
       startLine = sourceLine s - 1
-      len = sourceLine e - startLine
-      str = unlines $ ("position: " ++ show s ++ " - " ++ show e): take len (drop startLine $ lines src)
-                ++ [replicate (sourceColumn s - 1) ' ' ++ replicate (sourceColumn e - sourceColumn s) '^' | len == 1]
+      endline = sourceLine e - if sourceColumn e == 1 then 1 else 0
+      len = endline - startLine
+      str = vcat $ ("position:" <+> text (show s) <+> "-" <+> text (show e)):
+                   map text (take len $ drop startLine $ lines src)
+                ++ [text $ replicate (sourceColumn s - 1) ' ' ++ replicate (sourceColumn e - sourceColumn s) '^' | len == 1]
 
 -------------------------------------------------------------------------------- parser output
 
