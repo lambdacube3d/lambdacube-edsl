@@ -168,9 +168,7 @@ clearRenderTarget values = do
                   _                   -> GL.clearColor_ 0 0 0 1
                 GL.colorMask_ true true true true
                 return {mask:m .|. GL._COLOR_BUFFER_BIT, index:i+1}
-            _ -> do
-                trace "internal error (clearRenderTarget)"
-                return arg
+            _ -> throwException $ error "internal error (clearRenderTarget)"
     m <- foldM setClearValue {mask:0,index:0} values
     GL.clear_ m.mask
 
@@ -267,10 +265,10 @@ renderPipeline p = do
   return unit
 
 disposePipeline :: WebGLPipeline -> GFX Unit
-disposePipeline _ = return unit
+disposePipeline _ = throwException $ error "not implemented"
 
 setPipelineInput :: WebGLPipeline -> Maybe WebGLPipelineInput -> GFX Unit
-setPipelineInput _ _ = throwException $ error "not implemnted"
+setPipelineInput _ _ = throwException $ error "not implemented"
 
 {-
 shaders :: Shaders {aVertexPosition :: Attribute Vec3, uPMatrix :: Uniform Mat4, uMVMatrix:: Uniform Mat4}

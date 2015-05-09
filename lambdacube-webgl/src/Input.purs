@@ -1,7 +1,10 @@
 module Input where
 
+import Prelude.Unsafe (unsafeIndex)
 import Control.Monad.Eff
+import Control.Monad.Eff.Ref
 import Control.Monad.Eff.Exception
+import qualified Data.Map as Map
 import qualified Data.StrMap as StrMap
 import Data.Maybe
 import Type
@@ -15,73 +18,154 @@ schemaFromPipeline :: IR.Pipeline -> PipelineSchema
 schemaFromPipeline _ = undefined
 
 mkWebGLPipelineInput :: PipelineSchema -> GFX WebGLPipelineInput
-mkWebGLPipelineInput _ = throwException $ error "not implemented"
+mkWebGLPipelineInput sch = do
+  seed <- newRef 0
+  size <- newRef (V2 0 0)
+  ppls <- newRef []
+  return $
+    { schema        : sch
+    , slotMap       : StrMap.empty :: StrMap.StrMap Int-- TODO
+    , slotVector    : [] -- TODO
+    , objSeed       : seed
+    , uniformSetter : StrMap.empty :: StrMap.StrMap InputSetter-- TODO
+    , uniformSetup  : StrMap.empty :: StrMap.StrMap GLUniform-- TODO
+    , screenSize    : size
+    , pipelines     : ppls -- TODO
+    }
+{-
+type WebGLPipelineInput =
+    { schema        :: PipelineSchema
+    , slotMap       :: StrMap.StrMap String
+    , slotVector    :: [RefVal GLSlot]
+    , objSeed       :: RefVal Int
+    , uniformSetter :: StrMap.StrMap InputSetter
+    , uniformSetup  :: StrMap.StrMap GLUniform
+    , screenSize    :: RefVal V2U
+    , pipelines     :: RefVal [(Maybe WebGLPipeline)] -- attached pipelines
+    }
+-}
+{-
+mkGLPipelineInput sch = do
+    let sm  = T.fromList $ zip (T.keys $ T.slots sch) [0..]
+        len = T.size sm
+    (setters,unis) <- mkUniform $ T.toList $ uniforms sch
+    seed <- newIORef 0
+    slotV <- V.replicateM len $ newIORef (GLSlot IM.empty V.empty Ordered)
+    size <- newIORef (0,0)
+    ppls <- newIORef $ V.singleton Nothing
+    return $ GLPipelineInput
+        { schema        = sch
+        , slotMap       = sm
+        , slotVector    = slotV
+        , objSeed       = seed
+        , uniformSetter = setters
+        , uniformSetup  = unis
+        , screenSize    = size
+        , pipelines     = ppls
+        }
+-}
 
 addObject :: WebGLPipelineInput -> String -> Primitive -> Maybe (IndexStream Buffer) -> StrMap.StrMap (Stream Buffer) -> [String] -> GFX GLObject
 addObject _ _ _ _ _ _ = throwException $ error "not implemented"
 
 removeObject :: WebGLPipelineInput -> GLObject -> GFX Unit
-removeObject _ _ = throwException $ error "not implemented"
+removeObject p obj = modifyRef (p.slotVector `unsafeIndex` obj.slot) $ \s -> {objectMap:Map.delete obj.id s.objectMap, sortedObjects:[], orderJob:Generate}
 
 enableObject :: GLObject -> Bool -> GFX Unit
-enableObject _ _ = throwException $ error "not implemented"
+enableObject obj b = writeRef obj.enabled b
 
 setObjectOrder :: WebGLPipelineInput -> GLObject -> Int -> GFX Unit
-setObjectOrder _ _ _ = throwException $ error "not implemented"
+setObjectOrder p obj i = do
+    writeRef obj.order i
+    modifyRef (p.slotVector `unsafeIndex` obj.slot) $ \s -> s {orderJob = Reorder}
 
 objectUniformSetter :: GLObject -> StrMap.StrMap InputSetter
-objectUniformSetter _ = undefined
+objectUniformSetter o = o.uniSetter
 
-setScreenSize :: WebGLPipelineInput -> Word -> Word -> GFX Unit
-setScreenSize _ _ _ = throwException $ error "not implemented"
+setScreenSize :: WebGLPipelineInput -> V2U -> GFX Unit
+setScreenSize p s = writeRef p.screenSize s
 
 sortSlotObjects :: WebGLPipelineInput -> GFX Unit
 sortSlotObjects _ = throwException $ error "not implemented"
 
-uniformBool   :: String -> StrMap.StrMap InputSetter -> SetterFun Bool
-uniformBool   _ _ _ = throwException $ error "not implemented"
+nullSetter :: forall a . String -> String -> a -> GFX Unit
+nullSetter n t _ = return unit -- Prelude.putStrLn $ "WARNING: unknown uniform: " ++ n ++ " :: " ++ t
 
-uniformV2B    :: String -> StrMap.StrMap InputSetter -> SetterFun V2B
-uniformV2B    _ _ _ = throwException $ error "not implemented"
+uniformBool :: String -> StrMap.StrMap InputSetter -> SetterFun Bool
+uniformBool n is =
+  case StrMap.lookup n is of
+  Just (SBool fun) -> fun
+  _ -> nullSetter n "Bool"
 
-uniformV3B    :: String -> StrMap.StrMap InputSetter -> SetterFun V3B
-uniformV3B    _ _ _ = throwException $ error "not implemented"
+uniformV2B :: String -> StrMap.StrMap InputSetter -> SetterFun V2B
+uniformV2B n is = case StrMap.lookup n is of
+  Just (SV2B fun) -> fun
+  _ -> nullSetter n "V2B"
 
-uniformV4B    :: String -> StrMap.StrMap InputSetter -> SetterFun V4B
-uniformV4B    _ _ _ = throwException $ error "not implemented"
+uniformV3B :: String -> StrMap.StrMap InputSetter -> SetterFun V3B
+uniformV3B n is = case StrMap.lookup n is of
+  Just (SV3B fun) -> fun
+  _ -> nullSetter n "V3B"
 
-uniformInt    :: String -> StrMap.StrMap InputSetter -> SetterFun Int32
-uniformInt    _ _ _ = throwException $ error "not implemented"
+uniformV4B :: String -> StrMap.StrMap InputSetter -> SetterFun V4B
+uniformV4B n is =case StrMap.lookup n is of
+  Just (SV4B fun) -> fun
+  _ -> nullSetter n "V4B"
 
-uniformV2I    :: String -> StrMap.StrMap InputSetter -> SetterFun V2I
-uniformV2I    _ _ _ = throwException $ error "not implemented"
+uniformInt :: String -> StrMap.StrMap InputSetter -> SetterFun Int32
+uniformInt n is = case StrMap.lookup n is of
+  Just (SInt fun) -> fun
+  _ -> nullSetter n "Int"
 
-uniformV3I    :: String -> StrMap.StrMap InputSetter -> SetterFun V3I
-uniformV3I    _ _ _ = throwException $ error "not implemented"
+uniformV2I :: String -> StrMap.StrMap InputSetter -> SetterFun V2I
+uniformV2I n is = case StrMap.lookup n is of
+  Just (SV2I fun) -> fun
+  _ -> nullSetter n "V2I"
 
-uniformV4I    :: String -> StrMap.StrMap InputSetter -> SetterFun V4I
-uniformV4I    _ _ _ = throwException $ error "not implemented"
+uniformV3I :: String -> StrMap.StrMap InputSetter -> SetterFun V3I
+uniformV3I n is = case StrMap.lookup n is of
+  Just (SV3I fun) -> fun
+  _ -> nullSetter n "V3I"
 
-uniformFloat  :: String -> StrMap.StrMap InputSetter -> SetterFun Float
-uniformFloat  _ _ _ = throwException $ error "not implemented"
+uniformV4I :: String -> StrMap.StrMap InputSetter -> SetterFun V4I
+uniformV4I n is = case StrMap.lookup n is of
+  Just (SV4I fun) -> fun
+  _ -> nullSetter n "V4I"
 
-uniformV2F    :: String -> StrMap.StrMap InputSetter -> SetterFun V2F
-uniformV2F    _ _ _ = throwException $ error "not implemented"
+uniformFloat :: String -> StrMap.StrMap InputSetter -> SetterFun Float
+uniformFloat n is = case StrMap.lookup n is of
+  Just (SFloat fun) -> fun
+  _ -> nullSetter n "Float"
 
-uniformV3F    :: String -> StrMap.StrMap InputSetter -> SetterFun V3F
-uniformV3F    _ _ _ = throwException $ error "not implemented"
+uniformV2F :: String -> StrMap.StrMap InputSetter -> SetterFun V2F
+uniformV2F n is = case StrMap.lookup n is of
+  Just (SV2F fun) -> fun
+  _ -> nullSetter n "V2F"
 
-uniformV4F    :: String -> StrMap.StrMap InputSetter -> SetterFun V4F
-uniformV4F    _ _ _ = throwException $ error "not implemented"
+uniformV3F :: String -> StrMap.StrMap InputSetter -> SetterFun V3F
+uniformV3F n is = case StrMap.lookup n is of
+  Just (SV3F fun) -> fun
+  _ -> nullSetter n "V3F"
 
-uniformM22F   :: String -> StrMap.StrMap InputSetter -> SetterFun M22F
-uniformM22F   _ _ _ = throwException $ error "not implemented"
+uniformV4F :: String -> StrMap.StrMap InputSetter -> SetterFun V4F
+uniformV4F n is = case StrMap.lookup n is of
+  Just (SV4F fun) -> fun
+  _ -> nullSetter n "V4F"
 
-uniformM33F   :: String -> StrMap.StrMap InputSetter -> SetterFun M33F
-uniformM33F   _ _ _ = throwException $ error "not implemented"
+uniformM22F :: String -> StrMap.StrMap InputSetter -> SetterFun M22F
+uniformM22F n is = case StrMap.lookup n is of
+  Just (SM22F fun) -> fun
+  _ -> nullSetter n "M22F"
 
-uniformM44F   :: String -> StrMap.StrMap InputSetter -> SetterFun M44F
-uniformM44F   _ _ _ = throwException $ error "not implemented"
+uniformM33F :: String -> StrMap.StrMap InputSetter -> SetterFun M33F
+uniformM33F n is = case StrMap.lookup n is of
+  Just (SM33F fun) -> fun
+  _ -> nullSetter n "M33F"
+
+uniformM44F :: String -> StrMap.StrMap InputSetter -> SetterFun M44F
+uniformM44F n is = case StrMap.lookup n is of
+  Just (SM44F fun) -> fun
+  _ -> nullSetter n "M44F"
 
 {-
   TODO

@@ -14,7 +14,7 @@ import Data.Maybe
 
 import IR
 
-type GFX a = forall e . Eff (webgl :: WebGl, trace :: Trace, err :: Exception | e) a
+type GFX a = forall e . Eff (webgl :: WebGl, trace :: Trace, err :: Exception, ref :: Ref | e) a
 
 type IntMap a = Map.Map Int a
 
@@ -119,7 +119,7 @@ data GLUniform = GLUniform InputType (forall a . RefVal a)
 
 type WebGLPipelineInput =
     { schema        :: PipelineSchema
-    , slotMap       :: StrMap.StrMap String
+    , slotMap       :: StrMap.StrMap Int
     , slotVector    :: [RefVal GLSlot]
     , objSeed       :: RefVal Int
     , uniformSetter :: StrMap.StrMap InputSetter
@@ -129,7 +129,7 @@ type WebGLPipelineInput =
     }
 
 type GLObject = -- internal type
-    { slot       :: String
+    { slot       :: Int
     , primitive  :: Primitive
     , indices    :: Maybe (IndexStream Buffer)
     , attributes :: StrMap.StrMap (Stream Buffer)
@@ -183,3 +183,4 @@ data InputSetter
     | SM22F  (SetterFun M22F)
     | SM33F  (SetterFun M33F)
     | SM44F  (SetterFun M44F)
+
