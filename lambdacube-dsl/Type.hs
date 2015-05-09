@@ -98,7 +98,10 @@ instance Eq Ty where
     Ty a b == Ty a' b' = (a, b) == (a', b')
     _ == _ = False
 instance Ord Ty where
-    a `compare` b = error "ord Ty"
+    StarToStar i `compare` StarToStar j = i `compare` j
+    Ty a b `compare` Ty a' b' = (a, b) `compare` (a', b')
+    StarToStar _ `compare` _ = LT
+    _ `compare` _ = GT
 
 pattern StarToStar i = Ty'' (StarToStarC i)
 pattern Ty k t = Ty'' (TyC k t)
@@ -630,7 +633,7 @@ instance (PShow n, PShow c, PShow a) => PShow (Ty_ c n a) where
         TCon_ n -> pShow n
         TApp_ a b -> pApp p a b
         Forall_ Nothing a b -> pInfixr (-1) "->" p a b
---        Forall_  (Maybe TName) a a
+        Forall_ (Just n) a b -> "forall" <+> pShow n <+> "::" <+> pShow a <> "." <+> pShow b
         TTuple_ a -> tupled $ map pShow a
 --        | TRecord_ (Map FName a)
         ConstraintKind_ c -> pShowPrec p c
@@ -650,8 +653,8 @@ instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
         ETuple_ a -> tupled $ map pShow a
         ELam_ p b -> "\\" <> pShow p <+> "->" <+> pShow b
         ELet_ a b c -> "let" <+> pShow a <+> "=" <+> pShow b <+> "in" </> pShow c
-    --    ERecord_   (Maybe FName) [(FName, b)]
-  --      EFieldProj_ FName
+        ERecord_ xs -> braces $ hsep $ punctuate (char ',') $ map (\(a, b) -> pShow a <> ":" <+> pShow b) xs
+        EFieldProj_ n -> "." <> pShow n
         EAlts_ i b -> int i <> braces (vcat $ punctuate (char ';') $ map pShow b)
         ENext_ -> "SKIP"
         ETypeSig_ b t -> pShow b <+> "::" <+> pShow t
@@ -666,6 +669,12 @@ getLams (ELam' _ p e) = (p:) *** id $ getLams e
 getLams e = ([], e)
 
 instance (PShow n, PShow t, PShow p) => PShow (Exp' n t p Identity) where
+    pShowPrec p e = case getLams' e of
+        ([], Exp'' e) -> pShowPrec p e
+        (ps, Exp'' e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
+
+getLams' (ELam p e) = (p:) *** id $ getLams' e
+getLams' e = ([], e)
 
 instance (PShow c, PShow v, PShow b) => PShow (Pat_ c v b) where
     pShowPrec p = \case
@@ -697,6 +706,9 @@ instance (PShow c, PShow n) => PShow (Ty' c n ((,) a)) where
     pShowPrec p (Ty' a b) = pShowPrec p b
 
 instance PShow Var where
+    pShowPrec p = \case
+        VarE n t -> pShow n
+        VarT n t -> pShow n
 
 instance PShow TEnv where
 

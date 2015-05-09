@@ -546,7 +546,11 @@ inferKind (Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ 
             TVar_ n -> lookEnv n $ addTypeVar n
             TCon_ n -> lookEnv n $ lookEnv (toExpN n) $ lift $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
 --            x -> error $ " inferKind: " ++ ppShow x
-        return $ Ty k ty
+        case ty of
+            Forall_ Nothing (ConstraintKind c) b -> do
+                addConstraint c
+                return b
+            _ -> return $ Ty k ty
 
 
 {-
@@ -595,14 +599,22 @@ inferTyping (Exp r e) = addRange r $ case e of
     EType_ ta -> do
         t <- inferKind ta
         return (EType t, kindOf t)
+    EVar_ n -> do
+        t <- lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
+        return (EVar $ VarE n t, t)
     _ -> do
         e <- traverse inferTyping e
         t <- case e of
             EApp_ (_, tf) (EType t, ta)
                 -> newStarV >>= \v -> lift newVar'' >>= \u@(TVar _ x) -> addUnif u t >> addUnif tf (Forall x ta v) >> return v
             EApp_ (_, tf) (_, ta) -> newStarV >>= \v -> addUnif tf (ta ~> v) >> return v
---            EFieldProj_ fn -> noSubst $ fieldProjType fn
---            ERecord_ (unzip -> (fs, es)) -> unifyTypings "record" (map getTag' es) $ toTyping . TRecord . Map.fromList . zip fs
+            EFieldProj_ fn -> do
+                a <- newStarV
+                r <- newStarV
+                r' <- newStarV
+                addConstraint $ Split r r' (TRecord $ Map.singleton fn a)
+                return $ r ~> a
+            ERecord_ (unzip -> (fs, es)) -> return $ TRecord $ Map.fromList $ zip fs $ map snd es
 {-
             ERecord_ (Just n) (unzip -> (fs, es)) -> do -- TODO: handle field names
                 (s', nt) <- asks (getPolyEnv . fst) >>= fromMaybe (throwErrorTCM $ "Variable " ++ n ++ " is not in scope.") . Map.lookup n
@@ -611,16 +623,10 @@ inferTyping (Exp r e) = addRange r $ case e of
 -}
             ETuple_ te -> return $ TTuple $ map snd te
             ELit_ l -> return $ inferLit l
-            EVar_ n -> lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
             EAlts_ _ xs -> newStarV >>= \v -> mapM_ (addUnif v . snd) xs >> return v
             ENext_ -> newStarV          -- TODO: review
             x -> error $ "inferTyping: " ++ ppShow x
         return (Exp'' $ mapExp (error "e1") (error "e2") (error "e3") $ fst <$> e, t)
-
-{-
-fieldProjType :: FName -> TCM Typing
-fieldProjType fn = newV $ \a r r' -> return $ [Split r r' (TRecord $ Map.singleton fn a)] ==> r ~> a :: TCM ([ConstraintT], Ty)
--}
 
 inferPatTyping :: Bool -> PatR -> TCMS ((Pat, Ty), (Set EName, Env InstType))
 inferPatTyping polymorph p_@(Pat pt p) = addRange pt $ do
@@ -809,8 +815,9 @@ inferDefs ((r, d): ds) = addRange r $ case d of
     InstanceDef c t xs -> do  -- TODO: check types
         (ce, t) <- runTypingT $ inferKind t     -- TODO: ce
         local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton t) (Set.insert t)) c $ instanceDefs pe}) $ do
-            xs <- forM xs $ \d -> inferDef d
-            foldr ($) cont xs
+            cont
+--            xs <- forM xs $ \d -> inferDef d
+--            foldr ($) cont xs
   where
     cont = inferDefs ds
 
