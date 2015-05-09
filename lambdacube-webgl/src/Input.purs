@@ -1,69 +1,60 @@
 module Input where
 
 import Prelude.Unsafe (unsafeIndex)
+import Control.Monad
 import Control.Monad.Eff
 import Control.Monad.Eff.Ref
 import Control.Monad.Eff.Exception
 import qualified Data.Map as Map
 import qualified Data.StrMap as StrMap
+import Data.Foldable
+import Data.Traversable
 import Data.Maybe
+import Data.Tuple
+import Data.Array
 import Type
 import IR
-
--- temp
-foreign import undefined :: forall a. a
+import Util
 
 -- API
-schemaFromPipeline :: IR.Pipeline -> PipelineSchema
-schemaFromPipeline _ = undefined
+schemaFromPipeline :: IR.Pipeline -> GFX PipelineSchema
+schemaFromPipeline ppl = do
+  sl <- flip traverse ppl.slots $ \s -> do
+    a <- traverse toStreamType s.slotStreams
+    return $ Tuple s.slotName {primitive: s.slotPrimitive, attributes: a}
+  let ul = map (\s -> s.slotUniforms) ppl.slots
+  return $
+    { slots: StrMap.fromList sl
+    , uniforms: foldl StrMap.union (StrMap.empty :: StrMap.StrMap InputType) ul
+    }
+
+mkUniform :: [Tuple String InputType] -> GFX (Tuple (StrMap.StrMap InputSetter) (StrMap.StrMap GLUniform))
+mkUniform l = do
+  unisAndSetters <- flip traverse l $ \(Tuple n t) -> do
+    (Tuple uni setter) <- mkUniformSetter t
+    return $ Tuple (Tuple n uni) (Tuple n setter)
+  let fun (Tuple unis setters) = Tuple (StrMap.fromList setters) (StrMap.fromList unis)
+  return $ fun $ unzip unisAndSetters
 
 mkWebGLPipelineInput :: PipelineSchema -> GFX WebGLPipelineInput
 mkWebGLPipelineInput sch = do
+  let sm = StrMap.fromList $ zip (StrMap.keys sch.slots) (0..len)
+      len = StrMap.size sch.slots
+  Tuple setters unis <- mkUniform $ StrMap.toList $ sch.uniforms
+  slotV <- replicateM len $ newRef {objectMap: Map.empty :: Map.Map Int GLObject, sortedObjects: [], orderJob: Ordered}
   seed <- newRef 0
   size <- newRef (V2 0 0)
-  ppls <- newRef []
+  ppls <- newRef [Nothing]
   return $
     { schema        : sch
-    , slotMap       : StrMap.empty :: StrMap.StrMap Int-- TODO
-    , slotVector    : [] -- TODO
+    , slotMap       : sm
+    , slotVector    : slotV
     , objSeed       : seed
-    , uniformSetter : StrMap.empty :: StrMap.StrMap InputSetter-- TODO
-    , uniformSetup  : StrMap.empty :: StrMap.StrMap GLUniform-- TODO
+    , uniformSetter : setters
+    , uniformSetup  : unis
     , screenSize    : size
-    , pipelines     : ppls -- TODO
+    , pipelines     : ppls
     }
-{-
-type WebGLPipelineInput =
-    { schema        :: PipelineSchema
-    , slotMap       :: StrMap.StrMap String
-    , slotVector    :: [RefVal GLSlot]
-    , objSeed       :: RefVal Int
-    , uniformSetter :: StrMap.StrMap InputSetter
-    , uniformSetup  :: StrMap.StrMap GLUniform
-    , screenSize    :: RefVal V2U
-    , pipelines     :: RefVal [(Maybe WebGLPipeline)] -- attached pipelines
-    }
--}
-{-
-mkGLPipelineInput sch = do
-    let sm  = T.fromList $ zip (T.keys $ T.slots sch) [0..]
-        len = T.size sm
-    (setters,unis) <- mkUniform $ T.toList $ uniforms sch
-    seed <- newIORef 0
-    slotV <- V.replicateM len $ newIORef (GLSlot IM.empty V.empty Ordered)
-    size <- newIORef (0,0)
-    ppls <- newIORef $ V.singleton Nothing
-    return $ GLPipelineInput
-        { schema        = sch
-        , slotMap       = sm
-        , slotVector    = slotV
-        , objSeed       = seed
-        , uniformSetter = setters
-        , uniformSetup  = unis
-        , screenSize    = size
-        , pipelines     = ppls
-        }
--}
 
 addObject :: WebGLPipelineInput -> String -> Primitive -> Maybe (IndexStream Buffer) -> StrMap.StrMap (Stream Buffer) -> [String] -> GFX GLObject
 addObject _ _ _ _ _ _ = throwException $ error "not implemented"
@@ -86,7 +77,24 @@ setScreenSize :: WebGLPipelineInput -> V2U -> GFX Unit
 setScreenSize p s = writeRef p.screenSize s
 
 sortSlotObjects :: WebGLPipelineInput -> GFX Unit
-sortSlotObjects _ = throwException $ error "not implemented"
+sortSlotObjects p = do
+  flip traverse p.slotVector $ \slotRef -> do
+    slot <- readRef slotRef
+    let cmpFun (Tuple a _) (Tuple b _) = a `compare` b
+        doSort objs = writeRef slotRef $ slot {sortedObjects = sortBy cmpFun objs, orderJob = Ordered}
+    case slot.orderJob of
+        Ordered -> return unit
+        Generate -> do
+            objs <- flip traverse (Map.values slot.objectMap) $ \obj -> do
+                ord <- readRef obj.order
+                return $ Tuple ord obj
+            doSort objs
+        Reorder -> do
+            objs <- flip traverse slot.sortedObjects $ \(Tuple _ obj) -> do
+                ord <- readRef obj.order
+                return (Tuple ord obj)
+            doSort objs
+  return unit
 
 nullSetter :: forall a . String -> String -> a -> GFX Unit
 nullSetter n t _ = return unit -- Prelude.putStrLn $ "WARNING: unknown uniform: " ++ n ++ " :: " ++ t
