@@ -532,7 +532,7 @@ inferKind (Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ 
         return $ Ty Star $ Forall_ (Just n) k t --  TODO: review
     _ -> do
         ty <- traverse inferKind ty
-        k <- case ty of
+        k <- case kindOf <$> ty of
             TLit_ l -> return $ inferLit l
             StarC -> star
             ConstraintKind_ c -> star

@@ -640,7 +640,7 @@ instance PShow Ty where
         Star -> "*"
         StarToStar i -> hcat $ intersperse "->" $ replicate (i+1) "*"
         TyStar i -> pShowPrec p i
-        Ty k i -> pInfix (-2) "::" p k i
+        Ty k i -> pInfix (-2) "::" p i k
 
 instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
     pShowPrec p = \case
