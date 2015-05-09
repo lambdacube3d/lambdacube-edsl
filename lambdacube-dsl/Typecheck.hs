@@ -409,6 +409,9 @@ instance (m ~ TCM, MonadReader r m) => MonadReader r (TypingT m) where
     ask = lift ask
     local f (TypingT m) = TypingT $ local f m
 
+instance (m ~ TCM, MonadState s m) => MonadState s (TypingT m) where
+    state f = lift $ state f
+
 instance (m ~ TCM, MonadError r m) => MonadError r (TypingT m) where
     catchError (TypingT m) f = TypingT $ catchError m $ (\(TypingT m) -> m) <$> f
     throwError e = TypingT $ throwError e
@@ -422,12 +425,12 @@ checkStarKind t = addUnif Star (kindOf t)
 
 star = return Star
 
-newVar :: Ty -> TCM Ty
-newVar k = TVar k <$> lift newName
+--newVar :: Ty -> TCM Ty
+newVar k = TVar k <$> newName
 
 newVar'' = newVar =<< newVar Star
 
-newStarV = lift (newVar Star)
+newStarV = newVar Star
 
 addTypeVar n = newStarV >>= \t -> TypingT $ pure (Map.singleton n $ Right t, t)
 
@@ -464,12 +467,13 @@ instantiateTyping' se ty = do
     pe <- asks $ getPolyEnv
     return $ instantiateTyping_ (filter (`Map.notMember` pe) [n | (n, Right _) <- Map.toList se]) ty
 
+instantiateTyping = fmap fst . instantiateTyping''
 
-instantiateTyping :: TCMS Ty -> TCM InstType
-instantiateTyping ty = do
+instantiateTyping'' :: TCMS Ty -> TCM (InstType, Ty)
+instantiateTyping'' ty = do
     (se, ty) <- runTypingT ty
-    instantiateTyping' se ty
-
+    x <- instantiateTyping' se ty
+    return (x, ty)
 
 --------------------------------------------------------------------------------
 
@@ -538,7 +542,7 @@ inferKind (Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ 
             ConstraintKind_ c -> star
             TTuple_ ts -> mapM_ checkStarKind ts >> star
             Forall_ Nothing a b -> checkStarKind a >> checkStarKind b >> star
-            TApp_ tf ta -> newStarV >>= \v -> addUnif tf (ta ~> v) >> return v
+            TApp_ tf ta -> newVar'' >>= \v -> addUnif tf (ta ~> v) >> return v
             TVar_ n -> lookEnv n $ addTypeVar n
             TCon_ n -> lookEnv n $ lookEnv (toExpN n) $ lift $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
 --            x -> error $ " inferKind: " ++ ppShow x
@@ -575,13 +579,13 @@ inferTyping (Exp r e) = addRange r $ case e of
         it <- lift $ instantiateTyping' se tx
         (e, t) <- withTyping' (Map.singleton n it) $ inferTyping e
         return (ELet (PVar $ VarE n tx) x e, t)
-{-
     ELet_ p x e -> do          -- monomorph let; TODO?
-        tx <- inferTyping x
-        p_@(p, (_, tr)) <- inferPatTyping False p
-        te <- withTyping tr $ inferTyping e
-        ty <- unifyTypings "let" [getTagP' p_ ++ getTag' tx, getTag' te] $ \[_, te] -> toTyping te
-        return $ ELet ty p tx te
+        (se, (x, tx)) <- lift $ runTypingT $ inferTyping x
+        ((p, tp), (_, tr)) <- inferPatTyping False p
+        (e, t) <- withTyping' tr $ inferTyping e
+        addUnif tx tp
+        return (ELet p x e, t)
+{-
     ETypeSig_ e ty -> do
         te@(Exp' _ e') <- inferTyping e
         ty <- generalizeTypeVars <$> inferKind' ty
@@ -680,8 +684,7 @@ typingToTy ty = foldr forall_ (typingType ty) $ orderEnv $ monoEnv ty
 
 --------------------------------------------------------------------------------
 
-{-
-mangleAx (n, t) = (if kinded $ res $ typingType t then toTypeN n else n, t)
+mangleAx n t = if kinded $ res t then toTypeN n else n
   where
     res (TArr a b) = res b
     res t = t
@@ -689,7 +692,7 @@ mangleAx (n, t) = (if kinded $ res $ typingType t then toTypeN n else n, t)
         StarToStar n -> True
         Ty_ _ StarC -> True
         _ -> False
--}
+
 inference_ :: PolyEnv -> ModuleR -> ErrorT Identity PolyEnv
 inference_ penv m = flip evalStateT ['t': show i | i <- [0..]] $ flip runReaderT penv $ inferModule m
   where
@@ -699,7 +702,7 @@ inference_ penv m = flip evalStateT ['t': show i | i <- [0..]] $ flip runReaderT
 trace' s = trace (show s) s
 
 tyConKind :: [TyR] -> TCM InstType
-tyConKind vs = instantiateTyping $ foldr (liftA2 (~>)) star $ map (fmap kindOf . inferKind) vs
+tyConKind vs = instantiateTyping $ foldr (liftA2 (~>)) star $ map inferKind vs
 
 inferConDef :: Name -> [(Name, TyR)] -> WithRange ConDef -> TCM (Env InstType)
 inferConDef con (unzip -> (vn, vt)) (r, ConDef n tys) = addRange r $ do
@@ -776,59 +779,40 @@ modTag f (Exp' t x) = Exp' (f t) x
 
 inferDefs :: [DefinitionR] -> TCM PolyEnv
 inferDefs [] = ask
-inferDefs ((r, d): ds) = do
-    f <- addRange r $ case d of
-        DValueDef d -> do
-            inferDef d
-        DDataDef con vars cdefs -> do
-          tk <- tyConKind $ map snd vars
-          withTyping (Map.singleton con tk) $ do
+inferDefs ((r, d): ds) = addRange r $ case d of
+    DValueDef d -> do
+        inferDef d >>= ($ cont)
+    DDataDef con vars cdefs -> do
+        tk <- tyConKind $ map snd vars
+        withTyping (Map.singleton con tk) $ do
             ev <- mapM (inferConDef con vars) cdefs
-            return $ withTyping (mconcat ev)
-        GADT con vars cdefs -> error "ddef gadt" -- do
-{-
-  vars <- forM vars $ \(n, k) -> do
-    k <- inferKind' k
-    return (n, k)
-  withTyping (uncurry Map.singleton $ tyConKind con vars) $ do
-    cdefs <- forM cdefs $ \(c, t) -> do
-        t <- inferKind' t
-        return (c, generalizeTypeVars t)
-    let d' = GADT con vars cdefs
-    ds <- withTyping (instantiateTyping <$> Map.fromList cdefs) $ inferDefs ds
-    return (d': ds)
--}
-        ClassDef con vars cdefs -> error "ddef class" -- do
-{-
-  vars <- forM vars $ \(n, k) -> do
-    k <- inferKind' k
-    return (n, k)
-  do --withTyping (uncurry Map.singleton $ tyConKind con vars) $ do
-    cdefs <- inferDefs cdefs
-    let c = CClass con $ head{-TODO-} $ map g vars
-        g (n, k) = TVar (typingToTy k) n
-    cdefs <- mapM (\(TypeSig (n, t)) -> TypeSig . (,) n <$> addConstr [c] t) cdefs
-    let d' = ClassDef con vars cdefs
-    ds <- withTyping (Map.fromList $ classTypings d') $ inferDefs ds
-    return (d': ds)
--}
-        DAxiom (TypeSig n a) -> error "ddef axiom" -- do
-{-
-    a' <- inferKind' a
-    let (n', a'') = mangleAx . (id *** generalizeTypeVars) $ (n, a')
-    ds <- withTyping (Map.singleton n' $ instantiateTyping a'') $ inferDefs ds
-    return (TypeSig (n', a''): ds)
--}
-        InstanceDef c t xs -> error "ddef instance" -- do
-{-
-    t <- inferKind' t
-    let tt = typingToTy t
-    local ((\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton tt) (Set.insert tt)) c $ instanceDefs pe}) *** id) $ do
-        xs <- inferDefs xs      -- TODO: check types
-        ds <- withTyping (Map.fromList $ concatMap axs xs) $ inferDefs ds
-        return (InstanceDef c t xs: ds)
--}
-    f $ inferDefs ds
+            withTyping (mconcat ev) cont
+    GADT con vars cdefs -> do
+        tk <- tyConKind $ map snd vars
+        withTyping (Map.singleton con tk) $ do
+            cdefs <- forM cdefs $ \(c, t) -> do
+                ty <- instantiateTyping $ do
+                    inferKind t
+                return $ Map.singleton c ty
+            withTyping (mconcat cdefs) cont
+    ClassDef con [(n, vark)] cdefs -> do
+        cdefs <- forM cdefs $ \(TypeSig n t) -> do
+            t <- instantiateTyping $ do
+                vark <- inferKind vark
+                addConstraint $ CClass con $ TVar vark n
+                inferKind t
+            return $ Map.singleton n t
+        withTyping (mconcat cdefs) cont
+    DAxiom (TypeSig n t) -> do
+        (t, t') <- instantiateTyping'' $ inferKind t
+        withTyping (Map.singleton (mangleAx n t') t) cont
+    InstanceDef c t xs -> do  -- TODO: check types
+        (ce, t) <- runTypingT $ inferKind t     -- TODO: ce
+        local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton t) (Set.insert t)) c $ instanceDefs pe}) $ do
+            xs <- forM xs $ \d -> inferDef d
+            foldr ($) cont xs
+  where
+    cont = inferDefs ds
 
 {-
 addConstr :: [ConstraintT] -> Typing -> TCM Typing
