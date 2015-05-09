@@ -348,6 +348,10 @@ instance Monoid Range where
     NoRange `mappend` a = a
     a `mappend` b = a
 
+type WithRange = (,) Range
+
+---------------------------------------
+
 -- TODO: add more structure
 data ErrorMsg
     = ErrorMsg Doc
@@ -383,14 +387,15 @@ checkUnambError = do
 --throwErrorTCM :: Doc -> TCM a
 throwErrorTCM = throwError . ErrorMsg
 
-showRange Nothing Nothing = ""
-showRange Nothing (Just _) = "??"
-showRange (Just _) Nothing = "?"
+showRange Nothing Nothing = "no file position"
+showRange Nothing (Just _) = "no file"
+showRange (Just _) Nothing = "no position"
 showRange (Just src) (Just (Range s e)) = str
     where
       startLine = sourceLine s - 1
-      endLine = sourceLine e - 1
-      str = unlines $ take (endLine - startLine) $ drop startLine $ lines src
+      len = sourceLine e - startLine
+      str = unlines $ ("position: " ++ show s ++ " - " ++ show e): take len (drop startLine $ lines src)
+                ++ [replicate (sourceColumn s - 1) ' ' ++ replicate (sourceColumn e - sourceColumn s) '^' | len == 1]
 
 -------------------------------------------------------------------------------- parser output
 
@@ -406,11 +411,11 @@ data ModuleR
 
 type PrecMap = Map Name Fixity
 
-type DefinitionR = (Range, Definition)
+type DefinitionR = WithRange Definition
 data Definition
     = DValueDef (ValueDef PatR ExpR)
     | DAxiom (TypeSig Name TyR)
-    | DDataDef Name [(Name, TyR)] [ConDef]      -- TODO: remove, use GADT
+    | DDataDef Name [(Name, TyR)] [WithRange ConDef]      -- TODO: remove, use GADT
     | GADT Name [(Name, TyR)] [(Name, TyR)]
     | ClassDef ClassName [(Name, TyR)] [TypeSig Name TyR]
     | InstanceDef ClassName TyR [ValueDef PatR ExpR]
@@ -430,9 +435,9 @@ data GuardedRHS
 data ConDef = ConDef Name [FieldTy]
 data FieldTy = FieldTy {fieldName :: Maybe Name, fieldType :: TyR}
 
-type TyR = Ty' Name Name ((,) Range)
-type PatR = Pat' Name Name ((,) Range)
-type ExpR = Exp' Name TyR PatR ((,) Range)
+type TyR = Ty' Name Name WithRange
+type PatR = Pat' Name Name WithRange
+type ExpR = Exp' Name TyR PatR WithRange
 type ConstraintR = Constraint Name TyR
 type TypeFunR = TypeFun Name TyR
 type ValueDefR = ValueDef PatR ExpR

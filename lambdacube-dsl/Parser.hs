@@ -172,10 +172,7 @@ moduleDef fname = do
       { moduleImports = (if modn == Just (N ExpNS [] "Prelude" Nothing) then id else (N ExpNS [] "Prelude" Nothing:)) idefs
       , moduleExports = mempty
       , definitions   = defs
---      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
---      , precedences   = Map.fromList [(n, p) | DFixity n p <- defs]     -- TODO: check multiple definitions
       }
-
 
 importDef :: P Name
 importDef = do
@@ -305,7 +302,7 @@ dataDef = addDPos $ do
  localIndentation Gt $ do
   tc <- typeConstructor
   tvs <- many typeVarKind
-  let dataConDef = do
+  let dataConDef = addDPos $ do
         tc <- dataConstructor
         tys <-   braces (sepBy (FieldTy <$> (Just <$> varId) <*> (keyword "::" *> optional (operator "!") *> typeExp)) comma)
             <|>  many (optional (operator "!") *> (FieldTy Nothing <$> typeAtom))

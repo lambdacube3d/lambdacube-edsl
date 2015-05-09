@@ -435,6 +435,8 @@ joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
     isSing [_] = True
     isSing _ = False
     ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv _ e _ _ <- ps]
+--      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
+--      , precedences   = Map.fromList [(n, p) | DFixity n p <- defs]     -- TODO: check multiple definitions
 
 --withTyping :: Env InstType -> TCM a -> TCM a
 withTyping ts m = do
@@ -696,8 +698,8 @@ trace' s = trace (show s) s
 tyConKind :: [TyR] -> TCM InstType
 tyConKind vs = instantiateTyping $ foldr (liftA2 (~>)) star $ map (fmap kindOf . inferKind) vs
 
-inferConDef :: Name -> [(Name, TyR)] -> ConDef -> TCM (Env InstType)
-inferConDef con (unzip -> (vn, vt)) (ConDef n tys) = do
+inferConDef :: Name -> [(Name, TyR)] -> WithRange ConDef -> TCM (Env InstType)
+inferConDef con (unzip -> (vn, vt)) (r, ConDef n tys) = addRange r $ do
     ty <- instantiateTyping $ do
         ks <- mapM inferKind vt
         withTyping' (Map.fromList $ zip vn $ map pure ks) $ do
