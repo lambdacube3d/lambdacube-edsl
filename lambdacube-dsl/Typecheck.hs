@@ -23,6 +23,7 @@ module Typecheck where
 import Data.Function
 import Data.List
 import Data.Maybe
+import Data.Either
 import Data.Monoid
 import Data.Foldable (Foldable, foldMap, toList, foldrM)
 import qualified Data.Traversable as T
@@ -336,6 +337,7 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
             unifyTy' (TCon_ u) (TCon_ v) | u == v = return ()
             unifyTy' (TTuple_ t1) (TTuple_ t2) = sequence_ $ zipWith uni t1 t2
             unifyTy' (TApp_ a1 b1) (TApp_ a2 b2) = uni a1 a2 >> uni b1 b2
+            unifyTy' Star_ Star_ = return ()
             unifyTy' a b
               | otherwise = throwError $ UnificationError a_ b_ $ filter (not . null . drop 1 . snd) tys
 
@@ -343,10 +345,10 @@ subst1 :: Subst -> Ty -> Ty
 subst1 s tv@(TVar _ a) = fromMaybe tv $ Map.lookup a s
 subst1 _ t = t
 
-joinSubsts :: forall m . (MonadError ErrorMsg m) => [Subst] -> m (Subst, Subst)
+joinSubsts :: forall m . (MonadError ErrorMsg m) => [Subst] -> m Subst
 joinSubsts ss = do
     s <- addCtx "joinSubsts" $ unifyTypes True $ unifyMaps ss
-    return (s, foldMap (subst s <$>) ss <> s)
+    return $ foldMap (subst s <$>) ss <> s
 
 appSubst :: Subst -> SubstEnv -> SubstEnv
 appSubst s e = (Left <$> s) <> subst s e
@@ -354,12 +356,16 @@ appSubst s e = (Left <$> s) <> subst s e
 showVar (N _ _ n (NameInfo _ i)) = text n <> "{" <> i <> "}"
 
 joinSE :: forall m . (MonadReader PolyEnv m, MonadError ErrorMsg m) => [SubstEnv] -> m SubstEnv
-joinSE [a, b]
-    | Map.null a = return b     -- optimization
-    | Map.null b = return a     -- optimization
-joinSE ss = do
-    s <- addCtx "joinSE" $ unifyTypes True $ concatMap ff $ unifyMaps_ showVar ss
-    untilNoUnif $ appSubst s $ Map.unionsWith gg ss
+joinSE = \case
+    [a, b]
+        | Map.null a -> untilNoUnif b     -- optimization
+        | Map.null b -> untilNoUnif a     -- optimization
+    [a, b] -> do
+        s <- addCtx "joinSE" $ unifyTypes True $ concatMap ff $ unifyMaps_ showVar [a, b]
+        let sa = appSubst s a
+            sb = appSubst s b
+            f x y = appSubst (Map.map (\(Left x) -> x) $ Map.filter isLeft x) y
+        untilNoUnif $ Map.unionWith gg (f sb sa) (f sa sb)
   where
     gg (Left s) _ = Left s
     gg Right{} b = b
@@ -381,7 +387,7 @@ joinSE ss = do
                     [((ty, it), is) | Right (ConstraintKind (CEq ty (injType -> Just (it, is)))) <- toList es])
             ++ eqs
 
-        (_, s) <- joinSubsts $ s0: ss
+        s <- joinSubsts $ s0: ss
             -- TODO nub constraints?
         if Map.null s then return es else untilNoUnif $ appSubst s es
 
@@ -425,20 +431,17 @@ withTyping ts m = do
 
 ----------------------------
 
--- TODO!!: introduce new vars into the env??
-instantiateTyping_ :: [TName] -> SubstEnv -> Ty -> InstType
-instantiateTyping_ fv se ty = WriterT' $ do
-    newVars <- replicateM (length fv) $ newName "instvar"
-    let s = Map.fromList $ zip fv newVars
-    return (repl s se, repl s ty)
-
 instantiateTyping' :: SubstEnv -> Ty -> TCM InstType
 instantiateTyping' se ty = do
     pe <- asks $ getPolyEnv
     let p n (Right _) = n `Map.notMember` pe
         p _ _ = False
         se' = Map.filterWithKey p se
-    return $ instantiateTyping_ (Map.keys se') se' ty
+        fv = Map.keys se'
+    return $ WriterT' $ do
+        newVars <- replicateM (length fv) $ newName "instvar"
+        let s = Map.fromList $ zip fv newVars
+        return (repl s se', repl s ty)
 
 instantiateTyping = fmap fst . instantiateTyping''
 
@@ -757,6 +760,8 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = addRange r $ case d of
         withTyping (Map.singleton (mangleAx n t') t) cont
     InstanceDef c t xs -> do  -- TODO: check types
         (ce, t) <- runWriterT' $ inferKind t     -- TODO: ce
+        let ce' = Map.filter (either (const False) (const True)) ce
+        when (not $ Map.null ce') $ throwErrorTCM $ "not null ce" <+> pShow ce'
         local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton t) (Set.insert t)) c $ instanceDefs pe}) $ do
             cont
 --            xs <- forM xs $ \d -> inferDef d

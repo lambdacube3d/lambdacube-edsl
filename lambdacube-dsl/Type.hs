@@ -737,6 +737,9 @@ instance PShow Range where
         Range a b -> text (show a) <+> "--" <+> text (show b)
         NoRange -> ""
 
+instance (PShow a, PShow b) => PShow (Either a b) where
+    pShowPrec p = either (("Left" <+>) . pShow) (("Right" <+>) . pShow)
+
 -------------------------------------------------------------------------------- replacement
 
 type Repl = Map TName TName
@@ -746,7 +749,7 @@ class Replace a where repl :: Repl -> a -> a
 
 instance Replace Ty where
     repl st = \case
-    --    ty | Map.null st -> ty -- optimization
+        ty | Map.null st -> ty -- optimization
         StarToStar n -> StarToStar n
         Ty_ k s -> Ty_ (repl st k) $ case s of
             Forall_ (Just n) a b -> Forall_ (Just n) (repl st a) (repl (Map.delete n st) b)
