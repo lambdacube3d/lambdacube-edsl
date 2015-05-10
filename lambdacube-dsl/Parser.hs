@@ -59,8 +59,9 @@ try' s m = try m <?> s
 
 typeVar :: P N
 typeVar = try' "type variable" $ do
+  p <- position
   i <- ident lcIdents
-  if isUpper $ head i then fail "type variable name must start with lower case letter" else return $ ExpN i
+  if isUpper $ head i then fail "type variable name must start with lower case letter" else return $ TypeN' i (P.text $ i ++ show p)
 
 dataConstructor :: P N
 dataConstructor = try' "data constructor" $ do
@@ -69,8 +70,9 @@ dataConstructor = try' "data constructor" $ do
 
 var :: P N
 var = try' "variable" $ do
+  p <- position
   i <- ident lcIdents
-  if isUpper $ head i then fail "variable name must start with lower case letter" else return $ ExpN i
+  if isUpper $ head i then fail "variable name must start with lower case letter" else return $ ExpN' i (P.text $ i ++ show p)
 
 -- qualified variable
 qVar :: P N    -- TODO

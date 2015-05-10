@@ -332,7 +332,7 @@ showN = ppShow
 
 pattern ExpN n <- N ExpNS [] n _ where
     ExpN n = N ExpNS [] n (NameInfo Nothing "exp")
---pattern ExpN' n i = N ExpNS [] n i
+pattern ExpN' n i = N ExpNS [] n (NameInfo Nothing i)
 pattern TypeN n <- N TypeNS [] n _
 pattern TypeN' n i = N TypeNS [] n (NameInfo Nothing i)
 

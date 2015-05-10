@@ -355,6 +355,13 @@ appSubst s e = (Left <$> s) <> subst s e
 
 showVar (N _ _ n (NameInfo _ i)) = text n <> "{" <> i <> "}"
 
+substEnvSubst = Map.map (\(Left x) -> x) . Map.filter isLeft
+
+appSES :: (Substitute x, Monad m) => TypingT m x -> TypingT m x
+appSES (WriterT' m) = WriterT' $ do
+    (se, x) <- m
+    return (se, subst (substEnvSubst se) x)
+
 joinSE :: forall m . (MonadReader PolyEnv m, MonadError ErrorMsg m) => [SubstEnv] -> m SubstEnv
 joinSE = \case
     [a, b]
@@ -364,7 +371,7 @@ joinSE = \case
         s <- addCtx "joinSE" $ unifyTypes True $ concatMap ff $ unifyMaps_ showVar [a, b]
         let sa = appSubst s a
             sb = appSubst s b
-            f x y = appSubst (Map.map (\(Left x) -> x) $ Map.filter isLeft x) y
+            f x y = appSubst (substEnvSubst x) y
         untilNoUnif $ Map.unionWith gg (f sb sa) (f sa sb)
   where
     gg (Left s) _ = Left s
@@ -373,7 +380,7 @@ joinSE = \case
     ff (expl, ss) = case (WithExplanation (expl <+> "subst") [s | Left s <- ss], WithExplanation (expl <+> "typesig") [s | Right s <- ss]) of 
         (WithExplanation _ [], ss) -> [ss]
         (ss, WithExplanation _ []) -> [ss]
-        (subs@(WithExplanation _ (s:_)), sigs@(WithExplanation _ (s':_))) -> [subs, sigs, WithExplanation "subskind" [kindOf s, s']]
+        (subs@(WithExplanation i (s:_)), sigs@(WithExplanation i' (s':_))) -> [subs, sigs, WithExplanation ("subskind" <+> i <+> i') [kindOf s, s']]
 
     untilNoUnif :: SubstEnv -> m SubstEnv
     untilNoUnif es = do
@@ -515,9 +522,11 @@ inferLit a = case a of
     LString _ -> TString
     LNat _    -> TNat
 
+inferKind_ = {-appSES .-} inferKind
+
 -- TODO: ambiguity check
 inferKind :: TyR -> TCMS Ty
-inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ case ty of
+inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ appSES $ case ty of
     Forall_ (Just n) k t -> do
         k <- inferKind k
         t <- withTyping (Map.singleton n $ pureInstType k) $ inferKind t
@@ -759,7 +768,7 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = addRange r $ case d of
         (t, t') <- instantiateTyping'' $ inferKind t
         withTyping (Map.singleton (mangleAx n t') t) cont
     InstanceDef c t xs -> do  -- TODO: check types
-        (ce, t) <- runWriterT' $ inferKind t     -- TODO: ce
+        (ce, t) <- runWriterT' $ inferKind_ t     -- TODO: ce
         let ce' = Map.filter (either (const False) (const True)) ce
         when (not $ Map.null ce') $ throwErrorTCM $ "not null ce" <+> pShow ce'
         local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton t) (Set.insert t)) c $ instanceDefs pe}) $ do
