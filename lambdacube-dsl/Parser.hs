@@ -285,16 +285,18 @@ tyApp = typeAtom >>= f
 
 typeAtom :: P TyR
 typeAtom = typeRecord
-    <|> addPos Ty' (StarC <$ operator "*")
-    <|> addPos Ty' (TVar_ <$> try' "type var" typeVar)
-    <|> addPos Ty' (TLit_ <$> (LNat . fromIntegral <$> natural <|> literal))
-    <|> addPos Ty' (TCon_ <$> typeConstructor)
+    <|> addTPos (Star_ <$ operator "*")
+    <|> addTPos (TVar_ <$> try' "type var" typeVar)
+    <|> addTPos (TLit_ <$> (LNat . fromIntegral <$> natural <|> literal))
+    <|> addTPos (TCon_ <$> typeConstructor)
     <|> addPos tTuple (parens (sepBy ty comma))
     <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ (TypeN' "List" "List"))) (brackets ty)
 
 tTuple :: Range -> [TyR] -> TyR
 tTuple p [t] = t
 tTuple p ts = Ty' p $ TTuple_ ts
+
+addTPos = addPos Ty'
 
 addDPos m = addPos (,) m
 
@@ -364,7 +366,7 @@ typeClassDef = addDPos $ do
 
 typeVarKind =
       parens ((,) <$> typeVar <* operator "::" <*> ty)
-  <|> (,) <$> typeVar <*> addPos Ty' (pure StarC)
+  <|> (,) <$> typeVar <*> addTPos (pure Star_)
 
 typeClassInstanceDef :: P PreDefinitionR
 typeClassInstanceDef = addDPos $ do

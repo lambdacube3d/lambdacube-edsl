@@ -108,7 +108,7 @@ pattern StarToStar i = Ty'' (StarToStarC i)
 pattern Ty k t = Ty'' (TyC k t)
 
 pattern Ty_ a b <- Ty a b where
-    Ty_ Star StarC = Star
+    Ty_ Star Star_ = Star
     Ty_ a b = Ty a b
 
 unfoldTy (StarToStar i) = Ty Star $ case i of
@@ -117,18 +117,16 @@ unfoldTy (StarToStar i) = Ty Star $ case i of
 unfoldTy x = x
 
 pattern Ty__ a b <- (unfoldTy -> Ty a b) where
-    Ty__ Star StarC = Star
+    Ty__ Star Star_ = Star
     Ty__ a b = Ty a b
 
-pattern StarC = Star_
 pattern TApp k a b = Ty_ k (TApp_ a b)
-pattern TCon k a <- Ty_ k (TCon_ (TypeN a)) where
-    TCon k a = Ty_ k (TCon_ (TypeN' a "typecon"))
+pattern TCon k a <- Ty_ k (TCon_ (TypeIdN a)) where
+    TCon k a = Ty_ k (TCon_ (TypeIdN' a "typecon"))
 pattern TVar k b = Ty_ k (TVar_ b)
 pattern TLit k b = Ty_ k (TLit_ b)
 
 pattern Star = StarToStar 0
-pattern StarStar = StarToStar 1
 
 pattern TyStar a = Ty_ Star a
 pattern TRecord b = TyStar (TRecord_ b)
@@ -151,10 +149,11 @@ infix 4 ~~, ~~~
 (~~~) = CUnify
 
 kindOf :: Ty -> Ty
-kindOf = \case
-    Ty_ k _ -> k
-    StarToStar _ -> Star
+kindOf = \case Ty__ k _ -> k
 
+isStar = \case
+    Star -> True
+    _ -> False
 
 -------------------------------------------------------------------------------- patterns
 
@@ -163,7 +162,7 @@ data Pat_ c v b
     | PVar_ v
     | PCon_ c [b]
     | PTuple_ [b]
-    | PRecord_ [(FName, b)]
+    | PRecord_ [(Name, b)]
     | PAt_ v b
     | Wildcard_
     deriving (Functor,Foldable,Traversable)
@@ -174,7 +173,7 @@ mapPat f g = \case
     PVar_ v -> PVar_ $ g v
     PCon_ c p -> PCon_ (f c) p
     PTuple_ p -> PTuple_ p
-    PRecord_ p -> PRecord_ p
+    PRecord_ p -> PRecord_ p -- $ map (g *** id) p
     PAt_ v p -> PAt_ (g v) p
     Wildcard_ -> Wildcard_
 
@@ -211,7 +210,7 @@ data Exp_ v t p b
     | EType_     t
 
     | ELet_      p b b
-    | ENamedRecord_ v [(v, b)]
+    | ENamedRecord_ Name [(Name, b)]
     | ERecord_   [(Name, b)]
     | EFieldProj_ Name
     | EAlts_     Int [b]  -- function alternatives; Int: arity
@@ -226,9 +225,9 @@ mapExp vf tf f = \case
     ELam_      x y     -> ELam_ (f x) y
     ELet_      x y z   -> ELet_ (f x) y z
     ETuple_    x       -> ETuple_ x
-    ERecord_   x       -> ERecord_ x
-    ENamedRecord_ n x  -> ENamedRecord_ (vf n) $ map (vf *** id) x
-    EFieldProj_ x      -> EFieldProj_ x
+    ERecord_   x       -> ERecord_ $ x --map (vf *** id) x
+    ENamedRecord_ n x  -> ENamedRecord_ n x --(vf n) $ map (vf *** id) x
+    EFieldProj_ x      -> EFieldProj_ x -- $ vf x
     ETypeSig_  x y     -> ETypeSig_ x $ tf y
     EAlts_     x y     -> EAlts_ x y
     ENext_             -> ENext_
@@ -271,9 +270,9 @@ pattern EType a = Exp'' (EType_ a)
 pattern EAlts i b = Exp'' (EAlts_ i b)
 pattern ENext = Exp'' ENext_
 
-pattern Va x <- VarE (ExpN x) _
+pattern Va x <- VarE (ExpIdN x) _
 pattern A0 x <- EVar (Va x)
-pattern A0t x t <- EVar (VarE (ExpN x) t)
+pattern A0t x t <- EVar (VarE (ExpIdN x) t)
 pattern At0 x t <- ETyApp (A0 x) t
 pattern A1 f x <- EApp (A0 f) x
 pattern A1t f t x <- EApp (A0t f t) x
@@ -307,21 +306,21 @@ instance GetTag (Pat' c n ((,) a)) where
 
 -------------------------------------------------------------------------------- names
 
+data NameSpace = TypeNS | ExpNS
+    deriving (Eq, Ord)
+
+-- TODO: more structure instead of Doc
 data NameInfo = NameInfo (Maybe Fixity) Doc
 
--- TODO: add definition range info
 data N = N
     { nameSpace :: NameSpace
     , qualifier :: [String]
-    , qData :: String
-    , fixityInfo :: NameInfo
+    , nName :: String
+    , nameInfo :: NameInfo
     }
 
 instance Eq N where N a b c d == N a' b' c' d' = (a, b, c) == (a', b', c')
 instance Ord N where N a b c d `compare` N a' b' c' d' = (a, b, c) `compare` (a', b', c')
-
-data NameSpace = TypeNS | ExpNS
-    deriving (Eq, Ord)
 
 type Fixity = (Maybe FixityDir, Int)
 data FixityDir = FDLeft | FDRight
@@ -351,8 +350,8 @@ isTypeVar (N ns _ _ _) = ns == TypeNS
 isConstr (N _ _ (c:_) _) = isUpper c || c == ':'
 
 data Var
-  = VarE EName Ty   -- TODO: is Ty needed?
-  | VarT EName Ty   -- TODO: eliminate
+  = VarE IdN Ty   -- TODO: is Ty needed?
+  | VarT IdN Ty   -- TODO: eliminate
 
 -------------------------------------------------------------------------------- error handling
 
@@ -369,7 +368,7 @@ instance Monoid Range where
 
 type WithRange = (,) Range
 
----------------------------------------
+--------------------------------------------------------------------------------
 
 type WithExplanation = (,) Doc
 
@@ -476,26 +475,36 @@ type ValueDefR = ValueDef PatR ExpR
 
 -------------------------------------------------------------------------------- names with unique ids
 
+type IdN = N
+pattern IdN a = a
+--newtype IdN = IdN N deriving (Eq, Ord)
 {- TODO
 data IdN = IdN !Int N
 
 instance Eq IdN where IdN i _ == IdN j _ = i == j
 instance Ord IdN where IdN i _ `compare` IdN j _ = i `compare` j
 -}
-type IdN = N
+
+pattern TypeIdN n <- IdN (TypeN n)
+pattern TypeIdN' n i = IdN (TypeN' n i)
+pattern ExpIdN n <- IdN (ExpN n)
+pattern ExpIdN' n i = IdN (ExpN' n i)
+
+
 
 type FreshVars = [String]     -- fresh typevar names
 
 type VarMT = StateT FreshVars
 
-newName :: MonadState FreshVars m => Doc -> m Name
+newName :: MonadState FreshVars m => Doc -> m IdN
 newName i = do
   (n: ns) <- get
   put ns
-  return $ TypeN' n i
+  return $ TypeIdN' n i
 
 -------------------------------------------------------------------------------- environments
 
+type Env' a = Map Name a
 type Env a = Map IdN a
 
 type SubstEnv = Env (Either Ty Ty)  -- either substitution or type signature   TODO: dedicated type instead of Either
@@ -508,14 +517,14 @@ type EnvMap = Env (Maybe Thunk)   -- Nothing: statically unknown but defined
 
 data PolyEnv = PolyEnv
     { instanceDefs :: InstanceDefs
-    , getPolyEnv :: Env InstType
+    , getPolyEnv :: Env' InstType
     , precedences :: PrecMap
     , thunkEnv :: EnvMap
     }
 
-type PrecMap = Map Name Fixity
+type PrecMap = Env' Fixity
 
-type InstanceDefs = Env (Set Ty)
+type InstanceDefs = Env' (Set Ty)
 
 -------------------------------------------------------------------------------- monads
 
@@ -548,6 +557,8 @@ type ValueDefT = ValueDef PatT ExpT
 
 -------------------------------------------------------------------------------- LambdaCube specific definitions
 -- TODO: eliminate most of these
+
+pattern StarStar = StarToStar 1
 
 pattern TCon0 a = TCon Star a
 pattern TCon1 a b = TApp Star (TCon StarStar a) b
@@ -604,7 +615,7 @@ pattern TFJoinTupleType a b     = TypeFunS "JoinTupleType" [a, b]
 
 -------------------------------------------------------------------------------- free variables
 
-class FreeVars a where freeVars :: a -> Set TName
+class FreeVars a where freeVars :: a -> Set IdN
 
 instance FreeVars Ty where
     freeVars = \case
@@ -627,6 +638,8 @@ instance FreeVars a => FreeVars (Constraint' n a)    where freeVars = foldMap fr
 instance PShow N where
     pShowPrec p = \case
         N _ qs s _ -> hcat $ punctuate (char '.') $ map text $ qs ++ [s]
+
+--instance PShow IdN where pShowPrec p (IdN n) = pShowPrec p n
 
 instance PShow Lit where
     pShowPrec p = \case
@@ -742,7 +755,7 @@ instance (PShow a, PShow b) => PShow (Either a b) where
 
 -------------------------------------------------------------------------------- replacement
 
-type Repl = Map TName TName
+type Repl = Map IdN IdN
 
 -- TODO: express with Substitute?
 class Replace a where repl :: Repl -> a -> a
