@@ -206,7 +206,7 @@ compileProgram uniTrie p = do
       loc <- GL.getAttribLocation_ po streamName
       return $ Tuple streamName {location: loc, slotAttribute: s.name})
 
-    return {program: po, objects: [objV,objF], inputUniforms: uniformLocation, inputStreams: streamLocation}
+    return {program: po, shaders: [objV,objF], inputUniforms: uniformLocation, inputStreams: streamLocation}
 
 allocPipeline :: Pipeline -> GFX WebGLPipeline
 allocPipeline p = do
@@ -265,7 +265,19 @@ renderPipeline p = do
   return unit
 
 disposePipeline :: WebGLPipeline -> GFX Unit
-disposePipeline _ = throwException $ error "not implemented"
+disposePipeline p = do
+  setPipelineInput p Nothing
+  flip traverse p.programs $ \prg -> do
+      GL.deleteProgram_ prg.program
+      traverse GL.deleteShader_ prg.shaders
+  {- TODO: targets, textures
+  let targets = glTargets p
+  withArray (map framebufferObject $ V.toList targets) $ (glDeleteFramebuffers $ fromIntegral $ V.length targets)
+  let textures = glTextures p
+  withArray (map glTextureObject $ V.toList textures) $ (glDeleteTextures $ fromIntegral $ V.length textures)
+  with (glVAO p) $ (glDeleteVertexArrays 1)
+  -}
+  return unit
 
 setPipelineInput :: WebGLPipeline -> Maybe WebGLPipelineInput -> GFX Unit
 setPipelineInput _ _ = throwException $ error "not implemented"

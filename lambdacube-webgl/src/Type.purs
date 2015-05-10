@@ -46,11 +46,10 @@ sizeOfArrayType ArrInt16  = 2
 sizeOfArrayType ArrFloat  = 4
 sizeOfArrayType ArrFixed  = 4
 
-{-
 -- describes an array in a buffer
-data Array  -- array type, element count (NOT byte size!), setter
+data LCArray  -- array type, element count (NOT byte size!), setter
     = Array ArrayType Int BufferSetter
--}
+
 type BufferSetter = {} --(Ptr () -> IO ()) -> IO ()
 
 data StreamType
@@ -71,18 +70,18 @@ data Stream b
     | ConstM33F  M33F
     | ConstM44F  M44F
     | Stream 
-        { streamType    :: StreamType
-        , streamBuffer  :: b
-        , streamArrIdx  :: Int
-        , streamStart   :: Int
-        , streamLength  :: Int
+        { sType   :: StreamType
+        , buffer  :: b
+        , arrIdx  :: Int
+        , start   :: Int
+        , length  :: Int
         }
 
 type IndexStream b =
-    { indexBuffer   :: b
-    , indexArrIdx   :: Int
-    , indexStart    :: Int
-    , indexLength   :: Int
+    { buffer   :: b
+    , arrIdx   :: Int
+    , start    :: Int
+    , length   :: Int
     }
 
 data Primitive
@@ -149,7 +148,7 @@ type WebGLPipeline =
 
 type GLProgram =
   { program       :: GL.WebGLProgram
-  , objects       :: [GL.WebGLShader]
+  , shaders       :: [GL.WebGLShader]
   , inputUniforms :: StrMap.StrMap GL.WebGLUniformLocation
   , inputStreams  :: StrMap.StrMap {location :: GL.GLint, slotAttribute :: String}
   }

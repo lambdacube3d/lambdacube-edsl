@@ -6,7 +6,9 @@ import Data.StrMap
 type Int = Number
 type Word = Number
 type Float = Number
+type Int16 = Number
 type Int32 = Number
+type Word16 = Number
 type Word32 = Number
 type Bool = Boolean
 
