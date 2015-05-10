@@ -42,12 +42,12 @@ void_ a = a >> return ()
 typeConstraint :: P ClassName
 typeConstraint = do
   i <- ident lcIdents
-  if isUpper $ head i then return $ TypeN i else fail "type constraint must start with capital letter"
+  if isUpper $ head i then return $ TypeN' i (P.text i) else fail "type constraint must start with capital letter"
 
 typeConstructor :: P N
 typeConstructor = do
   i <- ident lcIdents
-  if isUpper $ head i then return $ TypeN i else fail "type name must start with capital letter"
+  if isUpper $ head i then return $ TypeN' i (P.text i) else fail "type name must start with capital letter"
 
 upperCaseIdent :: P N
 upperCaseIdent = do
@@ -145,7 +145,7 @@ moduleName :: P Name
 moduleName = do
   l <- sepBy1 (ident lcIdents) dot
   when (any (isLower . head) l) $ fail "module name must start with capital letter"
-  return $ N ExpNS (init l) (last l) Nothing
+  return $ N ExpNS (init l) (last l) $ NameInfo Nothing "module"
 
 moduleDef :: FilePath -> P ModuleR
 moduleDef fname = do
@@ -169,7 +169,7 @@ moduleDef fname = do
         , (:[]) <$> typeClassInstanceDef
         ])
     return $ Module
-      { moduleImports = (if modn == Just (N ExpNS [] "Prelude" Nothing) then id else (N ExpNS [] "Prelude" Nothing:)) idefs
+      { moduleImports = (if modn == Just (ExpN "Prelude") then id else (ExpN "Prelude":)) idefs
       , moduleExports = mempty
       , definitions   = defs
       }
@@ -288,7 +288,7 @@ typeAtom = typeRecord
     <|> addPos Ty' (TLit_ <$> (LNat . fromIntegral <$> natural <|> literal))
     <|> addPos Ty' (TCon_ <$> typeConstructor)
     <|> addPos tTuple (parens (sepBy ty comma))
-    <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ (TypeN "List"))) (brackets ty)
+    <|> addPos (\p -> Ty' p . TApp_ (Ty' p $ TCon_ (TypeN' "List" "List"))) (brackets ty)
 
 tTuple :: Range -> [TyR] -> TyR
 tTuple p [t] = t

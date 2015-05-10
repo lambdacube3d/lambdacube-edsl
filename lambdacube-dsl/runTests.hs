@@ -118,6 +118,6 @@ showRanges fname is e = (if head rs == 0 then "" else "...\n")
     f [] _ = ["\n..."]
     g (i:is) e = take i e: f is (drop i e)
     rs = (head is - x) : concat [[a + x, b - x] | (a, b) <- zip is (tail is), a + y < b] ++ [last is + x]
-    x = 200
+    x = 2000
     y = 3*x
 

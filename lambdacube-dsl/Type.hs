@@ -34,6 +34,7 @@ import Control.Monad.Reader
 import Control.Applicative
 import Control.Arrow hiding ((<+>))
 import Text.Parsec.Pos
+import GHC.Exts (Constraint)
 
 import ParserUtil (ParseError)
 import Pretty
@@ -60,11 +61,11 @@ data Ty_ c n a
     | Forall_  (Maybe n) a a
     | TTuple_  [a]
     | TRecord_ (Map n a)
-    | ConstraintKind_ (Constraint n a)        -- flatten?
+    | ConstraintKind_ (Constraint' n a)        -- flatten?
     | Witness  Witness      -- TODO: here or in Exp?
     deriving (Eq,Ord,Functor,Foldable,Traversable)      -- TODO: elim Eq instance
 
-data Constraint n a
+data Constraint' n a
     = CEq a (TypeFun n a) -- unification between a type and a fully applied type function; CEq t f:  t ~ f
     | CUnify a a          -- unification between (non-type-function) types; CUnify t s:  t ~ s
     | CClass n a          -- class constraint
@@ -110,9 +111,19 @@ pattern Ty_ a b <- Ty a b where
     Ty_ Star StarC = Star
     Ty_ a b = Ty a b
 
+unfoldTy (StarToStar i) = Ty Star $ case i of
+    0 -> Star_
+    _ -> Forall_ Nothing Star $ StarToStar $ i - 1
+unfoldTy x = x
+
+pattern Ty__ a b <- (unfoldTy -> Ty a b) where
+    Ty__ Star StarC = Star
+    Ty__ a b = Ty a b
+
 pattern StarC = Star_
 pattern TApp k a b = Ty_ k (TApp_ a b)
-pattern TCon k a = Ty_ k (TCon_ (TypeN a))
+pattern TCon k a <- Ty_ k (TCon_ (TypeN a)) where
+    TCon k a = Ty_ k (TCon_ (TypeN' a "typecon"))
 pattern TVar k b = Ty_ k (TVar_ b)
 pattern TLit k b = Ty_ k (TLit_ b)
 
@@ -296,12 +307,14 @@ instance GetTag (Pat' c n ((,) a)) where
 
 -------------------------------------------------------------------------------- names
 
+data NameInfo = NameInfo (Maybe Fixity) Doc
+
 -- TODO: add definition range info
 data N = N
     { nameSpace :: NameSpace
     , qualifier :: [String]
     , qData :: String
-    , fixityInfo :: Maybe Fixity
+    , fixityInfo :: NameInfo
     }
 
 instance Eq N where N a b c d == N a' b' c' d' = (a, b, c) == (a', b', c')
@@ -313,12 +326,15 @@ data NameSpace = TypeNS | ExpNS
 type Fixity = (Maybe FixityDir, Int)
 data FixityDir = FDLeft | FDRight
 
--- TODO: eliminate?
+-- TODO: eliminate
 showN :: N -> String
 showN = ppShow
 
-pattern ExpN n = N ExpNS [] n Nothing
-pattern TypeN n = N TypeNS [] n Nothing
+pattern ExpN n <- N ExpNS [] n _ where
+    ExpN n = N ExpNS [] n (NameInfo Nothing "exp")
+--pattern ExpN' n i = N ExpNS [] n i
+pattern TypeN n <- N TypeNS [] n _
+pattern TypeN' n i = N TypeNS [] n (NameInfo Nothing i)
 
 -- TODO: rename/eliminate
 type Name = N
@@ -427,8 +443,6 @@ data ModuleR
   , definitions   :: [DefinitionR]
   }
 
-type PrecMap = Map Name Fixity
-
 type DefinitionR = WithRange Definition
 data Definition
     = DValueDef (ValueDef PatR ExpR)
@@ -456,7 +470,7 @@ data FieldTy = FieldTy {fieldName :: Maybe Name, fieldType :: TyR}
 type TyR = Ty' Name Name WithRange
 type PatR = Pat' Name Name WithRange
 type ExpR = Exp' Name TyR PatR WithRange
-type ConstraintR = Constraint Name TyR
+type ConstraintR = Constraint' Name TyR
 type TypeFunR = TypeFun Name TyR
 type ValueDefR = ValueDef PatR ExpR
 
@@ -474,17 +488,17 @@ type FreshVars = [String]     -- fresh typevar names
 
 type VarMT = StateT FreshVars
 
-newName :: MonadState FreshVars m => m Name
-newName = do
+newName :: MonadState FreshVars m => Doc -> m Name
+newName i = do
   (n: ns) <- get
   put ns
-  return $ TypeN n
+  return $ TypeN' n i
 
 -------------------------------------------------------------------------------- environments
 
 type Env a = Map IdN a
 
-type SubstEnv = Env (Either Ty Ty)  -- either substitution or type signature
+type SubstEnv = Env (Either Ty Ty)  -- either substitution or type signature   TODO: dedicated type instead of Either
 
 type Subst = Env Ty  -- substitutions
 
@@ -499,32 +513,27 @@ data PolyEnv = PolyEnv
     , thunkEnv :: EnvMap
     }
 
+type PrecMap = Map Name Fixity
+
 type InstanceDefs = Env (Set Ty)
 
 -------------------------------------------------------------------------------- monads
 
-newtype TypingT m a
-  = TypingT {runTypingT :: m (SubstEnv, a)}
-    deriving (Functor,Foldable,Traversable)
-
-instance MonadTrans TypingT where
-    lift m = TypingT $ (,) mempty <$> m
+type TypingT = WriterT' SubstEnv
 
 type InstType = TypingT (VarMT Identity) Ty
 
-instance Applicative (TypingT (VarMT Identity)) where
-    pure = lift . pure
-    (<*>) = error "Applicative (TypingT (VarMT Identity))"
+pureInstType = lift . pure
 
 -- type checking monad transformer
-type TCMT m = ReaderT PolyEnv (VarMT (ErrorT m))
+type TCMT m = ReaderT PolyEnv (ErrorT (VarMT m))
 
 type TCM = TCMT Identity
 
 type TCMS = TypingT TCM
 
 toTCMS :: InstType -> TCMS Ty
-toTCMS (TypingT m) = TypingT $ lift $ mapStateT lift m
+toTCMS = mapWriterT' $ lift . lift --mapStateT lift
 
 liftIdentity :: Monad m => Identity a -> m a
 liftIdentity = return . runIdentity
@@ -533,7 +542,7 @@ liftIdentity = return . runIdentity
 
 type ExpT = (Exp, Ty)
 type PatT = Pat
-type ConstraintT = Constraint IdN Ty
+type ConstraintT = Constraint' IdN Ty
 type TypeFunT = TypeFun IdN Ty
 type ValueDefT = ValueDef PatT ExpT
 
@@ -573,13 +582,15 @@ pattern TImage b c = TCon2' "Image" b c
 pattern TInterpolated b = TCon1 "Interpolated" b
 pattern TFrameBuffer b c = TCon2' "FrameBuffer" b c
 
-pattern ClassN n = TypeN n
+pattern ClassN n <- TypeN n where
+    ClassN n = TypeN' n "class"
 pattern IsValidOutput = ClassN "ValidOutput"
 pattern IsTypeLevelNatural = ClassN "TNat"
 pattern IsValidFrameBuffer = ClassN "ValidFrameBuffer"
 pattern IsInputTuple = ClassN "InputTuple"
 
-pattern TypeFunS a b = TypeFun (TypeN a) b
+pattern TypeFunS a b <- TypeFun (TypeN a) b where
+    TypeFunS a b = TypeFun (TypeN' a "typefun") b
 pattern TFMat a b               = TypeFunS "Mat" [a, b]      -- may be data family
 pattern TFVec a b               = TypeFunS "Vec" [a, b]      -- may be data family
 pattern TFMatVecElem a          = TypeFunS "MatVecElem" [a]
@@ -609,7 +620,7 @@ instance FreeVars a => FreeVars [a]                 where freeVars = foldMap fre
 --instance FreeVars Typing where freeVars (TypingConstr m t) = freeVars m <> freeVars t
 instance FreeVars a => FreeVars (TypeFun n a)       where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (Env a)         where freeVars = foldMap freeVars
-instance FreeVars a => FreeVars (Constraint n a)    where freeVars = foldMap freeVars
+instance FreeVars a => FreeVars (Constraint' n a)    where freeVars = foldMap freeVars
 
 -------------------------------------------------------------------------------- Pretty show instances
 
@@ -627,7 +638,7 @@ instance PShow Lit where
 
 instance (PShow n, PShow c, PShow a) => PShow (Ty_ c n a) where
     pShowPrec p = \case
-        StarC -> "*"
+        Star_ -> "*"
         TLit_ l -> pShowPrec p l
         TVar_ n -> pShow n
         TCon_ n -> pShow n
@@ -635,8 +646,13 @@ instance (PShow n, PShow c, PShow a) => PShow (Ty_ c n a) where
         Forall_ Nothing a b -> pInfixr (-1) "->" p a b
         Forall_ (Just n) a b -> "forall" <+> pShow n <+> "::" <+> pShow a <> "." <+> pShow b
         TTuple_ a -> tupled $ map pShow a
---        | TRecord_ (Map FName a)
+        TRecord_ m -> "Record" <+> showRecord (Map.toList m)
         ConstraintKind_ c -> pShowPrec p c
+        Witness w -> pShowPrec p w
+
+instance PShow Witness where
+    pShowPrec p = \case
+        Refl -> "Refl"
 
 instance PShow Ty where
     pShowPrec p = \case
@@ -652,13 +668,17 @@ instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
         EApp_ a b -> pApp p a b
         ETuple_ a -> tupled $ map pShow a
         ELam_ p b -> "\\" <> pShow p <+> "->" <+> pShow b
+        ETypeSig_ b t -> pShow b <+> "::" <+> pShow t
+        EType_ t -> pShowPrec p t
         ELet_ a b c -> "let" <+> pShow a <+> "=" <+> pShow b <+> "in" </> pShow c
-        ERecord_ xs -> braces $ hsep $ punctuate (char ',') $ map (\(a, b) -> pShow a <> ":" <+> pShow b) xs
+        ENamedRecord_ n xs -> pShow n <+> showRecord xs
+        ERecord_ xs -> showRecord xs
         EFieldProj_ n -> "." <> pShow n
         EAlts_ i b -> int i <> braces (vcat $ punctuate (char ';') $ map pShow b)
         ENext_ -> "SKIP"
-        ETypeSig_ b t -> pShow b <+> "::" <+> pShow t
-        EType_ t -> pShowPrec p t
+
+
+showRecord = braces . hsep . punctuate (char ',') . map (\(a, b) -> pShow a <> ":" <+> pShow b)
 
 instance (PShow n, PShow t, PShow p, PShow a) => PShow (Exp' n t p ((,) a)) where
     pShowPrec p e = case getLams e of
@@ -682,8 +702,8 @@ instance (PShow c, PShow v, PShow b) => PShow (Pat_ c v b) where
         PVar_ v -> pShow v
         PCon_ s xs -> pApps p s xs
         PTuple_ a -> tupled $ map pShow a
-    --    PRecord_ p -> PRecord_ p
-    --    PAt_ v p -> PAt_ (g v) p
+        PRecord_ xs -> "Record" <+> showRecord xs
+        PAt_ v p -> pShow v <> "@" <> pShow p
         Wildcard_ -> "_"
 
 instance (PShow n, PShow c) => PShow (Pat' c n ((,) a)) where
@@ -695,7 +715,7 @@ instance (PShow n, PShow c) => PShow (Pat' c n Identity) where
 instance (PShow n, PShow a) => PShow (TypeFun n a) where
     pShowPrec p (TypeFun s xs) = pApps p s xs
 
-instance (PShow n, PShow a) => PShow (Constraint n a) where
+instance (PShow n, PShow a) => PShow (Constraint' n a) where
     pShowPrec p = \case
         CEq a b -> pShow a <+> "~" <+> pShow b
         CUnify a b -> pShow a <+> "~" <+> pShow b
@@ -711,6 +731,11 @@ instance PShow Var where
         VarT n t -> pShow n
 
 instance PShow TEnv where
+
+instance PShow Range where
+    pShowPrec p = \case
+        Range a b -> text (show a) <+> "--" <+> text (show b)
+        NoRange -> ""
 
 -------------------------------------------------------------------------------- replacement
 
@@ -733,6 +758,9 @@ instance Replace a => Replace (Env a) where
       where
         r x = fromMaybe x $ Map.lookup x st
 
+instance (Replace a, Replace b) => Replace (Either a b) where
+    repl st = either (Left . repl st) (Right . repl st)
+
 -------------------------------------------------------------------------------- pre-substitution
 
 -- TODO: review usage (use only after unification)
@@ -740,7 +768,7 @@ class Substitute a where subst_ :: Applicative m => Env (m Ty) -> a -> m a
 
 instance Substitute Ty where
     subst_ st = \case
---        ty | Map.null st -> return ty -- optimization
+ --       ty | Map.null st -> pure ty -- optimization
         StarToStar n -> pure $ StarToStar n
         Ty_ k s -> case s of
             Forall_ (Just n) a b -> Ty_ <$> subst_ st k <*> (Forall_ (Just n) <$> subst_ st a <*> subst_ (Map.delete n st) b)
@@ -761,7 +789,7 @@ instance Substitute SubstEnv where
 
         me f = either (fmap Left . f) (fmap Right . f)
 
-instance Substitute a => Substitute (Constraint n a) where subst_ = traverse . subst_
+instance Substitute a => Substitute (Constraint' n a) where subst_ = traverse . subst_
 instance Substitute a => Substitute [a]              where subst_ = traverse . subst_
 
 instance Substitute Var where
@@ -868,3 +896,41 @@ peelThunk (Exp env e) = mapExp vf (subst' env) (subst' env) $ applyEnv env <$> e
 buildLet :: [ValueDefT] -> ExpT -> ExpT
 buildLet es e = foldr (\(ValueDef p (e, t')) (x, t'') -> (ELet p e x, t'')) e es
 
+
+-------------------------------------------------------------------------------- WriterT'
+
+class Monoid' e where
+    type MonoidConstraint e (m :: * -> *) :: Constraint
+    mempty' :: e
+    mappend' :: MonoidConstraint e m => e -> e -> m e
+
+newtype WriterT' e m a
+  = WriterT' {runWriterT' :: m (e, a)}
+    deriving (Functor,Foldable,Traversable)
+
+instance (Monoid' e) => MonadTrans (WriterT' e) where
+    lift m = WriterT' $ (,) mempty' <$> m
+
+instance (Monoid' e, Monad m, MonoidConstraint e m) => Applicative (WriterT' e m) where
+    pure a = WriterT' $ pure (mempty', a)
+    a <*> b = join $ (<$> b) <$> a
+
+instance (Monoid' e, Monad m, MonoidConstraint e m) => Monad (WriterT' e m) where
+    WriterT' m >>= f = WriterT' $ do
+            (e1, a) <- m
+            (e2, b) <- runWriterT' $ f a
+            e <- mappend' e1 e2
+            return (e, b)
+
+instance (Monoid' e, MonoidConstraint e m, MonadReader r m) => MonadReader r (WriterT' e m) where
+    ask = lift ask
+    local f (WriterT' m) = WriterT' $ local f m
+
+instance (Monoid' e, MonoidConstraint e m, MonadState s m) => MonadState s (WriterT' e m) where
+    state f = lift $ state f
+
+instance (Monoid' e, MonoidConstraint e m, MonadError err m) => MonadError err (WriterT' e m) where
+    catchError (WriterT' m) f = WriterT' $ catchError m $ runWriterT' <$> f
+    throwError e = lift $ throwError e
+
+mapWriterT' f (WriterT' m) = WriterT' $ f m

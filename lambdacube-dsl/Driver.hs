@@ -7,6 +7,7 @@ import qualified Data.Map as Map
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
+import Control.Monad.Identity
 import Control.Arrow hiding ((<+>))
 import System.Directory
 import System.FilePath
@@ -22,7 +23,7 @@ import Typecheck hiding (Exp(..))
 
 type Modules = ([FilePath], Map FilePath PolyEnv)
 
-type MM = ReaderT [FilePath] (ErrorT (StateT Modules IO))
+type MM = ReaderT [FilePath] (ErrorT (StateT Modules (VarMT IO)))
 
 compileMain :: FilePath -> MName -> IO (Either String IR.Pipeline)
 compileMain path fname = fmap IR.compilePipeline <$> reducedMain path fname
@@ -32,7 +33,12 @@ reducedMain path fname =
     runMM [path] $ mkReduce <$> parseAndToCoreMain fname
 
 runMM :: [FilePath] -> MM a -> IO (Either String a) 
-runMM paths = flip evalStateT mempty . fmap (either (Left . show) Right) . runExceptT . flip runReaderT paths
+runMM paths
+    = flip evalStateT ['t': show i | i <- [0..]]
+    . flip evalStateT mempty
+    . fmap (either (Left . show) Right)
+    . runExceptT
+    . flip runReaderT paths
 
 catchMM :: MM a -> MM (Either String a)
 catchMM = mapReaderT $ \m -> lift $ either (Left . show) Right <$> runExceptT m
@@ -46,6 +52,7 @@ loadModule :: MName -> MM (FilePath, PolyEnv)
 loadModule mname = do
   fnames <- asks $ map $ flip lcModuleFile mname
   let
+    find :: [FilePath] -> MM (FilePath, PolyEnv)
     find [] = throwErrorTCM $ "can't find module" <+> hsep (map text fnames)
     find (fname: fs) = do
      b <- liftIO $ doesFileExist fname
@@ -57,11 +64,11 @@ loadModule mname = do
             modify $ (\x -> if fname `elem` x then x else fname: x) *** id
             return (fname, m)
          _ -> do
-            (src, e) <- lift $ mapExceptT lift $ parseLC fname
+            (src, e) <- lift $ mapExceptT (lift . lift) $ parseLC fname
             ms <- mapM loadModule $ moduleImports e
             mapError (InFile src) $ do
                 env <- joinPolyEnvs $ map snd ms
-                x <- lift $ mapExceptT liftIdentity $ inference_ env e
+                x <- lift $ mapExceptT (lift . mapStateT liftIdentity) $ inference_ env e
                 modify $ (fname:) *** Map.insert fname x
                 return (fname, x)
 
