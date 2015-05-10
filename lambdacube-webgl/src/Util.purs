@@ -3,9 +3,10 @@ module Util where
 import Debug.Trace
 
 import qualified Graphics.WebGLRaw as GL
-import Control.Monad.Eff.WebGL
 import Control.Monad.Eff
 import Control.Monad.Eff.Exception
+import Control.Monad.Eff.Ref
+import Control.Monad.Eff.WebGL
 import Data.Tuple
 
 import IR
@@ -59,5 +60,25 @@ toStreamType a = case a of
   M44F  -> return TM44F
   _     -> throwException $ error "invalid Stream Type"
 
+foreign import unsafeCoerce "function unsafeCoerce(a) {return a;}" :: forall a b. a -> b
+
+z2 = V2 0 0 :: V2F
+z3 = V3 0 0 0 :: V3F
+z4 = V4 0 0 0 0 :: V4F
+
 mkUniformSetter :: InputType -> GFX (Tuple GLUniform InputSetter)
-mkUniformSetter _ = throwException $ error "not implemented"
+mkUniformSetter t@Bool  = newRef false                        >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SBool  $ writeRef r)
+mkUniformSetter t@V2B   = newRef (V2 false false)             >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV2B   $ writeRef r)
+mkUniformSetter t@V3B   = newRef (V3 false false false)       >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV3B   $ writeRef r)
+mkUniformSetter t@V4B   = newRef (V4 false false false false) >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV4B   $ writeRef r)
+mkUniformSetter t@Int   = newRef 0                            >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SInt   $ writeRef r)
+mkUniformSetter t@V2I   = newRef (V2 0 0)                     >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV2I   $ writeRef r)
+mkUniformSetter t@V3I   = newRef (V3 0 0 0)                   >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV3I   $ writeRef r)
+mkUniformSetter t@V4I   = newRef (V4 0 0 0 0)                 >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV4I   $ writeRef r)
+mkUniformSetter t@Float = newRef 0                            >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SFloat $ writeRef r)
+mkUniformSetter t@V2F   = newRef (V2 0 0)                     >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV2F   $ writeRef r)
+mkUniformSetter t@V3F   = newRef (V3 0 0 0)                   >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV3F   $ writeRef r)
+mkUniformSetter t@V4F   = newRef (V4 0 0 0 0)                 >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV4F   $ writeRef r)
+mkUniformSetter t@M22F  = newRef (V2 z2 z2)                   >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM22F  $ writeRef r)
+mkUniformSetter t@M33F  = newRef (V3 z3 z3 z3)                >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM33F  $ writeRef r)
+mkUniformSetter t@M44F  = newRef (V4 z4 z4 z4 z4)             >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM44F  $ writeRef r)

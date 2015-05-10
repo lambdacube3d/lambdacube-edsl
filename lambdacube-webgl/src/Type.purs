@@ -183,4 +183,3 @@ data InputSetter
     | SM22F  (SetterFun M22F)
     | SM33F  (SetterFun M33F)
     | SM44F  (SetterFun M44F)
-
