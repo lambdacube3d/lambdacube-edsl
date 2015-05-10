@@ -175,6 +175,9 @@ uniformM44F n is = case StrMap.lookup n is of
   Just (SM44F fun) -> fun
   _ -> nullSetter n "M44F"
 
+createObjectCommands :: {} -> {-Trie (IORef GLint) -> -}StrMap.StrMap GLUniform -> GLObject -> GLProgram -> [GLObjectCommand]
+createObjectCommands _ _ _ _ = [] -- TODO: not implemented
+
 {-
   TODO
     input schema data structure

@@ -140,10 +140,20 @@ type GLObject = -- internal type
     , commands   :: RefVal [[[GLObjectCommand]]]  -- pipeline id, program name, commands
     }
 
+data InputConnection = InputConnection
+  { id                      :: Int                -- identifier (vector index) for attached pipeline
+  , input                   :: WebGLPipelineInput
+  , slotMapPipelineToInput  :: [SlotName]         -- GLPipeline to GLPipelineInput slot name mapping
+  , slotMapInputToPipeline  :: [Maybe SlotName]   -- GLPipelineInput to GLPipeline slot name mapping
+  }
+
 type WebGLPipeline =
-  { targets   :: [RenderTarget]
-  , programs  :: [GLProgram]
-  , commands  :: [Command]
+  { targets       :: [RenderTarget]
+  , programs      :: [GLProgram]
+  , commands      :: [Command]
+  , input         :: RefVal (Maybe InputConnection)
+  , slotNames     :: [String]
+  , slotPrograms  :: [[ProgramName]] -- program list for every slot (programs depend on a slot)
   }
 
 type GLProgram =

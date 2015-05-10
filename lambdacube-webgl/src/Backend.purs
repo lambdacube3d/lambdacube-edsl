@@ -6,17 +6,21 @@ import Prelude.Unsafe (unsafeIndex)
 import qualified Graphics.WebGLRaw as GL
 import Control.Monad.Eff.Exception
 import Control.Monad.Eff.WebGL
+import Control.Monad.Eff.Ref
 import Control.Monad.Eff
 import Control.Monad
 import Data.Foldable
 import Data.Traversable
 import qualified Data.StrMap as StrMap
+import qualified Data.Map as Map
 import Data.Tuple
 import Data.Maybe
+import Data.Array
 
 import Type
 import IR
 import Util
+import Input
 
 setupRasterContext :: RasterContext -> GFX Unit
 setupRasterContext = cvt
@@ -225,7 +229,15 @@ allocPipeline p = do
     - commands
   -}
   prgs <- traverse (compileProgram StrMap.empty) p.programs
-  return {targets: p.targets, programs: prgs, commands: p.commands}
+  input <- newRef Nothing
+  return
+    { targets: p.targets
+    , programs: prgs
+    , commands: p.commands
+    , input: input
+    , slotPrograms: map (\a -> a.slotPrograms) p.slots
+    , slotNames: map (\a -> a.slotName) p.slots
+    }
 {-
 allocPipeline p = do
     let uniTrie = uniforms $ schemaFromPipeline p
@@ -280,8 +292,66 @@ disposePipeline p = do
   return unit
 
 setPipelineInput :: WebGLPipeline -> Maybe WebGLPipelineInput -> GFX Unit
-setPipelineInput _ _ = throwException $ error "not implemented"
+setPipelineInput p input' = do
+    -- TODO: check matching input schema
+    ic' <- readRef p.input
+    case ic' of
+        Nothing -> return unit
+        Just (InputConnection ic) -> do
+            modifyRef ic.input.pipelines $ \v -> updateAt ic.id Nothing v
+            flip traverse ic.slotMapPipelineToInput $ \slotIdx -> do
+                slot <- readRef (ic.input.slotVector `unsafeIndex` slotIdx)
+                flip traverse (Map.values slot.objectMap) $ \obj -> do
+                    modifyRef obj.commands $ \v -> updateAt ic.id [] v
+            return unit
+    {-
+        addition:
+            - get an id from pipeline input
+            - add to attached pipelines
+            - generate slot mappings
+            - update used slots, and generate object commands for objects in the related slots
+    -}
+    case input' of
+        Nothing -> writeRef p.input Nothing
+        Just input -> do
+            oldPipelineV <- readRef input.pipelines
+            Tuple idx shouldExtend <- case findIndex isNothing oldPipelineV of
+                (-1) -> do
+                    -- we don't have empty space, hence we double the vector size
+                    let len = length oldPipelineV
+                    modifyRef input.pipelines $ \v -> updateAt len (Just p) (concat [v,replicate len Nothing])
+                    return $ Tuple len (Just len)
+                i -> do
+                    modifyRef input.pipelines $ \v -> updateAt i (Just p) v
+                    return $ Tuple i Nothing
+            -- create input connection
+            pToI <- flip traverse p.slotNames $ \n -> case StrMap.lookup n input.slotMap of
+              Nothing -> throwException $ error "internal error: unknown slot name in input"
+              Just i -> return i
+            let iToP = foldr (\(Tuple i v) -> updateAt v (Just i)) (replicate (StrMap.size input.slotMap) Nothing) (zip (0..length pToI) pToI)
+            writeRef p.input $ Just $ InputConnection {id: idx, input: input, slotMapPipelineToInput: pToI, slotMapInputToPipeline: iToP}
 
+            -- generate object commands for related slots
+            {-
+                for each slot in pipeline:
+                    map slot name to input slot name
+                    for each object:
+                        generate command program vector => for each dependent program:
+                            generate object commands
+            -}
+            let texUnitMap = {} --TODO: glTexUnitMapping p
+                topUnis = input.uniformSetup
+                emptyV  = replicate (length p.programs) []
+                extend v = case shouldExtend of
+                    Nothing -> v
+                    Just l  -> concat [v,replicate l []]
+            flip traverse (zip pToI p.slotPrograms) $ \(Tuple slotIdx prgs) -> do
+                slot <- readRef $ input.slotVector `unsafeIndex` slotIdx
+                flip traverse (Map.values slot.objectMap) $ \obj -> do
+                    let updateCmds v prgIdx = updateAt prgIdx (createObjectCommands texUnitMap topUnis obj (p.programs `unsafeIndex` prgIdx)) v
+                        cmdV = foldl updateCmds emptyV prgs
+                    modifyRef obj.commands $ \v -> updateAt idx cmdV (extend v)
+            return unit
 {-
 shaders :: Shaders {aVertexPosition :: Attribute Vec3, uPMatrix :: Uniform Mat4, uMVMatrix:: Uniform Mat4}
 shaders = Shaders
