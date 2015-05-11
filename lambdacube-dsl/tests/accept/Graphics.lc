@@ -26,7 +26,6 @@ zero' = PrimZero
 one' = PrimOne
 normalize' = PrimNormalize
 texture' = PrimTexture
-negate x = 0 -. x
 
 singT = id
 
@@ -59,7 +58,7 @@ mkRasterContext ca = TriangleCtx cull PolygonFill offset LastVertex
         CT_BackSided    -> CullBack CCW
         CT_TwoSided     -> CullNone
 
---mkAccumulationContext :: StageAttrs -> (FragmentOperation (Depth Float), FragmentOperation (Color (Vec 4 Float)))
+--mkAccumulationContext :: StageAttrs -> AccumulationContext (Depth Float, Color (Vec 4 Float))
 mkAccumulationContext sa = AccumulationContext (DepthOp depthFunc depthWrite, ColorOp blend (one' :: Vec 4 Bool))
   where
     depthWrite  = saDepthWrite sa

@@ -221,10 +221,10 @@ reduceConstraint cvar x = do
                 _ -> nothing --like $ TFVec a b
             _ -> like $ TFVec a b
 
-        TFMatVecElem t -> case t of
+        TFMatVecElem t -> observe t $ \case
             TVec _ t -> reduced t
             TMat _ _ t -> reduced t
-            _ -> nothing --trace ("###### " ++ ppShow t) nothing
+            _ -> fail $ "no instance matvecelem" <+> pShow t
 
         TFMatVecScalarElem t -> observe t $ \case
             t | t `elem'` floatIntWordBool -> reduced t

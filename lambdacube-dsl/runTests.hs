@@ -111,7 +111,7 @@ limit msg n s = take n s ++ if null (drop n s) then "" else msg
 
 showRanges :: String -> [Int] -> String -> String
 showRanges fname is e = (if head rs == 0 then "" else "...\n")
-    ++ limit ("\n... (see " ++ fname ++ " for more differences)") 4000 (intercalate "\n...\n" $ f (zipWith (-) rs (0:rs)) e)
+    ++ limit ("\n... (see " ++ fname ++ " for more differences)") 140000 (intercalate "\n...\n" $ f (zipWith (-) rs (0:rs)) e)
   where
     f :: [Int] -> String -> [String]
     f (i:is) e = g is $ drop i e
@@ -119,6 +119,6 @@ showRanges fname is e = (if head rs == 0 then "" else "...\n")
     f [] _ = ["\n..."]
     g (i:is) e = take i e: f is (drop i e)
     rs = (head is - x) : concat [[a + x, b - x] | (a, b) <- zip is (tail is), a + y < b] ++ [last is + x]
-    x = 2000
+    x = 100000
     y = 3*x
 

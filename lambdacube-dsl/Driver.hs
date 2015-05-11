@@ -76,17 +76,25 @@ loadModule mname = do
 
 lcModuleFile path n = path </> (showN n ++ ".lc")
 
-getType n = either putStrLn (putStrLn . ppShow) =<< runMM ["./tests/accept"] (snd <$> getDef_ (ExpN "Prelude") (ExpN n))
+getType = getType_ "Prelude"
+getType_ m n = either putStrLn (putStrLn . ppShow) =<< runMM ["./tests/accept"] (snd <$> getDef__ (ExpN m) (ExpN n))
 
 getDef :: MName -> EName -> MM ExpT
 getDef = getDef_
 --    either (\s -> throwErrorTCM $ pShow m <> "." <> pShow d <> ":" <+> s) return =<< getDef_ m d
 
+getDef__ :: MName -> EName -> MM ExpT
+getDef__ m d = do
+    clearImports
+    (fm, pe) <- loadModule m
+    fmap (\(m, x) -> (undefined, typingToTy m x)) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
+
 getDef_ :: MName -> EName -> MM ExpT
 getDef_ m d = do
     clearImports
     (fm, pe) <- loadModule m
-    fmap (\(m, x) -> (undefined, typingToTy m x)) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
+--    fmap (\(m, x) -> (undefined, typingToTy m x)) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
+    throwErrorTCM "not found"
 --    (ms_, mods) <- get
 --    let ms = zip ms_ $ map (mods Map.!) ms_
 
