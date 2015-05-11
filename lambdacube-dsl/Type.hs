@@ -35,6 +35,7 @@ import Control.Applicative
 import Control.Arrow hiding ((<+>))
 import Text.Parsec.Pos
 import GHC.Exts (Constraint)
+import Debug.Trace
 
 import ParserUtil (ParseError)
 import Pretty
@@ -325,10 +326,6 @@ instance Ord N where N a b c d `compare` N a' b' c' d' = (a, b, c) `compare` (a'
 type Fixity = (Maybe FixityDir, Int)
 data FixityDir = FDLeft | FDRight
 
--- TODO: eliminate
-showN :: N -> String
-showN = ppShow
-
 pattern ExpN n <- N ExpNS [] n _ where
     ExpN n = N ExpNS [] n (NameInfo Nothing "exp")
 pattern ExpN' n i = N ExpNS [] n (NameInfo Nothing i)
@@ -517,10 +514,12 @@ type EnvMap = Env (Maybe Thunk)   -- Nothing: statically unknown but defined
 
 data PolyEnv = PolyEnv
     { instanceDefs :: InstanceDefs
-    , getPolyEnv :: Env' InstType
+    , getPolyEnv :: InstEnv
     , precedences :: PrecMap
     , thunkEnv :: EnvMap
     }
+
+type InstEnv = Env' InstType'
 
 type PrecMap = Env' Fixity
 
@@ -531,6 +530,7 @@ type InstanceDefs = Env' (Set Ty)
 type TypingT = WriterT' SubstEnv
 
 type InstType = TypingT (VarMT Identity) Ty
+type InstType' = Doc -> InstType
 
 pureInstType = lift . pure
 
@@ -635,9 +635,16 @@ instance FreeVars a => FreeVars (Constraint' n a)    where freeVars = foldMap fr
 
 -------------------------------------------------------------------------------- Pretty show instances
 
+-- TODO: eliminate
+showN :: N -> String
+showN (N _ qs s _) = show $ hcat (punctuate (char '.') $ map text $ qs ++ [s])
+
 instance PShow N where
     pShowPrec p = \case
-        N _ qs s _ -> hcat $ punctuate (char '.') $ map text $ qs ++ [s]
+        N _ qs s (NameInfo _ i) -> hcat (punctuate (char '.') $ map text $ qs ++ [s]) -- <> "{" <> i <> "}"
+
+--showVar (N _ _ n (NameInfo _ i)) = text n <> "{" <> i <> "}"
+showVar = pShow
 
 --instance PShow IdN where pShowPrec p (IdN n) = pShowPrec p n
 
@@ -730,7 +737,7 @@ instance (PShow n, PShow a) => PShow (TypeFun n a) where
 
 instance (PShow n, PShow a) => PShow (Constraint' n a) where
     pShowPrec p = \case
-        CEq a b -> pShow a <+> "~" <+> pShow b
+        CEq a b -> pShow a <+> "~~" <+> pShow b
         CUnify a b -> pShow a <+> "~" <+> pShow b
         CClass a b -> pShow a <+> pShow b
 --        | Split a a a         -- Split x y z:  x, y, z are records; fields of x = disjoint union of the fields of y and z
@@ -749,9 +756,6 @@ instance PShow Range where
     pShowPrec p = \case
         Range a b -> text (show a) <+> "--" <+> text (show b)
         NoRange -> ""
-
-instance (PShow a, PShow b) => PShow (Either a b) where
-    pShowPrec p = either (("Left" <+>) . pShow) (("Right" <+>) . pShow)
 
 -------------------------------------------------------------------------------- replacement
 
@@ -777,36 +781,64 @@ instance Replace a => Replace (Env a) where
 instance (Replace a, Replace b) => Replace (Either a b) where
     repl st = either (Left . repl st) (Right . repl st)
 
--------------------------------------------------------------------------------- pre-substitution
+-------------------------------------------------------------------------------- substitution
+
+data Subst_ = Subst_ { showS :: Doc, lookupS :: Name -> Maybe Ty, delN :: Name -> Subst_ }
 
 -- TODO: review usage (use only after unification)
-class Substitute a where subst_ :: Applicative m => Env (m Ty) -> a -> m a
+class Substitute a where subst_ :: Subst_ -> a -> a
+
+subst :: Substitute a => Subst -> a -> a
+subst = subst_ . mkSubst
+  where
+    mkSubst :: Subst -> Subst_
+    mkSubst s = Subst_ (pShow s) (`Map.lookup` s) $ \n -> mkSubst $ Map.delete n s
+
+substEnvSubst :: Substitute a => SubstEnv -> a -> a
+substEnvSubst = subst_ . mkSubst'
+  where
+    mkSubst' :: SubstEnv -> Subst_
+    mkSubst' s = Subst_ (pShow s) ((`Map.lookup` s) >=> either Just (const Nothing)) $ \n -> mkSubst' $ Map.delete n s
+
+trace' x = trace (ppShow x) x
+
+recsubst :: (Ty -> IdN -> Ty) -> (IdN -> Ty -> Ty) -> Ty -> Ty
+recsubst g h = \case
+    StarToStar n -> StarToStar n
+    Ty_ k s -> case s of
+        Forall_ (Just n) a b -> Ty_ (f k) $ Forall_ (Just n) (f a) $ h n b
+        TVar_ v -> g (Ty_ (f k) $ TVar_ v) v
+        _ -> Ty_ (f k) $ f <$> s
+  where
+    f = recsubst g h
 
 instance Substitute Ty where
-    subst_ st = \case
- --       ty | Map.null st -> pure ty -- optimization
-        StarToStar n -> pure $ StarToStar n
-        Ty_ k s -> case s of
-            Forall_ (Just n) a b -> Ty_ <$> subst_ st k <*> (Forall_ (Just n) <$> subst_ st a <*> subst_ (Map.delete n st) b)
-            TVar_ a | Just t <- Map.lookup a st -> t
-            _ -> Ty_ <$> subst_ st k <*> traverse (subst_ st) s
-
+    subst_ st t = f mempty st t where
+      f acc st = recsubst r1 r2 where
+            r2 n = f acc (delN st n)
+            r1 def a
+                | Set.member a acc = error $ "cycle" ++ show (showS st <$$> pShow t)
+                | Just t <- lookupS st a = f (Set.insert a acc) st t
+                | otherwise = def
+{-
 instance Substitute (Env Ty) where
     subst_ st = fmap (Map.fromList . concat) . sequenceA . map f . Map.toList where
         f (x, y)
             | Map.member x st = pure []
             | otherwise = (:[]) . (,) x <$> subst_ st y
-
+-}
 instance Substitute SubstEnv where
-    subst_ st = fmap Map.fromList{-TODO: optimize-} . sequenceA . map f . Map.toList where
+    subst_ st = Map.fromDistinctAscList . concatMap f . Map.toList where
         f (x, y)
-            | Just t <- Map.lookup x st = (,) x . Left <$> t
-            | otherwise = (,) x <$> me (subst_ st) y
+            | Just _ <- lookupS st x = []
+            | otherwise = [(x, either Left (Right . subst_ st) y)]
 
-        me f = either (fmap Left . f) (fmap Right . f)
+--instance Substitute a => Substitute (Constraint' n a)      where subst_ = fmap . subst_
+--instance Substitute a => Substitute [a]                    where subst_ = fmap . subst_
+instance (Substitute a, Substitute b) => Substitute (a, b) where subst_ s (a, b) = (subst_ s a, subst_ s b)
 
-instance Substitute a => Substitute (Constraint' n a) where subst_ = traverse . subst_
-instance Substitute a => Substitute [a]              where subst_ = traverse . subst_
+instance Substitute Exp where
+    subst_ s e = e -- TODO!
 
 instance Substitute Var where
 {-
@@ -823,16 +855,6 @@ instance Substitute Pat where
         PCon (n, ty) l -> PCon (n, subst s ty) $ subst s l
         Pat p -> Pat $ fmap (subst s) p
 -}
-
--------------------------------------------------------------------------------- substitution
-
--- TODO: review usage (use only after unification)
-subst :: Substitute a => Subst -> a -> a
-subst s = runIdentity . subst_ (pure <$> s)
-
--- instance Substitute Ty where --subst st = join . subst_ st
---instance Substitute Typing where subst st = join . subst_ st
--- instance Substitute a => Substitute [a] where subst = fmap . subst
 
 --------------------------------------------------------------------------------
 

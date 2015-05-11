@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Pretty
     ( module Pretty
@@ -63,11 +64,14 @@ instance (PShow a, PShow b, PShow c) => PShow (a, b, c) where
     pShowPrec p (a, b, c) = tupled [pShow a, pShow b, pShow c]
 
 instance PShow a => PShow [a] where
-    pShowPrec p = brackets . hsep . punctuate comma . map pShow
+    pShowPrec p = brackets . sep . punctuate comma . map pShow
 
 instance PShow a => PShow (Set a) where
     pShowPrec p = pShowPrec p . Set.toList
 
 instance (PShow s, PShow a) => PShow (Map s a) where
     pShowPrec p = braces . vcat . map (\(k, t) -> pShow k <> colon <+> pShow t) . Map.toList
+
+instance (PShow a, PShow b) => PShow (Either a b) where
+    pShowPrec p = either (("Left" <+>) . pShow) (("Right" <+>) . pShow)
 

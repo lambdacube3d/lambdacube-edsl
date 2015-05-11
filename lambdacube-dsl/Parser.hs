@@ -80,8 +80,9 @@ qVar = var <|> {-runUnspaced-} (try' "qualified var" $ sepBy ({-Unspaced-} upper
 
 operator' :: P N
 operator' = try' "operator" (do
+                  p <- position
                   i <- ident lcOps
-                  if head i == ':' then fail "operator cannot start with ':'" else return $ ExpN i)
+                  if head i == ':' then fail "operator cannot start with ':'" else return $ ExpN' i $ P.text $ show p)
         <|> (operator "." *> pure (ExpN "."))
         <|> (operator ":" *> pure (ExpN "Cons"))
 
