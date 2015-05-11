@@ -589,7 +589,7 @@ expressionAtom_ =
 literal :: P Lit
 literal =
     LFloat <$> try double <|>
-    LInt <$> try integer <|>
+    LInt <$> try natural <|>
     LChar <$> charLiteral <|>
     LString <$> stringLiteral
 

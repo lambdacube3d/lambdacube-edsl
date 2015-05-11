@@ -66,7 +66,7 @@ loadModule mname = do
          _ -> do
             (src, e) <- lift $ mapExceptT (lift . lift) $ parseLC fname
             ms <- mapM loadModule $ moduleImports e
-            mapError (InFile src) $ do
+            mapError (InFile src) $ trace ("loading " ++ fname) $ do
                 env <- joinPolyEnvs $ map snd ms
                 x <- lift $ mapExceptT (lift . mapStateT liftIdentity) $ inference_ env e
                 modify $ (fname:) *** Map.insert fname x
@@ -76,6 +76,8 @@ loadModule mname = do
 
 lcModuleFile path n = path </> (showN n ++ ".lc")
 
+getType n = either putStrLn (putStrLn . ppShow) =<< runMM ["./tests/accept"] (snd <$> getDef_ (ExpN "Prelude") (ExpN n))
+
 getDef :: MName -> EName -> MM ExpT
 getDef = getDef_
 --    either (\s -> throwErrorTCM $ pShow m <> "." <> pShow d <> ":" <+> s) return =<< getDef_ m d
@@ -83,10 +85,11 @@ getDef = getDef_
 getDef_ :: MName -> EName -> MM ExpT
 getDef_ m d = do
     clearImports
-    (fm, _) <- loadModule m
-    (ms_, mods) <- get
-    let ms = zip ms_ $ map (mods Map.!) ms_
-    throwErrorTCM "not found"
+    (fm, pe) <- loadModule m
+    fmap (\(m, x) -> (undefined, typingToTy m x)) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
+--    (ms_, mods) <- get
+--    let ms = zip ms_ $ map (mods Map.!) ms_
+
 {- TODO
     return $ case
         [ buildLet ((\ds -> [d | DValueDef d <- ds]) (concatMap (definitions . snd) (reverse dss) ++ reverse ps)) e

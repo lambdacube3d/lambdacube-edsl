@@ -75,3 +75,6 @@ instance (PShow s, PShow a) => PShow (Map s a) where
 instance (PShow a, PShow b) => PShow (Either a b) where
     pShowPrec p = either (("Left" <+>) . pShow) (("Right" <+>) . pShow)
 
+instance PShow Doc where
+    pShowPrec p x = braces x
+

@@ -664,6 +664,7 @@ instance (PShow n, PShow c, PShow a) => PShow (Ty_ c n a) where
         TCon_ n -> pShow n
         TApp_ a b -> pApp p a b
         Forall_ Nothing a b -> pInfixr (-1) "->" p a b
+--        Forall_ (Just n) (a) b -> "forall" <+> pShow n <+> "::" <+> pShow (_ a) <> "." <+> pShow b
         Forall_ (Just n) a b -> "forall" <+> pShow n <+> "::" <+> pShow a <> "." <+> pShow b
         TTuple_ a -> tupled $ map pShow a
         TRecord_ m -> "Record" <+> showRecord (Map.toList m)

@@ -365,9 +365,12 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
 appSES :: (Substitute x, Monad m) => TypingT m x -> TypingT m x
 appSES (WriterT' m) = WriterT' $ do
     (se, x) <- m
-    return (substEnvSubst se se, substEnvSubst se x)
+    return (either (Left . substEnvSubst se) (Right . substEnvSubst se) <$> se, substEnvSubst se x)
 
 runWriterT'' = runWriterT' . appSES
+
+--  {x |-> Float,  z |-> x}  {z |-> y}
+--  {x |-> y}
 
 joinSE :: forall m . (MonadReader PolyEnv m, MonadError ErrorMsg m) => [SubstEnv] -> m SubstEnv
 joinSE = \case
@@ -381,7 +384,7 @@ joinSE = \case
     joinSubsts :: forall m . (MonadError ErrorMsg m) => [Subst] -> m Subst
     joinSubsts ss = do
         s <- addCtx "joinSubsts" $ unifyTypes True $ unifyMaps ss
-        return $ s <> mconcat ss
+        return $ mconcat $ ((subst s <$>) <$> ss)
 
     appSubst :: Subst -> SubstEnv -> SubstEnv
     appSubst s e = either (Left . substEnvSubst e') (Right . substEnvSubst e') <$> e' where e' = (Left <$> s) <> e
@@ -432,7 +435,7 @@ addConstraint c = newName "constraint" >>= \n -> addConstraints $ Map.singleton 
 addUnif :: Ty -> Ty -> TCMS ()
 addUnif t1 t2 = addConstraint $ t1 ~~~ t2
 
-checkStarKind t = addUnif Star (kindOf t)
+checkStarKind t = addUnif Star t
 
 star = return Star
 
@@ -456,8 +459,8 @@ withTyping ts m = do
 
 instantiateTyping' :: Doc -> SubstEnv -> Ty -> TCM InstType'
 instantiateTyping' info se ty = do
-    ambiguityCheck ".." se ty
-    pe <- asks $ getPolyEnv
+    ambiguityCheck ("ambcheck" <+> info) se ty
+--    pe <- asks $ getPolyEnv
     let p n (Right _) = True --n `Map.notMember` pe
         p _ _ = False
         se' = Map.filterWithKey p se
@@ -488,30 +491,34 @@ lookEnv n m = asks (Map.lookup n . getPolyEnv) >>= maybe m (toTCMS . ($ pShow n)
 ambiguityCheck msg se ty = do
     pe <- asks getPolyEnv
     let
-        cs = [c | (n, Right (ConstraintKind c)) <- Map.toList se]
+        cs = [(n, c) | (n, Right c) <- Map.toList se]
         defined = dependentVars cs $ Map.keysSet pe <> freeVars ty
         def n = n `Set.member` defined || n `Map.member` pe
-        ok c = any def $ freeVars c
-    if all ok cs then return () else throwError . ErrorMsg $
-            "during" <+> msg </> "ambiguous type:" </> pShow se </> pShow cs </> "=>" </> pShow ty -- </> "defined vars:" <+> pShow (toList defined)
+        ok (n, c) = any def $ Set.insert n $ freeVars c
+    case filter (not . ok) cs of
+        [] -> return ()
+        err -> throwError . ErrorMsg $
+            "during" <+> msg </> "ambiguous type:" <$$> pShow se <$$> pShow cs </> "=>" </> pShow ty <$$> "problematic vars:" <+> pShow err
 
 --typing me ty = TypingConstr me ty
 --    dependentVars cs (freeVars ty) Set.\\ freeVars me  -- TODO: make it more precise if necessary
 
 -- compute dependent type vars in constraints
 -- Example:  dependentVars [(a, b) ~ F b c, d ~ F e] [c] == [a,b,c]
-dependentVars :: [ConstraintT] -> Set TName -> Set TName
+dependentVars :: [(IdN, Ty)] -> Set TName -> Set TName
 dependentVars ie s = cycle mempty s
   where
     cycle acc s
         | Set.null s = acc
         | otherwise = cycle (acc <> s) (grow s Set.\\ acc)
 
-    grow = flip foldMap ie $ \case
-        CEq ty f -> freeVars ty <-> freeVars f
-        Split a b c -> freeVars a <-> (freeVars b <> freeVars c)
-        CUnify{} -> mempty --error "dependentVars: impossible" 
-        CClass{} -> mempty
+    grow = flip foldMap ie $ \(n, t) -> (Set.singleton n <-> freeVars t) <> case t of
+        ConstraintKind c -> case c of
+            CEq ty f -> freeVars ty <-> freeVars f
+            Split a b c -> freeVars a <-> (freeVars b <> freeVars c)
+            CUnify{} -> mempty --error "dependentVars: impossible" 
+            CClass{} -> mempty
+        _ -> mempty
       where
         a --> b = \s -> if Set.null $ a `Set.intersection` s then mempty else b
         a <-> b = (a --> b) <> (b --> a)
@@ -543,10 +550,11 @@ inferKind_ = {-appSES .-} inferKind
 -- TODO: ambiguity check
 inferKind :: TyR -> TCMS Ty
 inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ appSES $ case ty of
-    Forall_ (Just n) k t -> do
+    Forall_ (Just n) k t -> removeMonoVars $ do
         k <- inferKind k
-        t <- withTyping (Map.singleton n $ mkInstType n k) $ inferKind t
-        return $ Ty Star $ Forall_ (Just n) k t --  TODO: review
+        addConstraints $ Map.singleton n $ Right k
+        t <- withTyping (Map.singleton n $ monoInstType n k) $ inferKind t
+        return $ (,) (Set.fromList [n]) $ Ty Star $ Forall_ (Just n) k t
     _ -> do
         ty <- traverse inferKind ty
         k <- case kindOf <$> ty of
@@ -576,8 +584,9 @@ inferPatTyping polymorph p_@(Pat pt p) = addRange pt $ addCtx ("type inference o
         Wildcard_ -> noTr $ newStarVar "_" >>= \t -> return t
         PVar_ n -> do
             t <- newStarVar "pvar"
-            when (not polymorph) $ addConstraints $ Map.singleton n $ Right t       -- ??
-            return $ (,) t $ Map.singleton n $ monoInstType n t   -- ??
+--            when (not polymorph) $ 
+            addConstraints $ Map.singleton n $ Right t
+            return $ (,) t $ Map.singleton n $ monoInstType n t
 
         PAt_ n p -> addTr (\t -> Map.singleton n $ monoInstType n t) $ pure $ snd . fst $ p
 
@@ -676,16 +685,16 @@ instance MonadWriter (Env b) (Typing_ b) where
     pass (TypingConstr m (t, f)) = TypingConstr (f m) t
 
 type Typing = Typing_ Ty Ty
-
+-}
 -- TODO: review applications of this
-typingToTy :: Typing -> Ty
-typingToTy ty = foldr forall_ (typingType ty) $ orderEnv $ monoEnv ty
+typingToTy :: SubstEnv -> Ty -> Ty
+typingToTy env ty = foldr forall_ ty $ orderEnv env
   where
     forall_ (n, k) t = Forall n k t
 
     -- TODO: make more efficient
-    orderEnv :: Env Ty -> [(IdN, Ty)]
-    orderEnv env = f mempty . Map.toList $ env
+    orderEnv :: SubstEnv -> [(IdN, Ty)]
+    orderEnv env = f mempty [(n, t) | (n, Right t) <- Map.toList env]
       where
         f :: Set IdN -> [(IdN, Ty)] -> [(IdN, Ty)]
         f s [] = []
@@ -693,11 +702,11 @@ typingToTy ty = foldr forall_ (typingType ty) $ orderEnv $ monoEnv ty
             (((n, t), ts):_) -> (n, t): f (Set.insert n s) ts
             _ -> error $ show $ "orderEnv:" <+> pShow ty
         getOne xs = [(b, a ++ c) | (a, b: c) <- zip (inits xs) (tails xs)]
--}
+
 
 --------------------------------------------------------------------------------
 
-trace' s = trace (ppShow s) s
+--trace' s = trace (ppShow s) s
 
 tyConKind :: [TyR] -> TCM InstType'
 tyConKind vs = instantiateTyping "tyconkind" $ foldr (liftA2 (~>)) star $ map inferKind vs
@@ -740,13 +749,14 @@ inferDef :: ValueDefR -> TCM (TCM a -> TCM a)
 inferDef (ValueDef p@(PVar' _ n) e) = do
     (se, (exp, te)) <- runWriterT'' $ removeMonoVars $ do
 --        ((p, tp), (ns, tr)) <- inferPatTyping False p
-        tn <- newStarVar $ pShow n
-        (exp, te) <- withTyping (Map.singleton n $ mkInstType n tn) $ inferTyping e
+        tn@(TVar _ tv) <- newStarVar $ pShow n
+        addConstraints $ Map.singleton n $ Right tn
+        (exp, te) <- withTyping (Map.singleton n $ monoInstType n tn) $ inferTyping e
 --        addUnif tp te
-        return $ (,) (Set.singleton n) (exp, te) 
+        return $ (,) (Set.fromList [n, tv]) (exp, te) 
     -- TODO: removeMonoVars?
     -- TODO: subst down
-    f <- {- trace (ppShow (Map.filter isRight se, (n, te))) $ -} instantiateTyping' (pShow n) se te
+    f <- {- trace (ppShow (Map.filter isRight se, (n, te))) $ -} addCtx ("inst" <+> pShow n) $ instantiateTyping' (pShow n) se te
     return ({-ValueDef (PVar $ VarE n te) (exp, te), -}withTyping $ Map.singleton n f) -- TODO: replCallType n (getTag e) e
 
 {-
@@ -775,7 +785,7 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
         tk <- tyConKind $ map snd vars
         withTyping (Map.singleton con tk) $ do
             cdefs <- forM cdefs $ \(c, t) -> do
-                ty <- instantiateTyping (pShow c) $ inferKind t
+                ty <- instantiateTyping ("GADT" <+> pShow c) $ inferKind t
                 return $ Map.singleton c ty
             withTyping (mconcat cdefs) cont
     ClassDef con [(vn, vark)] cdefs -> do

@@ -52,6 +52,7 @@ writeReduced = runMM' . (testFrame ["./tests/accept"] $ \case
     Right e -> Right ("reduced main ", ppShow . mkReduce . fst $ e))
 
 main' x = runMM' $ acceptTests [x]
+main'' x = runMM' $ rejectTests [x]
 
 acceptTests = testFrame ["./tests/accept", "./tests/reject"] $ \case
     Left e -> Left e
