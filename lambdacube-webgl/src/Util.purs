@@ -8,6 +8,7 @@ import Control.Monad.Eff.Exception
 import Control.Monad.Eff.Ref
 import Control.Monad.Eff.WebGL
 import Data.Tuple
+import Data.Array
 
 import IR
 import Type
@@ -82,3 +83,18 @@ mkUniformSetter t@V4F   = newRef (V4 0 0 0 0)                 >>= \r -> return $
 mkUniformSetter t@M22F  = newRef (V2 z2 z2)                   >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM22F  $ writeRef r)
 mkUniformSetter t@M33F  = newRef (V3 z3 z3 z3)                >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM33F  $ writeRef r)
 mkUniformSetter t@M44F  = newRef (V4 z4 z4 z4 z4)             >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM44F  $ writeRef r)
+
+primitiveToFetchPrimitive :: Primitive -> FetchPrimitive
+primitiveToFetchPrimitive prim = case prim of
+  TriangleStrip           -> Triangles
+  TriangleList            -> Triangles
+  TriangleFan             -> Triangles
+  LineStrip               -> Lines
+  LineLoop                -> Lines
+  LineList                -> Lines
+  PointList               -> Points
+
+unlines :: [String] -> String
+unlines [] = ""
+unlines [x] = x
+unlines (x:xs) = x ++ "\n" ++ unlines xs

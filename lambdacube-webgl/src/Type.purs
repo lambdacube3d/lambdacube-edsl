@@ -59,7 +59,27 @@ data StreamType
     | TV4F
     | TM22F
     | TM33F
-    | TM44F
+    | TM44F 
+
+instance eqStreamType :: Eq (StreamType) where
+  (==) TFloat TFloat = true
+  (==) TV2F   TV2F   = true
+  (==) TV3F   TV3F   = true
+  (==) TV4F   TV4F   = true
+  (==) TM22F  TM22F  = true
+  (==) TM33F  TM33F  = true
+  (==) TM44F  TM44F  = true
+  (==) _      _      = false
+  (/=) a      b      = not (a == b)
+
+instance showStreamType :: Show (StreamType) where
+  show TFloat = "TFloat"
+  show TV2F   = "TV2F"
+  show TV3F   = "TV3F"
+  show TV4F   = "TV4F"
+  show TM22F  = "TM22F"
+  show TM33F  = "TM33F"
+  show TM44F  = "TM44F"
 
 data Stream b
     = ConstFloat Float
@@ -92,6 +112,15 @@ data Primitive
     | LineList
     | LineLoop
     | PointList
+
+instance showPrimitive :: Show (Primitive) where
+  show TriangleStrip = "TriangleStrip"
+  show TriangleList  = "TriangleList"
+  show TriangleFan   = "TriangleFan"
+  show LineStrip     = "LineStrip"
+  show LineList      = "LineList"
+  show LineLoop      = "LineLoop"
+  show PointList     = "PointList"
 
 type SlotSchema =
     { primitive     :: FetchPrimitive
@@ -192,3 +221,14 @@ data InputSetter
     | SM22F  (SetterFun M22F)
     | SM33F  (SetterFun M33F)
     | SM44F  (SetterFun M44F)
+
+streamToStreamType :: forall a . Stream a -> StreamType
+streamToStreamType s = case s of
+    ConstFloat _ -> TFloat
+    ConstV2F   _ -> TV2F
+    ConstV3F   _ -> TV3F
+    ConstV4F   _ -> TV4F
+    ConstM22F  _ -> TM22F
+    ConstM33F  _ -> TM33F
+    ConstM44F  _ -> TM44F
+    Stream t -> t.sType

@@ -1,6 +1,7 @@
 module Input where
 
 import Prelude.Unsafe (unsafeIndex)
+import Control.Bind
 import Control.Monad
 import Control.Monad.Eff
 import Control.Monad.Eff.Ref
@@ -57,7 +58,69 @@ mkWebGLPipelineInput sch = do
     }
 
 addObject :: WebGLPipelineInput -> String -> Primitive -> Maybe (IndexStream Buffer) -> StrMap.StrMap (Stream Buffer) -> [String] -> GFX GLObject
-addObject _ _ _ _ _ _ = throwException $ error "not implemented"
+addObject input slotName prim indices attribs uniformNames = do
+    flip traverse uniformNames $ \n -> case StrMap.lookup n input.schema.uniforms of
+        Nothing -> throwException $ error $ "Unknown uniform: " ++ show n
+        _ -> return unit
+    case StrMap.lookup slotName input.schema.slots of
+        Nothing -> throwException $ error $ "Unknown slot: " ++ slotName
+        Just slotSchema -> do
+            when (slotSchema.primitive /= (primitiveToFetchPrimitive prim)) $ throwException $ error $
+                "Primitive mismatch for slot (" ++ show slotName ++ ") expected " ++ show slotSchema.primitive  ++ " but got " ++ show prim
+            let sType = streamToStreamType <$> attribs
+            when (sType /= slotSchema.attributes) $ throwException $ error $ unlines $ 
+                [ "Attribute stream mismatch for slot (" ++ show slotName ++ ") expected "
+                , show slotSchema.attributes
+                , " but got "
+                , show sType
+                ]
+
+    slotIdx <- case slotName `StrMap.lookup` input.slotMap of
+      Nothing -> throwException $ error "internal error (slot index)"
+      Just i  -> return i
+    order <- newRef 0
+    enabled <- newRef true
+    index <- readRef input.objSeed
+    modifyRef input.objSeed (1+)
+    Tuple setters unis <- mkUniform =<< (flip traverse uniformNames $ \n -> case StrMap.lookup n input.schema.uniforms of
+      Nothing -> throwException $ error "internal error (uniform setter not found)"
+      Just t -> return $ Tuple n t)
+    cmdsRef <- newRef [[]]
+    let obj =
+          { slot       : slotIdx
+          , primitive  : prim
+          , indices    : indices
+          , attributes : attribs
+          , uniSetter  : setters
+          , uniSetup   : unis
+          , order      : order
+          , enabled    : enabled
+          , id         : index
+          , commands   : cmdsRef
+          }
+
+    modifyRef (input.slotVector `unsafeIndex` slotIdx) $ \s -> {objectMap: Map.insert index obj s.objectMap, sortedObjects: [], orderJob: Generate}
+
+    -- generate GLObjectCommands for the new object
+    {-
+        foreach pipeline:
+            foreach realted program:
+                generate commands
+    -}
+    ppls <- readRef input.pipelines
+    cmds <- flip traverse ppls $ \mp -> case mp of
+        Nothing -> return []
+        Just p  -> do
+            Just (InputConnection ic) <- readRef p.input
+            case ic.slotMapInputToPipeline `unsafeIndex` slotIdx of
+                Nothing -> do
+                    return []   -- this slot is not used in that pipeline
+                Just pSlotIdx -> do
+                    let emptyV = replicate (length p.programs) []
+                        addCmds v prgIdx = updateAt prgIdx (createObjectCommands {-(glTexUnitMapping p)-}{} input.uniformSetup obj (p.programs `unsafeIndex` prgIdx)) v
+                    return $ foldl addCmds emptyV $ p.slotPrograms `unsafeIndex` pSlotIdx
+    writeRef cmdsRef cmds
+    return obj
 
 removeObject :: WebGLPipelineInput -> GLObject -> GFX Unit
 removeObject p obj = modifyRef (p.slotVector `unsafeIndex` obj.slot) $ \s -> {objectMap:Map.delete obj.id s.objectMap, sortedObjects:[], orderJob:Generate}
