@@ -16,7 +16,6 @@ ifThenElse False a b = b
 
 pi = 3.14
 
-
 foldl' f e [] = e
 foldl' f e (x: xs) = foldl' f (f e x) xs
 
@@ -49,6 +48,17 @@ data Word where
 data Float where
 data Char where
 data String where
+
+type family Vec (n :: Nat) a                  -- may be a data family
+type family VecScalar (n :: Nat) a
+type family Mat i j                           -- may be a data family
+type family MatVecElem a
+type family MatVecScalarElem a
+type family FTRepr' a
+type family ColorRepr a
+type family FrameBuffer a
+type family FragOps a
+type family JoinTupleType t1 t2
 
 data Vec (n :: Nat) a where
   V2 :: Component a => a -> a -> Vec 2 a
@@ -472,4 +482,6 @@ colorImage2 = ColorImage @2
 
 depthImage1 = DepthImage @1
 
+--negate = PrimNeg
+negate = PrimSubS 0
 

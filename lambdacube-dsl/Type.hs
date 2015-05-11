@@ -447,6 +447,7 @@ data Definition
     | GADT Name [(Name, TyR)] [(Name, TyR)]
     | ClassDef ClassName [(Name, TyR)] [TypeSig Name TyR]
     | InstanceDef ClassName TyR [ValueDef PatR ExpR]
+    | TypeFamilyDef Name [(Name, TyR)] TyR
 -- used only during parsing
     | PreValueDef (Range, EName) [PatR] WhereRHS
     | DTypeSig (TypeSig EName TyR)
@@ -517,6 +518,7 @@ data PolyEnv = PolyEnv
     , getPolyEnv :: InstEnv
     , precedences :: PrecMap
     , thunkEnv :: EnvMap
+    , typeFamilies :: InstEnv
     }
 
 type InstEnv = Env' InstType'

@@ -165,6 +165,7 @@ moduleDef fname = do
         [ (:[]) <$> dataDef
         , concat <$ keyword "axioms" <*> localIndentation Gt (localAbsoluteIndentation $ many axiom)
         , typeSignature
+        , (:[]) <$> typeFamily
         , const [] <$> typeSynonym
         , (:[]) <$> typeClassDef
         , (:[]) <$> valueDef
@@ -300,6 +301,16 @@ tTuple p ts = Ty' p $ TTuple_ ts
 addTPos = addPos Ty'
 
 addDPos m = addPos (,) m
+
+typeFamily :: P PreDefinitionR
+typeFamily = addDPos $ do
+    try $ keyword "type" >> keyword "family"
+    tc <- typeConstructor
+    tvs <- many typeVarKind
+    res <- optional $ do
+        operator "::"
+        ty
+    return $ TypeFamilyDef tc tvs $ fromMaybe (Ty' mempty Star_) res
 
 dataDef :: P PreDefinitionR
 dataDef = addDPos $ do

@@ -440,20 +440,26 @@ checkStarKind t = addUnif Star t
 star = return Star
 
 joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
-    [] -> return $ PolyEnv (foldMap instanceDefs ps) (head <$> ms) mempty{-TODO-} mempty{-TODO-}
+    [] -> return $ PolyEnv (foldMap instanceDefs ps) (head <$> ms) mempty{-TODO-} mempty{-TODO-} (head <$> tfs)
     xss -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xss)
   where
     isSing [_] = True
     isSing _ = False
-    ms = Map.unionsWith (++) [(:[]) <$> e | PolyEnv _ e _ _ <- ps]
+    ms = Map.unionsWith (++) $ map (((:[]) <$>) . getPolyEnv) ps
+    tfs = Map.unionsWith (++) $ map (((:[]) <$>) . typeFamilies) ps
 --      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
 --      , precedences   = Map.fromList [(n, p) | DFixity n p <- defs]     -- TODO: check multiple definitions
 
+emptyPolyEnv = PolyEnv mempty mempty mempty mempty mempty
+
 --withTyping :: Env InstType -> TCM a -> TCM a
-withTyping ts m = do
+withTyping ts = addPolyEnv $ emptyPolyEnv {getPolyEnv = ts}
+
+addPolyEnv pe m = do
     env <- ask
-    env <- joinPolyEnvs [env, PolyEnv mempty ts mempty mempty]
+    env <- joinPolyEnvs [env, pe]
     local (const env) m
+
 
 ----------------------------
 
@@ -484,6 +490,7 @@ instantiateTyping i = fmap fst . instantiateTyping'' i
 lookEnv :: Name -> TCMS Ty -> TCMS Ty
 lookEnv n m = asks (Map.lookup n . getPolyEnv) >>= maybe m (toTCMS . ($ pShow n))
 
+lookEnv' n m = asks (Map.lookup n . typeFamilies) >>= maybe m (toTCMS . ($ pShow n))
 
 -- Ambiguous: (Int ~ F a) => Int
 -- Not ambiguous: (Show a, a ~ F b) => b
@@ -560,12 +567,18 @@ inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty
         k <- case kindOf <$> ty of
             TLit_ l -> return $ inferLit l
             Star_ -> star
-            ConstraintKind_ c -> star
+            ConstraintKind_ c -> case c of
+                CEq t (TypeFun f ts) -> do
+                    tf <- lookEnv' f $ throwErrorTCM $ "Type family" <+> pShow f <+> "is not in scope."
+                    addUnif tf $ ts ~~> t
+                    star
+                CClass _ t -> checkStarKind t >> star           -- TODO
+                _ -> star
             TTuple_ ts -> mapM_ checkStarKind ts >> star
             Forall_ Nothing a b -> checkStarKind a >> checkStarKind b >> star
             TApp_ tf ta -> appTy tf ta
             TVar_ n -> lookEnv n $ newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (Map.singleton n $ Right t) >> return t
-            TCon_ n -> lookEnv n $ lookEnv (toExpN n) $ lift $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
+            TCon_ n -> lookEnv n $ lookEnv (toExpN n) $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
 --            x -> error $ " inferKind: " ++ ppShow x
         case ty of
             Forall_ Nothing (ConstraintKind c) b -> do
@@ -709,7 +722,10 @@ typingToTy env ty = foldr forall_ ty $ orderEnv env
 --trace' s = trace (ppShow s) s
 
 tyConKind :: [TyR] -> TCM InstType'
-tyConKind vs = instantiateTyping "tyconkind" $ foldr (liftA2 (~>)) star $ map inferKind vs
+tyConKind = tyConKind_ $ Ty' mempty Star_
+
+tyConKind_ :: TyR -> [TyR] -> TCM InstType'
+tyConKind_ res vs = instantiateTyping "tyconkind" $ foldr (liftA2 (~>)) (inferKind res) $ map inferKind vs
 
 mkInstType v k = \d -> WriterT' $ pure (Map.singleton v $ Right k, k)
 monoInstType v k = \d -> WriterT' $ pure (mempty, k)
@@ -775,6 +791,9 @@ inferDefs [] = ask
 inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
     DValueDef d -> do
         addRange r (inferDef d) >>= ($ cont)
+    TypeFamilyDef con vars res -> do
+        tk <- tyConKind_ res $ map snd vars
+        addPolyEnv (emptyPolyEnv {typeFamilies = Map.singleton con tk}) cont
     DDataDef con vars cdefs -> do
         tk <- tyConKind $ map snd vars
         withTyping (Map.singleton con tk) $ do
