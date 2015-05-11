@@ -637,10 +637,11 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
         return $ (,) (Map.keysSet tr) (ELam p f, tp ~> t)
 
     ELet_ (PVar' _ n) x_ e -> do
-        (it, x, tx) <- lift $ do
+        (it, x, tx, se) <- lift $ do
             (se, (x, tx)) <- runWriterT'' $ inferTyping x_
             it <- addRange (getTag x_) $ addCtx "let" $ instantiateTyping' (pShow n) se tx
-            return (it, x, tx)
+            return (it, x, tx, se)
+        addConstraints $ Map.filter isLeft se
         (e, t) <- withTyping (Map.singleton n it) $ inferTyping e
         return (ELet (PVar $ VarE (IdN n) tx) x e, t)
     ELet_ p x e -> removeMonoVars $ do          -- monomorph let; TODO?
