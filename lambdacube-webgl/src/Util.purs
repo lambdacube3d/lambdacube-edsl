@@ -9,6 +9,8 @@ import Control.Monad.Eff.Ref
 import Control.Monad.Eff.WebGL
 import Data.Tuple
 import Data.Array
+import qualified Data.ArrayBuffer.Types as AB
+import qualified Data.TypedArray as TA
 
 import IR
 import Type
@@ -61,28 +63,41 @@ toStreamType a = case a of
   M44F  -> return TM44F
   _     -> throwException $ error "invalid Stream Type"
 
-foreign import unsafeCoerce "function unsafeCoerce(a) {return a;}" :: forall a b. a -> b
+foreign import setFloatArray
+  """function setFloatArray(ta) {
+      return function(a) {
+        return ta.set(a);
+      };
+     }""" :: AB.Float32Array -> [Float] -> GFX Unit
 
-z2 = V2 0 0 :: V2F
-z3 = V3 0 0 0 :: V3F
-z4 = V4 0 0 0 0 :: V4F
+foreign import setIntArray
+  """function setIntArray(ta) {
+      return function(a) {
+        return ta.set(a);
+      };
+     }""" :: AB.Int32Array -> [Int] -> GFX Unit
+
+setBoolArray :: AB.Int32Array -> [Bool] -> GFX Unit
+setBoolArray ta a = setIntArray ta $ map (\b -> if b then 1 else 0) a
 
 mkUniformSetter :: InputType -> GFX (Tuple GLUniform InputSetter)
-mkUniformSetter t@Bool  = newRef false                        >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SBool  $ writeRef r)
-mkUniformSetter t@V2B   = newRef (V2 false false)             >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV2B   $ writeRef r)
-mkUniformSetter t@V3B   = newRef (V3 false false false)       >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV3B   $ writeRef r)
-mkUniformSetter t@V4B   = newRef (V4 false false false false) >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV4B   $ writeRef r)
-mkUniformSetter t@Int   = newRef 0                            >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SInt   $ writeRef r)
-mkUniformSetter t@V2I   = newRef (V2 0 0)                     >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV2I   $ writeRef r)
-mkUniformSetter t@V3I   = newRef (V3 0 0 0)                   >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV3I   $ writeRef r)
-mkUniformSetter t@V4I   = newRef (V4 0 0 0 0)                 >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV4I   $ writeRef r)
-mkUniformSetter t@Float = newRef 0                            >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SFloat $ writeRef r)
-mkUniformSetter t@V2F   = newRef (V2 0 0)                     >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV2F   $ writeRef r)
-mkUniformSetter t@V3F   = newRef (V3 0 0 0)                   >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV3F   $ writeRef r)
-mkUniformSetter t@V4F   = newRef (V4 0 0 0 0)                 >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SV4F   $ writeRef r)
-mkUniformSetter t@M22F  = newRef (V2 z2 z2)                   >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM22F  $ writeRef r)
-mkUniformSetter t@M33F  = newRef (V3 z3 z3 z3)                >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM33F  $ writeRef r)
-mkUniformSetter t@M44F  = newRef (V4 z4 z4 z4 z4)             >>= \r -> return $ Tuple (GLUniform t (unsafeCoerce r)) (SM44F  $ writeRef r)
+mkUniformSetter t@Bool  = let r = TA.asInt32Array [0]                in return $ Tuple (UniBool  r) (SBool  $ \x -> setBoolArray r [x])
+mkUniformSetter t@V2B   = let r = TA.asInt32Array (replicate 2 0)    in return $ Tuple (UniV2B   r) (SV2B   $ \(V2 x y) -> setBoolArray r [x,y])
+mkUniformSetter t@V3B   = let r = TA.asInt32Array (replicate 3 0)    in return $ Tuple (UniV3B   r) (SV3B   $ \(V3 x y z) -> setBoolArray r [x,y,z])
+mkUniformSetter t@V4B   = let r = TA.asInt32Array (replicate 4 0)    in return $ Tuple (UniV4B   r) (SV4B   $ \(V4 x y z w) -> setBoolArray r [x,y,z,w])
+mkUniformSetter t@Int   = let r = TA.asInt32Array [0]                in return $ Tuple (UniInt   r) (SInt $ \x -> setIntArray r [x])
+mkUniformSetter t@V2I   = let r = TA.asInt32Array (replicate 2 0)    in return $ Tuple (UniV2I   r) (SV2I $ \(V2 x y) -> setIntArray r [x,y])
+mkUniformSetter t@V3I   = let r = TA.asInt32Array (replicate 3 0)    in return $ Tuple (UniV3I   r) (SV3I $ \(V3 x y z) -> setIntArray r [x,y,z])
+mkUniformSetter t@V4I   = let r = TA.asInt32Array (replicate 4 0)    in return $ Tuple (UniV4I   r) (SV4I $ \(V4 x y z w) -> setIntArray r [x,y,z,w])
+mkUniformSetter t@Float = let r = TA.asFloat32Array [0]              in return $ Tuple (UniFloat r) (SFloat $ \x -> setFloatArray r [x])
+mkUniformSetter t@V2F   = let r = TA.asFloat32Array (replicate 2 0)  in return $ Tuple (UniV2F   r) (SV2F $ \(V2 x y) -> setFloatArray r [x,y])
+mkUniformSetter t@V3F   = let r = TA.asFloat32Array (replicate 3 0)  in return $ Tuple (UniV3F   r) (SV3F $ \(V3 x y z) -> setFloatArray r [x,y,z])
+mkUniformSetter t@V4F   = let r = TA.asFloat32Array (replicate 4 0)  in return $ Tuple (UniV4F   r) (SV4F $ \(V4 x y z w) -> setFloatArray r [x,y,z,w])
+mkUniformSetter t@M22F  = let r = TA.asFloat32Array (replicate 4 0)  in return $ Tuple (UniM22F  r) (SM22F $ \(V2 (V2 a b) (V2 c d)) -> setFloatArray r [a,b,c,d])
+mkUniformSetter t@M33F  = let r = TA.asFloat32Array (replicate 9 0)  in return $ Tuple (UniM33F  r)
+  (SM33F $ \(V3 (V3 a b c) (V3 d e f) (V3 g h i)) -> setFloatArray r [a,b,d,e,f,g,h,i])
+mkUniformSetter t@M44F  = let r = TA.asFloat32Array (replicate 16 0) in return $ Tuple (UniM44F  r)
+  (SM44F $ \(V4 (V4 a0 a1 a2 a3) (V4 a4 a5 a6 a7) (V4 a8 a9 aa ab) (V4 ac ad ae af)) -> setFloatArray r [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,aa,ab,ac,ad,ae,af])
 
 primitiveToFetchPrimitive :: Primitive -> FetchPrimitive
 primitiveToFetchPrimitive prim = case prim of
@@ -98,3 +113,55 @@ unlines :: [String] -> String
 unlines [] = ""
 unlines [x] = x
 unlines (x:xs) = x ++ "\n" ++ unlines xs
+
+setVertexAttrib :: GL.GLuint -> Stream Buffer -> GFX Unit
+setVertexAttrib i val = case val of
+  ConstFloat v    -> setAFloat i v
+  ConstV2F v      -> setAV2F i v
+  ConstV3F v      -> setAV3F i v
+  ConstV4F v      -> setAV4F i v
+  ConstM22F (V2 x y) -> do
+    setAV2F i x
+    setAV2F (i+1) y
+  ConstM33F (V3 x y z) -> do
+    setAV3F i x
+    setAV3F (i+1) y
+    setAV3F (i+2) z
+  ConstM44F (V4 x y z w) -> do
+    setAV4F i x
+    setAV4F (i+1) y
+    setAV4F (i+2) z
+    setAV4F (i+3) w
+  _ -> throwException $ error "internal error (setVertexAttrib)!"
+
+setAFloat :: GL.GLuint -> Float -> GFX Unit
+setAFloat i v = GL.vertexAttrib1f_ i v
+
+setAV2F :: GL.GLuint -> V2F -> GFX Unit
+setAV2F i (V2 x y) = GL.vertexAttrib2f_ i x y
+
+setAV3F :: GL.GLuint -> V3F -> GFX Unit
+setAV3F i (V3 x y z) = GL.vertexAttrib3f_ i x y z
+
+setAV4F :: GL.GLuint -> V4F -> GFX Unit
+setAV4F i (V4 x y z w) = GL.vertexAttrib4f_ i x y z w
+
+-- sets value based uniforms only (does not handle textures)
+setUniform :: forall a . GL.WebGLUniformLocation -> GLUniform -> GFX Unit
+setUniform i uni = case uni of
+  UniBool  r -> GL.uniform1iv_ i r
+  UniV2B   r -> GL.uniform2iv_ i r
+  UniV3B   r -> GL.uniform3iv_ i r
+  UniV4B   r -> GL.uniform4iv_ i r
+  UniInt   r -> GL.uniform1iv_ i r
+  UniV2I   r -> GL.uniform2iv_ i r
+  UniV3I   r -> GL.uniform3iv_ i r
+  UniV4I   r -> GL.uniform4iv_ i r
+  UniFloat r -> GL.uniform1fv_ i r
+  UniV2F   r -> GL.uniform2fv_ i r
+  UniV3F   r -> GL.uniform3fv_ i r
+  UniV4F   r -> GL.uniform4fv_ i r
+  UniM22F  r -> GL.uniformMatrix2fv_ i false r
+  UniM33F  r -> GL.uniformMatrix3fv_ i false r
+  UniM44F  r -> GL.uniformMatrix4fv_ i false r
+  _ -> throwException $ error "internal error (setUniform)!"

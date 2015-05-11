@@ -9,6 +9,7 @@ import Control.Monad.Eff.WebGL
 import Control.Monad.Eff.Ref
 import Control.Monad.Eff
 import Control.Monad
+import Control.Bind
 import Data.Foldable
 import Data.Traversable
 import qualified Data.StrMap as StrMap
@@ -275,6 +276,35 @@ renderPipeline p = do
       SetProgram i -> GL.useProgram_ $ (p.programs `unsafeIndex` i).program
       _ -> return unit
   return unit
+
+renderSlot :: [GLObjectCommand] -> GFX Unit
+renderSlot cmds = do
+  flip traverse cmds $ \cmd -> case cmd of
+    GLSetVertexAttribArray idx buf size typ ptr -> do
+      GL.bindBuffer_ GL._ARRAY_BUFFER buf
+      GL.enableVertexAttribArray_ idx
+      GL.vertexAttribPointer_ idx size typ false 0 ptr
+    GLDrawArrays mode first count -> do
+      GL.drawArrays_ mode first count
+    GLDrawElements mode count typ buf indicesPtr -> do
+      GL.bindBuffer_ GL._ELEMENT_ARRAY_BUFFER buf
+      GL.drawElements_ mode count typ indicesPtr
+    GLSetVertexAttrib idx val -> do
+      GL.disableVertexAttribArray_ idx
+      setVertexAttrib idx val
+    GLSetUniform idx uni -> do
+      setUniform idx uni
+  return unit
+{-
+        GLBindTexture txTarget tuRef (GLUniform _ ref)  -> do
+                                                            txObjVal <- readIORef ref
+                                                            -- HINT: ugly and hacky
+                                                            with txObjVal $ \txObjPtr -> do
+                                                                txObj <- peek $ castPtr txObjPtr :: IO GLuint
+                                                                texUnit <- readIORef tuRef
+                                                                glActiveTexture $ gl_TEXTURE0 + fromIntegral texUnit
+                                                                glBindTexture txTarget txObj
+-}
 
 disposePipeline :: WebGLPipeline -> GFX Unit
 disposePipeline p = do

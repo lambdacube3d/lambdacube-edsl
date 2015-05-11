@@ -11,6 +11,7 @@ import qualified Graphics.WebGLRaw as GL
 import qualified Data.Map as Map
 import Data.Tuple
 import Data.Maybe
+import qualified Data.ArrayBuffer.Types as AB
 
 import IR
 
@@ -143,7 +144,22 @@ type GLSlot =
     , orderJob      :: OrderJob
     }
 
-data GLUniform = GLUniform InputType (forall a . RefVal a)
+data GLUniform
+  = UniBool  AB.Int32Array
+  | UniV2B   AB.Int32Array
+  | UniV3B   AB.Int32Array
+  | UniV4B   AB.Int32Array
+  | UniInt   AB.Int32Array
+  | UniV2I   AB.Int32Array
+  | UniV3I   AB.Int32Array
+  | UniV4I   AB.Int32Array
+  | UniFloat AB.Float32Array
+  | UniV2F   AB.Float32Array
+  | UniV3F   AB.Float32Array
+  | UniV4F   AB.Float32Array
+  | UniM22F  AB.Float32Array
+  | UniM33F  AB.Float32Array
+  | UniM44F  AB.Float32Array
 
 type WebGLPipelineInput =
     { schema        :: PipelineSchema
@@ -192,15 +208,13 @@ type GLProgram =
   , inputStreams  :: StrMap.StrMap {location :: GL.GLint, slotAttribute :: String}
   }
 
-data GLObjectCommand = GLObjectCommand
-{-
-    = GLSetUniform              !GLint !GLUniform
-    | GLBindTexture             !GLenum !(IORef GLint) !GLUniform               -- binds the texture from the gluniform to the specified texture unit and target
-    | GLSetVertexAttribArray    !GLuint !GLuint !GLint !GLenum !(Ptr ())        -- index buffer size type pointer
-    | GLSetVertexAttrib         !GLuint !(Stream Buffer)                        -- index value
-    | GLDrawArrays              !GLenum !GLint !GLsizei                         -- mode first count
-    | GLDrawElements            !GLenum !GLsizei !GLenum !GLuint !(Ptr ())      -- mode count type buffer indicesPtr
--}
+data GLObjectCommand
+    = GLSetVertexAttribArray    GL.GLuint GL.WebGLBuffer GL.GLint GL.GLenum GL.GLintptr -- index buffer size type pointer
+    | GLDrawArrays              GL.GLenum GL.GLint GL.GLsizei -- mode first count
+    | GLDrawElements            GL.GLenum GL.GLsizei GL.GLenum GL.WebGLBuffer GL.GLintptr -- mode count type buffer indicesPtr
+    | GLSetVertexAttrib         GL.GLuint (Stream Buffer) -- index value
+    | GLSetUniform              GL.WebGLUniformLocation GLUniform
+--    | GLBindTexture             !GLenum (IORef GLint) GLUniform               -- binds the texture from the gluniform to the specified texture unit and target
 
 type SetterFun a = a -> GFX Unit
 
