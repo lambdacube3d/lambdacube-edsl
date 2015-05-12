@@ -14,11 +14,10 @@ import Text.Show.Pretty
 import Backend.GL as GL
 import Backend.GL.Mesh
 import IR as IR
-import Type
 
 import System.Environment
 
-import Driver (compileMain)
+import Driver
 
 --  Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
 --  A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
@@ -137,7 +136,7 @@ main = do
     addMesh pplInput "stream" gpuMonkey []
 
     let setup = do
-          let sn = N ExpNS [] srcName (NameInfo Nothing mempty)
+          let sn = ExpN srcName
           pplRes <- compileMain "../lambdacube-dsl/tests/accept" sn
           case pplRes of
             Left err -> putStrLn ("error: " ++ err) >> return Nothing
