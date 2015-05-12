@@ -92,7 +92,7 @@ matchPattern e = \case
     PTuple ps -> reduceHNF' e $ \e -> case e of
         ETuple_ xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
         _ -> Right Nothing
-    PCon (c, _) ps -> case getApp [] e of
+    PCon (VarE c _) ps -> case getApp [] e of
         Left err -> Left err
         Right Nothing -> Right Nothing
         Right (Just (xx, xs)) -> case xx of

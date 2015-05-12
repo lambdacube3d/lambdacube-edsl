@@ -574,7 +574,7 @@ inferPatTyping polymorph p_@(Pat pt p) = addRange pt $ addCtx ("type inference o
             (_, tn) <- lookEnv n $ lift $ throwErrorTCM $ "Constructor" <+> pShow n <+> "is not in scope."
             v <- newStarVar "pcon"
             addUnif tn (map (snd . fst) ps ~~> v)
-            return (Pat'' $ PCon_ (n, tn) $ fst . fst <$> ps, v, mempty)
+            return (Pat'' $ PCon_ (VarE n tn) $ fst . fst <$> ps, v, mempty)
       _ -> do
        (t, tr) <- case p of
         PLit_ n -> noTr $ pure $ inferLit n

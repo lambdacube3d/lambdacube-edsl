@@ -82,4 +82,4 @@ instance PShow Int     where pShowPrec _ = int
 instance PShow Integer where pShowPrec _ = integer
 instance PShow Double  where pShowPrec _ = double
 instance PShow Char    where pShowPrec _ = char
-
+instance PShow ()      where pShowPrec _ _ = "()"
