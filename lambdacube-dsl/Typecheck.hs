@@ -802,7 +802,13 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
         let res (TArr a b) = res b
             res t = t
             n' = (if isStar $ res t' then toTypeN else id) n
-        withTyping (Map.singleton n' t) cont
+            isPrim (ExpN s) = take 4 s == "prim"
+            arity = f t' where
+                f (TArr _ x) = 1 + f x
+                f _ = 0
+            f | isPrim n = addPolyEnv (emptyPolyEnv {thunkEnv = Map.singleton n $ Just $ Exp mempty $ PrimFun n [] arity})
+              | otherwise = id
+        f $ withTyping (Map.singleton n' t) cont
     InstanceDef c t xs -> do  -- TODO: check types
         (ClassD cs) <- lookEnv'' c >>= maybe (throwErrorTCM "can't find class") return
         (ce, t) <- runWriterT'' $ inferKind_ t     -- TODO: ce

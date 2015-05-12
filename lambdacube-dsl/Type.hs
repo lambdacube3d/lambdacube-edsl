@@ -69,6 +69,7 @@ data Witness
     | WInstance (Env Thunk)
     deriving (Eq, Ord)
 
+-- TODO: remove
 instance Eq Thunk where
 instance Ord Thunk where
 
@@ -207,7 +208,8 @@ data Exp_ v t p b       -- TODO: elim t parameter
     | EFieldProj_ Name
     | EAlts_     Int [b]  -- function alternatives; Int: arity
     | ENext_              -- go to next alternative
-    | ExtractInstance [Thunk] Int Name
+    | ExtractInstance [b] Int Name
+    | PrimFun Name [b] Int
 
     -- was types
     | Star_
@@ -237,6 +239,7 @@ mapExp vf tf f = \case
     ENext_             -> ENext_
     EType_ t           -> EType_ $ tf t
     ExtractInstance i j n -> ExtractInstance i j n
+    PrimFun a b c      -> PrimFun a b c
 
 --------------------------------------------
 
@@ -455,6 +458,7 @@ data Definition
     | PreValueDef (Range, EName) [PatR] WhereRHS
     | DTypeSig (TypeSig EName TyR)
     | PreInstanceDef ClassName TyR [DefinitionR]
+    | ForeignDef Name TyR
 
 -- used only during parsing
 data WhereRHS = WhereRHS GuardedRHS (Maybe [DefinitionR])
@@ -735,6 +739,7 @@ instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
         EAlts_ i b -> pShow i <> braces (vcat $ punctuate (pShow ';') $ map pShow b)
         ENext_ -> "SKIP"
         ExtractInstance i j n -> "extract" <+> pShow i <+> pShow j <+> pShow n
+        PrimFun a b c -> "primfun" <+> pShow a <+> pShow b <+> pShow c
 
         Star_ -> "*"
 --        TLit_ l -> pShowPrec p l
@@ -967,7 +972,10 @@ recEnv (PVar (VarE v _)) th_ = th where th = applyEnvBefore (TEnv mempty (Map.si
 recEnv _ th = th
 
 mkThunk :: Exp -> Thunk
-mkThunk (Exp'' e) = thunk $ mkThunk <$> e
+mkThunk = thunk . mkThunk'
+
+mkThunk' :: Exp -> Thunk'
+mkThunk' (Exp'' e) = mkThunk <$> e
 
 thunk :: Thunk' -> Thunk
 thunk = Exp mempty

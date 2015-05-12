@@ -35,6 +35,9 @@ import Typecheck
 
 reduceHNF :: Thunk -> Either String Thunk'       -- Left: pattern match failure
 reduceHNF th@(peelThunk -> exp) = case exp of
+
+    PrimFun f acc 0 -> Right $ mkThunk' $ evalPrimFun f $ map reduce $ reverse acc
+
     ENext_ -> Left "? err"
     EAlts_ 0 (map reduceHNF -> es) -> case [e | Right e <- es] of
         (thu:_) -> Right thu
@@ -49,6 +52,8 @@ reduceHNF th@(peelThunk -> exp) = case exp of
         Right _ -> keep
 
     EApp_ f x -> reduceHNF' f $ \f -> case f of
+
+        PrimFun f acc i | i > 0 -> Right $ PrimFun f (x: acc) (i-1)
 
         ExtractInstance acc 0 n -> reduceHNF' x $ \case
             EType_ (Ty _ (Witness (WInstance m))) -> reduceHNF $ foldl (EApp' mempty) (m Map.! n) $ reverse acc
@@ -72,10 +77,6 @@ reduceHNF th@(peelThunk -> exp) = case exp of
                 Left err -> Left err
                 Right (Just m') -> reduceHNF $ applyEnvBefore m' e
                 Right _ -> keep
-
-        -- TODO
-        EVar_ (VarE (ExpN "fromInt") (TArr _ TFloat)) -> reduceHNF' x $ \case
-            ELit_ (LInt i) -> Right $ ELit_ $ LFloat $ fromIntegral i
 
         _ -> keep
     _ -> keep
@@ -114,7 +115,9 @@ matchPattern e = \case
 mkReduce :: Exp -> Exp
 mkReduce = reduce . mkThunk
 
+reduce :: Thunk -> Exp
 reduce = either (error "pattern match failure.") id . reduceEither
+
 reduce' p = reduce . applyEnvBefore (TEnv mempty $ Map.fromList [(v, Nothing) | v <- patternEVars p])
 
 reduceEither :: Thunk -> Either String Exp
@@ -126,3 +129,10 @@ reduceEither e = reduceHNF' e $ \e -> Right $ case e of
         es -> EAlts i es
     e -> Exp'' $ reduce <$> e
 
+
+--------------------------------------------------------------------------------
+
+evalPrimFun :: Name -> [Exp] -> Exp
+evalPrimFun (ExpN x) = case x of
+    "primIntToFloat" -> \[_, ELit (LInt i)] -> ELit $ LFloat $ fromIntegral i
+    x -> error $ "evalPrimFun: " ++ x
