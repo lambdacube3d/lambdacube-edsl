@@ -20,10 +20,13 @@ type GFX a = forall e . Eff (webgl :: WebGl, trace :: Trace, err :: Exception, r
 
 type IntMap a = Map.Map Int a
 
+foreign import data ArrayBuffer :: *
+foreign import data ArrayView :: *
+
 type Buffer = -- internal type
     { arrays    :: [ArrayDesc]
     , glBuffer  :: GL.WebGLBuffer
-    , buffer    :: {}
+    , buffer    :: ArrayBuffer
     }
 
 type ArrayDesc =
@@ -31,6 +34,7 @@ type ArrayDesc =
     , arrLength :: Int  -- item count
     , arrOffset :: Int  -- byte position in buffer
     , arrSize   :: Int  -- size in bytes
+    , arrView   :: ArrayView
     }
 
 data ArrayType

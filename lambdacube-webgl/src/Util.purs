@@ -66,14 +66,14 @@ toStreamType a = case a of
 foreign import setFloatArray
   """function setFloatArray(ta) {
       return function(a) {
-        return ta.set(a);
+        return function(){ta.set(a);};
       };
      }""" :: AB.Float32Array -> [Float] -> GFX Unit
 
 foreign import setIntArray
   """function setIntArray(ta) {
       return function(a) {
-        return ta.set(a);
+        return function(){ta.set(a);};
       };
      }""" :: AB.Int32Array -> [Int] -> GFX Unit
 
@@ -178,3 +178,87 @@ arrayTypeToGLType a = case a of
   ArrInt8     -> GL._BYTE
   ArrInt16    -> GL._SHORT
   ArrFloat    -> GL._FLOAT
+
+-- custom typed array buffer and view functions
+foreign import newArrayBuffer
+  """function newArrayBuffer(s) {
+      return function() {return new ArrayBuffer(s);};
+     }""" :: Int -> GFX ArrayBuffer
+
+foreign import newWord8View
+  """function newWord8View(b) {
+      return function(o) {
+        return function(l) {
+          return function(){new Uint8Array(b,o,l);};
+        };
+      };
+     }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
+
+foreign import newWord16View
+  """function newWord16View(b) {
+      return function(o) {
+        return function(l) {
+          return function(){new Uint16Array(b,o,l);};
+        };
+      };
+     }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
+
+foreign import newInt8View
+  """function newInt8View(b) {
+      return function(o) {
+        return function(l) {
+          return function(){new Int8Array(b,o,l);};
+        };
+      };
+     }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
+
+foreign import newInt16View
+  """function newInt16View(b) {
+      return function(o) {
+        return function(l) {
+          return function(){new Int16Array(b,o,l);};
+        };
+      };
+     }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
+
+foreign import newFloatView
+  """function newFloatView(b) {
+      return function(o) {
+        return function(l) {
+          return function(){new Float32Array(b,o,l);};
+        };
+      };
+     }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
+
+foreign import setArrayView
+  """function setArrayView(av) {
+      return function(a) {
+        return function(){av.set(a);};
+      };
+     }""" :: ArrayView -> [Number] -> GFX Unit
+
+foreign import nullWebGLBuffer "var nullWebGLBuffer = null" :: GL.WebGLBuffer
+
+foreign import bufferDataAlloc
+  """function bufferDataAlloc(target)
+   {return function(size)
+    {return function(usage)
+     {return function()
+      {gl.bufferData(target,size,usage);};};};};"""
+    :: forall eff. GL.GLenum -> Int -> GL.GLenum -> GFX Unit
+
+foreign import bufferSubDataArrayBuffer
+  """function bufferSubDataArrayBuffer(target)
+   {return function(offset)
+    {return function(data)
+     {return function()
+      {gl.bufferSubData(target,offset,data);};};};};"""
+    :: forall eff. GL.GLenum -> GL.GLintptr -> ArrayBuffer -> GFX Unit
+
+foreign import bufferSubDataArrayView
+  """function bufferSubDataArrayView(target)
+   {return function(offset)
+    {return function(data)
+     {return function()
+      {gl.bufferSubData(target,offset,data);};};};};"""
+    :: forall eff. GL.GLenum -> GL.GLintptr -> ArrayView -> GFX Unit
