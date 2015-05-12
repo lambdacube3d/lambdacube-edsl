@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Driver where
+{-# LANGUAGE PatternSynonyms #-}
+module Driver
+    ( module Driver
+    , pattern ExpN
+    ) where
 
 import Data.List
 import Data.Maybe
