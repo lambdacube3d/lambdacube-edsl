@@ -600,7 +600,7 @@ inferPatTyping polymorph p_@(Pat pt p) = addRange pt $ addCtx ("type inference o
     noTr = addTr $ const mempty
     addTr tr m = (\x -> (x, tr x)) <$> m
 
-eLam (n, t) e = ELam' mempty (PVar $ VarT n t) e
+eLam (n, t) e = ELam' mempty (PVar $ VarE n t) e
 
 inferTyping :: ExpR -> TCMS (Thunk, Ty)
 inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_) $ appSES $ case e of

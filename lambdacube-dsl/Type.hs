@@ -268,7 +268,6 @@ pattern Exp'' a = Exp' (Identity a)
 pattern ELit a = Exp'' (ELit_ a)
 pattern EVar a = Exp'' (EVar_ a)
 pattern EApp a b = Exp'' (EApp_ a b)
-pattern ETyApp a b = Exp'' (EApp_ a (EType b))
 pattern ELam a b = Exp'' (ELam_ a b)
 pattern ELet a b c = Exp'' (ELet_ a b c)
 pattern ETuple a = Exp'' (ETuple_ a)
@@ -280,11 +279,7 @@ pattern ENext = Exp'' ENext_
 
 pattern Va x <- VarE (ExpIdN x) _
 pattern A0 x <- EVar (Va x)
-pattern A0t x t <- EVar (VarE (ExpIdN x) t)
-pattern At0 x t <- ETyApp (A0 x) t
 pattern A1 f x <- EApp (A0 f) x
-pattern A1t f t x <- EApp (A0t f t) x
-pattern At1 f t x <- EApp (At0 f t) x
 pattern A2 f x y <- EApp (A1 f x) y
 pattern A3 f x y z <- EApp (A2 f x y) z
 pattern A4 f x y z v <- EApp (A3 f x y z) v
@@ -361,7 +356,6 @@ isConstr (N _ _ (c:_) _) = isUpper c || c == ':'
 
 data Var
   = VarE IdN Ty   -- TODO: is Ty needed?
-  | VarT IdN Ty   -- TODO: eliminate
 
 -------------------------------------------------------------------------------- error handling
 
@@ -813,7 +807,6 @@ instance (PShow c, PShow n) => PShow (Ty' c n ((,) a)) where
 instance PShow Var where
     pShowPrec p = \case
         VarE n t -> pShow n --pParens True $ pShow n <+> "::" <+> pShow t
-        VarT n t -> pShow n
 
 instance PShow TEnv where
 
@@ -914,7 +907,6 @@ instance Substitute Thunk where
 instance Substitute Var where
     subst_ s = \case
         VarE n t -> VarE n $ subst_ s t
-        VarT n t -> VarT n $ subst_ s t
 
 instance Substitute Pat where
     subst_ s = \case

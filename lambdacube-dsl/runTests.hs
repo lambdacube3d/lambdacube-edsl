@@ -61,7 +61,7 @@ acceptTests = testFrame ["./tests/accept", "./tests/reject"] $ \case
         | tyOf e == TCon0 "Output"
             -> Right ("compiled main", show . compilePipeline $ e)
         | tyOf e == TCon0 "Bool" -> case e of
-            x@(A0t "True" (TCon0 "Bool")) -> Right ("main ~~> True", ppShow x)
+            x@(A0 "True") -> Right ("main ~~> True", ppShow x)
             x -> Left $ "main should be True but it is \n" ++ ppShow x
         | otherwise -> Right ("reduced main " ++ ppShow (tyOf e), ppShow e)
 --        | otherwise -> Right ("System-F main ", ppShow . toCore mempty $ e)

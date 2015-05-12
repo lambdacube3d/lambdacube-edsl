@@ -60,9 +60,12 @@ reduceHNF th@(peelThunk -> exp) = case exp of
             _ -> keep
 
         ELam_ p e -> case p of
-            PVar (VarT v _k) -> reduceHNF' x $ \case
+            PVar (VarE v _k) -> reduceHNF' x $ \case
                 EType_ x -> reduceHNF $ applySubst (Map.singleton v x) e
-                x -> error $ show $ "reduce varT:" <$$> pShow x <$$> "-----------" <$$> pShow f
+                _  -> case matchPattern x p of
+                    Left err -> Left err
+                    Right (Just m') -> reduceHNF $ applyEnvBefore m' e
+                    Right _ -> keep
             _ -> case matchPattern x p of
                 Left err -> Left err
                 Right (Just m') -> reduceHNF $ applyEnvBefore m' e
@@ -72,11 +75,6 @@ reduceHNF th@(peelThunk -> exp) = case exp of
         EVar_ (VarE (ExpN "fromInt") (TArr _ TFloat)) -> reduceHNF' x $ \case
             ELit_ (LInt i) -> Right $ ELit_ $ LFloat $ fromIntegral i
 
-        EVar_ (VarE v ty) -> case ty of
---            Forall tv _ t -> case x of
---                EType_ x -> Right $ EVar_ $ VarE v $ subst (Map.singleton tv x) t
---                x -> error $ "reduce forall: " ++ ppShow x
-            _ -> keep
         _ -> keep
     _ -> keep
   where
