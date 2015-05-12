@@ -19,7 +19,7 @@ import Data.Monoid
 import Control.Applicative (some,liftA2,Alternative())
 import Control.Arrow
 import Control.Monad
-import Control.Monad.IO.Class
+import Control.Monad.Trans
 import qualified Text.Parsec.Indentation.Char as I
 import Text.Parsec.Indentation
 import Text.Parsec hiding (optional)
@@ -614,7 +614,7 @@ eVar p n = EVar' p n
 
 parseLC :: FilePath -> ErrorT IO (String, ModuleR)
 parseLC fname = do
-  src <- liftIO $ readFile fname
+  src <- lift $ readFile fname
   let setName = setPosition =<< flip setSourceName fname <$> getPosition
   case runParser (setName *> whiteSpace *> moduleDef fname <* eof) mempty "" (mkIndentStream 0 infIndentation True Ge $ I.mkCharIndentStream src) of
     Left err -> throwParseError err
