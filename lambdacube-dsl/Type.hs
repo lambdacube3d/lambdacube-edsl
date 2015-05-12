@@ -207,7 +207,7 @@ data Exp_ v t p b       -- TODO: elim t parameter
     | EFieldProj_ Name
     | EAlts_     Int [b]  -- function alternatives; Int: arity
     | ENext_              -- go to next alternative
-    | ExtractInstance Int Int Name
+    | ExtractInstance [Thunk] Int Name
 
     -- was types
     | Star_
@@ -219,9 +219,6 @@ data Exp_ v t p b       -- TODO: elim t parameter
     | ConstraintKind_ (Constraint' v b)        -- flatten?
     | Witness  Witness      -- TODO: here or in Exp?
     deriving (Eq,Ord,Functor,Foldable,Traversable) -- TODO: elim Eq instance
-
--- TODO: elim these
---type Ty_ n a = Exp_ n () () a
 
 
 mapExp :: (v -> v') -> (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v' t' p' b

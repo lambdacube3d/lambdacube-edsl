@@ -795,7 +795,7 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
             let find = head $ [i | (i, ConstraintKind (CClass n _)) <- zip [0..] $ map snd fs, n == con] ++ error (show $ "classDef:" <+> showVar con <$$> pShow fs <$$> pShow t_)
 --            let t' = (mapWriterT' ((id *** ((ConstraintKind cstr:) *** id)) <$>)) <$> t
 --                rearrange cs = head [b: as ++ bs | (as, b@(_, ConstraintKind _): bs) <- zip (inits cs) (tails cs)]
-            return (Map.singleton n $ Just $ Exp mempty $ ExtractInstance (length fs) find n, Map.singleton n t)
+            return (Map.singleton n $ Just $ Exp mempty $ ExtractInstance [] find n, Map.singleton n t)
         addPolyEnv (emptyPolyEnv {thunkEnv = mconcat ths, classDefs = Map.singleton con $ ClassD $ mconcat cdefs}) $ withTyping (mconcat cdefs) cont
     DAxiom (TypeSig n t) -> do
         ((_, t), t') <- instantiateTyping'' False (pShow n) $ inferKind t

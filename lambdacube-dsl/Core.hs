@@ -50,8 +50,10 @@ reduceHNF th@(peelThunk -> exp) = case exp of
 
     EApp_ f x -> reduceHNF' f $ \f -> case f of
 
---        ExtractInstance i 0 n -> reduceHNF' x $ \case
---            EType_ (ConstraintKind x) -> reduceHNF $ applySubst (Map.singleton v x) e
+        ExtractInstance acc 0 n -> reduceHNF' x $ \case
+            EType_ (Ty _ (Witness (WInstance m))) -> reduceHNF $ foldl (EApp' mempty) (m Map.! n) $ reverse acc
+            x -> error $ "expected instance witness instead of " ++ ppShow x
+        ExtractInstance acc j n -> Right $ ExtractInstance (x: acc) (j-1) n
 
         EAlts_ i es | i > 0 -> reduceHNF $ thunk $ EAlts_ (i-1) $ thunk . (`EApp_` x) <$> es
         EFieldProj_ fi -> reduceHNF' x $ \case
