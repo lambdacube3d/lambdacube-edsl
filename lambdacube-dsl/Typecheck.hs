@@ -367,6 +367,8 @@ appSES (WriterT' m) = WriterT' $ do
     (se, x) <- m
     return (either (Left . substEnvSubst se) (Right . substEnvSubst se) <$> se, substEnvSubst se x)
 
+removeMonoVars = mapWriterT' $ fmap $ \(se, (s, x)) -> (foldr Map.delete se $ Set.toList s, substEnvSubst se x)
+
 runWriterT'' = runWriterT' . appSES
 
 --  {x |-> Float,  z |-> x}  {z |-> y}
@@ -439,16 +441,26 @@ checkStarKind t = addUnif Star t
 
 star = return Star
 
-joinPolyEnvs ps = case filter (not . isSing . snd) $ Map.toList ms of
-    [] -> return $ PolyEnv (foldMap instanceDefs ps) (head <$> ms) mempty{-TODO-} mempty{-TODO-} (head <$> tfs)
-    xss -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xss)
+joinPolyEnvs :: forall m. MonadError ErrorMsg m => [PolyEnv] -> m PolyEnv
+joinPolyEnvs ps = PolyEnv
+    <$> mkJoin' instanceDefs
+    <*> mkJoin getPolyEnv
+    <*> mkJoin precedences
+    <*> mkJoin thunkEnv
+    <*> mkJoin typeFamilies
   where
-    isSing [_] = True
-    isSing _ = False
-    ms = Map.unionsWith (++) $ map (((:[]) <$>) . getPolyEnv) ps
-    tfs = Map.unionsWith (++) $ map (((:[]) <$>) . typeFamilies) ps
---      , instances     = Map.unionsWith (<>) [Map.singleton c $ Set.singleton t | InstanceDef c t <- defs] -- TODO: check clash
---      , precedences   = Map.fromList [(n, p) | DFixity n p <- defs]     -- TODO: check multiple definitions
+    mkJoin :: (PolyEnv -> Env a) -> m (Env a)
+    mkJoin f = case filter (not . null . drop 1 . snd) $ Map.toList ms' of
+        [] -> return $ head <$> ms'
+        xs -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xs)
+       where
+        ms' = Map.unionsWith (++) $ map (((:[]) <$>) . f) ps
+
+    mkJoin' f = case [(n, x) | (n, s) <- Map.toList ms', (x, is) <- Map.toList s, not $ null $ drop 1 is] of
+        [] -> return $ Map.keysSet <$> ms'
+        xs -> throwErrorTCM $ "Definition clash:" <+> pShow xs
+       where
+        ms' = Map.unionsWith (Map.unionWith (++)) $ map (((Map.fromList . map (flip (,) [()]) . Set.toList) <$>) . f) ps
 
 emptyPolyEnv = PolyEnv mempty mempty mempty mempty mempty
 
@@ -463,31 +475,33 @@ addPolyEnv pe m = do
 
 ----------------------------
 
-instantiateTyping' :: Doc -> SubstEnv -> Ty -> TCM InstType'
-instantiateTyping' info se ty = do
+instantiateTyping_' :: Bool -> Doc -> SubstEnv -> Ty -> TCM ([(IdN, Ty)], InstType')
+instantiateTyping_' typ info se ty = do
     ambiguityCheck ("ambcheck" <+> info) se ty
 --    pe <- asks $ getPolyEnv
     let p n (Right _) = True --n `Map.notMember` pe
         p _ _ = False
         se' = Map.filterWithKey p se
         fv = Map.keys se'
-    return $ \info' -> WriterT' $ do
+    return $ (,) (if typ then [(n, t) | (n, Right t) <- Map.toList se'] else []) $ \info' -> WriterT' $ do
         newVars <- forM fv $ \case
             TypeN' n i -> newName $ "instvar" <+> info' <+> info <+> text n <+> i
             v -> error $ "instT: " ++ ppShow v
         let s = Map.fromList $ zip fv newVars
-        return (repl s se', repl s ty)
+        return (repl s se', (if typ then zipWith TVar [repl s x | Right x <- Map.elems se'] newVars else [], repl s ty))
+
+instantiateTyping' = instantiateTyping_' False
 
 instantiateTyping'' :: Doc -> TCMS Ty -> TCM (InstType', Ty)
 instantiateTyping'' i ty = do
     (se, ty) <- runWriterT'' ty
-    x <- instantiateTyping' i se ty
+    (_, x) <- instantiateTyping' i se ty
     return (x, ty)
 
 instantiateTyping i = fmap fst . instantiateTyping'' i
 
 --lookEnv :: IdN -> T
-lookEnv :: Name -> TCMS Ty -> TCMS Ty
+lookEnv :: Name -> TCMS ([Ty], Ty) -> TCMS ([Ty], Ty)
 lookEnv n m = asks (Map.lookup n . getPolyEnv) >>= maybe m (toTCMS . ($ pShow n))
 
 lookEnv' n m = asks (Map.lookup n . typeFamilies) >>= maybe m (toTCMS . ($ pShow n))
@@ -506,9 +520,6 @@ ambiguityCheck msg se ty = do
         [] -> return ()
         err -> throwError . ErrorMsg $
             "during" <+> msg </> "ambiguous type:" <$$> pShow se <$$> pShow cs </> "=>" </> pShow ty <$$> "problematic vars:" <+> pShow err
-
---typing me ty = TypingConstr me ty
---    dependentVars cs (freeVars ty) Set.\\ freeVars me  -- TODO: make it more precise if necessary
 
 -- compute dependent type vars in constraints
 -- Example:  dependentVars [(a, b) ~ F b c, d ~ F e] [c] == [a,b,c]
@@ -529,17 +540,6 @@ dependentVars ie s = cycle mempty s
       where
         a --> b = \s -> if Set.null $ a `Set.intersection` s then mempty else b
         a <-> b = (a --> b) <> (b --> a)
-
-
-{-
-generalizeTypeVars :: Typing -> Typing
-generalizeTypeVars t = t -- TODO!   removeMonoVars (Set.fromList $ filter isTypeVar $ Map.keys $ monoEnv t) t
--}
-removeMonoVars = mapWriterT' $ fmap $ \(se, (s, x)) -> (foldr Map.delete se $ Set.toList s, x)
-{-
-simpArr (TArr a b) = TArr a b   -- patt syn trick
-simpArr x = x
--}
 
 
 --------------------------------------------------------------------------------
@@ -569,7 +569,7 @@ inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty
             Star_ -> star
             ConstraintKind_ c -> case c of
                 CEq t (TypeFun f ts) -> do
-                    tf <- lookEnv' f $ throwErrorTCM $ "Type family" <+> pShow f <+> "is not in scope."
+                    (_, tf) <- lookEnv' f $ throwErrorTCM $ "Type family" <+> pShow f <+> "is not in scope."
                     addUnif tf $ ts ~~> t
                     star
                 CClass _ t -> checkStarKind t >> star           -- TODO
@@ -577,8 +577,8 @@ inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty
             TTuple_ ts -> mapM_ checkStarKind ts >> star
             Forall_ Nothing a b -> checkStarKind a >> checkStarKind b >> star
             TApp_ tf ta -> appTy tf ta
-            TVar_ n -> lookEnv n $ newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (Map.singleton n $ Right t) >> return t
-            TCon_ n -> lookEnv n $ lookEnv (toExpN n) $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
+            TVar_ n -> fmap snd . lookEnv n $ newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (Map.singleton n $ Right t) >> return ([], t)
+            TCon_ n -> fmap snd . lookEnv n $ lookEnv (toExpN n) $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
 --            x -> error $ " inferKind: " ++ ppShow x
         case ty of
             Forall_ Nothing (ConstraintKind c) b -> do
@@ -590,41 +590,49 @@ appTy (TArr ta v) ta' = addUnif ta ta' >> return v      -- optimalization
 appTy tf ta = newStarVar "tapp" >>= \v -> addUnif tf (ta ~> v) >> return v
 
 inferPatTyping :: Bool -> PatR -> TCMS ((Pat, Ty), InstEnv)
-inferPatTyping polymorph p_@(Pat pt p) = addRange pt $ addCtx ("type inference of pattern" <+> pShow p_) $ do
+inferPatTyping polymorph p_@(Pat pt p) = addRange pt $ addCtx ("type inference of pattern" <+> pShow p_) $ case p of
+
+  PVar_ n -> do
+        t <- newStarVar "pvar"
+        addConstraints $ Map.singleton n $ Right t
+        let tr = Map.singleton n $ monoInstType n t
+        return ((Pat'' $ PVar_ $ VarE n {- $ trace'-} t, t), tr)
+  _ -> do
     p <- traverse (inferPatTyping polymorph) p
-    (t, tr) <- case p of
+    (res, t, tr) <- case p of
+      PCon_ n ps -> do
+            (_, tn) <- lookEnv n $ lift $ throwErrorTCM $ "Constructor" <+> pShow n <+> "is not in scope."
+            v <- newStarVar "pcon"
+            addUnif tn (map (snd . fst) ps ~~> v)
+            return (Pat'' $ PCon_ (n, tn) $ fst . fst <$> ps, v, mempty)
+      _ -> do
+       (t, tr) <- case p of
         PLit_ n -> noTr $ pure $ inferLit n
         Wildcard_ -> noTr $ newStarVar "_" >>= \t -> return t
-        PVar_ n -> do
-            t <- newStarVar "pvar"
---            when (not polymorph) $ 
-            addConstraints $ Map.singleton n $ Right t
-            return $ (,) t $ Map.singleton n $ monoInstType n t
 
         PAt_ n p -> addTr (\t -> Map.singleton n $ monoInstType n t) $ pure $ snd . fst $ p
 
         PTuple_ ps -> noTr $ pure $ TTuple $ map (snd . fst) ps
-        PCon_ n ps -> noTr $ do
-            tn <- lookEnv n $ lift $ throwErrorTCM $ "Constructor" <+> pShow n <+> "is not in scope."
-            newStarVar "pcon" >>= \v -> addUnif tn (map (snd . fst) ps ~~> v) >> return v
 
         PRecord_ (unzip -> (fs, ps)) -> noTr $ do
             v <- newStarVar "pfp2"
             v' <- newStarVar "pfp3"
             addConstraint $ Split v v' $ TRecord $ Map.fromList $ zip fs $ map (snd . fst) ps
             return v
+       return (Pat'' $ mapPat (error "p1") (`VarE` error "p2") $ fst . fst <$> p, t, tr)
 
     let trs = Map.unionsWith (++) . map ((:[]) <$>) $ tr: map snd (toList p)
---        ns = Set.unions $ n: map (fst . snd) (toList p)
     tr <- case filter (not . null . drop 1 . snd) $ Map.toList trs of
         [] -> return $ Map.map head trs
         ns -> lift $ throwErrorTCM $ "conflicting definitions for" <+> pShow (map fst ns)
-    return ((Pat'' $ mapPat (error "p1") (error "p2") $ fst . fst <$> p, t), tr)
+    return ((res, t), tr)
   where
     noTr = addTr $ const mempty
     addTr tr m = (\x -> (x, tr x)) <$> m
 
-inferTyping :: ExpR -> TCMS (Exp, Ty)
+eLam (n, t) e = ELam' mempty (PVar $ VarT n t) e
+
+inferTyping :: ExpR -> TCMS (Thunk, Ty)
 inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_) $ appSES $ case e of
 
     -- hack
@@ -634,22 +642,22 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
     ELam_ p f -> removeMonoVars $ do
         ((p, tp), tr) <- inferPatTyping False p
         (f, t) <- addCtx "?" $ withTyping tr $ inferTyping f
-        return $ (,) (Map.keysSet tr) (ELam p f, tp ~> t)
+        return $ (,) (Map.keysSet tr) (ELam' mempty p f, tp ~> t)
 
     ELet_ (PVar' _ n) x_ e -> do
-        (it, x, tx, se) <- lift $ do
+        ((fs, it), x, tx, se) <- lift $ do
             (se, (x, tx)) <- runWriterT'' $ inferTyping x_
-            it <- addRange (getTag x_) $ addCtx "let" $ instantiateTyping' (pShow n) se tx
+            it <- addRange (getTag x_) $ addCtx "let" $ instantiateTyping_' True (pShow n) se tx
             return (it, x, tx, se)
         addConstraints $ Map.filter isLeft se
         (e, t) <- withTyping (Map.singleton n it) $ inferTyping e
-        return (ELet (PVar $ VarE (IdN n) tx) x e, t)
+        return (ELet' mempty (PVar $ VarE (IdN n) tx) (foldr eLam x fs) e, t)
     ELet_ p x e -> removeMonoVars $ do          -- monomorph let; TODO?
         (x, tx) <- inferTyping x
         ((p, tp), tr) <- inferPatTyping False p
         addUnif tx tp
         (e, t) <- withTyping tr $ inferTyping e
-        return $ (,) (Map.keysSet tr) (ELet p x e, t)
+        return $ (,) (Map.keysSet tr) (ELet' mempty p x e, t)
     ETypeSig_ e ty -> do
         (e, te) <- inferTyping e
         ty <- inferKind ty
@@ -657,14 +665,14 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
         return (e, te)
     EType_ ta -> do
         t <- inferKind ta
-        return (EType t, kindOf t)
+        return (EType' mempty t, kindOf t)
     EVar_ n -> do
-        t <- lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
-        return (EVar $ VarE (IdN n) t, t)
+        (ty, t) <- lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
+        return (foldl (EApp' mempty) (EVar' mempty $ VarE (IdN n) $ foldr TArr t ty) $ map (EType' mempty) ty, t)
     _ -> do
         e <- traverse inferTyping e
         t <- case e of
-            EApp_ (_, tf) (EType t, ta) -> do
+            EApp_ (_, tf) (EType' _ t, ta) -> do
                 x <- newName "apptype"
                 addUnif t (TVar ta x)
                 v <- newStarVar "etyapp"
@@ -679,7 +687,7 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
                 return $ r ~> a
             ERecord_ (unzip -> (fs, es)) -> return $ TRecord $ Map.fromList $ zip (map IdN fs) $ map snd es
             ENamedRecord_ n (unzip -> (fs, es)) -> do -- TODO: handle field names
-                t <- lookEnv n $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
+                (_, t) <- lookEnv n $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
                 v <- newStarVar "namedrecord"
                 addUnif t $ foldr (~>) v $ map snd es
                 return v
@@ -688,7 +696,7 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
             EAlts_ _ xs -> newStarVar "ealts" >>= \v -> mapM_ (addUnif v . snd) xs >> return v
             ENext_ -> newStarVar "enext"          -- TODO: review
             x -> error $ "inferTyping: " ++ ppShow x
-        return (Exp'' $ mapExp (error "e1") (error "e2") (error "e3") $ fst <$> e, t)
+        return (Exp mempty $ mapExp (error "e1") (error "e2") (error "e3") $ fst <$> e, t)
 
 --------------------------------------------------------------------------------
 
@@ -728,8 +736,8 @@ tyConKind = tyConKind_ $ Ty' mempty Star_
 tyConKind_ :: TyR -> [TyR] -> TCM InstType'
 tyConKind_ res vs = instantiateTyping "tyconkind" $ foldr (liftA2 (~>)) (inferKind res) $ map inferKind vs
 
-mkInstType v k = \d -> WriterT' $ pure (Map.singleton v $ Right k, k)
-monoInstType v k = \d -> WriterT' $ pure (mempty, k)
+mkInstType v k = \d -> WriterT' $ pure (Map.singleton v $ Right k, ([], k))
+monoInstType v k = \d -> WriterT' $ pure (mempty, ([], k))
 
 inferConDef :: Name -> [(Name, TyR)] -> WithRange ConDef -> TCM InstEnv
 inferConDef con (unzip -> (vn, vt)) (r, ConDef n tys) = addRange r $ do
@@ -762,36 +770,42 @@ selectorDefs (r, DDataDef n _ cs) =
     , FieldTy (Just sel) _ <- tys
     ]
 
-inferDef :: ValueDefR -> TCM (TCM a -> TCM a)
+inferDef :: ValueDefR -> TCM (EnvMap, TCM a -> TCM a)
 inferDef (ValueDef p@(PVar' _ n) e) = do
     (se, (exp, te)) <- runWriterT'' $ removeMonoVars $ do
---        ((p, tp), (ns, tr)) <- inferPatTyping False p
         tn@(TVar _ tv) <- newStarVar $ pShow n
         addConstraints $ Map.singleton n $ Right tn
         (exp, te) <- withTyping (Map.singleton n $ monoInstType n tn) $ inferTyping e
---        addUnif tp te
         return $ (,) (Set.fromList [n, tv]) (exp, te) 
-    -- TODO: removeMonoVars?
-    -- TODO: subst down
-    f <- {- trace (ppShow (Map.filter isRight se, (n, te))) $ -} addCtx ("inst" <+> pShow n) $ instantiateTyping' (pShow n) se te
-    return ({-ValueDef (PVar $ VarE n te) (exp, te), -}withTyping $ Map.singleton n f) -- TODO: replCallType n (getTag e) e
+    (fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se te
+    the <- asks thunkEnv
+    let th = recEnv (PVar $ VarE n undefined) $ applyEnvBefore (TEnv mempty the)
+            $ flip (foldr eLam) fs
+            $ applyEnvBefore
+                ( TEnv mempty $ Map.singleton n $ Just
+                $ foldl (EApp' mempty) (EVar' mempty $ VarE n $ error "ev") $ map (\(n, t) -> EType' mempty $ TVar t n) fs
+                ) exp
+    return (Map.singleton n $ Just th, withTyping $ Map.singleton n f) -- TODO: replCallType n (getTag e) e
 
 {-
 -- TODO: revise
 replCallType n nt = \case
-    EVar _ n' | n == n' -> EVar nt n
-    Exp' t e -> Exp' t $ f <$> e
+    EVar' _ n' | n == n' -> EVar' nt n
+    Exp t e -> Exp' t $ f <$> e
 --    x -> error $ "replCallType: " ++ ppShow x
   where f = replCallType n nt
 
-modTag f (Exp' t x) = Exp' (f t) x
+modTag f (Exp t x) = Exp (f t) x
 -}
+
+
 
 inferDefs :: [DefinitionR] -> TCM PolyEnv
 inferDefs [] = ask
 inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
     DValueDef d -> do
-        addRange r (inferDef d) >>= ($ cont)
+        (e, f) <- addRange r (inferDef d)
+        addPolyEnv (emptyPolyEnv {thunkEnv = e}) $ f cont
     TypeFamilyDef con vars res -> do
         tk <- tyConKind_ res $ map snd vars
         addPolyEnv (emptyPolyEnv {typeFamilies = Map.singleton con tk}) cont
@@ -832,7 +846,13 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
 --            foldr ($) cont xs
 
 inference_ :: PolyEnv -> ModuleR -> ErrorT (VarMT Identity) PolyEnv
-inference_ penv Module{..} = flip runReaderT penv $ diffEnv <$> inferDefs definitions
+inference_ penv@PolyEnv{..} Module{..} = flip runReaderT penv $ diffEnv <$> inferDefs definitions
   where
-    diffEnv p = p {getPolyEnv = getPolyEnv p Map.\\ getPolyEnv penv}
+    diffEnv (PolyEnv i g p th tf) = PolyEnv
+        (Map.differenceWith (\a b -> Just $ a Set.\\ b) i instanceDefs)
+        (g Map.\\ getPolyEnv)
+        (p Map.\\ precedences)
+        (th Map.\\ thunkEnv)
+        (tf Map.\\ typeFamilies)
+
 

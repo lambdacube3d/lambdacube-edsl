@@ -17,6 +17,7 @@
 module Type where
 
 import Data.Char
+import Data.Either
 import Data.String
 import Data.Maybe
 import Data.List
@@ -282,6 +283,12 @@ pattern A2 f x y <- EApp (A1 f x) y
 pattern A3 f x y z <- EApp (A2 f x y) z
 pattern A4 f x y z v <- EApp (A3 f x y z) v
 pattern A5 f x y z v w <-  EApp (A4 f x y z v) w
+pattern A6 f x y z v w q <-  EApp (A5 f x y z v w) q
+pattern A7 f x y z v w q r <-  EApp (A6 f x y z v w q) r
+pattern A8 f x y z v w q r s <-  EApp (A7 f x y z v w q r) s
+pattern A9 f x y z v w q r s t <-  EApp (A8 f x y z v w q r s) t
+pattern A10 f x y z v w q r s t a <-  EApp (A9 f x y z v w q r s t) a
+pattern A11 f x y z v w q r s t a b <-  EApp (A10 f x y z v w q r s t a) b
 
 --------------------------------------------
 
@@ -500,6 +507,11 @@ newName i = do
   put ns
   return $ TypeIdN' n i
 
+newEName = do
+  (n: ns) <- get
+  put ns
+  return $ ExpIdN' n ""
+
 -------------------------------------------------------------------------------- environments
 
 type Env' a = Map Name a
@@ -531,7 +543,7 @@ type InstanceDefs = Env' (Set Ty)
 
 type TypingT = WriterT' SubstEnv
 
-type InstType = TypingT (VarMT Identity) Ty
+type InstType = TypingT (VarMT Identity) ([Ty], Ty)
 type InstType' = Doc -> InstType
 
 pureInstType = lift . pure
@@ -543,7 +555,7 @@ type TCM = TCMT Identity
 
 type TCMS = TypingT TCM
 
-toTCMS :: InstType -> TCMS Ty
+toTCMS :: InstType -> TCMS ([Ty], Ty)
 toTCMS = mapWriterT' $ lift . lift --mapStateT lift
 
 liftIdentity :: Monad m => Identity a -> m a
@@ -568,6 +580,7 @@ pattern TCon2 a b c = TApp Star (TApp StarStar (TCon (StarToStar 2) a) b) c
 pattern TCon2' a b c = TApp Star (TApp StarStar (TCon VecKind a) b) c
 pattern TCon3' a b c d = TApp Star (TApp StarStar (TApp VecKind (TCon (TArr Star VecKind) a) b) c) d
 
+pattern TENat' a = EType (TENat a)
 pattern TENat a = Ty_ TNat (TLit_ (LNat a))
 pattern TVec a b = TCon2' "Vec" (TENat a) b
 pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TENat a)) (TENat b)) c
@@ -645,8 +658,12 @@ instance PShow N where
     pShowPrec p = \case
         N _ qs s (NameInfo _ i) -> hcat (punctuate (char '.') $ map text $ qs ++ [s]) -- <> "{" <> i <> "}"
 
---showVar (N _ _ n (NameInfo _ i)) = text n <> "{" <> i <> "}"
-showVar = pShow
+showVar (N q _ n (NameInfo _ i)) = pShow q <> text n <> "{" <> i <> "}"
+
+instance PShow NameSpace where
+    pShowPrec p = \case
+        TypeNS -> "'"
+        ExpNS -> ""
 
 --instance PShow IdN where pShowPrec p (IdN n) = pShowPrec p n
 
@@ -692,7 +709,7 @@ instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
         ETuple_ a -> tupled $ map pShow a
         ELam_ p b -> "\\" <> pShow p <+> "->" <+> pShow b
         ETypeSig_ b t -> pShow b <+> "::" <+> pShow t
-        EType_ t -> pShowPrec p t
+        EType_ t -> "'" <> pShowPrec p t
         ELet_ a b c -> "let" <+> pShow a <+> "=" <+> pShow b <+> "in" </> pShow c
         ENamedRecord_ n xs -> pShow n <+> showRecord xs
         ERecord_ xs -> showRecord xs
@@ -750,7 +767,7 @@ instance (PShow c, PShow n) => PShow (Ty' c n ((,) a)) where
 
 instance PShow Var where
     pShowPrec p = \case
-        VarE n t -> pShow n
+        VarE n t -> pShow n --pParens True $ pShow n <+> "::" <+> pShow t
         VarT n t -> pShow n
 
 instance PShow TEnv where
@@ -786,7 +803,9 @@ instance (Replace a, Replace b) => Replace (Either a b) where
 
 -------------------------------------------------------------------------------- substitution
 
-data Subst_ = Subst_ { showS :: Doc, lookupS :: Name -> Maybe Ty, delN :: Name -> Subst_ }
+data Subst_ = Subst_ { substS :: Subst, lookupS :: Name -> Maybe Ty, delN :: Name -> Subst_ }
+
+showS = pShow . substS
 
 -- TODO: review usage (use only after unification)
 class Substitute a where subst_ :: Subst_ -> a -> a
@@ -795,13 +814,14 @@ subst :: Substitute a => Subst -> a -> a
 subst = subst_ . mkSubst
   where
     mkSubst :: Subst -> Subst_
-    mkSubst s = Subst_ (pShow s) (`Map.lookup` s) $ \n -> mkSubst $ Map.delete n s
+    mkSubst s = Subst_ s (`Map.lookup` s) $ \n -> mkSubst $ Map.delete n s
 
 substEnvSubst :: Substitute a => SubstEnv -> a -> a
 substEnvSubst = subst_ . mkSubst'
   where
     mkSubst' :: SubstEnv -> Subst_
-    mkSubst' s = Subst_ (pShow s) ((`Map.lookup` s) >=> either Just (const Nothing)) $ \n -> mkSubst' $ Map.delete n s
+    mkSubst' s = Subst_ (Map.map fromLeft $ Map.filter isLeft s) ((`Map.lookup` s) >=> either Just (const Nothing)) $ \n -> mkSubst' $ Map.delete n s
+    fromLeft = either id $ error "impossible"
 
 trace' x = trace (ppShow x) x
 
@@ -837,27 +857,25 @@ instance Substitute SubstEnv where
             | otherwise = [(x, either Left (Right . subst_ st) y)]
 
 --instance Substitute a => Substitute (Constraint' n a)      where subst_ = fmap . subst_
---instance Substitute a => Substitute [a]                    where subst_ = fmap . subst_
+instance Substitute a => Substitute [a]                    where subst_ = fmap . subst_
 instance (Substitute a, Substitute b) => Substitute (a, b) where subst_ s (a, b) = (subst_ s a, subst_ s b)
 
-instance Substitute Exp where
-    subst_ s e = e -- TODO!
+--instance Substitute (Exp' Var Ty Pat Identity) where
+--    subst_ s (Exp'' e) = subst_ s $ e
+
+instance Substitute Thunk where
+    subst_ s = applySubst $ substS s
 
 instance Substitute Var where
-{-
-    subst s = \case
-        VarE n t -> VarE n $ subst s t
-        VarC c -> VarC $ subst s c
-        VarT n -> VarT n
--}
+    subst_ s = \case
+        VarE n t -> VarE n $ subst_ s t
+        VarT n t -> VarT n $ subst_ s t
 
 instance Substitute Pat where
-{-
-    subst s = \case
-        PVar v -> PVar $ subst s v
-        PCon (n, ty) l -> PCon (n, subst s ty) $ subst s l
-        Pat p -> Pat $ fmap (subst s) p
--}
+    subst_ s = \case
+        PVar v -> PVar $ subst_ s v
+        PCon (n, ty) l -> PCon (n, subst_ s ty) $ subst_ s l
+        Pat'' p -> Pat'' $ subst_ s <$> p
 
 --------------------------------------------------------------------------------
 
@@ -877,6 +895,7 @@ tyOf = \case
     EVar (VarE _ t) -> t
     EApp (tyOf -> TArr _ t) _ -> t
     ELam (tyOfPat -> a) (tyOf -> b) -> TArr a b
+--    _ -> TUnit -- hack!
     e -> error $ "tyOf " ++ ppShow e
 
 tyOfPat :: Pat -> Ty

@@ -6,7 +6,7 @@ module Pretty
     , (<+>), (</>), (<$$>)
     , hsep, hcat, vcat
     , punctuate
-    , tupled, braces
+    , tupled, braces--, parens
     , text, int, integer, double, char
     ) where
 
@@ -43,7 +43,7 @@ f x (g y)
 --------------------------------------------------------------------------------
 
 pParens p x
-    | p = parens x
+    | p = tupled [x]
     | otherwise = x
 
 pOp i j k sep p a b = pParens (p >= i) $ pShowPrec j a <+> sep <+> pShowPrec k b

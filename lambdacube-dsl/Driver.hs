@@ -2,8 +2,10 @@
 module Driver where
 
 import Data.List
+import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Foldable (Foldable, toList)
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
@@ -44,7 +46,7 @@ catchMM :: MM a -> MM (Either String a)
 catchMM = mapReaderT $ \m -> lift $ either (Left . show) Right <$> runExceptT m
 
 parseAndToCoreMain :: MName -> MM Exp
-parseAndToCoreMain m = fst <$> getDef m (ExpN "main")
+parseAndToCoreMain m = either (throwErrorTCM . text) return =<< getDef m (ExpN "main")
 
 clearImports = modify (const [] *** id)
 
@@ -79,31 +81,21 @@ lcModuleFile path n = path </> (showN n ++ ".lc")
 getType = getType_ "Prelude"
 getType_ m n = either putStrLn (putStrLn . ppShow) =<< runMM ["./tests/accept"] (snd <$> getDef__ (ExpN m) (ExpN n))
 
-getDef :: MName -> EName -> MM ExpT
+getDef :: MName -> EName -> MM (Either String Exp)
 getDef = getDef_
---    either (\s -> throwErrorTCM $ pShow m <> "." <> pShow d <> ":" <+> s) return =<< getDef_ m d
 
 getDef__ :: MName -> EName -> MM ExpT
 getDef__ m d = do
     clearImports
     (fm, pe) <- loadModule m
-    fmap (\(m, x) -> (undefined, typingToTy m x)) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
+    fmap (\(m, (_, x)) -> (undefined, typingToTy m x)) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
 
-getDef_ :: MName -> EName -> MM ExpT
+getDef_ :: MName -> EName -> MM (Either String Exp)
 getDef_ m d = do
     clearImports
     (fm, pe) <- loadModule m
---    fmap (\(m, x) -> (undefined, typingToTy m x)) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
-    throwErrorTCM "not found"
---    (ms_, mods) <- get
---    let ms = zip ms_ $ map (mods Map.!) ms_
+    case Map.lookup d $ thunkEnv pe of
+        Just (Just th) -> return $ Right $ reduce th
+        Nothing -> return $ Left "not found"
+        _ -> throwErrorTCM "not found?"
 
-{- TODO
-    return $ case
-        [ buildLet ((\ds -> [d | DValueDef d <- ds]) (concatMap (definitions . snd) (reverse dss) ++ reverse ps)) e
-         | ((m', defs): dss) <- tails ms, m' == fm
-         , (DValueDef (ValueDef (PVar (VarE d' _)) e):ps) <- tails $ reverse $ definitions defs, d' == d
-         ] of
-        [e] -> Right e
-        [] -> Left "not found"
--}

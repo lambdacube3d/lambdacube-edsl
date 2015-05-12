@@ -48,26 +48,23 @@ main = do
 
 writeReduced = runMM' . (testFrame ["./tests/accept"] $ \case
     Left e -> Left e
---    Right (Left e) -> Right ("typechecked", show e)
-    Right e -> Right ("reduced main ", ppShow . mkReduce . fst $ e))
+    Right (Left e) -> Right ("typechecked", show e)
+    Right (Right e) -> Right ("reduced main ", ppShow e))
 
 main' x = runMM' $ acceptTests [x]
 main'' x = runMM' $ rejectTests [x]
 
 acceptTests = testFrame ["./tests/accept", "./tests/reject"] $ \case
     Left e -> Left e
---    Right (Left e) -> Right ("typechecked", show e)
-    Right e
-{-
-        | typingToTy (snd $ getTag e) == TCon0 "Output"
-            -> Right ("compiled main", ppShow . compilePipeline . mkReduce . toCore mempty $ e)
-        | typingToTy (snd $ getTag e) == TCon0 "Bool" -> case mkReduce . toCore mempty $ e of
+    Right (Left e) -> Right ("typechecked", show e)
+    Right (Right e)
+        | tyOf e == TCon0 "Output"
+            -> Right ("compiled main", show . compilePipeline $ e)
+        | tyOf e == TCon0 "Bool" -> case e of
             x@(A0t "True" (TCon0 "Bool")) -> Right ("main ~~> True", ppShow x)
             x -> Left $ "main should be True but it is \n" ++ ppShow x
-        | otherwise -> Right ("reduced main ", ppShow . mkReduce . toCore mempty $ e)
-        | otherwise -> Right ("System-F main ", ppShow . toCore mempty $ e)
--}
-        | otherwise -> Right ("typechecked ", ppShow e)
+        | otherwise -> Right ("reduced main " ++ ppShow (tyOf e), ppShow e)
+--        | otherwise -> Right ("System-F main ", ppShow . toCore mempty $ e)
 
 rejectTests = testFrame ["./tests/reject", "./tests/accept"] $ \case
     Left e -> Right ("error message", e)
@@ -80,10 +77,11 @@ testFrame dirs f tests = local (const dirs) $ forM_ (zip [1..] (tests :: [String
     result <- catchMM $ getDef_ (ExpN n) (ExpN "main")
     case f result of
       Left e -> liftIO $ putStrLn $ "\n!FAIL\n" ++ e
-      Right (op, x) -> liftIO $ catch (length x `seq` compareResult (pad 15 op) (head dirs </> (n ++ ".out")) x) getErr
+      Right (op, x) -> liftIO $ catchErr $ length x `seq` compareResult (pad 15 op) (head dirs </> (n ++ ".out")) x
   where
+    catchErr m = catch m getErr
     getErr :: ErrorCall -> IO ()
-    getErr e = putStrLn $ "\n!FAIL err\n" ++ limit "\n..." 4000 (show e)
+    getErr e = catchErr $ putStrLn $ "\n!FAIL err\n" ++ limit "\n..." 4000 (show e)
 
 compareResult msg ef e = doesFileExist ef >>= \b -> case b of
     False -> writeFile ef e >> putStrLn ("OK - " ++ msg ++ " is written")
