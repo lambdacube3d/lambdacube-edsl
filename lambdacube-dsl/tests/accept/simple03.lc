@@ -1,0 +1,34 @@
+
+renderWire fb = let
+  blend = Blend (FuncSubtract,FuncAdd) ((SrcColor,SrcColor),(SrcColor,OneMinusSrcAlpha)) (V4F 0.0 1.0 0.0 0.0)
+  modelViewProj = Uni (IM44F "viewProj")
+  polyMode          = PolygonLine 20.0
+  polyMode'        = PolygonPoint (PointSize 10.0)
+  polyMode''         = PolygonFill
+  rasterCtx         = TriangleCtx CullNone polyMode (Offset (-1) 0) FirstVertex
+  fragmentCtx       = AccumulationContext (DepthOp Lequal True,ColorOp NoBlending (V4B True True True True))
+  vertexShader (v,n)    = VertexOut (PrimMulMatVec modelViewProj (PrimV3FToV4F v) ) 1.0 () (Smooth (PrimV3FToV4F n))
+  vertexStream      = Fetch "missing shader" Triangles (IV3F "position",IV3F "color")
+  primitiveStream   = Transform vertexShader vertexStream
+  fragmentStream    = Rasterize rasterCtx primitiveStream
+  fragmentShader f  = FragmentOutRastDepth (V4F 1.0 1.0 1.0 1.0)
+ in Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
+
+render fb = let
+  blend = Blend (FuncSubtract,FuncAdd) ((SrcColor,SrcColor),(SrcColor,OneMinusSrcAlpha)) (V4F 0.0 1.0 0.0 0.0)
+  modelViewProj = Uni (IM44F "viewProj")
+  polyMode          = PolygonLine 20.0
+  polyMode'        = PolygonPoint (PointSize 10.0)
+  polyMode''         = PolygonFill
+  rasterCtx         = TriangleCtx CullNone polyMode'' NoOffset FirstVertex
+  fragmentCtx       = AccumulationContext (DepthOp Less True,ColorOp NoBlending (V4B True True True True))
+  vertexShader (v,n)    = VertexOut (PrimMulMatVec modelViewProj (PrimV3FToV4F v) ) 1.0 () (Smooth (PrimV3FToV4F n))
+  vertexStream      = Fetch "missing shader" Triangles (IV3F "position",IV3F "color")
+  primitiveStream   = Transform vertexShader vertexStream
+  fragmentStream    = Rasterize rasterCtx primitiveStream
+  fragmentShader f  = FragmentOutRastDepth f-- (V4F 1.0 1.0 1.0 0.2)
+ in Accumulate fragmentCtx PassAll fragmentShader fragmentStream fb
+
+main = let
+  emptyFB = FrameBuffer (DepthImage @1 1000,ColorImage @1 (V4F 0.0 0.0 0.4 1.0))
+ in ScreenOut $ renderWire $ render emptyFB
