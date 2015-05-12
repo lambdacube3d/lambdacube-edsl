@@ -74,7 +74,7 @@ instance Ord Thunk where
 
 --------------------------------------------
 
-newtype Ty' n m = Ty'' (m (Ty_ n (Ty' n m)))
+newtype Ty' n m = Ty'' (m (Exp_ n () () (Ty' n m)))
 
 pattern Ty' a b = Ty'' (a, b)
 
@@ -112,11 +112,11 @@ pattern Ty__ a b <- (unfoldTy -> Ty a b) where
     Ty__ Star Star_ = Star
     Ty__ a b = Ty a b
 
-pattern TApp k a b = Ty_ k (TApp_ a b)
+pattern TApp k a b = Ty_ k (EApp_ a b)
 pattern TCon k a <- Ty_ k (TCon_ (TypeIdN a)) where
     TCon k a = Ty_ k (TCon_ (TypeIdN' a "typecon"))
-pattern TVar k b = Ty_ k (TVar_ b)
-pattern TLit k b = Ty_ k (TLit_ b)
+pattern TVar k b = Ty_ k (EVar_ b)
+pattern TLit k b = Ty_ k (ELit_ b)
 
 pattern Star = StarToStar 0
 
@@ -192,7 +192,7 @@ pattern Wildcard = Pat'' Wildcard_
 
 -------------------------------------------------------------------------------- expressions
 
-data Exp_ v t p b
+data Exp_ v t p b       -- TODO: elim t parameter
     = ELit_      Lit      -- could be replaced by EType + ELit
     | EVar_      v
     | EApp_      b b
@@ -221,11 +221,7 @@ data Exp_ v t p b
     deriving (Eq,Ord,Functor,Foldable,Traversable) -- TODO: elim Eq instance
 
 -- TODO: elim these
-type Ty_ n a = Exp_ n () () a
-pattern TLit_ l = ELit_ l
-pattern TVar_ n = EVar_ n
-pattern TApp_ a b = EApp_ a b
-
+--type Ty_ n a = Exp_ n () () a
 
 
 mapExp :: (v -> v') -> (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v' t' p' b
@@ -622,7 +618,7 @@ pattern TCon2' a b c = TApp Star (TApp StarStar (TCon VecKind a) b) c
 pattern TCon3' a b c d = TApp Star (TApp StarStar (TApp VecKind (TCon (TArr Star VecKind) a) b) c) d
 
 pattern TENat' a = EType (TENat a)
-pattern TENat a = Ty_ TNat (TLit_ (LNat a))
+pattern TENat a = Ty_ TNat (ELit_ (LNat a))
 pattern TVec a b = TCon2' "Vec" (TENat a) b
 pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TENat a)) (TENat b)) c
 
@@ -675,13 +671,11 @@ class FreeVars a where freeVars :: a -> Set IdN
 
 instance FreeVars Ty where
     freeVars = \case
-        Ty_ k x -> freeVars k `mappend` freeVars x
+        Ty_ k x -> freeVars k `mappend` case x of
+            EVar_ a -> Set.singleton a
+            Forall_ (Just v) k t -> freeVars k <> Set.delete v (freeVars t)
+            x -> foldMap freeVars x
         StarToStar _ -> mempty
-instance FreeVars (Ty_ IdN Ty) where    -- TODO: eliminate
-    freeVars = \case
-        TVar_ a -> Set.singleton a
-        Forall_ (Just v) k t -> freeVars k <> Set.delete v (freeVars t)
-        x -> foldMap freeVars x
 
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
 --instance FreeVars Typing where freeVars (TypingConstr m t) = freeVars m <> freeVars t
@@ -747,7 +741,7 @@ instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
 
         Star_ -> "*"
 --        TLit_ l -> pShowPrec p l
---        TVar_ n -> pShow n
+--        EVar_ n -> pShow n
         TCon_ n -> pShow n
 --        TApp_ a b -> pApp p a b
         Forall_ Nothing a b -> pInfixr (-1) "->" p a b
@@ -830,7 +824,7 @@ instance Replace Ty where
         StarToStar n -> StarToStar n
         Ty_ k s -> Ty_ (repl st k) $ case s of
             Forall_ (Just n) a b -> Forall_ (Just n) (repl st a) (repl (Map.delete n st) b)
-            TVar_ a | Just t <- Map.lookup a st -> TVar_ t
+            EVar_ a | Just t <- Map.lookup a st -> EVar_ t
             t -> repl st <$> t
 
 instance Replace a => Replace (Env a) where
@@ -870,7 +864,7 @@ recsubst g h = \case
     StarToStar n -> StarToStar n
     Ty_ k s -> case s of
         Forall_ (Just n) a b -> Ty_ (f k) $ Forall_ (Just n) (f a) $ h n b
-        TVar_ v -> g (Ty_ (f k) $ TVar_ v) v
+        EVar_ v -> g (Ty_ (f k) $ EVar_ v) v
         _ -> Ty_ (f k) $ f <$> s
   where
     f = recsubst g h

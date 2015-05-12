@@ -346,13 +346,13 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
             -- uni t (repl (Map.singleton a' a) t')
             bindVars (TVar k a) (TVar k' a') >> uni t t'
         unifyTy' (Forall_ Nothing a1 b1) (Forall_ Nothing a2 b2) = uni a1 a2 >> uni b1 b2
-        unifyTy' (TVar_ u) (TVar_ v) = bindVars a b
-        unifyTy' (TVar_ u) _ = bindVar u b
-        unifyTy' _ (TVar_ v) | bidirectional = bindVar v a
-        unifyTy' (TLit_ l) (TLit_ l') | l == l' = return ()
+        unifyTy' (EVar_ u) (EVar_ v) = bindVars a b
+        unifyTy' (EVar_ u) _ = bindVar u b
+        unifyTy' _ (EVar_ v) | bidirectional = bindVar v a
+        unifyTy' (ELit_ l) (ELit_ l') | l == l' = return ()
         unifyTy' (TCon_ u) (TCon_ v) | u == v = return ()
         unifyTy' (TTuple_ t1) (TTuple_ t2) = sequence_ $ zipWith uni t1 t2
-        unifyTy' (TApp_ a1 b1) (TApp_ a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy' (EApp_ a1 b1) (EApp_ a2 b2) = uni a1 a2 >> uni b1 b2
         unifyTy' Star_ Star_ = return ()
         unifyTy' _ _
           | otherwise = throwError $ UnificationError a b $ filter (not . null . drop 1 . snd) tys
@@ -535,7 +535,7 @@ inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty
     _ -> do
         ty <- traverse inferKind ty
         k <- case kindOf <$> ty of
-            TLit_ l -> return $ inferLit l
+            ELit_ l -> return $ inferLit l
             Star_ -> star
             ConstraintKind_ c -> case c of
                 CEq t (TypeFun f ts) -> do
@@ -546,8 +546,8 @@ inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty
                 _ -> star
             TTuple_ ts -> mapM_ checkStarKind ts >> star
             Forall_ Nothing a b -> checkStarKind a >> checkStarKind b >> star
-            TApp_ tf ta -> appTy tf ta
-            TVar_ n -> fmap snd . lookEnv n $ newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (Map.singleton n $ Right t) >> return ([], t)
+            EApp_ tf ta -> appTy tf ta
+            EVar_ n -> fmap snd . lookEnv n $ newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (Map.singleton n $ Right t) >> return ([], t)
             TCon_ n -> fmap snd . lookEnv n $ lookEnv (toExpN n) $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
 --            x -> error $ " inferKind: " ++ ppShow x
         case ty of
@@ -706,9 +706,9 @@ inferConDef con (unzip -> (vn, vt)) (r, ConDef n tys) = addRange r $ do
         withTyping (Map.fromList $ zip vn $ zipWith mkInstType vn ks) $ do
             let tyConResTy :: TCMS Ty
                 tyConResTy
-                    = inferKind $ foldl app (Ty' mempty $ TCon_ con) $ map (Ty' mempty . TVar_) vn
+                    = inferKind $ foldl app (Ty' mempty $ TCon_ con) $ map (Ty' mempty . EVar_) vn
                   where
-                    app a b = Ty' mempty $ TApp_ a b
+                    app a b = Ty' mempty $ EApp_ a b
 
             foldr (liftA2 (~>)) tyConResTy $ map inferFieldKind tys
     return $ Map.singleton n ty
