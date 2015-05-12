@@ -7,7 +7,7 @@ module Pretty
     , hsep, hcat, vcat
     , punctuate
     , tupled, braces--, parens
-    , text, int, integer, double, char
+    , text
     ) where
 
 import Data.Set (Set)
@@ -77,4 +77,9 @@ instance (PShow a, PShow b) => PShow (Either a b) where
 
 instance PShow Doc where
     pShowPrec p x = braces x
+
+instance PShow Int     where pShowPrec _ = int
+instance PShow Integer where pShowPrec _ = integer
+instance PShow Double  where pShowPrec _ = double
+instance PShow Char    where pShowPrec _ = char
 

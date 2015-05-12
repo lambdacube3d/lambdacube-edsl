@@ -50,6 +50,9 @@ reduceHNF th@(peelThunk -> exp) = case exp of
 
     EApp_ f x -> reduceHNF' f $ \f -> case f of
 
+--        ExtractInstance i 0 n -> reduceHNF' x $ \case
+--            EType_ (ConstraintKind x) -> reduceHNF $ applySubst (Map.singleton v x) e
+
         EAlts_ i es | i > 0 -> reduceHNF $ thunk $ EAlts_ (i-1) $ thunk . (`EApp_` x) <$> es
         EFieldProj_ fi -> reduceHNF' x $ \case
             ERecord_ fs -> case [e | (fi', e) <- fs, fi' == fi] of

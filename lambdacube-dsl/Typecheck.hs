@@ -190,7 +190,7 @@ reduceConstraint cvar x = do
                 | otherwise -> noInstance
             _ -> discard Refl []
 
-        _ -> maybe noInstance (\s -> if Set.member t $ s then discard Refl [] else noInstance' s) $ Map.lookup c builtinInstances
+        _ -> maybe noInstance (\s -> maybe (noInstance' s) (\w -> discard w []) $ Map.lookup t s) $ Map.lookup c builtinInstances
 
       where
         msg' = "no" <+> pShow c <+> "instance for" <+> pShow t
@@ -441,38 +441,6 @@ checkStarKind t = addUnif Star t
 
 star = return Star
 
-joinPolyEnvs :: forall m. MonadError ErrorMsg m => [PolyEnv] -> m PolyEnv
-joinPolyEnvs ps = PolyEnv
-    <$> mkJoin' instanceDefs
-    <*> mkJoin getPolyEnv
-    <*> mkJoin precedences
-    <*> mkJoin thunkEnv
-    <*> mkJoin typeFamilies
-  where
-    mkJoin :: (PolyEnv -> Env a) -> m (Env a)
-    mkJoin f = case filter (not . null . drop 1 . snd) $ Map.toList ms' of
-        [] -> return $ head <$> ms'
-        xs -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xs)
-       where
-        ms' = Map.unionsWith (++) $ map (((:[]) <$>) . f) ps
-
-    mkJoin' f = case [(n, x) | (n, s) <- Map.toList ms', (x, is) <- Map.toList s, not $ null $ drop 1 is] of
-        [] -> return $ Map.keysSet <$> ms'
-        xs -> throwErrorTCM $ "Definition clash:" <+> pShow xs
-       where
-        ms' = Map.unionsWith (Map.unionWith (++)) $ map (((Map.fromList . map (flip (,) [()]) . Set.toList) <$>) . f) ps
-
-emptyPolyEnv = PolyEnv mempty mempty mempty mempty mempty
-
---withTyping :: Env InstType -> TCM a -> TCM a
-withTyping ts = addPolyEnv $ emptyPolyEnv {getPolyEnv = ts}
-
-addPolyEnv pe m = do
-    env <- ask
-    env <- joinPolyEnvs [env, pe]
-    local (const env) m
-
-
 ----------------------------
 
 instantiateTyping_' :: Bool -> Doc -> SubstEnv -> Ty -> TCM ([(IdN, Ty)], InstType')
@@ -492,19 +460,21 @@ instantiateTyping_' typ info se ty = do
 
 instantiateTyping' = instantiateTyping_' False
 
-instantiateTyping'' :: Doc -> TCMS Ty -> TCM (InstType', Ty)
-instantiateTyping'' i ty = do
+instantiateTyping'' :: Bool -> Doc -> TCMS Ty -> TCM (([(IdN, Ty)], InstType'), Ty)
+instantiateTyping'' typ i ty = do
     (se, ty) <- runWriterT'' ty
-    (_, x) <- instantiateTyping' i se ty
+    x <- instantiateTyping_' typ i se ty
     return (x, ty)
 
-instantiateTyping i = fmap fst . instantiateTyping'' i
+instantiateTyping i = fmap (snd . fst) . instantiateTyping'' False i
 
 --lookEnv :: IdN -> T
 lookEnv :: Name -> TCMS ([Ty], Ty) -> TCMS ([Ty], Ty)
 lookEnv n m = asks (Map.lookup n . getPolyEnv) >>= maybe m (toTCMS . ($ pShow n))
 
 lookEnv' n m = asks (Map.lookup n . typeFamilies) >>= maybe m (toTCMS . ($ pShow n))
+
+lookEnv'' n = asks (Map.lookup n . classDefs) -- >>= maybe (undefined <$> throwErrorTCM n)
 
 -- Ambiguous: (Int ~ F a) => Int
 -- Not ambiguous: (Show a, a ~ F b) => b
@@ -700,14 +670,6 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
 
 --------------------------------------------------------------------------------
 
-{-
-instance MonadWriter (Env b) (Typing_ b) where
-    writer (t, m) = TypingConstr m t
-    listen (TypingConstr m t) = TypingConstr m (t, m)
-    pass (TypingConstr m (t, f)) = TypingConstr (f m) t
-
-type Typing = Typing_ Ty Ty
--}
 -- TODO: review applications of this
 typingToTy :: SubstEnv -> Ty -> Ty
 typingToTy env ty = foldr forall_ ty $ orderEnv env
@@ -727,8 +689,6 @@ typingToTy env ty = foldr forall_ ty $ orderEnv env
 
 
 --------------------------------------------------------------------------------
-
---trace' s = trace (ppShow s) s
 
 tyConKind :: [TyR] -> TCM InstType'
 tyConKind = tyConKind_ $ Ty' mempty Star_
@@ -785,20 +745,24 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
                 ( TEnv mempty $ Map.singleton n $ Just
                 $ foldl (EApp' mempty) (EVar' mempty $ VarE n $ error "ev") $ map (\(n, t) -> EType' mempty $ TVar t n) fs
                 ) exp
-    return (Map.singleton n $ Just th, withTyping $ Map.singleton n f) -- TODO: replCallType n (getTag e) e
+    return (Map.singleton n $ Just th, withTyping $ Map.singleton n f)
 
-{-
--- TODO: revise
-replCallType n nt = \case
-    EVar' _ n' | n == n' -> EVar' nt n
-    Exp t e -> Exp' t $ f <$> e
---    x -> error $ "replCallType: " ++ ppShow x
-  where f = replCallType n nt
-
-modTag f (Exp t x) = Exp (f t) x
--}
-
-
+-- non recursive
+inferDef' :: InstType -> ValueDefR -> TCM (EnvMap, TCM a -> TCM a)
+inferDef' ty (ValueDef p@(PVar' _ n) e) = do
+    (se, (exp, (te, fs))) <- runWriterT'' $ removeMonoVars $ do
+        (fn, t) <- toTCMS ty
+        tn@(TVar _ tv) <- newStarVar $ pShow n
+        addConstraints $ Map.singleton n $ Right tn
+        (exp, te) <- inferTyping e
+        addUnif t te
+        return $ (,) (Set.fromList [n, tv]) (exp, (te, fn))
+    (_fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se te
+    -- TODO: unify fs - _fs
+    the <- asks thunkEnv
+    let th = recEnv (PVar $ VarE n undefined) $ applyEnvBefore (TEnv mempty the)        -- recEnv not needed?
+            $ flip (foldr eLam) [(n, v) | v@(TVar    _ n) <- fs] exp
+    return (Map.singleton n $ Just th, withTyping $ Map.singleton n f)
 
 inferDefs :: [DefinitionR] -> TCM PolyEnv
 inferDefs [] = ask
@@ -823,33 +787,41 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
                 return $ Map.singleton c ty
             withTyping (mconcat cdefs) cont
     ClassDef con [(vn, vark)] cdefs -> do
-        cdefs <- forM cdefs $ \(TypeSig n t) -> do
-            t <- instantiateTyping (pShow n) $ do
+        (unzip -> (ths, cdefs)) <- forM cdefs $ \(TypeSig n t) -> do
+            ((fs, t), _) <- instantiateTyping'' False (pShow n) $ do
                 vark <- inferKind vark
                 addConstraint $ CClass (IdN con) $ TVar vark $ IdN vn
                 inferKind t
-            return $ Map.singleton n t
-        withTyping (mconcat cdefs) cont
+            let find = head [i | (i, ConstraintKind (CClass n _)) <- zip [0..] $ map snd fs, n == con]
+--            let t' = (mapWriterT' ((id *** ((ConstraintKind cstr:) *** id)) <$>)) <$> t
+--                rearrange cs = head [b: as ++ bs | (as, b@(_, ConstraintKind _): bs) <- zip (inits cs) (tails cs)]
+            return (Map.singleton n $ Just $ Exp mempty $ ExtractInstance (length fs) find n, Map.singleton n t)
+        addPolyEnv (emptyPolyEnv {thunkEnv = mconcat ths, classDefs = Map.singleton con $ ClassD $ mconcat cdefs}) $ withTyping (mconcat cdefs) cont
     DAxiom (TypeSig n t) -> do
-        (t, t') <- instantiateTyping'' (pShow n) $ inferKind t
+        ((_, t), t') <- instantiateTyping'' False (pShow n) $ inferKind t
         let res (TArr a b) = res b
             res t = t
             n' = (if isStar $ res t' then toTypeN else id) n
         withTyping (Map.singleton n' t) cont
     InstanceDef c t xs -> do  -- TODO: check types
+        (ClassD cs) <- lookEnv'' c >>= maybe (throwErrorTCM "can't find class") return
         (ce, t) <- runWriterT'' $ inferKind_ t     -- TODO: ce
         let ce' = Map.filter (either (const False) (const True)) ce
         when (not $ Map.null ce') $ throwErrorTCM $ "not null ce" <+> pShow ce'
-        local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Set.singleton t) (Set.insert t)) c $ instanceDefs pe}) $ do
-            cont
---            xs <- forM xs $ \d -> inferDef d
+        xs <- local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t Refl) (Map.insert t Refl)) c $ instanceDefs pe}) -- fake
+                $ forM xs $ \x@(ValueDef (PVar' _ n)  _) -> do
+            inferDef' (cs Map.! n $ "instance") x
+        let w = WInstance $ fmap (fromMaybe (error "impossible")) $ mconcat $ map fst xs
+        local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t w) (Map.insert t w)) c $ instanceDefs pe}) $ do
 --            foldr ($) cont xs
+            cont
 
 inference_ :: PolyEnv -> ModuleR -> ErrorT (VarMT Identity) PolyEnv
 inference_ penv@PolyEnv{..} Module{..} = flip runReaderT penv $ diffEnv <$> inferDefs definitions
   where
-    diffEnv (PolyEnv i g p th tf) = PolyEnv
-        (Map.differenceWith (\a b -> Just $ a Set.\\ b) i instanceDefs)
+    diffEnv (PolyEnv i c g p th tf) = PolyEnv
+        (Map.differenceWith (\a b -> Just $ a Map.\\ b) i instanceDefs)
+        (c Map.\\ classDefs)
         (g Map.\\ getPolyEnv)
         (p Map.\\ precedences)
         (th Map.\\ thunkEnv)

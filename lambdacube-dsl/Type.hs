@@ -13,6 +13,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Type where
 
@@ -79,8 +80,11 @@ data TypeFun n a = TypeFun n [a]
 
 data Witness
     = Refl
-    -- TODO
+    | WInstance (Env Thunk)
     deriving (Eq, Ord)
+
+instance Eq Thunk where
+instance Ord Thunk where
 
 --------------------------------------------
 
@@ -217,6 +221,7 @@ data Exp_ v t p b
     | EFieldProj_ Name
     | EAlts_     Int [b]  -- function alternatives; Int: arity
     | ENext_              -- go to next alternative
+    | ExtractInstance Int Int Name
     deriving (Functor,Foldable,Traversable)
 
 mapExp :: (v -> v') -> (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v' t' p' b
@@ -234,6 +239,7 @@ mapExp vf tf f = \case
     EAlts_     x y     -> EAlts_ x y
     ENext_             -> ENext_
     EType_ t           -> EType_ $ tf t
+    ExtractInstance i j n -> ExtractInstance i j n
 
 --------------------------------------------
 
@@ -525,19 +531,57 @@ data TEnv = TEnv Subst EnvMap       -- TODO: merge into this:   Env (Either Ty (
 
 type EnvMap = Env (Maybe Thunk)   -- Nothing: statically unknown but defined
 
+data ClassD = ClassD InstEnv
+
+type InstEnv = Env' InstType'
+
+type PrecMap = Env' Fixity
+
+type InstanceDefs = Env' (Map Ty Witness)
+
+--------------------------------------------------------------------------------
+
 data PolyEnv = PolyEnv
     { instanceDefs :: InstanceDefs
+    , classDefs  :: Env' ClassD
     , getPolyEnv :: InstEnv
     , precedences :: PrecMap
     , thunkEnv :: EnvMap
     , typeFamilies :: InstEnv
     }
 
-type InstEnv = Env' InstType'
+emptyPolyEnv :: PolyEnv
+emptyPolyEnv = PolyEnv mempty mempty mempty mempty mempty mempty
 
-type PrecMap = Env' Fixity
+joinPolyEnvs :: forall m. MonadError ErrorMsg m => [PolyEnv] -> m PolyEnv
+joinPolyEnvs ps = PolyEnv
+    <$> mkJoin' instanceDefs
+    <*> mkJoin classDefs
+    <*> mkJoin getPolyEnv
+    <*> mkJoin precedences
+    <*> mkJoin thunkEnv
+    <*> mkJoin typeFamilies
+  where
+    mkJoin :: (PolyEnv -> Env a) -> m (Env a)
+    mkJoin f = case filter (not . null . drop 1 . snd) $ Map.toList ms' of
+        [] -> return $ head <$> ms'
+        xs -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xs)
+       where
+        ms' = Map.unionsWith (++) $ map (((:[]) <$>) . f) ps
 
-type InstanceDefs = Env' (Set Ty)
+    mkJoin' f = case [(n, x) | (n, s) <- Map.toList ms', (x, is) <- Map.toList s, not $ null $ drop 1 is] of
+        [] -> return $ (head <$>) <$> ms'
+        xs -> throwErrorTCM $ "Definition clash:" <+> pShow xs
+       where
+        ms' = Map.unionsWith (Map.unionWith (++)) $ map ((((:[]) <$>) <$>) . f) ps
+
+--withTyping :: Env InstType -> TCM a -> TCM a
+withTyping ts = addPolyEnv $ emptyPolyEnv {getPolyEnv = ts}
+
+addPolyEnv pe m = do
+    env <- ask
+    env <- joinPolyEnvs [env, pe]
+    local (const env) m
 
 -------------------------------------------------------------------------------- monads
 
@@ -652,11 +696,11 @@ instance FreeVars a => FreeVars (Constraint' n a)    where freeVars = foldMap fr
 
 -- TODO: eliminate
 showN :: N -> String
-showN (N _ qs s _) = show $ hcat (punctuate (char '.') $ map text $ qs ++ [s])
+showN (N _ qs s _) = show $ hcat (punctuate (pShow '.') $ map text $ qs ++ [s])
 
 instance PShow N where
     pShowPrec p = \case
-        N _ qs s (NameInfo _ i) -> hcat (punctuate (char '.') $ map text $ qs ++ [s]) -- <> "{" <> i <> "}"
+        N _ qs s (NameInfo _ i) -> hcat (punctuate (pShow '.') $ map text $ qs ++ [s]) -- <> "{" <> i <> "}"
 
 showVar (N q _ n (NameInfo _ i)) = pShow q <> text n <> "{" <> i <> "}"
 
@@ -669,11 +713,11 @@ instance PShow NameSpace where
 
 instance PShow Lit where
     pShowPrec p = \case
-        LInt    i -> integer i
+        LInt    i -> pShow i
         LChar   i -> text $ show i
         LString i -> text $ show i
-        LFloat  i -> double i
-        LNat    i -> int i
+        LFloat  i -> pShow i
+        LNat    i -> pShow i
 
 instance (PShow n, PShow c, PShow a) => PShow (Ty_ c n a) where
     pShowPrec p = \case
@@ -693,6 +737,7 @@ instance (PShow n, PShow c, PShow a) => PShow (Ty_ c n a) where
 instance PShow Witness where
     pShowPrec p = \case
         Refl -> "Refl"
+        WInstance _ -> "WInstance ..."       
 
 instance PShow Ty where
     pShowPrec p = \case
@@ -714,11 +759,11 @@ instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
         ENamedRecord_ n xs -> pShow n <+> showRecord xs
         ERecord_ xs -> showRecord xs
         EFieldProj_ n -> "." <> pShow n
-        EAlts_ i b -> int i <> braces (vcat $ punctuate (char ';') $ map pShow b)
+        EAlts_ i b -> pShow i <> braces (vcat $ punctuate (pShow ';') $ map pShow b)
         ENext_ -> "SKIP"
+        ExtractInstance i j n -> "extract" <+> pShow i <+> pShow j <+> pShow n
 
-
-showRecord = braces . hsep . punctuate (char ',') . map (\(a, b) -> pShow a <> ":" <+> pShow b)
+showRecord = braces . hsep . punctuate (pShow ',') . map (\(a, b) -> pShow a <> ":" <+> pShow b)
 
 instance (PShow n, PShow t, PShow p, PShow a) => PShow (Exp' n t p ((,) a)) where
     pShowPrec p e = case getLams e of
