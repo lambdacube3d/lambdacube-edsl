@@ -111,10 +111,10 @@ unlines (x:xs) = x ++ "\n" ++ unlines xs
 
 setVertexAttrib :: GL.GLuint -> Stream Buffer -> GFX Unit
 setVertexAttrib i val = case val of
-  ConstFloat v    -> setAFloat i v
-  ConstV2F v      -> setAV2F i v
-  ConstV3F v      -> setAV3F i v
-  ConstV4F v      -> setAV4F i v
+  ConstFloat v -> setAFloat i v
+  ConstV2F v   -> setAV2F i v
+  ConstV3F v   -> setAV3F i v
+  ConstV4F v   -> setAV4F i v
   ConstM22F (V2 x y) -> do
     setAV2F i x
     setAV2F (i+1) y
@@ -160,3 +160,21 @@ setUniform i uni = case uni of
   UniM33F  r -> GL.uniformMatrix3fv_ i false r
   UniM44F  r -> GL.uniformMatrix4fv_ i false r
   _ -> throwException $ error "internal error (setUniform)!"
+
+primitiveToGLType :: Primitive -> GL.GLenum
+primitiveToGLType p = case p of
+  TriangleStrip -> GL._TRIANGLE_STRIP
+  TriangleList  -> GL._TRIANGLES
+  TriangleFan   -> GL._TRIANGLE_FAN
+  LineStrip     -> GL._LINE_STRIP
+  LineLoop      -> GL._LINE_LOOP
+  LineList      -> GL._LINES
+  PointList     -> GL._POINTS
+
+arrayTypeToGLType :: ArrayType -> GL.GLenum
+arrayTypeToGLType a = case a of
+  ArrWord8    -> GL._UNSIGNED_BYTE
+  ArrWord16   -> GL._UNSIGNED_SHORT
+  ArrInt8     -> GL._BYTE
+  ArrInt16    -> GL._SHORT
+  ArrFloat    -> GL._FLOAT

@@ -39,7 +39,6 @@ data ArrayType
     | ArrInt8
     | ArrInt16
     | ArrFloat
-    | ArrFixed
 
 sizeOfArrayType :: ArrayType -> Int
 sizeOfArrayType ArrWord8  = 1
@@ -47,7 +46,6 @@ sizeOfArrayType ArrWord16 = 2
 sizeOfArrayType ArrInt8   = 1
 sizeOfArrayType ArrInt16  = 2
 sizeOfArrayType ArrFloat  = 4
-sizeOfArrayType ArrFixed  = 4
 
 -- describes an array in a buffer
 data LCArray = Array ArrayType [Number]
