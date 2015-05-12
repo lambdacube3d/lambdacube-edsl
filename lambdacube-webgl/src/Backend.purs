@@ -6,17 +6,22 @@ import Prelude.Unsafe (unsafeIndex)
 import qualified Graphics.WebGLRaw as GL
 import Control.Monad.Eff.Exception
 import Control.Monad.Eff.WebGL
+import Control.Monad.Eff.Ref
 import Control.Monad.Eff
 import Control.Monad
+import Control.Bind
 import Data.Foldable
 import Data.Traversable
 import qualified Data.StrMap as StrMap
+import qualified Data.Map as Map
 import Data.Tuple
 import Data.Maybe
+import Data.Array
 
 import Type
 import IR
 import Util
+import Input
 
 setupRasterContext :: RasterContext -> GFX Unit
 setupRasterContext = cvt
@@ -168,9 +173,7 @@ clearRenderTarget values = do
                   _                   -> GL.clearColor_ 0 0 0 1
                 GL.colorMask_ true true true true
                 return {mask:m .|. GL._COLOR_BUFFER_BIT, index:i+1}
-            _ -> do
-                trace "internal error (clearRenderTarget)"
-                return arg
+            _ -> throwException $ error "internal error (clearRenderTarget)"
     m <- foldM setClearValue {mask:0,index:0} values
     GL.clear_ m.mask
 
@@ -208,7 +211,7 @@ compileProgram uniTrie p = do
       loc <- GL.getAttribLocation_ po streamName
       return $ Tuple streamName {location: loc, slotAttribute: s.name})
 
-    return {program: po, objects: [objV,objF], inputUniforms: uniformLocation, inputStreams: streamLocation}
+    return {program: po, shaders: [objV,objF], inputUniforms: uniformLocation, inputStreams: streamLocation}
 
 allocPipeline :: Pipeline -> GFX WebGLPipeline
 allocPipeline p = do
@@ -227,7 +230,15 @@ allocPipeline p = do
     - commands
   -}
   prgs <- traverse (compileProgram StrMap.empty) p.programs
-  return {targets: p.targets, programs: prgs, commands: p.commands}
+  input <- newRef Nothing
+  return
+    { targets: p.targets
+    , programs: prgs
+    , commands: p.commands
+    , input: input
+    , slotPrograms: map (\a -> a.slotPrograms) p.slots
+    , slotNames: map (\a -> a.slotName) p.slots
+    }
 {-
 allocPipeline p = do
     let uniTrie = uniforms $ schemaFromPipeline p
@@ -266,12 +277,111 @@ renderPipeline p = do
       _ -> return unit
   return unit
 
+renderSlot :: [GLObjectCommand] -> GFX Unit
+renderSlot cmds = do
+  flip traverse cmds $ \cmd -> case cmd of
+    GLSetVertexAttribArray idx buf size typ ptr -> do
+      GL.bindBuffer_ GL._ARRAY_BUFFER buf
+      GL.enableVertexAttribArray_ idx
+      GL.vertexAttribPointer_ idx size typ false 0 ptr
+    GLDrawArrays mode first count -> do
+      GL.drawArrays_ mode first count
+    GLDrawElements mode count typ buf indicesPtr -> do
+      GL.bindBuffer_ GL._ELEMENT_ARRAY_BUFFER buf
+      GL.drawElements_ mode count typ indicesPtr
+    GLSetVertexAttrib idx val -> do
+      GL.disableVertexAttribArray_ idx
+      setVertexAttrib idx val
+    GLSetUniform idx uni -> do
+      setUniform idx uni
+  return unit
+{-
+        GLBindTexture txTarget tuRef (GLUniform _ ref)  -> do
+                                                            txObjVal <- readIORef ref
+                                                            -- HINT: ugly and hacky
+                                                            with txObjVal $ \txObjPtr -> do
+                                                                txObj <- peek $ castPtr txObjPtr :: IO GLuint
+                                                                texUnit <- readIORef tuRef
+                                                                glActiveTexture $ gl_TEXTURE0 + fromIntegral texUnit
+                                                                glBindTexture txTarget txObj
+-}
+
 disposePipeline :: WebGLPipeline -> GFX Unit
-disposePipeline _ = return unit
+disposePipeline p = do
+  setPipelineInput p Nothing
+  flip traverse p.programs $ \prg -> do
+      GL.deleteProgram_ prg.program
+      traverse GL.deleteShader_ prg.shaders
+  {- TODO: targets, textures
+  let targets = glTargets p
+  withArray (map framebufferObject $ V.toList targets) $ (glDeleteFramebuffers $ fromIntegral $ V.length targets)
+  let textures = glTextures p
+  withArray (map glTextureObject $ V.toList textures) $ (glDeleteTextures $ fromIntegral $ V.length textures)
+  with (glVAO p) $ (glDeleteVertexArrays 1)
+  -}
+  return unit
 
 setPipelineInput :: WebGLPipeline -> Maybe WebGLPipelineInput -> GFX Unit
-setPipelineInput _ _ = throwException $ error "not implemnted"
+setPipelineInput p input' = do
+    -- TODO: check matching input schema
+    ic' <- readRef p.input
+    case ic' of
+        Nothing -> return unit
+        Just (InputConnection ic) -> do
+            modifyRef ic.input.pipelines $ \v -> updateAt ic.id Nothing v
+            flip traverse ic.slotMapPipelineToInput $ \slotIdx -> do
+                slot <- readRef (ic.input.slotVector `unsafeIndex` slotIdx)
+                flip traverse (Map.values slot.objectMap) $ \obj -> do
+                    modifyRef obj.commands $ \v -> updateAt ic.id [] v
+            return unit
+    {-
+        addition:
+            - get an id from pipeline input
+            - add to attached pipelines
+            - generate slot mappings
+            - update used slots, and generate object commands for objects in the related slots
+    -}
+    case input' of
+        Nothing -> writeRef p.input Nothing
+        Just input -> do
+            oldPipelineV <- readRef input.pipelines
+            Tuple idx shouldExtend <- case findIndex isNothing oldPipelineV of
+                (-1) -> do
+                    -- we don't have empty space, hence we double the vector size
+                    let len = length oldPipelineV
+                    modifyRef input.pipelines $ \v -> updateAt len (Just p) (concat [v,replicate len Nothing])
+                    return $ Tuple len (Just len)
+                i -> do
+                    modifyRef input.pipelines $ \v -> updateAt i (Just p) v
+                    return $ Tuple i Nothing
+            -- create input connection
+            pToI <- flip traverse p.slotNames $ \n -> case StrMap.lookup n input.slotMap of
+              Nothing -> throwException $ error "internal error: unknown slot name in input"
+              Just i -> return i
+            let iToP = foldr (\(Tuple i v) -> updateAt v (Just i)) (replicate (StrMap.size input.slotMap) Nothing) (zip (0..length pToI) pToI)
+            writeRef p.input $ Just $ InputConnection {id: idx, input: input, slotMapPipelineToInput: pToI, slotMapInputToPipeline: iToP}
 
+            -- generate object commands for related slots
+            {-
+                for each slot in pipeline:
+                    map slot name to input slot name
+                    for each object:
+                        generate command program vector => for each dependent program:
+                            generate object commands
+            -}
+            let texUnitMap = {} --TODO: glTexUnitMapping p
+                topUnis = input.uniformSetup
+                emptyV  = replicate (length p.programs) []
+                extend v = case shouldExtend of
+                    Nothing -> v
+                    Just l  -> concat [v,replicate l []]
+            flip traverse (zip pToI p.slotPrograms) $ \(Tuple slotIdx prgs) -> do
+                slot <- readRef $ input.slotVector `unsafeIndex` slotIdx
+                flip traverse (Map.values slot.objectMap) $ \obj -> do
+                    let updateCmds v prgIdx = updateAt prgIdx (createObjectCommands texUnitMap topUnis obj (p.programs `unsafeIndex` prgIdx)) v
+                        cmdV = foldl updateCmds emptyV prgs
+                    modifyRef obj.commands $ \v -> updateAt idx cmdV (extend v)
+            return unit
 {-
 shaders :: Shaders {aVertexPosition :: Attribute Vec3, uPMatrix :: Uniform Mat4, uMVMatrix:: Uniform Mat4}
 shaders = Shaders

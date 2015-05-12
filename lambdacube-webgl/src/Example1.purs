@@ -2,6 +2,7 @@ module Main where
 
 import Control.Monad.Eff.Exception
 import Control.Monad.Eff.Alert
+import Control.Monad.Eff.Ref
 import Control.Monad.Eff
 import Debug.Trace
 
@@ -227,7 +228,7 @@ gfx03Pipeline =
       ]
   }
 
-main :: Eff (trace :: Trace, alert :: Alert, err :: Exception) Unit
+main :: Eff (trace :: Trace, alert :: Alert, err :: Exception, ref :: Ref) Unit
 main = GL.runWebGL "glcanvas" (\s -> alert s)
   \ context -> do
 

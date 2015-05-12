@@ -6,7 +6,9 @@ import Data.StrMap
 type Int = Number
 type Word = Number
 type Float = Number
+type Int16 = Number
 type Int32 = Number
+type Word16 = Number
 type Word32 = Number
 type Bool = Boolean
 
@@ -167,6 +169,21 @@ data FetchPrimitive
     | Triangles
     | LinesAdjacency
     | TrianglesAdjacency
+
+instance eqFetchPrimitive :: Eq (FetchPrimitive) where
+  (==) Points             Points              = true
+  (==) Lines              Lines               = true
+  (==) Triangles          Triangles           = true
+  (==) LinesAdjacency     LinesAdjacency      = true
+  (==) TrianglesAdjacency TrianglesAdjacency  = true
+  (/=) a                  b                   = not (a == b)
+
+instance showFetchPrimitive :: Show (FetchPrimitive) where
+  show Points             = "Points"
+  show Lines              = "Lines"
+  show Triangles          = "Triangles"
+  show LinesAdjacency     = "LinesAdjacency"
+  show TrianglesAdjacency = "TrianglesAdjacency"
 
 data OutputPrimitive
     = TrianglesOutput
