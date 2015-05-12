@@ -189,7 +189,7 @@ foreign import newWord8View
   """function newWord8View(b) {
       return function(o) {
         return function(l) {
-          return function(){new Uint8Array(b,o,l);};
+          return function(){return new Uint8Array(b,o,l);};
         };
       };
      }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
@@ -198,7 +198,7 @@ foreign import newWord16View
   """function newWord16View(b) {
       return function(o) {
         return function(l) {
-          return function(){new Uint16Array(b,o,l);};
+          return function(){return new Uint16Array(b,o,l);};
         };
       };
      }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
@@ -207,7 +207,7 @@ foreign import newInt8View
   """function newInt8View(b) {
       return function(o) {
         return function(l) {
-          return function(){new Int8Array(b,o,l);};
+          return function(){return new Int8Array(b,o,l);};
         };
       };
      }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
@@ -216,7 +216,7 @@ foreign import newInt16View
   """function newInt16View(b) {
       return function(o) {
         return function(l) {
-          return function(){new Int16Array(b,o,l);};
+          return function(){return new Int16Array(b,o,l);};
         };
       };
      }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView
@@ -225,7 +225,7 @@ foreign import newFloatView
   """function newFloatView(b) {
       return function(o) {
         return function(l) {
-          return function(){new Float32Array(b,o,l);};
+          return function(){return new Float32Array(b,o,l);};
         };
       };
      }""" :: ArrayBuffer -> Int -> Int -> GFX ArrayView

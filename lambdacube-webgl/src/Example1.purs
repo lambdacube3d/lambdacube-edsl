@@ -203,6 +203,7 @@ gfx03Pipeline =
             }
       , SetProgram 2
       , RenderSlot 1
+{-
       , SetRasterContext
           (TriangleCtx CullNone PolygonFill NoOffset FirstVertex)
       , SetAccumulationContext
@@ -225,6 +226,7 @@ gfx03Pipeline =
             }
       , SetProgram 0
       , RenderSlot 0
+-}
       ]
   }
 
@@ -239,6 +241,8 @@ main = GL.runWebGL "glcanvas" (\s -> alert s)
           , uniforms : fromList [Tuple "MVP" M44F, Tuple "MVP2" M44F]
           }
     pplInput <- mkWebGLPipelineInput inputSchema
+    let mvp = V4 (V4 0.4692207 (-0.28573585) (-0.9593549) (-0.9574381)) (V4 0.0 2.395976 (-0.122928835) (-0.12268323)) (V4 (-1.719497) (-7.797232e-2) (-0.2617912) (-0.26126814)) (V4 0.0 0.0 3.8834958 4.0755367)
+    uniformM44F "MVP" pplInput.uniformSetter mvp
 
     gpuCube <- compileMesh myCube
 
@@ -256,4 +260,3 @@ main = GL.runWebGL "glcanvas" (\s -> alert s)
     trace "WebGL completed"
     disposePipeline ppl
     trace "Pipeline disposed"
-

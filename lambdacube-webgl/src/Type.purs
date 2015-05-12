@@ -200,6 +200,7 @@ type WebGLPipeline =
   , input         :: RefVal (Maybe InputConnection)
   , slotNames     :: [String]
   , slotPrograms  :: [[ProgramName]] -- program list for every slot (programs depend on a slot)
+  , curProgram    :: RefVal (Maybe Int)
   }
 
 type GLProgram =

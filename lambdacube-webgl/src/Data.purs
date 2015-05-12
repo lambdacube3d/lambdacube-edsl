@@ -32,6 +32,7 @@ compileBuffer arrs = do
             ArrInt16  -> newInt16View
             ArrFloat  -> newFloatView
       view <- newView b o len
+      setArrayView view a
       return {arrType: t, arrLength: len, arrOffset: o, arrSize: bytes, arrView: view}
 
     bo <- GL.createBuffer_

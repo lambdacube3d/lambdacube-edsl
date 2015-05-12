@@ -14,6 +14,7 @@ import Text.Show.Pretty
 import Backend.GL as GL
 import Backend.GL.Mesh
 import IR as IR
+import Type
 
 import System.Environment
 
@@ -136,7 +137,8 @@ main = do
     addMesh pplInput "stream" gpuMonkey []
 
     let setup = do
-          pplRes <- compileMain "../lambdacube-dsl/tests/accept" srcName
+          let sn = N ExpNS [] srcName (NameInfo Nothing mempty)
+          pplRes <- compileMain "../lambdacube-dsl/tests/accept" sn
           case pplRes of
             Left err -> putStrLn ("error: " ++ err) >> return Nothing
             Right ppl -> do
@@ -163,6 +165,7 @@ main = do
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
             mvp $! mat4ToM44F $! mm .*. cm .*. pm
             mvp' $! mat4ToM44F $! mm .*. cm' .*. pm
+            print $ mat4ToM44F $! mm .*. cm' .*. pm
             renderPipeline renderer
             swapBuffers win >> pollEvents
 

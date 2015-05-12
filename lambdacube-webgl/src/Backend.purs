@@ -209,6 +209,7 @@ compileProgram uniTrie p = do
 
     streamLocation <- StrMap.fromList <$> flip traverse (StrMap.toList p.programStreams) (\(Tuple streamName s) -> do
       loc <- GL.getAttribLocation_ po streamName
+      trace $ "attrib location " ++ streamName ++" " ++ show loc
       return $ Tuple streamName {location: loc, slotAttribute: s.name})
 
     return {program: po, shaders: [objV,objF], inputUniforms: uniformLocation, inputStreams: streamLocation}
@@ -231,6 +232,7 @@ allocPipeline p = do
   -}
   prgs <- traverse (compileProgram StrMap.empty) p.programs
   input <- newRef Nothing
+  curProg <- newRef Nothing
   return
     { targets: p.targets
     , programs: prgs
@@ -238,42 +240,41 @@ allocPipeline p = do
     , input: input
     , slotPrograms: map (\a -> a.slotPrograms) p.slots
     , slotNames: map (\a -> a.slotName) p.slots
+    , curProgram: curProg
     }
-{-
-allocPipeline p = do
-    let uniTrie = uniforms $ schemaFromPipeline p
-    smps <- V.mapM compileSampler $ samplers p
-    texs <- V.mapM compileTexture $ textures p
-    trgs <- V.mapM (compileRenderTarget (textures p) texs) $ targets p
-    prgs <- V.mapM (compileProgram uniTrie) $ programs p
-    -- texture unit mapping ioref trie
-    texUnitMapRefs <- T.fromList <$> mapM (\k -> (k,) <$> newIORef 0) (S.toList $ S.fromList $ concat $ V.toList $ V.map (T.keys . toTrie . programInTextures) $ programs p)
-    let (cmds,st) = runState (mapM (compileCommand texUnitMapRefs smps texs trgs prgs) $ commands p) initCGState
-    input <- newIORef Nothing
-    -- default Vertex Array Object
-    vao <- alloca $! \pvao -> glGenVertexArrays 1 pvao >> peek pvao
-    return $ GLPipeline
-        { glPrograms        = prgs
-        , glTextures        = texs
-        , glSamplers        = smps
-        , glTargets         = trgs
-        , glCommands        = cmds
-        , glSlotPrograms    = V.map slotPrograms $ IR.slots p
-        , glInput           = input
-        , glSlotNames       = V.map (pack . slotName) $ IR.slots p
-        , glVAO             = vao
-        , glTexUnitMapping  = texUnitMapRefs
-        }
--}
 
 renderPipeline :: WebGLPipeline -> GFX Unit
 renderPipeline p = do
-  flip traverse p.commands $ \cmd -> do
-    case cmd of
-      SetRasterContext rCtx -> setupRasterContext rCtx
-      SetAccumulationContext aCtx -> setupAccumulationContext aCtx
-      ClearRenderTarget t -> clearRenderTarget t
-      SetProgram i -> GL.useProgram_ $ (p.programs `unsafeIndex` i).program
+  writeRef p.curProgram Nothing
+  flip traverse p.commands $ \cmd -> case cmd of
+      SetRasterContext rCtx -> do
+        trace "SetRasterContext"
+        setupRasterContext rCtx
+      SetAccumulationContext aCtx -> do
+        trace "SetAccumulationContext"
+        setupAccumulationContext aCtx
+      ClearRenderTarget t -> do
+        trace "ClearRenderTarget"
+        clearRenderTarget t
+      SetProgram i -> do
+        trace $ "SetProgram " ++ show i
+        writeRef p.curProgram (Just i)
+        GL.useProgram_ $ (p.programs `unsafeIndex` i).program
+      RenderSlot slotIdx -> do
+        trace $ "RenderSlot " ++ show slotIdx
+        readRef p.curProgram >>= \cp -> case cp of
+          Nothing -> throwException $ error "invalid pipeline, no active program"
+          Just progIdx -> readRef p.input >>= \input -> case input of
+              Nothing -> return unit
+              Just (InputConnection ic) -> do
+                s <- readRef (ic.input.slotVector `unsafeIndex` (ic.slotMapPipelineToInput `unsafeIndex` slotIdx))
+                trace $ "#" ++ show (length s.sortedObjects)
+                flip traverse s.sortedObjects $ \(Tuple _ obj) -> do
+                  enabled <- readRef obj.enabled
+                  when enabled $ do
+                    cmd <- readRef obj.commands
+                    renderSlot $ (cmd `unsafeIndex` ic.id) `unsafeIndex` progIdx
+                return unit
       _ -> return unit
   return unit
 
@@ -281,18 +282,23 @@ renderSlot :: [GLObjectCommand] -> GFX Unit
 renderSlot cmds = do
   flip traverse cmds $ \cmd -> case cmd of
     GLSetVertexAttribArray idx buf size typ ptr -> do
+      trace $ "GLSetVertexAttribArray " ++ show [idx,size,ptr]
       GL.bindBuffer_ GL._ARRAY_BUFFER buf
       GL.enableVertexAttribArray_ idx
       GL.vertexAttribPointer_ idx size typ false 0 ptr
     GLDrawArrays mode first count -> do
+      trace $ "GLDrawArrays " ++ show [first,count]
       GL.drawArrays_ mode first count
     GLDrawElements mode count typ buf indicesPtr -> do
+      trace "GLDrawElements"
       GL.bindBuffer_ GL._ELEMENT_ARRAY_BUFFER buf
       GL.drawElements_ mode count typ indicesPtr
     GLSetVertexAttrib idx val -> do
+      trace $ "GLSetVertexAttrib " ++ show idx
       GL.disableVertexAttribArray_ idx
       setVertexAttrib idx val
     GLSetUniform idx uni -> do
+      trace "GLSetUniform"
       setUniform idx uni
   return unit
 {-
@@ -382,61 +388,3 @@ setPipelineInput p input' = do
                         cmdV = foldl updateCmds emptyV prgs
                     modifyRef obj.commands $ \v -> updateAt idx cmdV (extend v)
             return unit
-{-
-shaders :: Shaders {aVertexPosition :: Attribute Vec3, uPMatrix :: Uniform Mat4, uMVMatrix:: Uniform Mat4}
-shaders = Shaders
-
-  """precision mediump float;
-
-  void main(void) {
-    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
-      }
-  """
-
-  """
-      attribute vec3 aVertexPosition;
-
-      uniform mat4 uMVMatrix;
-      uniform mat4 uPMatrix;
-
-      void main(void) {
-          gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
-      }
-  """
-
-    withShaders shaders (\s -> alert s)
-      \ bindings -> do
-        trace "Shaders and bindings ready"
-        clearColor 0.0 1.0 0.0 1.0
-        enable DEPTH_TEST
-
-        canvasWidth <- getCanvasWidth context
-        canvasHeight <- getCanvasHeight context
-        viewport 0 0 canvasWidth canvasHeight
-        clear [COLOR_BUFFER_BIT, DEPTH_BUFFER_BIT]
-
-        let pMatrix = M.makePerspective 45 (canvasWidth / canvasHeight) 0.1 100.0
-        setUniformFloats bindings.uPMatrix (M.toArray pMatrix)
-
-        let mvMatrix = M.translate (V.vec3 (-1.5) 0.0 (-7.0))
-                          M.identity
-        setUniformFloats bindings.uMVMatrix (M.toArray mvMatrix)
-
-        buf1 <- makeBufferFloat [0.0,  1.0,  0.0,
-                           (-1.0), (-1.0),  0.0,
-                            1.0, (-1.0),  0.0]
-        drawArr TRIANGLES buf1 bindings.aVertexPosition
-
-        let mvMatrix' = M.translate (V.vec3 3.0 0.0 0.0)
-                          mvMatrix
-        setUniformFloats bindings.uMVMatrix (M.toArray mvMatrix')
-
-        buf2 <- makeBufferFloat [1.0,  1.0,  0.0,
-                           (-1.0), 1.0,  0.0,
-                            1.0, (-1.0),  0.0,
-                           (-1.0), (-1.0),  0.0]
-        drawArr TRIANGLE_STRIP buf2 bindings.aVertexPosition
-
-        trace "WebGL completed"
--}
-
