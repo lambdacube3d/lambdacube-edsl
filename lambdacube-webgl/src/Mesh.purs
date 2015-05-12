@@ -56,7 +56,7 @@ compileMesh mesh = case mesh.gpuData of
   Just _ -> return mesh
   Nothing -> do
     let mkIndexBuf v = do
-            iBuf <- compileBuffer [Array ArrWord16 (length v) {}]
+            iBuf <- compileBuffer [Array ArrWord16 (toArray v)]
             return $ Just {buffer: iBuf, arrIdx: 0, start: 0, length: length v}
     vBuf <- compileBuffer $ map meshAttrToArray (StrMap.values mesh.attributes)
     Tuple prim indices <- case mesh.primitive of
@@ -71,13 +71,13 @@ compileMesh mesh = case mesh.gpuData of
 
 meshAttrToArray :: MeshAttribute -> LCArray
 meshAttrToArray a = case a of
-  A_Float v -> Array ArrFloat  (1 *  length v) {}
-  A_V2F   v -> Array ArrFloat  (2 *  length v) {}
-  A_V3F   v -> Array ArrFloat  (3 *  length v) {}
-  A_V4F   v -> Array ArrFloat  (4 *  length v) {}
-  A_M22F  v -> Array ArrFloat  (4 *  length v) {}
-  A_M33F  v -> Array ArrFloat  (9 *  length v) {}
-  A_M44F  v -> Array ArrFloat  (16 * length v) {}
+  A_Float v -> Array ArrFloat $ toArray v
+  A_V2F   v -> Array ArrFloat $ toArray v
+  A_V3F   v -> Array ArrFloat $ toArray v
+  A_V4F   v -> Array ArrFloat $ toArray v
+  A_M22F  v -> Array ArrFloat $ toArray v
+  A_M33F  v -> Array ArrFloat $ toArray v
+  A_M44F  v -> Array ArrFloat $ toArray v
 
 meshAttrToStream :: Buffer -> Int -> MeshAttribute -> Stream Buffer
 meshAttrToStream b i a = Stream $ case a of

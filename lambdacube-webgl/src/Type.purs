@@ -11,6 +11,7 @@ import qualified Graphics.WebGLRaw as GL
 import qualified Data.Map as Map
 import Data.Tuple
 import Data.Maybe
+import Data.Array
 import qualified Data.ArrayBuffer.Types as AB
 
 import IR
@@ -20,8 +21,9 @@ type GFX a = forall e . Eff (webgl :: WebGl, trace :: Trace, err :: Exception, r
 type IntMap a = Map.Map Int a
 
 type Buffer = -- internal type
-    { bufArrays :: [ArrayDesc]
-    , bufGLObj  :: GL.WebGLBuffer
+    { arrays    :: [ArrayDesc]
+    , glBuffer  :: GL.WebGLBuffer
+    , buffer    :: {}
     }
 
 type ArrayDesc =
@@ -48,10 +50,7 @@ sizeOfArrayType ArrFloat  = 4
 sizeOfArrayType ArrFixed  = 4
 
 -- describes an array in a buffer
-data LCArray  -- array type, element count (NOT byte size!), setter
-    = Array ArrayType Int BufferSetter
-
-type BufferSetter = {} --(Ptr () -> IO ()) -> IO ()
+data LCArray = Array ArrayType [Number]
 
 data StreamType
     = TFloat
@@ -246,3 +245,13 @@ streamToStreamType s = case s of
     ConstM33F  _ -> TM33F
     ConstM44F  _ -> TM44F
     Stream t -> t.sType
+
+class NumberStorable a where
+  toArray :: a -> [Number]
+
+instance numStorable  :: NumberStorable Number  where toArray a = [a]
+instance boolStorable :: NumberStorable Boolean where toArray a = [if a then 1 else 0]
+instance v2Storable   :: (NumberStorable a) => NumberStorable (V2 a)  where toArray (V2 x y) = concatMap toArray [x,y]
+instance v3Storable   :: (NumberStorable a) => NumberStorable (V3 a)  where toArray (V3 x y z) = concatMap toArray [x,y,z]
+instance v4Storable   :: (NumberStorable a) => NumberStorable (V4 a)  where toArray (V4 x y z w) = concatMap toArray [x,y,z,w]
+instance arrStorable  :: (NumberStorable a) => NumberStorable [a]     where toArray a = concatMap toArray a

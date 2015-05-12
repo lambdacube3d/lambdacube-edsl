@@ -77,27 +77,22 @@ foreign import setIntArray
       };
      }""" :: AB.Int32Array -> [Int] -> GFX Unit
 
-setBoolArray :: AB.Int32Array -> [Bool] -> GFX Unit
-setBoolArray ta a = setIntArray ta $ map (\b -> if b then 1 else 0) a
-
 mkUniformSetter :: InputType -> GFX (Tuple GLUniform InputSetter)
-mkUniformSetter t@Bool  = let r = TA.asInt32Array [0]                in return $ Tuple (UniBool  r) (SBool  $ \x -> setBoolArray r [x])
-mkUniformSetter t@V2B   = let r = TA.asInt32Array (replicate 2 0)    in return $ Tuple (UniV2B   r) (SV2B   $ \(V2 x y) -> setBoolArray r [x,y])
-mkUniformSetter t@V3B   = let r = TA.asInt32Array (replicate 3 0)    in return $ Tuple (UniV3B   r) (SV3B   $ \(V3 x y z) -> setBoolArray r [x,y,z])
-mkUniformSetter t@V4B   = let r = TA.asInt32Array (replicate 4 0)    in return $ Tuple (UniV4B   r) (SV4B   $ \(V4 x y z w) -> setBoolArray r [x,y,z,w])
-mkUniformSetter t@Int   = let r = TA.asInt32Array [0]                in return $ Tuple (UniInt   r) (SInt $ \x -> setIntArray r [x])
-mkUniformSetter t@V2I   = let r = TA.asInt32Array (replicate 2 0)    in return $ Tuple (UniV2I   r) (SV2I $ \(V2 x y) -> setIntArray r [x,y])
-mkUniformSetter t@V3I   = let r = TA.asInt32Array (replicate 3 0)    in return $ Tuple (UniV3I   r) (SV3I $ \(V3 x y z) -> setIntArray r [x,y,z])
-mkUniformSetter t@V4I   = let r = TA.asInt32Array (replicate 4 0)    in return $ Tuple (UniV4I   r) (SV4I $ \(V4 x y z w) -> setIntArray r [x,y,z,w])
-mkUniformSetter t@Float = let r = TA.asFloat32Array [0]              in return $ Tuple (UniFloat r) (SFloat $ \x -> setFloatArray r [x])
-mkUniformSetter t@V2F   = let r = TA.asFloat32Array (replicate 2 0)  in return $ Tuple (UniV2F   r) (SV2F $ \(V2 x y) -> setFloatArray r [x,y])
-mkUniformSetter t@V3F   = let r = TA.asFloat32Array (replicate 3 0)  in return $ Tuple (UniV3F   r) (SV3F $ \(V3 x y z) -> setFloatArray r [x,y,z])
-mkUniformSetter t@V4F   = let r = TA.asFloat32Array (replicate 4 0)  in return $ Tuple (UniV4F   r) (SV4F $ \(V4 x y z w) -> setFloatArray r [x,y,z,w])
-mkUniformSetter t@M22F  = let r = TA.asFloat32Array (replicate 4 0)  in return $ Tuple (UniM22F  r) (SM22F $ \(V2 (V2 a b) (V2 c d)) -> setFloatArray r [a,b,c,d])
-mkUniformSetter t@M33F  = let r = TA.asFloat32Array (replicate 9 0)  in return $ Tuple (UniM33F  r)
-  (SM33F $ \(V3 (V3 a b c) (V3 d e f) (V3 g h i)) -> setFloatArray r [a,b,d,e,f,g,h,i])
-mkUniformSetter t@M44F  = let r = TA.asFloat32Array (replicate 16 0) in return $ Tuple (UniM44F  r)
-  (SM44F $ \(V4 (V4 a0 a1 a2 a3) (V4 a4 a5 a6 a7) (V4 a8 a9 aa ab) (V4 ac ad ae af)) -> setFloatArray r [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,aa,ab,ac,ad,ae,af])
+mkUniformSetter t@Bool  = let r = TA.asInt32Array [0]                in return $ Tuple (UniBool  r) (SBool  $ setIntArray r <<< toArray)
+mkUniformSetter t@V2B   = let r = TA.asInt32Array (replicate 2 0)    in return $ Tuple (UniV2B   r) (SV2B   $ setIntArray r <<< toArray)
+mkUniformSetter t@V3B   = let r = TA.asInt32Array (replicate 3 0)    in return $ Tuple (UniV3B   r) (SV3B   $ setIntArray r <<< toArray)
+mkUniformSetter t@V4B   = let r = TA.asInt32Array (replicate 4 0)    in return $ Tuple (UniV4B   r) (SV4B   $ setIntArray r <<< toArray)
+mkUniformSetter t@Int   = let r = TA.asInt32Array [0]                in return $ Tuple (UniInt   r) (SInt   $ setIntArray r <<< toArray)
+mkUniformSetter t@V2I   = let r = TA.asInt32Array (replicate 2 0)    in return $ Tuple (UniV2I   r) (SV2I   $ setIntArray r <<< toArray)
+mkUniformSetter t@V3I   = let r = TA.asInt32Array (replicate 3 0)    in return $ Tuple (UniV3I   r) (SV3I   $ setIntArray r <<< toArray)
+mkUniformSetter t@V4I   = let r = TA.asInt32Array (replicate 4 0)    in return $ Tuple (UniV4I   r) (SV4I   $ setIntArray r <<< toArray)
+mkUniformSetter t@Float = let r = TA.asFloat32Array [0]              in return $ Tuple (UniFloat r) (SFloat $ setFloatArray r <<< toArray)
+mkUniformSetter t@V2F   = let r = TA.asFloat32Array (replicate 2 0)  in return $ Tuple (UniV2F   r) (SV2F   $ setFloatArray r <<< toArray)
+mkUniformSetter t@V3F   = let r = TA.asFloat32Array (replicate 3 0)  in return $ Tuple (UniV3F   r) (SV3F   $ setFloatArray r <<< toArray)
+mkUniformSetter t@V4F   = let r = TA.asFloat32Array (replicate 4 0)  in return $ Tuple (UniV4F   r) (SV4F   $ setFloatArray r <<< toArray)
+mkUniformSetter t@M22F  = let r = TA.asFloat32Array (replicate 4 0)  in return $ Tuple (UniM22F  r) (SM22F  $ setFloatArray r <<< toArray)
+mkUniformSetter t@M33F  = let r = TA.asFloat32Array (replicate 9 0)  in return $ Tuple (UniM33F  r) (SM33F  $ setFloatArray r <<< toArray)
+mkUniformSetter t@M44F  = let r = TA.asFloat32Array (replicate 16 0) in return $ Tuple (UniM44F  r) (SM44F  $ setFloatArray r <<< toArray)
 
 primitiveToFetchPrimitive :: Primitive -> FetchPrimitive
 primitiveToFetchPrimitive prim = case prim of
