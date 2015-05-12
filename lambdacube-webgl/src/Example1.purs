@@ -203,7 +203,6 @@ gfx03Pipeline =
             }
       , SetProgram 2
       , RenderSlot 1
-{-
       , SetRasterContext
           (TriangleCtx CullNone PolygonFill NoOffset FirstVertex)
       , SetAccumulationContext
@@ -226,7 +225,6 @@ gfx03Pipeline =
             }
       , SetProgram 0
       , RenderSlot 0
--}
       ]
   }
 

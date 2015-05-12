@@ -165,7 +165,6 @@ main = do
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
             mvp $! mat4ToM44F $! mm .*. cm .*. pm
             mvp' $! mat4ToM44F $! mm .*. cm' .*. pm
-            print $ mat4ToM44F $! mm .*. cm' .*. pm
             renderPipeline renderer
             swapBuffers win >> pollEvents
 
