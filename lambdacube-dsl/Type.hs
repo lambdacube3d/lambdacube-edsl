@@ -557,13 +557,13 @@ joinPolyEnvs ps = PolyEnv
   where
     mkJoin :: (PolyEnv -> Env a) -> m (Env a)
     mkJoin f = case filter (not . null . drop 1 . snd) $ Map.toList ms' of
-        [] -> return $ head <$> ms'
+        [] -> return $ fmap head $ Map.filter (not . null) ms'
         xs -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xs)
        where
         ms' = Map.unionsWith (++) $ map (((:[]) <$>) . f) ps
 
     mkJoin' f = case [(n, x) | (n, s) <- Map.toList ms', (x, is) <- Map.toList s, not $ null $ drop 1 is] of
-        [] -> return $ (head <$>) <$> ms'
+        [] -> return $ fmap head . Map.filter (not . null) <$> ms'
         xs -> throwErrorTCM $ "Definition clash:" <+> pShow xs
        where
         ms' = Map.unionsWith (Map.unionWith (++)) $ map ((((:[]) <$>) <$>) . f) ps

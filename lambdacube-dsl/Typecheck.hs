@@ -787,12 +787,12 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
                 return $ Map.singleton c ty
             withTyping (mconcat cdefs) cont
     ClassDef con [(vn, vark)] cdefs -> do
-        (unzip -> (ths, cdefs)) <- forM cdefs $ \(TypeSig n t) -> do
-            ((fs, t), _) <- instantiateTyping'' False (pShow n) $ do
+        (unzip -> (ths, cdefs)) <- forM cdefs $ \(TypeSig n t_) -> do
+            ((fs, t), _) <- instantiateTyping'' True (pShow n) $ do
                 vark <- inferKind vark
                 addConstraint $ CClass (IdN con) $ TVar vark $ IdN vn
-                inferKind t
-            let find = head [i | (i, ConstraintKind (CClass n _)) <- zip [0..] $ map snd fs, n == con]
+                inferKind t_
+            let find = head $ [i | (i, ConstraintKind (CClass n _)) <- zip [0..] $ map snd fs, n == con] ++ error (show $ "classDef:" <+> showVar con <$$> pShow fs <$$> pShow t_)
 --            let t' = (mapWriterT' ((id *** ((ConstraintKind cstr:) *** id)) <$>)) <$> t
 --                rearrange cs = head [b: as ++ bs | (as, b@(_, ConstraintKind _): bs) <- zip (inits cs) (tails cs)]
             return (Map.singleton n $ Just $ Exp mempty $ ExtractInstance (length fs) find n, Map.singleton n t)
