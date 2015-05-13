@@ -75,17 +75,22 @@ instance Ord Thunk where
 
 --------------------------------------------
 
-newtype Ty' n m = Ty'' (m (Exp_ n () () (Ty' n m)))
+data Void
+
+instance PShow Void
+instance Eq Void
+instance Ord Void
+
+newtype Ty' n m = Ty'' (m (Exp_ n Void Void (Ty' n m)))
 
 pattern Ty' a b = Ty'' (a, b)
+type TyR = Ty' Name WithRange
 
 -------------------------------------------- kinded types
 
-type Ty = Ty' IdN TyC
-
-data TyC a
-    = StarToStarC !Int
-    | TyC Ty a
+data Ty
+    = Ty Ty (Exp_ IdN Void Void Ty)
+    | StarToStar !Int
 
 instance Eq Ty where
     StarToStar i == StarToStar j = i == j
@@ -96,9 +101,6 @@ instance Ord Ty where
     Ty a b `compare` Ty a' b' = (a, b) `compare` (a', b')
     StarToStar _ `compare` _ = LT
     _ `compare` _ = GT
-
-pattern StarToStar i = Ty'' (StarToStarC i)
-pattern Ty k t = Ty'' (TyC k t)
 
 pattern Ty_ a b <- Ty a b where
     Ty_ Star Star_ = Star
@@ -219,7 +221,7 @@ data Exp_ v t p b       -- TODO: elim t parameter
     | TTuple_  [b]
     | TRecord_ (Map v b)
     | ConstraintKind_ (Constraint' v b)        -- flatten?
-    | Witness  Witness      -- TODO: here or in Exp?
+    | Witness  Witness      -- TODO: make this polymorphic
     deriving (Eq,Ord,Functor,Foldable,Traversable) -- TODO: elim Eq instance
 
 
@@ -471,7 +473,6 @@ data GuardedRHS
 data ConDef = ConDef Name [FieldTy]
 data FieldTy = FieldTy {fieldName :: Maybe Name, fieldType :: TyR}
 
-type TyR = Ty' Name WithRange
 type PatR = Pat' Name Name WithRange
 type ExpR = Exp' Name TyR PatR WithRange
 type ConstraintR = Constraint' Name TyR
