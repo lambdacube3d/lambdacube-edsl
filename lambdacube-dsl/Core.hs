@@ -46,7 +46,7 @@ reduceHNF th@(peelThunk -> exp) = case exp of
     EAlts_ 0 (map reduceHNF -> es) -> case [e | Right e <- es] of
         (thu:_) -> Right thu
         [] -> error $ "pattern match failure " ++ show [err | Left err <- es]
-    EVar_ v -> case v of
+    EVar_ _ v -> case v of
         VarE v _t
           | isConstr v -> keep
           | otherwise -> {-trace (ppShow v ++ ppShow (Map.keys $ envMap th)) $ -} maybe keep reduceHNF $ join $ Map.lookup v $ envMap th
@@ -55,18 +55,18 @@ reduceHNF th@(peelThunk -> exp) = case exp of
         Right (Just m') -> reduceHNF $ applyEnvBefore m' e
         Right _ -> keep
 
-    EApp_ f x -> reduceHNF' f $ \f -> case f of
+    EApp_ _ f x -> reduceHNF' f $ \f -> case f of
 
         PrimFun f acc i
             | i > 0 -> Right $ PrimFun f (x: acc) (i-1)
 --            | otherwise -> error $ "too much argument for primfun " ++ ppShow f ++ ": " ++ ppShow exp
 
         ExtractInstance acc 0 n -> reduceHNF' x $ \case
-            EType_ (Ty _ (Witness (WInstance m))) -> reduceHNF $ foldl (EApp' mempty) (m Map.! n) $ reverse acc
+            EType_ (Ty (Witness _ (WInstance m))) -> reduceHNF $ foldl (EApp' mempty) (m Map.! n) $ reverse acc
             x -> error $ "expected instance witness instead of " ++ ppShow x
         ExtractInstance acc j n -> Right $ ExtractInstance (x: acc) (j-1) n
 
-        EAlts_ i es | i > 0 -> reduceHNF $ thunk $ EAlts_ (i-1) $ thunk . (`EApp_` x) <$> es
+        EAlts_ i es | i > 0 -> reduceHNF $ thunk $ EAlts_ (i-1) $ thunk . (\f -> EApp_ () f x) <$> es
         EFieldProj_ fi -> reduceHNF' x $ \case
             ERecord_ fs -> case [e | (fi', e) <- fs, fi' == fi] of
                 [e] -> reduceHNF e
@@ -106,15 +106,15 @@ matchPattern e = \case
         Left err -> Left err
         Right Nothing -> Right Nothing
         Right (Just (xx, xs)) -> case xx of
-          EVar_ (VarE c' _)
+          EVar_ _ (VarE c' _)
             | c == c' -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
             | otherwise -> Left $ "constructors doesn't match: " ++ ppShow (c, c')
           q -> error $ "match rj: " ++ ppShow q
     p -> error $ "matchPattern: " ++ ppShow p
   where
     getApp acc e = reduceHNF' e $ \e -> case e of
-        EApp_ a b -> getApp (b: acc) a
-        EVar_ (VarE n _) | isConstr n -> Right $ Just (e, acc)
+        EApp_ _ a b -> getApp (b: acc) a
+        EVar_ _ (VarE n _) | isConstr n -> Right $ Just (e, acc)
         _ -> Right Nothing
 
 -------------------------------------------------------------------------------- full reduction

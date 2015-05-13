@@ -18,6 +18,8 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 module Typecheck where
 
 import Data.Function
@@ -39,6 +41,7 @@ import Control.Monad.Writer
 import Control.Monad.Identity
 import Control.Arrow hiding ((<+>))
 import Debug.Trace
+import GHC.Exts (Constraint)
 
 import Text.Parsec.Pos
 
@@ -290,7 +293,7 @@ reduceConstraint cvar x = do
     diff a b c = case Map.keys $ b Map.\\ a of
         [] -> discard Refl $ WithExplanation "???" [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
 --        ks -> failure $ "extra keys:" <+> pShow ks
-    discard w xs = return (Map.singleton cvar $ Ty_ (ConstraintKind x) $ Witness w, xs)
+    discard w xs = return (Map.singleton cvar $ Ty_ $ Witness (ConstraintKind x) w, xs)
     keep xs = return (mempty, xs)
     failure :: Doc -> m ConstraintSolvRes
     failure = throwErrorTCM
@@ -334,7 +337,7 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
     unifyTy a@(StarToStar i) b@(StarToStar j)
         | i == j = return ()
         | otherwise = throwError $ UnificationError a b $ filter (not . null . drop 1 . snd) tys
-    unifyTy a@(Ty__ k t) b@(Ty__ k' t') = uni k k' >> unifyTy' t t'
+    unifyTy a@(Ty__ t) b@(Ty__ t') = unifyTy' t t'
       where
         bindVars a@(TVar _ u) b@(TVar _ v)
             | u == v = return ()
@@ -346,13 +349,13 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
             -- uni t (repl (Map.singleton a' a) t')
             bindVars (TVar k a) (TVar k' a') >> uni t t'
         unifyTy' (Forall_ Nothing a1 b1) (Forall_ Nothing a2 b2) = uni a1 a2 >> uni b1 b2
-        unifyTy' (EVar_ u) (EVar_ v) = bindVars a b
-        unifyTy' (EVar_ u) _ = bindVar u b
-        unifyTy' _ (EVar_ v) | bidirectional = bindVar v a
+        unifyTy' (EVar_ k u) (EVar_ k' v) = uni k k' >> bindVars a b
+        unifyTy' (EVar_ k u) _ = bindVar u b
+        unifyTy' _ (EVar_ k v) | bidirectional = bindVar v a
         unifyTy' (ELit_ l) (ELit_ l') | l == l' = return ()
-        unifyTy' (TCon_ u) (TCon_ v) | u == v = return ()
+        unifyTy' (TCon_ k u) (TCon_ k' v) | u == v = uni k k' >> return ()
         unifyTy' (TTuple_ t1) (TTuple_ t2) = sequence_ $ zipWith uni t1 t2
-        unifyTy' (EApp_ a1 b1) (EApp_ a2 b2) = uni a1 a2 >> uni b1 b2
+        unifyTy' (EApp_ k a1 b1) (EApp_ k' a2 b2) = uni k k' >> uni a1 a2 >> uni b1 b2
         unifyTy' Star_ Star_ = return ()
         unifyTy' _ _
           | otherwise = throwError $ UnificationError a b $ filter (not . null . drop 1 . snd) tys
@@ -514,14 +517,6 @@ dependentVars ie s = cycle mempty s
 
 --------------------------------------------------------------------------------
 
-inferLit :: Lit -> Ty
-inferLit a = case a of
-    LInt _    -> TInt
-    LChar _   -> TChar
-    LFloat _  -> TFloat
-    LString _ -> TString
-    LNat _    -> TNat
-
 inferKind_ = {-appSES .-} inferKind
 
 -- TODO: ambiguity check
@@ -531,7 +526,7 @@ inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty
         k <- inferKind k
         addConstraints $ Map.singleton n $ Right k
         t <- withTyping (Map.singleton n $ monoInstType n k) $ inferKind t
-        return $ (,) (Set.fromList [n]) $ Ty Star $ Forall_ (Just n) k t
+        return $ (,) (Set.fromList [n]) $ Ty $ Forall_ (Just n) k t
     _ -> do
         ty <- traverse inferKind ty
         k <- case kindOf <$> ty of
@@ -546,15 +541,15 @@ inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty
                 _ -> star
             TTuple_ ts -> mapM_ checkStarKind ts >> star
             Forall_ Nothing a b -> checkStarKind a >> checkStarKind b >> star
-            EApp_ tf ta -> appTy tf ta
-            EVar_ n -> fmap snd . lookEnv n $ newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (Map.singleton n $ Right t) >> return ([], t)
-            TCon_ n -> fmap snd . lookEnv n $ lookEnv (toExpN n) $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
+            EApp_ _ tf ta -> appTy tf ta
+            EVar_ _ n -> fmap snd . lookEnv n $ newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (Map.singleton n $ Right t) >> return ([], t)
+            TCon_ _ n -> fmap snd . lookEnv n $ lookEnv (toExpN n) $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
 --            x -> error $ " inferKind: " ++ ppShow x
         case ty of
             Forall_ Nothing (ConstraintKind c) b -> do
                 addConstraint c
                 return b
-            _ -> return $ Ty k ty
+            _ -> return $ Ty $ mapKind (const k) ty
 
 appTy (TArr ta v) ta' = addUnif ta ta' >> return v      -- optimalization
 appTy tf ta = newStarVar "tapp" >>= \v -> addUnif tf (ta ~> v) >> return v
@@ -636,19 +631,19 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
     EType_ ta -> do
         t <- inferKind ta
         return (EType' mempty t, kindOf t)
-    EVar_ n -> do
+    EVar_ _ n -> do
         (ty, t) <- lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
         return (foldl (EApp' mempty) (EVar' mempty $ VarE (IdN n) $ foldr TArr t ty) $ map (EType' mempty) ty, t)
     _ -> do
         e <- traverse inferTyping e
         t <- case e of
-            EApp_ (_, tf) (EType' _ t, ta) -> do
+            EApp_ _ (_, tf) (EType' _ t, ta) -> do
                 x <- newName "apptype"
                 addUnif t (TVar ta x)
                 v <- newStarVar "etyapp"
                 addUnif tf (Forall x ta v)
                 return v
-            EApp_ (_, tf) (_, ta) -> appTy tf ta
+            EApp_ _ (_, tf) (_, ta) -> appTy tf ta
             EFieldProj_ fn -> do
                 a <- newStarVar "fp1"
                 r <- newStarVar "fp2"
@@ -706,9 +701,9 @@ inferConDef con (unzip -> (vn, vt)) (r, ConDef n tys) = addRange r $ do
         withTyping (Map.fromList $ zip vn $ zipWith mkInstType vn ks) $ do
             let tyConResTy :: TCMS Ty
                 tyConResTy
-                    = inferKind $ foldl app (Ty' mempty $ TCon_ con) $ map (Ty' mempty . EVar_) vn
+                    = inferKind $ foldl app (Ty' mempty $ TCon_ () con) $ map (Ty' mempty . EVar_ ()) vn
                   where
-                    app a b = Ty' mempty $ EApp_ a b
+                    app a b = Ty' mempty $ EApp_ () a b
 
             foldr (liftA2 (~>)) tyConResTy $ map inferFieldKind tys
     return $ Map.singleton n ty
@@ -833,4 +828,32 @@ inference_ penv@PolyEnv{..} Module{..} = flip runReaderT penv $ diffEnv <$> infe
         (th Map.\\ thunkEnv)
         (tf Map.\\ typeFamilies)
 
+{-
+-}
+class Num' a where
+    fromInt' :: (Read a, Show x) => Int -> [x] -> a
+
+data Dict (c :: Constraint) = c => D
+
+fromInt'' :: forall a x . (Num' a, Read a, Show x) => Int -> [x] -> a
+fromInt'' = fromInt_ (D :: Dict (Num' a))
+
+fromInt_ :: Dict (Num' a) -> forall a x . (Num' a, Read a, Show x) => Int -> [x] -> a
+fromInt_ D = fromInt'
+
+primIntToFloat :: (Show c) => Int -> c -> Float
+primIntToFloat = undefined
+
+instance Num' Float where
+    fromInt' = primIntToFloat
+{-
+given:  a :: *, cn :: Num a, cc :: Read a, x :: *, cx :: Show x  |  Int -> [x] -> a
+
+needed:            c :: *,  cd :: Show c    | Int -> c -> Float
+
+result:
+    c  :=  [x]
+    cd :=  dictShowList cx
+
+-}
 

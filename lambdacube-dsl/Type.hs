@@ -61,6 +61,13 @@ data Constraint' n a
     | Split a a a         -- Split x y z:  x, y, z are records; fields of x = disjoint union of the fields of y and z
     deriving (Eq,Ord,Functor,Foldable,Traversable)
 
+mapConstraint :: (n -> n') -> (a -> a') -> Constraint' n a -> Constraint' n' a'
+mapConstraint nf af = \case
+    CEq a (TypeFun n as) -> CEq (af a) (TypeFun (nf n) (af <$> as))
+    CUnify a1 a2 -> CUnify (af a1) (af a2)
+    CClass n a -> CClass (nf n) (af a)
+    Split a1 a2 a3 -> Split (af a1) (af a2) (af a3)
+
 data TypeFun n a = TypeFun n [a]
     deriving (Eq,Ord,Functor,Foldable,Traversable)
 
@@ -81,7 +88,7 @@ instance PShow Void
 instance Eq Void
 instance Ord Void
 
-newtype Ty' n m = Ty'' (m (Exp_ n Void Void (Ty' n m)))
+newtype Ty' n m = Ty'' (m (Exp_ () n Void Void (Ty' n m)))
 
 pattern Ty' a b = Ty'' (a, b)
 type TyR = Ty' Name WithRange
@@ -89,41 +96,41 @@ type TyR = Ty' Name WithRange
 -------------------------------------------- kinded types
 
 data Ty
-    = Ty Ty (Exp_ IdN Void Void Ty)
-    | StarToStar !Int
+    = Ty (Exp_ Ty IdN Void Void Ty)
+    | StarToStar !Int   -- TODO: remove
 
 instance Eq Ty where
     StarToStar i == StarToStar j = i == j
-    Ty a b == Ty a' b' = (a, b) == (a', b')
+    Ty b == Ty b' = b == b'
     _ == _ = False
 instance Ord Ty where
     StarToStar i `compare` StarToStar j = i `compare` j
-    Ty a b `compare` Ty a' b' = (a, b) `compare` (a', b')
+    Ty b `compare` Ty b' = b `compare` b'
     StarToStar _ `compare` _ = LT
     _ `compare` _ = GT
 
-pattern Ty_ a b <- Ty a b where
-    Ty_ Star Star_ = Star
-    Ty_ a b = Ty a b
+pattern Ty_ b <- Ty b where
+    Ty_ Star_ = Star
+    Ty_ b = Ty b
 
-unfoldTy (StarToStar i) = Ty Star $ case i of
+unfoldTy (StarToStar i) = Ty $ case i of
     0 -> Star_
     _ -> Forall_ Nothing Star $ StarToStar $ i - 1
 unfoldTy x = x
 
-pattern Ty__ a b <- (unfoldTy -> Ty a b) where
-    Ty__ Star Star_ = Star
-    Ty__ a b = Ty a b
+pattern Ty__ b <- (unfoldTy -> Ty b) where
+    Ty__ Star_ = Star
+    Ty__ b = Ty b
 
-pattern TApp k a b = Ty_ k (EApp_ a b)
-pattern TCon k a <- Ty_ k (TCon_ (TypeIdN a)) where
-    TCon k a = Ty_ k (TCon_ (TypeIdN' a "typecon"))
-pattern TVar k b = Ty_ k (EVar_ b)
-pattern TLit k b = Ty_ k (ELit_ b)
+pattern TApp k a b = Ty_ (EApp_ k a b)
+pattern TCon k a <- Ty_ (TCon_ k (TypeIdN a)) where
+    TCon k a = Ty_ (TCon_ k (TypeIdN' a "typecon"))
+pattern TVar k b = Ty_ (EVar_ k b)
+pattern TLit b = Ty_ (ELit_ b)
 
 pattern Star = StarToStar 0
 
-pattern TyStar a = Ty_ Star a
+pattern TyStar a = Ty_ a
 pattern TRecord b = TyStar (TRecord_ b)
 pattern TTuple b = TyStar (TTuple_ b)
 pattern TUnit = TTuple []
@@ -143,8 +150,44 @@ infix 4 ~~, ~~~
 (~~) = CEq
 (~~~) = CUnify
 
+inferLit :: Lit -> Ty
+inferLit a = case a of
+    LInt _    -> TInt
+    LChar _   -> TChar
+    LFloat _  -> TFloat
+    LString _ -> TString
+    LNat _    -> TNat
+
+
 kindOf :: Ty -> Ty
-kindOf = \case Ty__ k _ -> k
+kindOf = \case
+    Ty__ t -> case t of
+        ELit_ l -> inferLit l
+        EVar_ k _ -> k
+        EApp_ k _ _ -> k
+--        ETuple_    [b]
+--        ELam_      p b
+--        ETypeSig_ b t -> t  -- TODO?
+--        EType_ t -> kindOf t        -- ??
+{-
+        | ELet_      p b b
+        | ENamedRecord_ Name [(Name, b)]
+        | ERecord_   [(Name, b)]
+        | EFieldProj_ Name
+        | EAlts_     Int [b]  -- function alternatives; Int: arity
+        | ENext_              -- go to next alternative
+        | ExtractInstance [b] Int Name
+        | PrimFun Name [b] Int
+-}
+        -- was types
+        Star_ -> Star
+        TCon_ k _ -> k
+        Forall_ _ _ _ -> Star
+        TTuple_ _ -> Star
+        TRecord_ _ -> Star
+        ConstraintKind_ _ -> Star
+        Witness k _ -> k
+        _ -> error "kindOf"
 
 isStar = \case
     Star -> True
@@ -195,10 +238,10 @@ pattern Wildcard = Pat'' Wildcard_
 
 -------------------------------------------------------------------------------- expressions
 
-data Exp_ v t p b       -- TODO: elim t parameter
+data Exp_ k v t p b       -- TODO: elim t parameter
     = ELit_      Lit      -- could be replaced by EType + ELit
-    | EVar_      v
-    | EApp_      b b
+    | EVar_      k v
+    | EApp_      k b b
     | ETuple_    [b]
     | ELam_      p b
     | ETypeSig_  b t
@@ -215,21 +258,27 @@ data Exp_ v t p b       -- TODO: elim t parameter
 
     -- was types
     | Star_
-    | TCon_    v
+    | TCon_    k v
     -- | TFun_    f [a]    -- TODO
     | Forall_  (Maybe v) b b
     | TTuple_  [b]
     | TRecord_ (Map v b)
     | ConstraintKind_ (Constraint' v b)        -- flatten?
-    | Witness  Witness      -- TODO: make this polymorphic
+    | Witness  k Witness      -- TODO: make this polymorphic
     deriving (Eq,Ord,Functor,Foldable,Traversable) -- TODO: elim Eq instance
 
 
-mapExp :: (v -> v') -> (t -> t') -> (p -> p') -> Exp_ v t p b -> Exp_ v' t' p' b
-mapExp vf tf f = \case
+mapExp :: Ord v' => (v -> v') -> (t -> t') -> (p -> p') -> Exp_ k v t p b -> Exp_ k v' t' p' b
+mapExp = mapExp_ id
+
+mapKind :: Ord v => (k -> k') -> Exp_ k v t p b -> Exp_ k' v t p b
+mapKind f = mapExp_ f id id id
+
+mapExp_ :: Ord v' => (k -> k') -> (v -> v') -> (t -> t') -> (p -> p') -> Exp_ k v t p b -> Exp_ k' v' t' p' b
+mapExp_ kf vf tf f = \case
     ELit_      x       -> ELit_ x
-    EVar_      x       -> EVar_ $ vf x
-    EApp_      x y     -> EApp_ x y
+    EVar_      k x       -> EVar_ (kf k) $ vf x
+    EApp_      k x y     -> EApp_ (kf k) x y
     ELam_      x y     -> ELam_ (f x) y
     ELet_      x y z   -> ELet_ (f x) y z
     ETuple_    x       -> ETuple_ x
@@ -242,15 +291,24 @@ mapExp vf tf f = \case
     EType_ t           -> EType_ $ tf t
     ExtractInstance i j n -> ExtractInstance i j n
     PrimFun a b c      -> PrimFun a b c
+    Star_              -> Star_
+    TCon_    k v       -> TCon_ (kf k) (vf v)
+    -- | TFun_    f [a]    -- TODO
+    Forall_  mv b1 b2  -> Forall_ (vf <$> mv) b1 b2
+    TTuple_  bs        -> TTuple_ bs
+    TRecord_ m         -> TRecord_ $ Map.fromList $ map (vf *** id) $ Map.toList m -- (Map v b)
+    ConstraintKind_ c  -> ConstraintKind_ $ mapConstraint vf id c
+    Witness  k w       -> Witness (kf k) w
+
 
 --------------------------------------------
 
-data Exp' n t p m = Exp' (m (Exp_ n t p (Exp' n t p m)))
+data Exp' n t p m = Exp' (m (Exp_ () n t p (Exp' n t p m)))
 
 pattern Exp a b = Exp' (a, b)
 pattern ELit' a b = Exp a (ELit_ b)
-pattern EVar' a b = Exp a (EVar_ b)
-pattern EApp' a b c = Exp a (EApp_ b c)
+pattern EVar' a b = Exp a (EVar_ () b)
+pattern EApp' a b c = Exp a (EApp_ () b c)
 pattern ELam' a b c = Exp a (ELam_ b c)
 pattern ELet' a b c d = Exp a (ELet_ b c d)
 pattern ETuple' a b = Exp a (ETuple_ b)
@@ -268,8 +326,8 @@ type Exp = Exp' Var Ty Pat Identity
 
 pattern Exp'' a = Exp' (Identity a)
 pattern ELit a = Exp'' (ELit_ a)
-pattern EVar a = Exp'' (EVar_ a)
-pattern EApp a b = Exp'' (EApp_ a b)
+pattern EVar a = Exp'' (EVar_ () a)
+pattern EApp a b = Exp'' (EApp_ () a b)
 pattern ELam a b = Exp'' (ELam_ a b)
 pattern ELet a b c = Exp'' (ELet_ a b c)
 pattern ETuple a = Exp'' (ETuple_ a)
@@ -299,7 +357,7 @@ pattern A11 f x y z v w q r s t a b <-  EApp (A10 f x y z v w q r s t a) b
 --------------------------------------------
 
 type Thunk = Exp' Var Ty Pat ((,) TEnv)
-type Thunk' = Exp_ Var Ty Pat Thunk
+type Thunk' = Exp_ () Var Ty Pat Thunk
 
 -------------------------------------------------------------------------------- tag handling
 
@@ -360,6 +418,7 @@ isTypeVar (N ns _ _ _) = ns == TypeNS
 isConstr (N _ _ (c:_) _) = isUpper c || c == ':'
 
 data Var = VarE IdN Ty
+    deriving (Eq, Ord)
 
 -------------------------------------------------------------------------------- error handling
 
@@ -623,7 +682,7 @@ pattern TCon2' a b c = TApp Star (TApp StarStar (TCon VecKind a) b) c
 pattern TCon3' a b c d = TApp Star (TApp StarStar (TApp VecKind (TCon (TArr Star VecKind) a) b) c) d
 
 pattern TENat' a = EType (TENat a)
-pattern TENat a = Ty_ TNat (ELit_ (LNat a))
+pattern TENat a = Ty_ (ELit_ (LNat a))
 pattern TVec a b = TCon2' "Vec" (TENat a) b
 pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TENat a)) (TENat b)) c
 
@@ -676,9 +735,12 @@ class FreeVars a where freeVars :: a -> Set IdN
 
 instance FreeVars Ty where
     freeVars = \case
-        Ty_ k x -> freeVars k `mappend` case x of
-            EVar_ a -> Set.singleton a
+        Ty_ x -> case x of
+            EVar_ k a -> Set.singleton a <> freeVars k
+            TCon_ k a -> freeVars k
+            EApp_ k a b -> freeVars k <> freeVars a <> freeVars b
             Forall_ (Just v) k t -> freeVars k <> Set.delete v (freeVars t)
+            Witness k w -> freeVars k -- TODO: w?
             x -> foldMap freeVars x
         StarToStar _ -> mempty
 
@@ -725,13 +787,13 @@ instance PShow Ty where
         Star -> "*"
         StarToStar i -> hcat $ intersperse "->" $ replicate (i+1) "*"
         TyStar i -> pShowPrec p i
-        Ty k i -> pInfix (-2) "::" p i k
+--        Ty k i -> pInfix (-2) "::" p i k
 
-instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
+instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b) where
     pShowPrec p = \case
         ELit_ l -> pShowPrec p l
-        EVar_ v -> pShowPrec p v
-        EApp_ a b -> pApp p a b
+        EVar_ k v -> pShowPrec p v
+        EApp_ k a b -> pApp p a b
         ETuple_ a -> tupled $ map pShow a
         ELam_ p b -> "\\" <> pShow p <+> "->" <+> pShow b
         ETypeSig_ b t -> pShow b <+> "::" <+> pShow t
@@ -748,7 +810,7 @@ instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
         Star_ -> "*"
 --        TLit_ l -> pShowPrec p l
 --        EVar_ n -> pShow n
-        TCon_ n -> pShow n
+        TCon_ k n -> pShow n
 --        TApp_ a b -> pApp p a b
         Forall_ Nothing a b -> pInfixr (-1) "->" p a b
 --        Forall_ (Just n) (a) b -> "forall" <+> pShow n <+> "::" <+> pShow (_ a) <> "." <+> pShow b
@@ -756,7 +818,7 @@ instance (PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ v t p b) where
         TTuple_ a -> tupled $ map pShow a
         TRecord_ m -> "Record" <+> showRecord (Map.toList m)
         ConstraintKind_ c -> pShowPrec p c
-        Witness w -> pShowPrec p w
+        Witness k w -> pShowPrec p w
 
 
 showRecord = braces . hsep . punctuate (pShow ',') . map (\(a, b) -> pShow a <> ":" <+> pShow b)
@@ -828,9 +890,9 @@ instance Replace Ty where
     repl st = \case
         ty | Map.null st -> ty -- optimization
         StarToStar n -> StarToStar n
-        Ty_ k s -> Ty_ (repl st k) $ case s of
+        Ty_ s -> Ty_ $ mapKind (repl st) $ case s of
             Forall_ (Just n) a b -> Forall_ (Just n) (repl st a) (repl (Map.delete n st) b)
-            EVar_ a | Just t <- Map.lookup a st -> EVar_ t
+            EVar_ k a | Just t <- Map.lookup a st -> EVar_ (repl st k) t
             t -> repl st <$> t
 
 instance Replace a => Replace (Env a) where
@@ -868,10 +930,10 @@ trace' x = trace (ppShow x) x
 recsubst :: (Ty -> IdN -> Ty) -> (IdN -> Ty -> Ty) -> Ty -> Ty
 recsubst g h = \case
     StarToStar n -> StarToStar n
-    Ty_ k s -> case s of
-        Forall_ (Just n) a b -> Ty_ (f k) $ Forall_ (Just n) (f a) $ h n b
-        EVar_ v -> g (Ty_ (f k) $ EVar_ v) v
-        _ -> Ty_ (f k) $ f <$> s
+    Ty_ s -> case s of
+        Forall_ (Just n) a b -> Ty_ $ Forall_ (Just n) (f a) $ h n b
+        EVar_ k v -> g (Ty_ $ EVar_ (f k) v) v
+        _ -> Ty_ $ mapKind f $ f <$> s
   where
     f = recsubst g h
 

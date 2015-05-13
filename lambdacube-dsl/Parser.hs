@@ -233,8 +233,8 @@ tcExp = try' "type context" $ do
   return t
 
 pattern Tyy a <- Ty' _ a
-pattern TyApp1 s t <- Tyy (EApp_ (Tyy (TCon_ (TypeN s))) t)
-pattern TyApp2 s t t' <- Tyy (EApp_ (TyApp1 s t) t')
+pattern TyApp1 s t <- Tyy (EApp_ () (Tyy (TCon_ () (TypeN s))) t)
+pattern TyApp2 s t t' <- Tyy (EApp_ () (TyApp1 s t) t')
 
 mkTypeFun :: TyR -> TypeFunR
 mkTypeFun = \case
@@ -282,17 +282,17 @@ tyApp = typeAtom >>= f
   where
     f t = do
         a <- typeAtom
-        f $ Ty' (t <-> a) $ EApp_ t a
+        f $ Ty' (t <-> a) $ EApp_ () t a
       <|> return t
 
 typeAtom :: P TyR
 typeAtom = typeRecord
     <|> addTPos (Star_ <$ operator "*")
-    <|> addTPos (EVar_ <$> try' "type var" typeVar)
+    <|> addTPos (EVar_ () <$> try' "type var" typeVar)
     <|> addTPos (ELit_ <$> (LNat . fromIntegral <$> natural <|> literal))
-    <|> addTPos (TCon_ <$> typeConstructor)
+    <|> addTPos (TCon_ () <$> typeConstructor)
     <|> addPos tTuple (parens (sepBy ty comma))
-    <|> addPos (\p -> Ty' p . EApp_ (Ty' p $ TCon_ (TypeN' "List" "List"))) (brackets ty)
+    <|> addPos (\p -> Ty' p . EApp_ () (Ty' p $ TCon_ () (TypeN' "List" "List"))) (brackets ty)
 
 tTuple :: Range -> [TyR] -> TyR
 tTuple p [t] = t
