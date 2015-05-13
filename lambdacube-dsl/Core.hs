@@ -7,6 +7,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleInstances #-}
+--{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 module Core where
 
 import qualified Data.Foldable as F
@@ -24,6 +27,7 @@ import Control.Arrow
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
+import Control.Monad.Identity
 import Data.Foldable (Foldable, toList)
 import Debug.Trace
 
@@ -53,7 +57,9 @@ reduceHNF th@(peelThunk -> exp) = case exp of
 
     EApp_ f x -> reduceHNF' f $ \f -> case f of
 
-        PrimFun f acc i | i > 0 -> Right $ PrimFun f (x: acc) (i-1)
+        PrimFun f acc i
+            | i > 0 -> Right $ PrimFun f (x: acc) (i-1)
+--            | otherwise -> error $ "too much argument for primfun " ++ ppShow f ++ ": " ++ ppShow exp
 
         ExtractInstance acc 0 n -> reduceHNF' x $ \case
             EType_ (Ty _ (Witness (WInstance m))) -> reduceHNF $ foldl (EApp' mempty) (m Map.! n) $ reverse acc
@@ -83,6 +89,7 @@ reduceHNF th@(peelThunk -> exp) = case exp of
   where
     keep = Right exp
 
+reduceHNF' :: Thunk -> (Thunk' -> Either String b) -> Either String b
 reduceHNF' x f = case reduceHNF x of
     Left e -> Left e
     Right t -> f t
@@ -118,6 +125,7 @@ mkReduce = reduce . mkThunk
 reduce :: Thunk -> Exp
 reduce = either (error "pattern match failure.") id . reduceEither
 
+reduce' :: Pat -> Thunk -> Exp
 reduce' p = reduce . applyEnvBefore (TEnv mempty $ Map.fromList [(v, Nothing) | v <- patternEVars p])
 
 reduceEither :: Thunk -> Either String Exp
@@ -134,5 +142,19 @@ reduceEither e = reduceHNF' e $ \e -> Right $ case e of
 
 evalPrimFun :: Name -> [Exp] -> Exp
 evalPrimFun (ExpN x) = case x of
-    "primIntToFloat" -> \[_, ELit (LInt i)] -> ELit $ LFloat $ fromIntegral i
+    "primIntToFloat" -> check $ \(EInt i) -> EFloat $ fromIntegral i
     x -> error $ "evalPrimFun: " ++ x
+  where
+    check = getArg x
+
+class GetArg a where
+    getArg :: String -> a -> [Exp] -> Exp
+instance (a ~ Var, b ~ Ty, c ~ Pat, d ~ Identity) => GetArg (Exp' a b c d) where
+    getArg _ r [] = r
+    getArg s _ _ = error $ "evalPrimFun: too much arguments for " ++ s
+instance (GetArg x, a ~ Exp) => GetArg (a -> x) where
+    getArg s r (x:xs) = getArg s (r x) xs
+    getArg s _ _ = error $ "evalPrimFun: not enough arguments for " ++ s
+
+
+

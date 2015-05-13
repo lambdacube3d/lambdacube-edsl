@@ -279,6 +279,9 @@ pattern EType a = Exp'' (EType_ a)
 pattern EAlts i b = Exp'' (EAlts_ i b)
 pattern ENext = Exp'' ENext_
 
+pattern EInt a = ELit (LInt a)
+pattern EFloat a = ELit (LFloat a)
+
 pattern Va x <- VarE (ExpIdN x) _
 pattern A0 x <- EVar (Va x)
 pattern A1 f x <- EApp (A0 f) x
