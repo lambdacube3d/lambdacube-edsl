@@ -293,7 +293,7 @@ reduceConstraint cvar x = do
     diff a b c = case Map.keys $ b Map.\\ a of
         [] -> discard Refl $ WithExplanation "???" [c, TRecord $ a Map.\\ b]: unifyMaps [a, b]
 --        ks -> failure $ "extra keys:" <+> pShow ks
-    discard w xs = return (Map.singleton cvar $ Ty_ $ Witness (ConstraintKind x) w, xs)
+    discard w xs = return (Map.singleton cvar $ Ty $ Witness (ConstraintKind x) w, xs)
     keep xs = return (mempty, xs)
     failure :: Doc -> m ConstraintSolvRes
     failure = throwErrorTCM
@@ -334,10 +334,7 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
                 | otherwise = def
 
     unifyTy :: Ty -> Ty -> StateT Subst m ()
-    unifyTy a@(StarToStar i) b@(StarToStar j)
-        | i == j = return ()
-        | otherwise = throwError $ UnificationError a b $ filter (not . null . drop 1 . snd) tys
-    unifyTy a@(Ty__ t) b@(Ty__ t') = unifyTy' t t'
+    unifyTy a@(Ty t) b@(Ty t') = unifyTy' t t'
       where
         bindVars a@(TVar _ u) b@(TVar _ v)
             | u == v = return ()

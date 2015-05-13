@@ -95,50 +95,24 @@ type TyR = Ty' Name WithRange
 
 -------------------------------------------- kinded types
 
-data Ty
+newtype Ty
     = Ty (Exp_ Ty IdN Void Void Ty)
-    | StarToStar !Int   -- TODO: remove
+    deriving (Eq, Ord)
 
-instance Eq Ty where
-    StarToStar i == StarToStar j = i == j
-    Ty b == Ty b' = b == b'
-    _ == _ = False
-instance Ord Ty where
-    StarToStar i `compare` StarToStar j = i `compare` j
-    Ty b `compare` Ty b' = b `compare` b'
-    StarToStar _ `compare` _ = LT
-    _ `compare` _ = GT
+pattern TApp k a b = Ty (EApp_ k a b)
+pattern TCon k a <- Ty (TCon_ k (TypeIdN a)) where
+    TCon k a = Ty (TCon_ k (TypeIdN' a "typecon"))
+pattern TVar k b = Ty (EVar_ k b)
+pattern TLit b = Ty (ELit_ b)
 
-pattern Ty_ b <- Ty b where
-    Ty_ Star_ = Star
-    Ty_ b = Ty b
+pattern Star = Ty Star_
 
-unfoldTy (StarToStar i) = Ty $ case i of
-    0 -> Star_
-    _ -> Forall_ Nothing Star $ StarToStar $ i - 1
-unfoldTy x = x
-
-pattern Ty__ b <- (unfoldTy -> Ty b) where
-    Ty__ Star_ = Star
-    Ty__ b = Ty b
-
-pattern TApp k a b = Ty_ (EApp_ k a b)
-pattern TCon k a <- Ty_ (TCon_ k (TypeIdN a)) where
-    TCon k a = Ty_ (TCon_ k (TypeIdN' a "typecon"))
-pattern TVar k b = Ty_ (EVar_ k b)
-pattern TLit b = Ty_ (ELit_ b)
-
-pattern Star = StarToStar 0
-
-pattern TyStar a = Ty_ a
-pattern TRecord b = TyStar (TRecord_ b)
-pattern TTuple b = TyStar (TTuple_ b)
+pattern TRecord b = Ty (TRecord_ b)
+pattern TTuple b = Ty (TTuple_ b)
 pattern TUnit = TTuple []
-pattern ConstraintKind c = TyStar (ConstraintKind_ c)
-pattern Forall a b c = TyStar (Forall_ (Just a) b c)
-pattern TArr a b <- TyStar (Forall_ Nothing a b) where
-    TArr Star (StarToStar i) = StarToStar (i + 1)
-    TArr a b = TyStar (Forall_ Nothing a b)
+pattern ConstraintKind c = Ty (ConstraintKind_ c)
+pattern Forall a b c = Ty (Forall_ (Just a) b c)
+pattern TArr a b = Ty (Forall_ Nothing a b)
 
 infixr 7 ~>, ~~>
 a ~> b = TArr a b
@@ -161,7 +135,7 @@ inferLit a = case a of
 
 kindOf :: Ty -> Ty
 kindOf = \case
-    Ty__ t -> case t of
+    Ty t -> case t of
         ELit_ l -> inferLit l
         EVar_ k _ -> k
         EApp_ k _ _ -> k
@@ -673,16 +647,16 @@ type ValueDefT = ValueDef PatT ExpT
 -------------------------------------------------------------------------------- LambdaCube specific definitions
 -- TODO: eliminate most of these
 
-pattern StarStar = StarToStar 1
+pattern StarStar = TArr Star Star
 
 pattern TCon0 a = TCon Star a
 pattern TCon1 a b = TApp Star (TCon StarStar a) b
-pattern TCon2 a b c = TApp Star (TApp StarStar (TCon (StarToStar 2) a) b) c
+pattern TCon2 a b c = TApp Star (TApp StarStar (TCon (TArr Star StarStar) a) b) c
 pattern TCon2' a b c = TApp Star (TApp StarStar (TCon VecKind a) b) c
 pattern TCon3' a b c d = TApp Star (TApp StarStar (TApp VecKind (TCon (TArr Star VecKind) a) b) c) d
 
 pattern TENat' a = EType (TENat a)
-pattern TENat a = Ty_ (ELit_ (LNat a))
+pattern TENat a = Ty (ELit_ (LNat a))
 pattern TVec a b = TCon2' "Vec" (TENat a) b
 pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TENat a)) (TENat b)) c
 
@@ -735,14 +709,13 @@ class FreeVars a where freeVars :: a -> Set IdN
 
 instance FreeVars Ty where
     freeVars = \case
-        Ty_ x -> case x of
+        Ty x -> case x of
             EVar_ k a -> Set.singleton a <> freeVars k
             TCon_ k a -> freeVars k
             EApp_ k a b -> freeVars k <> freeVars a <> freeVars b
             Forall_ (Just v) k t -> freeVars k <> Set.delete v (freeVars t)
             Witness k w -> freeVars k -- TODO: w?
             x -> foldMap freeVars x
-        StarToStar _ -> mempty
 
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
 --instance FreeVars Typing where freeVars (TypingConstr m t) = freeVars m <> freeVars t
@@ -784,9 +757,7 @@ instance PShow Witness where
 
 instance PShow Ty where
     pShowPrec p = \case
-        Star -> "*"
-        StarToStar i -> hcat $ intersperse "->" $ replicate (i+1) "*"
-        TyStar i -> pShowPrec p i
+        Ty i -> pShowPrec p i
 --        Ty k i -> pInfix (-2) "::" p i k
 
 instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b) where
@@ -889,8 +860,7 @@ class Replace a where repl :: Repl -> a -> a
 instance Replace Ty where
     repl st = \case
         ty | Map.null st -> ty -- optimization
-        StarToStar n -> StarToStar n
-        Ty_ s -> Ty_ $ mapKind (repl st) $ case s of
+        Ty s -> Ty $ mapKind (repl st) $ case s of
             Forall_ (Just n) a b -> Forall_ (Just n) (repl st a) (repl (Map.delete n st) b)
             EVar_ k a | Just t <- Map.lookup a st -> EVar_ (repl st k) t
             t -> repl st <$> t
@@ -929,11 +899,10 @@ trace' x = trace (ppShow x) x
 
 recsubst :: (Ty -> IdN -> Ty) -> (IdN -> Ty -> Ty) -> Ty -> Ty
 recsubst g h = \case
-    StarToStar n -> StarToStar n
-    Ty_ s -> case s of
-        Forall_ (Just n) a b -> Ty_ $ Forall_ (Just n) (f a) $ h n b
-        EVar_ k v -> g (Ty_ $ EVar_ (f k) v) v
-        _ -> Ty_ $ mapKind f $ f <$> s
+    Ty s -> case s of
+        Forall_ (Just n) a b -> Ty $ Forall_ (Just n) (f a) $ h n b
+        EVar_ k v -> g (Ty $ EVar_ (f k) v) v
+        _ -> Ty $ mapKind f $ f <$> s
   where
     f = recsubst g h
 
