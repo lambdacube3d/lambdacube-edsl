@@ -203,11 +203,11 @@ compileProgram uniTrie p = do
     status <- GL.getProgramParameter_ po GL._LINK_STATUS
     when (status /= true) $ throwException $ error "link program failed!"
 
-    uniformLocation <- StrMap.fromList <$> flip traverse (StrMap.toList p.programUniforms) (\(Tuple uniName uniType) -> do
+    uniformLocation <- StrMap.fromList <$> for (StrMap.toList p.programUniforms) (\(Tuple uniName uniType) -> do
       loc <- GL.getUniformLocation_ po uniName
       return $ Tuple uniName loc)
 
-    streamLocation <- StrMap.fromList <$> flip traverse (StrMap.toList p.programStreams) (\(Tuple streamName s) -> do
+    streamLocation <- StrMap.fromList <$> for (StrMap.toList p.programStreams) (\(Tuple streamName s) -> do
       loc <- GL.getAttribLocation_ po streamName
       trace $ "attrib location " ++ streamName ++" " ++ show loc
       return $ Tuple streamName {location: loc, slotAttribute: s.name})
@@ -246,7 +246,7 @@ allocPipeline p = do
 renderPipeline :: WebGLPipeline -> GFX Unit
 renderPipeline p = do
   writeRef p.curProgram Nothing
-  flip traverse p.commands $ \cmd -> case cmd of
+  for_ p.commands $ \cmd -> case cmd of
       SetRasterContext rCtx -> do
         trace "SetRasterContext"
         setupRasterContext rCtx
@@ -269,18 +269,16 @@ renderPipeline p = do
               Just (InputConnection ic) -> do
                 s <- readRef (ic.input.slotVector `unsafeIndex` (ic.slotMapPipelineToInput `unsafeIndex` slotIdx))
                 trace $ "#" ++ show (length s.sortedObjects)
-                flip traverse s.sortedObjects $ \(Tuple _ obj) -> do
+                for_ s.sortedObjects $ \(Tuple _ obj) -> do
                   enabled <- readRef obj.enabled
                   when enabled $ do
                     cmd <- readRef obj.commands
                     renderSlot $ (cmd `unsafeIndex` ic.id) `unsafeIndex` progIdx
-                return unit
       _ -> return unit
-  return unit
 
 renderSlot :: [GLObjectCommand] -> GFX Unit
 renderSlot cmds = do
-  flip traverse cmds $ \cmd -> case cmd of
+  for_ cmds $ \cmd -> case cmd of
     GLSetVertexAttribArray idx buf size typ ptr -> do
       trace $ "GLSetVertexAttribArray " ++ show [idx,size,ptr]
       GL.bindBuffer_ GL._ARRAY_BUFFER buf
@@ -300,7 +298,6 @@ renderSlot cmds = do
     GLSetUniform idx uni -> do
       trace "GLSetUniform"
       setUniform idx uni
-  return unit
 {-
         GLBindTexture txTarget tuRef (GLUniform _ ref)  -> do
                                                             txObjVal <- readIORef ref
@@ -315,9 +312,9 @@ renderSlot cmds = do
 disposePipeline :: WebGLPipeline -> GFX Unit
 disposePipeline p = do
   setPipelineInput p Nothing
-  flip traverse p.programs $ \prg -> do
+  for_ p.programs $ \prg -> do
       GL.deleteProgram_ prg.program
-      traverse GL.deleteShader_ prg.shaders
+      traverse_ GL.deleteShader_ prg.shaders
   {- TODO: targets, textures
   let targets = glTargets p
   withArray (map framebufferObject $ V.toList targets) $ (glDeleteFramebuffers $ fromIntegral $ V.length targets)
@@ -325,7 +322,6 @@ disposePipeline p = do
   withArray (map glTextureObject $ V.toList textures) $ (glDeleteTextures $ fromIntegral $ V.length textures)
   with (glVAO p) $ (glDeleteVertexArrays 1)
   -}
-  return unit
 
 setPipelineInput :: WebGLPipeline -> Maybe WebGLPipelineInput -> GFX Unit
 setPipelineInput p input' = do
@@ -335,11 +331,10 @@ setPipelineInput p input' = do
         Nothing -> return unit
         Just (InputConnection ic) -> do
             modifyRef ic.input.pipelines $ \v -> updateAt ic.id Nothing v
-            flip traverse ic.slotMapPipelineToInput $ \slotIdx -> do
+            for_ ic.slotMapPipelineToInput $ \slotIdx -> do
                 slot <- readRef (ic.input.slotVector `unsafeIndex` slotIdx)
-                flip traverse (Map.values slot.objectMap) $ \obj -> do
+                for_ (Map.values slot.objectMap) $ \obj -> do
                     modifyRef obj.commands $ \v -> updateAt ic.id [] v
-            return unit
     {-
         addition:
             - get an id from pipeline input
@@ -361,7 +356,7 @@ setPipelineInput p input' = do
                     modifyRef input.pipelines $ \v -> updateAt i (Just p) v
                     return $ Tuple i Nothing
             -- create input connection
-            pToI <- flip traverse p.slotNames $ \n -> case StrMap.lookup n input.slotMap of
+            pToI <- for p.slotNames $ \n -> case StrMap.lookup n input.slotMap of
               Nothing -> throwException $ error "internal error: unknown slot name in input"
               Just i -> return i
             let iToP = foldr (\(Tuple i v) -> updateAt v (Just i)) (replicate (StrMap.size input.slotMap) Nothing) (zip (0..length pToI) pToI)
@@ -381,10 +376,9 @@ setPipelineInput p input' = do
                 extend v = case shouldExtend of
                     Nothing -> v
                     Just l  -> concat [v,replicate l []]
-            flip traverse (zip pToI p.slotPrograms) $ \(Tuple slotIdx prgs) -> do
+            for_ (zip pToI p.slotPrograms) $ \(Tuple slotIdx prgs) -> do
                 slot <- readRef $ input.slotVector `unsafeIndex` slotIdx
-                flip traverse (Map.values slot.objectMap) $ \obj -> do
+                for_ (Map.values slot.objectMap) $ \obj -> do
                     let updateCmds v prgIdx = updateAt prgIdx (createObjectCommands texUnitMap topUnis obj (p.programs `unsafeIndex` prgIdx)) v
                         cmdV = foldl updateCmds emptyV prgs
                     modifyRef obj.commands $ \v -> updateAt idx cmdV (extend v)
-            return unit

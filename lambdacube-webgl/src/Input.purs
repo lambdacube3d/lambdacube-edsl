@@ -21,7 +21,7 @@ import Util
 -- API
 schemaFromPipeline :: IR.Pipeline -> GFX PipelineSchema
 schemaFromPipeline ppl = do
-  sl <- flip traverse ppl.slots $ \s -> do
+  sl <- for ppl.slots $ \s -> do
     a <- traverse toStreamType s.slotStreams
     return $ Tuple s.slotName {primitive: s.slotPrimitive, attributes: a}
   let ul = map (\s -> s.slotUniforms) ppl.slots
@@ -32,7 +32,7 @@ schemaFromPipeline ppl = do
 
 mkUniform :: [Tuple String InputType] -> GFX (Tuple (StrMap.StrMap InputSetter) (StrMap.StrMap GLUniform))
 mkUniform l = do
-  unisAndSetters <- flip traverse l $ \(Tuple n t) -> do
+  unisAndSetters <- for l $ \(Tuple n t) -> do
     (Tuple uni setter) <- mkUniformSetter t
     return $ Tuple (Tuple n uni) (Tuple n setter)
   let fun (Tuple unis setters) = Tuple (StrMap.fromList setters) (StrMap.fromList unis)
@@ -60,7 +60,7 @@ mkWebGLPipelineInput sch = do
 
 addObject :: WebGLPipelineInput -> String -> Primitive -> Maybe (IndexStream Buffer) -> StrMap.StrMap (Stream Buffer) -> [String] -> GFX GLObject
 addObject input slotName prim indices attribs uniformNames = do
-    flip traverse uniformNames $ \n -> case StrMap.lookup n input.schema.uniforms of
+    for_ uniformNames $ \n -> case StrMap.lookup n input.schema.uniforms of
         Nothing -> throwException $ error $ "Unknown uniform: " ++ show n
         _ -> return unit
     case StrMap.lookup slotName input.schema.slots of
@@ -83,7 +83,7 @@ addObject input slotName prim indices attribs uniformNames = do
     enabled <- newRef true
     index <- readRef input.objSeed
     modifyRef input.objSeed (1+)
-    Tuple setters unis <- mkUniform =<< (flip traverse uniformNames $ \n -> case StrMap.lookup n input.schema.uniforms of
+    Tuple setters unis <- mkUniform =<< (for uniformNames $ \n -> case StrMap.lookup n input.schema.uniforms of
       Nothing -> throwException $ error "internal error (uniform setter not found)"
       Just t -> return $ Tuple n t)
     cmdsRef <- newRef [[]]
@@ -109,7 +109,7 @@ addObject input slotName prim indices attribs uniformNames = do
                 generate commands
     -}
     ppls <- readRef input.pipelines
-    cmds <- flip traverse ppls $ \mp -> case mp of
+    cmds <- for ppls $ \mp -> case mp of
         Nothing -> return []
         Just p  -> do
             Just (InputConnection ic) <- readRef p.input
@@ -142,23 +142,22 @@ setScreenSize p s = writeRef p.screenSize s
 
 sortSlotObjects :: WebGLPipelineInput -> GFX Unit
 sortSlotObjects p = do
-  flip traverse p.slotVector $ \slotRef -> do
+  for_ p.slotVector $ \slotRef -> do
     slot <- readRef slotRef
     let cmpFun (Tuple a _) (Tuple b _) = a `compare` b
         doSort objs = writeRef slotRef $ slot {sortedObjects = sortBy cmpFun objs, orderJob = Ordered}
     case slot.orderJob of
         Ordered -> return unit
         Generate -> do
-            objs <- flip traverse (Map.values slot.objectMap) $ \obj -> do
+            objs <- for (Map.values slot.objectMap) $ \obj -> do
                 ord <- readRef obj.order
                 return $ Tuple ord obj
             doSort objs
         Reorder -> do
-            objs <- flip traverse slot.sortedObjects $ \(Tuple _ obj) -> do
+            objs <- for slot.sortedObjects $ \(Tuple _ obj) -> do
                 ord <- readRef obj.order
                 return (Tuple ord obj)
             doSort objs
-  return unit
 
 nullSetter :: forall a . String -> String -> a -> GFX Unit
 nullSetter n t _ = return unit -- Prelude.putStrLn $ "WARNING: unknown uniform: " ++ n ++ " :: " ++ t

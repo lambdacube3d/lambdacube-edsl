@@ -9,6 +9,7 @@ import qualified Graphics.WebGLRaw as GL
 import Data.Maybe
 import Data.Tuple
 import Data.Array
+import Data.Foldable
 import Data.Traversable
 
 import IR
@@ -22,7 +23,7 @@ compileBuffer arrs = do
           Just s  -> s
           Nothing -> 0
     b <- newArrayBuffer size
-    descs <- flip traverse (zip arrs $ take (length arrs) offsets) $ \(Tuple (Array t a) o) -> do
+    descs <- for (zip arrs $ take (length arrs) offsets) $ \(Tuple (Array t a) o) -> do
       let len     = length a
           bytes   = len * sizeOfArrayType t
           newView = case t of
@@ -44,11 +45,10 @@ compileBuffer arrs = do
 
 updateBuffer :: Buffer -> [Tuple Int LCArray] -> GFX Unit
 updateBuffer b arrs = do
-  flip traverse arrs $ \(Tuple i (Array t a)) -> case b.arrays !! i of
+  for_ arrs $ \(Tuple i (Array t a)) -> case b.arrays !! i of
     Nothing -> throwException $ error "wrong index"
     Just d  -> do
       when (arrayTypeToGLType t /= arrayTypeToGLType d.arrType) $ throwException $ error "type mismatch"
       when (length a /= d.arrLength) $ throwException $ error "size mismatch"
       setArrayView d.arrView a
       bufferSubDataArrayView GL._ARRAY_BUFFER d.arrOffset d.arrView
-  return unit
