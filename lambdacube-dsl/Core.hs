@@ -40,7 +40,7 @@ import Typecheck
 reduceHNF :: Thunk -> Either String Thunk'       -- Left: pattern match failure
 reduceHNF th@(peelThunk -> exp) = case exp of
 
-    PrimFun f acc 0 -> Right $ mkThunk' $ evalPrimFun f $ map reduce $ reverse acc
+    PrimFun (ExpN f) acc 0 -> Right $ mkThunk' $ evalPrimFun f $ map reduce $ reverse acc
 
     ENext_ -> Left "? err"
     EAlts_ 0 (map reduceHNF -> es) -> case [e | Right e <- es] of
@@ -140,21 +140,7 @@ reduceEither e = reduceHNF' e $ \e -> Right $ case e of
 
 --------------------------------------------------------------------------------
 
-evalPrimFun :: Name -> [Exp] -> Exp
-evalPrimFun (ExpN x) = case x of
-    "primIntToFloat" -> check $ \(EInt i) -> EFloat $ fromIntegral i
-    x -> error $ "evalPrimFun: " ++ x
-  where
-    check = getArg x
-
-class GetArg a where
-    getArg :: String -> a -> [Exp] -> Exp
-instance (a ~ Var, b ~ Ty, c ~ Pat, d ~ Identity) => GetArg (Exp' a b c d) where
-    getArg _ r [] = r
-    getArg s _ _ = error $ "evalPrimFun: too much arguments for " ++ s
-instance (GetArg x, a ~ Exp) => GetArg (a -> x) where
-    getArg s r (x:xs) = getArg s (r x) xs
-    getArg s _ _ = error $ "evalPrimFun: not enough arguments for " ++ s
-
-
+evalPrimFun :: String -> [Exp] -> Exp
+evalPrimFun "primIntToFloat" [EInt i] = EFloat $ fromIntegral i
+evalPrimFun x args = error $ "evalPrimFun: " ++ x ++ " " ++ ppShow args
 
