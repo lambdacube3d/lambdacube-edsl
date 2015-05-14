@@ -119,7 +119,7 @@ getCommands e = case e of
 getUniforms :: Exp -> Set (String,IR.InputType)
 getUniforms e = case e of
   A1 "Uni" a -> Set.fromList $ compInput a
-  Exp'' e -> F.foldMap getUniforms e
+  Exp e -> F.foldMap getUniforms e
 
 compAC x = case x of
   A1 "AccumulationContext" (ETuple a) -> IR.AccumulationContext Nothing (map compFrag a)

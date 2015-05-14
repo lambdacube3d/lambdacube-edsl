@@ -56,7 +56,7 @@ pattern ELString s = ELit (LString s)
 
 genUniforms e = case e of
   A1 "Uni" (A1 _ (ELString s)) -> Set.singleton [unwords ["uniform",toGLSLType "1" $ tyOf e,s,";"]]
-  Exp'' e -> F.foldMap genUniforms e
+  Exp e -> F.foldMap genUniforms e
 
 genStreamInput i = do
   let input (PVar (x@(VarE (showN -> n) t))) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]] >> return [n]

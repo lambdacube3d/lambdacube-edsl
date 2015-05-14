@@ -82,8 +82,8 @@ instance Ord Thunk where
 instance Eq Pat
 instance Ord Pat
 
-instance Eq Ty where Ty a == Ty b = a == b
-instance Ord Ty where Ty a `compare` Ty b = a `compare` b
+instance Eq Exp where Exp a == Exp b = a == b
+instance Ord Exp where Exp a `compare` Exp b = a `compare` b
 
 
 --------------------------------------------
@@ -94,39 +94,39 @@ instance PShow Void
 instance Eq Void
 instance Ord Void
 
-newtype Ty' n m = Ty'' (m (Exp_ () n Ty Pat (Ty' n m)))
+newtype Ty' n m = Ty'' (m (Exp_ () n Exp Pat (Ty' n m)))
 
 pattern Ty' a b = Ty'' (a, b)
 type TyR = Ty' Name WithRange
 
 -------------------------------------------- kinded types
 
-pattern TApp k a b = Ty (EApp_ k a b)
-pattern TCon k a <- Ty (TCon_ k (TypeIdN a)) where
-    TCon k a = Ty (TCon_ k (TypeIdN' a "typecon"))
-pattern TVar k b = Ty (EVar_ k b)
-pattern TLit b = Ty (ELit_ b)
+pattern TApp k a b = Exp (EApp_ k a b)
+pattern TCon k a <- Exp (TCon_ k (TypeIdN a)) where
+    TCon k a = Exp (TCon_ k (TypeIdN' a "typecon"))
+pattern TVar k b = Exp (EVar_ k b)
+pattern TLit b = Exp (ELit_ b)
 
-pattern Star = Ty Star_
+pattern Star = Exp Star_
 
-pattern TRecord b = Ty (TRecord_ b)
-pattern TTuple b = Ty (TTuple_ b)
+pattern TRecord b = Exp (TRecord_ b)
+pattern TTuple b = Exp (TTuple_ b)
 pattern TUnit = TTuple []
-pattern ConstraintKind c = Ty (ConstraintKind_ c)
-pattern Forall a b c = Ty (Forall_ (Just a) b c)
-pattern TArr a b = Ty (Forall_ Nothing a b)
+pattern ConstraintKind c = Exp (ConstraintKind_ c)
+pattern Forall a b c = Exp (Forall_ (Just a) b c)
+pattern TArr a b = Exp (Forall_ Nothing a b)
 
 infixr 7 ~>, ~~>
 a ~> b = TArr a b
 
-(~~>) :: [Ty] -> Ty -> Ty
+(~~>) :: [Exp] -> Exp -> Exp
 args ~~> res = foldr (~>) res args
 
 infix 4 ~~, ~~~
 (~~) = CEq
 (~~~) = CUnify
 
-inferLit :: Lit -> Ty
+inferLit :: Lit -> Exp
 inferLit a = case a of
     LInt _    -> TInt
     LChar _   -> TChar
@@ -134,9 +134,9 @@ inferLit a = case a of
     LString _ -> TString
     LNat _    -> TNat
 
-kindOf :: Ty -> Ty
+kindOf :: Exp -> Exp
 kindOf = \case
-    Ty t -> case t of
+    Exp t -> case t of
         ELit_ l -> inferLit l
         EVar_ k _ -> k
         EApp_ k _ _ -> k
@@ -278,7 +278,7 @@ mapExp_ kf vf tf f = \case
 
 --------------------------------------------
 
-data Exp' m = Exp' (m (Exp_ Ty Name Ty Pat (Exp' m)))
+data Exp' m = Exp' (m (Exp_ Exp Name Exp Pat (Exp' m)))
 
 newtype ExpR = ExpR_ (WithRange (Exp_ () Name TyR PatR ExpR))
 
@@ -297,44 +297,43 @@ pattern EAltsR' a i b = ExpR a (EAlts_ i b)
 pattern ENextR' a = ExpR a ENext_
 pattern ETypeR' a b = ExpR a (EType_ b)
 
-pattern Exp a b = Exp' (a, b)
-pattern ELit' a b = Exp a (ELit_ b)
-pattern EVar' a b <- Exp a (EVar_ _ b)
-pattern EVarT' a t b = Exp a (EVar_ t b)
-pattern EApp' a b c <- Exp a (EApp_ _ b c)
-pattern EAppT' a t b c = Exp a (EApp_ t b c)
-pattern ELam' a b c = Exp a (ELam_ b c)
-pattern ELet' a b c d = Exp a (ELet_ b c d)
-pattern ETuple' a b = Exp a (ETuple_ b)
-pattern ERecord' a b = Exp a (ERecord_ b)
-pattern ENamedRecord' a n b = Exp a (ENamedRecord_ n b)
-pattern EFieldProj' a c = Exp a (EFieldProj_ c)
-pattern ETypeSig' a b c = Exp a (ETypeSig_ b c)
-pattern EAlts' a i b = Exp a (EAlts_ i b)
-pattern ENext' a = Exp a ENext_
-pattern EType' a b = Exp a (EType_ b)
+pattern ExpTh a b = Exp' (a, b)
+pattern ELit' a b = ExpTh a (ELit_ b)
+pattern EVar' a b <- ExpTh a (EVar_ _ b)
+pattern EVarT' a t b = ExpTh a (EVar_ t b)
+pattern EApp' a b c <- ExpTh a (EApp_ _ b c)
+pattern EAppT' a t b c = ExpTh a (EApp_ t b c)
+pattern ELam' a b c = ExpTh a (ELam_ b c)
+pattern ELet' a b c d = ExpTh a (ELet_ b c d)
+pattern ETuple' a b = ExpTh a (ETuple_ b)
+pattern ERecord' a b = ExpTh a (ERecord_ b)
+pattern ENamedRecord' a n b = ExpTh a (ENamedRecord_ n b)
+pattern EFieldProj' a c = ExpTh a (EFieldProj_ c)
+pattern ETypeSig' a b c = ExpTh a (ETypeSig_ b c)
+pattern EAlts' a i b = ExpTh a (EAlts_ i b)
+pattern ENext' a = ExpTh a ENext_
+pattern EType' a b = ExpTh a (EType_ b)
 
 --------------------------------------------
 
 type Exp = Exp' Identity
-type Ty = Exp' Identity
+type Ty = Exp
 
-pattern Ty a = Exp' (Identity a)
-pattern Exp'' a = Exp' (Identity a)
+pattern Exp a = Exp' (Identity a)
 
-pattern ELit a = Exp'' (ELit_ a)
-pattern EVar a <- Exp'' (EVar_ _ a)
-pattern EVarT t a <- Exp'' (EVar_ t a)
-pattern EApp a b <- Exp'' (EApp_ _ a b)
-pattern EAppT t a b = Exp'' (EApp_ t a b)
-pattern ELam a b = Exp'' (ELam_ a b)
-pattern ELet a b c = Exp'' (ELet_ a b c)
-pattern ETuple a = Exp'' (ETuple_ a)
-pattern ERecord b = Exp'' (ERecord_ b)
-pattern EFieldProj a = Exp'' (EFieldProj_ a)
-pattern EType a = Exp'' (EType_ a)
-pattern EAlts i b = Exp'' (EAlts_ i b)
-pattern ENext = Exp'' ENext_
+pattern ELit a = Exp (ELit_ a)
+pattern EVar a <- Exp (EVar_ _ a)
+pattern EVarT t a <- Exp (EVar_ t a)
+pattern EApp a b <- Exp (EApp_ _ a b)
+pattern EAppT t a b = Exp (EApp_ t a b)
+pattern ELam a b = Exp (ELam_ a b)
+pattern ELet a b c = Exp (ELet_ a b c)
+pattern ETuple a = Exp (ETuple_ a)
+pattern ERecord b = Exp (ERecord_ b)
+pattern EFieldProj a = Exp (EFieldProj_ a)
+pattern EType a = Exp (EType_ a)
+pattern EAlts i b = Exp (EAlts_ i b)
+pattern ENext = Exp ENext_
 
 pattern EInt a = ELit (LInt a)
 pattern EFloat a = ELit (LFloat a)
@@ -356,7 +355,7 @@ pattern A11 f x y z v w q r s t a b <-  EApp (A10 f x y z v w q r s t a) b
 --------------------------------------------
 
 type Thunk = Exp' ((,) TEnv)
-type Thunk' = Exp_ Ty Name Ty Pat Thunk
+type Thunk' = Exp_ Exp Name Exp Pat Thunk
 
 -------------------------------------------------------------------------------- tag handling
 
@@ -369,7 +368,7 @@ instance GetTag ExpR where
     getTag (ExpR a _) = a
 instance GetTag (Exp' ((,) a)) where
     type Tag (Exp' ((,) a)) = a
-    getTag (Exp a _) = a
+    getTag (ExpTh a _) = a
 instance GetTag (Ty' n ((,) a)) where
     type Tag (Ty' n ((,) a)) = a
     getTag (Ty' k _) = k
@@ -419,7 +418,7 @@ toTypeN (N _ a b i) = N TypeNS a b i
 isTypeVar (N ns _ _ _) = ns == TypeNS
 isConstr (N _ _ (c:_) _) = isUpper c || c == ':'
 
-data Var = VarE IdN Ty
+data Var = VarE IdN Exp
     deriving (Eq, Ord)
 
 -------------------------------------------------------------------------------- error handling
@@ -450,7 +449,7 @@ data ErrorMsg
     | ErrorCtx Doc ErrorMsg
     | ErrorMsg Doc
     | EParseError ParseError
-    | UnificationError Ty Ty [WithExplanation [Ty]]
+    | UnificationError Exp Exp [WithExplanation [Exp]]
 
 instance Show ErrorMsg where
     show = show . f Nothing Nothing where
@@ -581,11 +580,11 @@ newEName = do
 type Env' a = Map Name a
 type Env a = Map IdN a
 
-type SubstEnv = Env (Either Ty Ty)  -- either substitution or type signature   TODO: dedicated type instead of Either
+type SubstEnv = Env (Either Exp Exp)  -- either substitution or type signature   TODO: dedicated type instead of Either
 
-type Subst = Env Ty  -- substitutions
+type Subst = Env Exp  -- substitutions
 
-data TEnv = TEnv Subst EnvMap       -- TODO: merge into this:   Env (Either Ty (Maybe Thunk))
+data TEnv = TEnv Subst EnvMap       -- TODO: merge into this:   Env (Either Exp (Maybe Thunk))
 
 type EnvMap = Env (Maybe Thunk)   -- Nothing: statically unknown but defined
 
@@ -595,7 +594,7 @@ type InstEnv = Env' InstType'
 
 type PrecMap = Env' Fixity
 
-type InstanceDefs = Env' (Map Ty Witness)
+type InstanceDefs = Env' (Map Exp Witness)
 
 --------------------------------------------------------------------------------
 
@@ -645,7 +644,7 @@ addPolyEnv pe m = do
 
 type TypingT = WriterT' SubstEnv
 
-type InstType = TypingT (VarMT Identity) ([Ty], Ty)
+type InstType = TypingT (VarMT Identity) ([Exp], Exp)
 type InstType' = Doc -> InstType
 
 pureInstType = lift . pure
@@ -657,7 +656,7 @@ type TCM = TCMT Identity
 
 type TCMS = TypingT TCM
 
-toTCMS :: InstType -> TCMS ([Ty], Ty)
+toTCMS :: InstType -> TCMS ([Exp], Exp)
 toTCMS = mapWriterT' $ lift . lift --mapStateT lift
 
 liftIdentity :: Monad m => Identity a -> m a
@@ -665,10 +664,10 @@ liftIdentity = return . runIdentity
 
 -------------------------------------------------------------------------------- typecheck output
 
-type ExpT = (Exp, Ty)
+type ExpT = (Exp, Exp)
 type PatT = Pat
-type ConstraintT = Constraint' IdN Ty
-type TypeFunT = TypeFun IdN Ty
+type ConstraintT = Constraint' IdN Exp
+type TypeFunT = TypeFun IdN Exp
 type ValueDefT = ValueDef PatT ExpT
 
 -------------------------------------------------------------------------------- LambdaCube specific definitions
@@ -683,7 +682,7 @@ pattern TCon2' a b c = TApp Star (TApp StarStar (TCon VecKind a) b) c
 pattern TCon3' a b c d = TApp Star (TApp StarStar (TApp VecKind (TCon (TArr Star VecKind) a) b) c) d
 
 pattern TENat' a = EType (TENat a)
-pattern TENat a = Ty (ELit_ (LNat a))
+pattern TENat a = Exp (ELit_ (LNat a))
 pattern TVec a b = TCon2' "Vec" (TENat a) b
 pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TENat a)) (TENat b)) c
 
@@ -734,9 +733,9 @@ pattern TFJoinTupleType a b     = TypeFunS "JoinTupleType" [a, b]
 
 class FreeVars a where freeVars :: a -> Set IdN
 
-instance FreeVars Ty where
+instance FreeVars Exp where
     freeVars = \case
-        Ty x -> case x of
+        Exp x -> case x of
             EVar_ k a -> Set.singleton a <> freeVars k
             TCon_ k a -> freeVars k
             EApp_ k a b -> freeVars k <> freeVars a <> freeVars b
@@ -782,7 +781,7 @@ instance PShow Witness where
         Refl -> "Refl"
         WInstance _ -> "WInstance ..."       
 
---        Ty k i -> pInfix (-2) "::" p i k
+--        Exp k i -> pInfix (-2) "::" p i k
 instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b) where
     pShowPrec p = \case
         ELit_ l -> pShowPrec p l
@@ -819,8 +818,8 @@ showRecord = braces . hsep . punctuate (pShow ',') . map (\(a, b) -> pShow a <> 
 
 instance (PShow a) => PShow (Exp' ((,) a)) where
     pShowPrec p e = case getLams e of
-        ([], Exp _ e) -> pShowPrec p e
-        (ps, Exp _ e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
+        ([], ExpTh _ e) -> pShowPrec p e
+        (ps, ExpTh _ e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
 
 getLams (ELam' _ p e) = (p:) *** id $ getLams e
 getLams e = ([], e)
@@ -835,8 +834,8 @@ getLamsR e = ([], e)
 
 instance PShow (Exp' Identity) where
     pShowPrec p e = case getLams' e of
-        ([], Exp'' e) -> pShowPrec p e
-        (ps, Exp'' e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
+        ([], Exp e) -> pShowPrec p e
+        (ps, Exp e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
 
 getLams' (ELam p e) = (p:) *** id $ getLams' e
 getLams' e = ([], e)
@@ -888,10 +887,10 @@ type Repl = Map IdN IdN
 -- TODO: express with Substitute?
 class Replace a where repl :: Repl -> a -> a
 
-instance Replace Ty where
+instance Replace Exp where
     repl st = \case
         ty | Map.null st -> ty -- optimization
-        Ty s -> Ty $ mapKind (repl st) $ case s of
+        Exp s -> Exp $ mapKind (repl st) $ case s of
             Forall_ (Just n) a b -> Forall_ (Just n) (repl st a) (repl (Map.delete n st) b)
             EVar_ k a | Just t <- Map.lookup a st -> EVar_ (repl st k) t
             t -> repl st <$> t
@@ -906,7 +905,7 @@ instance (Replace a, Replace b) => Replace (Either a b) where
 
 -------------------------------------------------------------------------------- substitution
 
-data Subst_ = Subst_ { substS :: Subst, lookupS :: Name -> Maybe Ty, delN :: Name -> Subst_ }
+data Subst_ = Subst_ { substS :: Subst, lookupS :: Name -> Maybe Exp, delN :: Name -> Subst_ }
 
 showS = pShow . substS
 
@@ -928,16 +927,16 @@ substEnvSubst = subst_ . mkSubst'
 
 trace' x = trace (ppShow x) x
 
-recsubst :: (Ty -> IdN -> Ty) -> (IdN -> Ty -> Ty) -> Ty -> Ty
+recsubst :: (Exp -> IdN -> Exp) -> (IdN -> Exp -> Exp) -> Exp -> Exp
 recsubst g h = \case
-    Ty s -> case s of
-        Forall_ (Just n) a b -> Ty $ Forall_ (Just n) (f a) $ h n b
-        EVar_ k v -> g (Ty $ EVar_ (f k) v) v
-        _ -> Ty $ mapKind f $ f <$> s
+    Exp s -> case s of
+        Forall_ (Just n) a b -> Exp $ Forall_ (Just n) (f a) $ h n b
+        EVar_ k v -> g (Exp $ EVar_ (f k) v) v
+        _ -> Exp $ mapKind f $ f <$> s
   where
     f = recsubst g h
 
-instance Substitute Ty where
+instance Substitute Exp where
     subst_ st t = f mempty st t where
       f acc st = recsubst r1 r2 where
             r2 n = f acc (delN st n)
@@ -946,7 +945,7 @@ instance Substitute Ty where
                 | Just t <- lookupS st a = f (Set.insert a acc) st t
                 | otherwise = def
 {-
-instance Substitute (Env Ty) where
+instance Substitute (Env Exp) where
     subst_ st = fmap (Map.fromList . concat) . sequenceA . map f . Map.toList where
         f (x, y)
             | Map.member x st = pure []
@@ -987,7 +986,7 @@ s2 `composeSubst` s1 = (subst s2 <$> s1) <> s2
 
 -------------------------------------------------------------------------------- utility
 
-tyOf :: Exp -> Ty
+tyOf :: Exp -> Exp
 tyOf = \case
     ETuple es -> TTuple $ map tyOf es
     EVarT t _ -> t
@@ -996,7 +995,7 @@ tyOf = \case
 --    _ -> TUnit -- hack!
     e -> error $ "tyOf " ++ ppShow e
 
-tyOfPat :: Pat -> Ty
+tyOfPat :: Pat -> Exp
 tyOfPat = \case
     PCon (VarE _ t) ps -> stripArgs (length ps) t
     e -> error $ "tyOfPat " ++ ppShow e
@@ -1016,21 +1015,21 @@ instance Monoid TEnv where
     m1@(TEnv x1 y1) `mappend` TEnv x2 y2 = TEnv (x1 `composeSubst` x2) $ ((applyEnv m1 <$>) <$> y2) <> y1
 
 envMap :: Thunk -> EnvMap
-envMap (Exp (TEnv _ m) _) = m
+envMap (ExpTh (TEnv _ m) _) = m
 
 subst' :: Substitute a => TEnv -> a -> a
 subst' (TEnv s _) = subst s
 
 applyEnv :: TEnv -> Thunk -> Thunk
-applyEnv m1 (Exp m exp) = Exp (m1 <> m) exp
+applyEnv m1 (ExpTh m exp) = ExpTh (m1 <> m) exp
 
 applyEnvBefore :: TEnv -> Thunk -> Thunk
-applyEnvBefore m1 (Exp m exp) = Exp (m <> m1) exp
+applyEnvBefore m1 (ExpTh m exp) = ExpTh (m <> m1) exp
 
 --   applySubst s  ===  applyEnv (TEnv s mempty)
 -- but the following is more efficient
 applySubst :: Subst -> Thunk -> Thunk
-applySubst s' (Exp (TEnv s m) exp) = Exp (TEnv (s' `composeSubst` s) m) exp
+applySubst s' (ExpTh (TEnv s m) exp) = ExpTh (TEnv (s' `composeSubst` s) m) exp
 
 -- build recursive environment  -- TODO: generalize
 recEnv :: Pat -> Thunk -> Thunk
@@ -1041,13 +1040,13 @@ mkThunk :: Exp -> Thunk
 mkThunk = thunk . mkThunk'
 
 mkThunk' :: Exp -> Thunk'
-mkThunk' (Exp'' e) = mkThunk <$> e
+mkThunk' (Exp e) = mkThunk <$> e
 
 thunk :: Thunk' -> Thunk
-thunk = Exp mempty
+thunk = ExpTh mempty
 
 peelThunk :: Thunk -> Thunk'
-peelThunk (Exp env e) = mapExp_ (subst' env) id (subst' env) (subst' env) $ applyEnv env <$> e
+peelThunk (ExpTh env e) = mapExp_ (subst' env) id (subst' env) (subst' env) $ applyEnv env <$> e
 
 --------------------------------------------------------------------------------
 

@@ -61,7 +61,7 @@ reduceHNF th@(peelThunk -> exp) = case exp of
 --            | otherwise -> error $ "too much argument for primfun " ++ ppShow f ++ ": " ++ ppShow exp
 
         ExtractInstance acc 0 n -> reduceHNF' x $ \case
-            EType_ (Ty (Witness _ (WInstance m))) -> reduceHNF $ foldl (EAppT' mempty (error "eae")) (m Map.! n) $ reverse acc
+            EType_ (Exp (Witness _ (WInstance m))) -> reduceHNF $ foldl (EAppT' mempty (error "eae")) (m Map.! n) $ reverse acc
             x -> error $ "expected instance witness instead of " ++ ppShow x
         ExtractInstance acc j n -> Right $ ExtractInstance (x: acc) (j-1) n
 
@@ -134,7 +134,7 @@ reduceEither e = reduceHNF' e $ \e -> Right $ case e of
     EAlts_ i es -> case [e | Right e <- reduceEither <$> es] of
         [e] -> e
         es -> EAlts i es
-    e -> Exp'' $ reduce <$> e
+    e -> Exp $ reduce <$> e
 
 
 --------------------------------------------------------------------------------
