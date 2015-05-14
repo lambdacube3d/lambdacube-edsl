@@ -80,6 +80,9 @@ data Witness
 instance Eq Thunk where
 instance Ord Thunk where
 
+instance Eq Ty where Ty a == Ty b = a == b
+instance Ord Ty where Ty a `compare` Ty b = a `compare` b
+
 --------------------------------------------
 
 data Void
@@ -312,9 +315,9 @@ pattern EType' a b = Exp a (EType_ b)
 
 type Exp = Exp' Name Ty Pat Identity
 
-newtype Ty
-    = Ty (Exp_ Ty IdN Void Void Ty)
-    deriving (Eq, Ord)
+type Ty = Exp' IdN Void Void Identity
+
+pattern Ty a = Exp' (Identity a)
 
 pattern Exp'' a = Exp' (Identity a)
 pattern ELit a = Exp'' (ELit_ a)
@@ -777,11 +780,7 @@ instance PShow Witness where
         Refl -> "Refl"
         WInstance _ -> "WInstance ..."       
 
-instance PShow Ty where
-    pShowPrec p = \case
-        Ty i -> pShowPrec p i
 --        Ty k i -> pInfix (-2) "::" p i k
-
 instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b) where
     pShowPrec p = \case
         ELit_ l -> pShowPrec p l
