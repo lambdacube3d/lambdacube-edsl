@@ -94,11 +94,6 @@ instance PShow Void
 instance Eq Void
 instance Ord Void
 
-newtype Ty' n m = Ty'' (m (Exp_ () n Exp Pat (Ty' n m)))
-
-pattern Ty' a b = Ty'' (a, b)
-type TyR = Ty' Name WithRange
-
 -------------------------------------------- kinded types
 
 pattern TApp k a b = Exp (EApp_ k a b)
@@ -282,6 +277,11 @@ data Exp' m = Exp' (m (Exp_ Exp Name Exp Pat (Exp' m)))
 
 newtype ExpR = ExpR_ (WithRange (Exp_ () Name TyR PatR ExpR))
 
+type TyR = ExpR
+
+pattern Ty' a b = ExpR_ (a, b)
+
+
 pattern ExpR a b = ExpR_ (a, b)
 pattern ELitR' a b = ExpR a (ELit_ b)
 pattern EVarR' a b = ExpR a (EVar_ () b)
@@ -369,9 +369,6 @@ instance GetTag ExpR where
 instance GetTag (Exp' ((,) a)) where
     type Tag (Exp' ((,) a)) = a
     getTag (ExpTh a _) = a
-instance GetTag (Ty' n ((,) a)) where
-    type Tag (Ty' n ((,) a)) = a
-    getTag (Ty' k _) = k
 instance GetTag (Pat' c n ((,) a)) where
     type Tag (Pat' c n ((,) a)) = a
     getTag (Pat a _) = a
@@ -865,9 +862,6 @@ instance (PShow n, PShow a) => PShow (Constraint' n a) where
         CUnify a b -> pShow a <+> "~" <+> pShow b
         CClass a b -> pShow a <+> pShow b
 --        | Split a a a         -- Split x y z:  x, y, z are records; fields of x = disjoint union of the fields of y and z
-
-instance (PShow n) => PShow (Ty' n ((,) a)) where
-    pShowPrec p (Ty' a b) = pShowPrec p b
 
 instance PShow Var where
     pShowPrec p = \case

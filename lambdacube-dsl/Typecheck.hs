@@ -546,7 +546,7 @@ inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty
             Forall_ Nothing (ConstraintKind c) b -> do
                 addConstraint c
                 return b
-            _ -> return $ Exp $ mapKind (const k) ty
+            _ -> return $ Exp $ mapExp_ (const k) id (error "x1") (error "x2") ty
 
 appTy (TArr ta v) ta' = addUnif ta ta' >> return v      -- optimalization
 appTy tf ta = newStarVar "tapp" >>= \v -> addUnif tf (ta ~> v) >> return v
