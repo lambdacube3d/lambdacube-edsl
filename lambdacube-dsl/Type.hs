@@ -79,9 +79,12 @@ data Witness
 -- TODO: remove
 instance Eq Thunk where
 instance Ord Thunk where
+instance Eq Pat
+instance Ord Pat
 
 instance Eq Ty where Ty a == Ty b = a == b
 instance Ord Ty where Ty a `compare` Ty b = a `compare` b
+
 
 --------------------------------------------
 
@@ -91,7 +94,7 @@ instance PShow Void
 instance Eq Void
 instance Ord Void
 
-newtype Ty' n m = Ty'' (m (Exp_ () n Void Void (Ty' n m)))
+newtype Ty' n m = Ty'' (m (Exp_ () n Ty Pat (Ty' n m)))
 
 pattern Ty' a b = Ty'' (a, b)
 type TyR = Ty' Name WithRange
@@ -275,7 +278,7 @@ mapExp_ kf vf tf f = \case
 
 --------------------------------------------
 
-data Exp' n t p m = Exp' (m (Exp_ Ty n t p (Exp' n t p m)))
+data Exp' m = Exp' (m (Exp_ Ty Name Ty Pat (Exp' m)))
 
 newtype ExpR = ExpR_ (WithRange (Exp_ () Name TyR PatR ExpR))
 
@@ -313,13 +316,12 @@ pattern EType' a b = Exp a (EType_ b)
 
 --------------------------------------------
 
-type Exp = Exp' Name Ty Pat Identity
-
-type Ty = Exp' IdN Void Void Identity
+type Exp = Exp' Identity
+type Ty = Exp' Identity
 
 pattern Ty a = Exp' (Identity a)
-
 pattern Exp'' a = Exp' (Identity a)
+
 pattern ELit a = Exp'' (ELit_ a)
 pattern EVar a <- Exp'' (EVar_ _ a)
 pattern EVarT t a <- Exp'' (EVar_ t a)
@@ -353,7 +355,7 @@ pattern A11 f x y z v w q r s t a b <-  EApp (A10 f x y z v w q r s t a) b
 
 --------------------------------------------
 
-type Thunk = Exp' Name Ty Pat ((,) TEnv)
+type Thunk = Exp' ((,) TEnv)
 type Thunk' = Exp_ Ty Name Ty Pat Thunk
 
 -------------------------------------------------------------------------------- tag handling
@@ -365,8 +367,8 @@ class GetTag c where
 instance GetTag ExpR where
     type Tag ExpR = Range
     getTag (ExpR a _) = a
-instance GetTag (Exp' n t p ((,) a)) where
-    type Tag (Exp' n t p ((,) a)) = a
+instance GetTag (Exp' ((,) a)) where
+    type Tag (Exp' ((,) a)) = a
     getTag (Exp a _) = a
 instance GetTag (Ty' n ((,) a)) where
     type Tag (Ty' n ((,) a)) = a
@@ -815,7 +817,7 @@ instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b)
 
 showRecord = braces . hsep . punctuate (pShow ',') . map (\(a, b) -> pShow a <> ":" <+> pShow b)
 
-instance (PShow n, PShow t, PShow p, PShow a) => PShow (Exp' n t p ((,) a)) where
+instance (PShow a) => PShow (Exp' ((,) a)) where
     pShowPrec p e = case getLams e of
         ([], Exp _ e) -> pShowPrec p e
         (ps, Exp _ e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
@@ -831,7 +833,7 @@ instance PShow ExpR where
 getLamsR (ELamR' _ p e) = (p:) *** id $ getLamsR e
 getLamsR e = ([], e)
 
-instance (PShow n, PShow t, PShow p) => PShow (Exp' n t p Identity) where
+instance PShow (Exp' Identity) where
     pShowPrec p e = case getLams' e of
         ([], Exp'' e) -> pShowPrec p e
         (ps, Exp'' e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
