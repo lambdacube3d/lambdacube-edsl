@@ -99,7 +99,7 @@ getDef_ m d = do
     clearImports
     (fm, pe) <- loadModule m
     case Map.lookup d $ thunkEnv pe of
-        Just (Just th) -> return $ Right $ reduce th
+        Just (Left th) -> return $ Right $ reduce th
         Nothing -> return $ Left "not found"
         _ -> throwErrorTCM "not found?"
 

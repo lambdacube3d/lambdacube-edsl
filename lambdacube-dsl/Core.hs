@@ -14,6 +14,7 @@ module Core where
 
 import qualified Data.Foldable as F
 import Data.Char
+import Data.Either
 import Data.Traversable
 import Data.Monoid
 import Data.Maybe
@@ -47,7 +48,7 @@ reduceHNF th@(peelThunk -> exp) = case exp of
         [] -> error $ "pattern match failure " ++ show [err | Left err <- es]
     EVar_ _ v
           | isConstr v -> keep
-          | otherwise -> {-trace (ppShow v ++ ppShow (Map.keys $ envMap th)) $ -} maybe keep reduceHNF $ join $ Map.lookup v $ envMap th
+          | otherwise -> {-trace (ppShow v ++ ppShow (Map.keys $ envMap th)) $ -} maybe keep (either reduceHNF (const keep)) $ Map.lookup v $ envMap th
     ELet_ p x e -> case matchPattern (recEnv p x) p of
         Left err -> Left err
         Right (Just m') -> reduceHNF $ applyEnvBefore m' e
@@ -96,7 +97,7 @@ reduceHNF' x f = case reduceHNF x of
 matchPattern :: Thunk -> Pat -> Either String (Maybe TEnv)       -- Left: pattern match failure; Right Nothing: can't reduce
 matchPattern e = \case
     Wildcard -> Right $ Just mempty
-    PVar (VarE v _) -> Right $ Just $ TEnv $ Map.singleton v (Just e)
+    PVar (VarE v _) -> Right $ Just $ TEnv $ Map.singleton v (Left e)
     PTuple ps -> reduceHNF' e $ \e -> case e of
         ETuple_ xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
         _ -> Right Nothing
@@ -124,7 +125,7 @@ reduce :: Thunk -> Exp
 reduce = either (error "pattern match failure.") id . reduceEither
 
 reduce' :: Pat -> Thunk -> Exp
-reduce' p = reduce . applyEnvBefore (TEnv $ Map.fromList [(v, Nothing) | v <- patternEVars p])
+reduce' p = reduce . applyEnvBefore (TEnv $ Map.fromList [(v, Right t) | (v, t) <- patternEVars p])
 
 reduceEither :: Thunk -> Either String Exp
 reduceEither e = reduceHNF' e $ \e -> Right $ case e of
@@ -135,11 +136,47 @@ reduceEither e = reduceHNF' e $ \e -> Right $ case e of
         es -> EAlts i es
     e -> Exp $ reduce <$> e
 
+-------------------------------------------------------------------------------- thunks
+
+instance Monoid TEnv where
+    mempty = TEnv mempty
+    -- semantics: apply (m1 <> m2) = apply m1 . apply m2;  see 'composeSubst'
+    m1@(TEnv y1) `mappend` TEnv y2 = TEnv $ ((applyEnv m1 +++ subst' m1) <$> y2) <> y1
+
+envMap :: Thunk -> EnvMap
+envMap (ExpTh (TEnv m) _) = m
+
+applyEnv :: TEnv -> Thunk -> Thunk
+applyEnv m1 (ExpTh m exp) = ExpTh (m1 <> m) exp
+
+applyEnvBefore :: TEnv -> Thunk -> Thunk
+applyEnvBefore m1 (ExpTh m exp) = ExpTh (m <> m1) exp
+
+applySubst :: Subst -> Thunk -> Thunk
+applySubst s = applyEnv $ TEnv $ Left . mkThunk <$> s
+
+-- build recursive environment  -- TODO: generalize
+recEnv :: Pat -> Thunk -> Thunk
+recEnv (PVar (VarE v _)) th_ = th where th = applyEnvBefore (TEnv (Map.singleton v (Left th))) th_
+recEnv _ th = th
+
+mkThunk :: Exp -> Thunk
+mkThunk = thunk . mkThunk'
+
+mkThunk' :: Exp -> Thunk'
+mkThunk' (Exp e) = mkThunk <$> e
+
+thunk :: Thunk' -> Thunk
+thunk = ExpTh mempty
+
 subst' :: Substitute a => TEnv -> a -> a
-subst' (TEnv e) = subst $ maybe (error "subst'") reduce <$> e --error "subst'" --subst s
+subst' (TEnv e) = subst $ either reduce (error "subst'") <$> Map.filter (isLeft) e --error "subst'" --subst s
 
 peelThunk :: Thunk -> Thunk'
 peelThunk (ExpTh env e) = mapExp_ (subst' env) id (subst' env) (subst' env) $ applyEnv env <$> e
+
+instance Substitute Thunk where
+    subst_ s = applySubst $ substS s
 
 
 --------------------------------------------------------------------------------

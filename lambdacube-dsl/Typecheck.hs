@@ -47,6 +47,7 @@ import Text.Parsec.Pos
 
 import Pretty
 import Type
+import Core
 
 --------------------------------------------------------------------------------
 
@@ -734,10 +735,10 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
     let th = recEnv (PVar $ VarE n undefined) $ applyEnvBefore (TEnv the)
             $ flip (foldr eLam) fs
             $ applyEnvBefore
-                ( TEnv $ Map.singleton n $ Just
+                ( TEnv $ Map.singleton n $ Left
                 $ foldl (EAppT' mempty (error "et")) (TVar' mempty (error "ev") n) $ map (\(n, t) -> EType' mempty $ TVar t n) fs
                 ) exp
-    return (Map.singleton n $ Just th, withTyping $ Map.singleton n f)
+    return (Map.singleton n $ Left th, withTyping $ Map.singleton n f)
 
 -- non recursive
 inferDef' :: InstType -> ValueDefR -> TCM (EnvMap, TCM a -> TCM a)
@@ -754,7 +755,7 @@ inferDef' ty (ValueDef p@(PVar' _ n) e) = do
     the <- asks thunkEnv
     let th = recEnv (PVar $ VarE n undefined) $ applyEnvBefore (TEnv the)        -- recEnv not needed?
             $ flip (foldr eLam) [(n, v) | v@(TVar    _ n) <- fs] exp
-    return (Map.singleton n $ Just th, withTyping $ Map.singleton n f)
+    return (Map.singleton n $ Left th, withTyping $ Map.singleton n f)
 
 inferDefs :: [DefinitionR] -> TCM PolyEnv
 inferDefs [] = ask
@@ -787,7 +788,7 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
             let find = head $ [i | (i, ConstraintKind (CClass n _)) <- zip [0..] $ map snd fs, n == con] ++ error (show $ "classDef:" <+> showVar con <$$> pShow fs <$$> pShow t_)
 --            let t' = (mapWriterT' ((id *** ((ConstraintKind cstr:) *** id)) <$>)) <$> t
 --                rearrange cs = head [b: as ++ bs | (as, b@(_, ConstraintKind _): bs) <- zip (inits cs) (tails cs)]
-            return (Map.singleton n $ Just $ ExpTh mempty $ ExtractInstance [] find n, Map.singleton n t)
+            return (Map.singleton n $ Left $ ExpTh mempty $ ExtractInstance [] find n, Map.singleton n t)
         addPolyEnv (emptyPolyEnv {thunkEnv = mconcat ths, classDefs = Map.singleton con $ ClassD $ mconcat cdefs}) $ withTyping (mconcat cdefs) cont
     DAxiom (TypeSig n t) -> do
         ((_, t), t') <- instantiateTyping'' False (pShow n) $ inferKind t
@@ -798,7 +799,7 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
             arity = f t' where
                 f (TArr _ x) = 1 + f x
                 f _ = 0
-            f | isPrim n = addPolyEnv (emptyPolyEnv {thunkEnv = Map.singleton n $ Just $ ExpTh mempty $ PrimFun n [] arity})
+            f | isPrim n = addPolyEnv (emptyPolyEnv {thunkEnv = Map.singleton n $ Left $ ExpTh mempty $ PrimFun n [] arity})
               | otherwise = id
         f $ withTyping (Map.singleton n' t) cont
     InstanceDef c t xs -> do  -- TODO: check types
@@ -809,7 +810,7 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
         xs <- local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t Refl) (Map.insert t Refl)) c $ instanceDefs pe}) -- fake
                 $ forM xs $ \x@(ValueDef (PVar' _ n)  _) -> do
             inferDef' (cs Map.! n $ "instance") x
-        let w = WInstance $ fmap (fromMaybe (error "impossible")) $ mconcat $ map fst xs
+        let w = WInstance $ fmap (either id (error "impossible")) $ mconcat $ map fst xs
         local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t w) (Map.insert t w)) c $ instanceDefs pe}) $ do
 --            foldr ($) cont xs
             cont

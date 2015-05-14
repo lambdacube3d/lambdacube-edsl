@@ -577,7 +577,7 @@ type Subst = Env Exp  -- substitutions
 
 data TEnv = TEnv EnvMap       -- TODO: merge into this:   Env (Either Exp (Maybe Thunk))
 
-type EnvMap = Env (Maybe Thunk)   -- either substitution or type signature
+type EnvMap = Env (Either Thunk Exp)   -- either substitution or type signature
 
 data ClassD = ClassD InstEnv
 
@@ -941,9 +941,6 @@ instance Substitute SubstEnv where
 instance Substitute a => Substitute [a]                    where subst_ = fmap . subst_
 instance (Substitute a, Substitute b) => Substitute (a, b) where subst_ s (a, b) = (subst_ s a, subst_ s b)
 
-instance Substitute Thunk where
-    subst_ s = applySubst $ substS s
-
 instance Substitute Var where
     subst_ s = \case
         VarE n t -> VarE n $ subst_ s t
@@ -984,41 +981,9 @@ tyOfPat = \case
     stripArgs n (TArr _ t) = stripArgs (n-1) t
 
 patternEVars (Pat'' p) = case p of
-    PVar_ (VarE v _) -> [v]
+    PVar_ (VarE v t) -> [(v, t)]
     p -> foldMap patternEVars p
 
--------------------------------------------------------------------------------- thunks
-
-instance Monoid TEnv where
-    mempty = TEnv mempty
-    -- semantics: apply (m1 <> m2) = apply m1 . apply m2;  see 'composeSubst'
-    m1@(TEnv y1) `mappend` TEnv y2 = TEnv $ ((applyEnv m1 <$>) <$> y2) <> y1
-
-envMap :: Thunk -> EnvMap
-envMap (ExpTh (TEnv m) _) = m
-
-applyEnv :: TEnv -> Thunk -> Thunk
-applyEnv m1 (ExpTh m exp) = ExpTh (m1 <> m) exp
-
-applyEnvBefore :: TEnv -> Thunk -> Thunk
-applyEnvBefore m1 (ExpTh m exp) = ExpTh (m <> m1) exp
-
-applySubst :: Subst -> Thunk -> Thunk
-applySubst s = applyEnv $ TEnv $ Just . mkThunk <$> s
-
--- build recursive environment  -- TODO: generalize
-recEnv :: Pat -> Thunk -> Thunk
-recEnv (PVar (VarE v _)) th_ = th where th = applyEnvBefore (TEnv (Map.singleton v (Just th))) th_
-recEnv _ th = th
-
-mkThunk :: Exp -> Thunk
-mkThunk = thunk . mkThunk'
-
-mkThunk' :: Exp -> Thunk'
-mkThunk' (Exp e) = mkThunk <$> e
-
-thunk :: Thunk' -> Thunk
-thunk = ExpTh mempty
 
 --------------------------------------------------------------------------------
 
