@@ -95,7 +95,7 @@ sepBy2 a b = (:) <$> a <* b <*> sepBy1 a b
 
 alts :: Int -> [PrecExpR] -> PrecExpR
 alts _ [e] = e
-alts i es = EAlts' (foldMap getTag es) i es
+alts i es = EAltsR' (foldMap getTag es) i es
 
 compileWhereRHS :: WhereRHS -> PrecExpR
 compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
@@ -103,7 +103,7 @@ compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
 
 compileGuardedRHS :: GuardedRHS -> PrecExpR
 compileGuardedRHS (NoGuards e) = e
-compileGuardedRHS (Guards p gs) = foldr addGuard (Exp p{-TODO-} ENext_) gs
+compileGuardedRHS (Guards p gs) = foldr addGuard (ExpR p{-TODO-} ENext_) gs
   where
     addGuard (b, x) y = eApp (eApp (eApp (eVar p{-TODO-} (ExpN "ifThenElse")) b) x) y
 
@@ -447,7 +447,7 @@ valuePatternAtom
       nil r = PCon' r{-TODO-} (ExpN "Nil") []
       cons a b = PCon' mempty (ExpN "Cons") [a, b]
 
-eLam p e = ELam' (p <-> e) p e
+eLam p e = ELamR' (p <-> e) p e
 
 valueDef :: P PreDefinitionR
 valueDef = addDPos $ do
@@ -494,7 +494,7 @@ eApp :: PrecExpR -> PrecExpR -> PrecExpR
 eApp = eApp'
 
 eApp' :: ExpR -> ExpR -> ExpR
-eApp' a b = EApp' (a <-> b) a b
+eApp' a b = EAppR' (a <-> b) a b
 
 expression :: P PrecExpR
 expression = do
@@ -539,10 +539,10 @@ expression = do
 eLets :: [PreDefinitionR] -> PrecExpR -> PrecExpR
 eLets l a = foldr ($) a $ map eLet $ groupDefinitions l
   where
-    eLet (r, DValueDef (ValueDef a b)) = ELet' r a b
+    eLet (r, DValueDef (ValueDef a b)) = ELetR' r a b
 
 eTyping :: PrecExpR -> TyR -> PrecExpR
-eTyping a b = ETypeSig' (a <-> b) a b
+eTyping a b = ETypeSigR' (a <-> b) a b
 
 expressionOpAtom :: P PrecExpR
 expressionOpAtom = do
@@ -562,7 +562,7 @@ expressionAtom = do
         typeAtom
     return $ foldl eTyApp e ts
 
-eTyApp a b = EApp' (a <-> b) a $ EType' (getTag b) b
+eTyApp a b = EAppR' (a <-> b) a $ ETypeR' (getTag b) b
 
 expressionAtom_ :: P PrecExpR
 expressionAtom_ =
@@ -586,10 +586,10 @@ expressionAtom_ =
 
   recordFieldProjection :: P PrecExpR
   recordFieldProjection = try $ flip eApp <$> addPos eVar var <*>
-        addPos EFieldProj' ({-runUnspaced $-} dot *> {-Unspaced-} var)
+        addPos EFieldProjR' ({-runUnspaced $-} dot *> {-Unspaced-} var)
 
-  eLit p l@LInt{} = eApp' (EVar' p (ExpN "fromInt")) $ ELit' p l
-  eLit p l = ELit' p l
+  eLit p l@LInt{} = eApp' (EVarR' p (ExpN "fromInt")) $ ELitR' p l
+  eLit p l = ELitR' p l
 
   listExp :: P PrecExpR
   listExp = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep expression
@@ -605,12 +605,12 @@ literal =
     LString <$> stringLiteral
 
 eTuple _ [x] = x
-eTuple p xs = ETuple' p xs
-eRecord p xs = ERecord' p xs
-eNamedRecord p n xs = ENamedRecord' p n xs
+eTuple p xs = ETupleR' p xs
+eRecord p xs = ERecordR' p xs
+eNamedRecord p n xs = ENamedRecordR' p n xs
 ret f x y = const $ f x y
 ret' f x y = f x y
-eVar p n = EVar' p n
+eVar p n = EVarR' p n
 
 parseLC :: FilePath -> ErrorT IO (String, ModuleR)
 parseLC fname = do

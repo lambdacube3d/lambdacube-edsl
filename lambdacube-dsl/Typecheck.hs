@@ -595,11 +595,11 @@ inferPatTyping polymorph p_@(Pat pt p) = addRange pt $ addCtx ("type inference o
 eLam (n, t) e = ELam' mempty (PVar $ VarE n t) e
 
 inferTyping :: ExpR -> TCMS (Thunk, Ty)
-inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_) $ appSES $ case e of
+inferTyping e_@(ExpR r e) = addRange r $ addCtx ("type inference of" <+> pShow e_) $ appSES $ case e of
 
     -- hack
     ENamedRecord_ n (unzip -> (fs, es)) ->
-        inferTyping $ foldl (EApp' mempty) (EVar' mempty n) es
+        inferTyping $ foldl (EAppR' mempty) (EVarR' mempty n) es
 
     ELam_ p f -> removeMonoVars $ do
         ((p, tp), tr) <- inferPatTyping False p
@@ -630,7 +630,7 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
         return (EType' mempty t, kindOf t)
     EVar_ _ n -> do
         (ty, t) <- lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
-        return (foldl (EApp' mempty) (EVar' mempty $ VarE (IdN n) $ foldr TArr t ty) $ map (EType' mempty) ty, t)
+        return (foldl (EAppT' mempty (error "et")) (EVarT' mempty (foldr TArr t ty) (IdN n)) $ map (EType' mempty) ty, t)
     _ -> do
         e <- traverse inferTyping e
         t <- case e of
@@ -658,7 +658,7 @@ inferTyping e_@(Exp r e) = addRange r $ addCtx ("type inference of" <+> pShow e_
             EAlts_ _ xs -> newStarVar "ealts" >>= \v -> mapM_ (addUnif v . snd) xs >> return v
             ENext_ -> newStarVar "enext"          -- TODO: review
             x -> error $ "inferTyping: " ++ ppShow x
-        return (Exp mempty $ mapExp (error "e1") (error "e2") (error "e3") $ fst <$> e, t)
+        return (Exp mempty $ mapExp_ (error "e0") (error "e1") (error "e2") (error "e3") $ fst <$> e, t)
 
 --------------------------------------------------------------------------------
 
@@ -711,12 +711,12 @@ selectorDefs :: DefinitionR -> [DefinitionR]
 selectorDefs (r, DDataDef n _ cs) =
     [ (r, DValueDef $ ValueDef
       ( PVar' mempty sel)
-      ( ELam' mempty
+      ( ELamR' mempty
             (PCon' mempty cn
                 [ if sel == sel' then PVar' mempty (ExpN "x") else Pat mempty Wildcard_
                 | FieldTy (Just sel') _ <- tys]
             )
-            (EVar' mempty $ ExpN "x")
+            (EVarR' mempty $ ExpN "x")
       ))
     | (rc, ConDef cn tys) <- cs
     , FieldTy (Just sel) _ <- tys
@@ -735,7 +735,7 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
             $ flip (foldr eLam) fs
             $ applyEnvBefore
                 ( TEnv mempty $ Map.singleton n $ Just
-                $ foldl (EApp' mempty) (EVar' mempty $ VarE n $ error "ev") $ map (\(n, t) -> EType' mempty $ TVar t n) fs
+                $ foldl (EAppT' mempty (error "et")) (EVarT' mempty (error "ev") n) $ map (\(n, t) -> EType' mempty $ TVar t n) fs
                 ) exp
     return (Map.singleton n $ Just th, withTyping $ Map.singleton n f)
 

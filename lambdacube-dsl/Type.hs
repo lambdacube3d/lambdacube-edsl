@@ -95,10 +95,6 @@ type TyR = Ty' Name WithRange
 
 -------------------------------------------- kinded types
 
-newtype Ty
-    = Ty (Exp_ Ty IdN Void Void Ty)
-    deriving (Eq, Ord)
-
 pattern TApp k a b = Ty (EApp_ k a b)
 pattern TCon k a <- Ty (TCon_ k (TypeIdN a)) where
     TCon k a = Ty (TCon_ k (TypeIdN' a "typecon"))
@@ -131,7 +127,6 @@ inferLit a = case a of
     LFloat _  -> TFloat
     LString _ -> TString
     LNat _    -> TNat
-
 
 kindOf :: Ty -> Ty
 kindOf = \case
@@ -277,12 +272,31 @@ mapExp_ kf vf tf f = \case
 
 --------------------------------------------
 
-data Exp' n t p m = Exp' (m (Exp_ () n t p (Exp' n t p m)))
+data Exp' n t p m = Exp' (m (Exp_ Ty n t p (Exp' n t p m)))
+
+newtype ExpR = ExpR_ (WithRange (Exp_ () Name TyR PatR ExpR))
+
+pattern ExpR a b = ExpR_ (a, b)
+pattern ELitR' a b = ExpR a (ELit_ b)
+pattern EVarR' a b = ExpR a (EVar_ () b)
+pattern EAppR' a b c = ExpR a (EApp_ () b c)
+pattern ELamR' a b c = ExpR a (ELam_ b c)
+pattern ELetR' a b c d = ExpR a (ELet_ b c d)
+pattern ETupleR' a b = ExpR a (ETuple_ b)
+pattern ERecordR' a b = ExpR a (ERecord_ b)
+pattern ENamedRecordR' a n b = ExpR a (ENamedRecord_ n b)
+pattern EFieldProjR' a c = ExpR a (EFieldProj_ c)
+pattern ETypeSigR' a b c = ExpR a (ETypeSig_ b c)
+pattern EAltsR' a i b = ExpR a (EAlts_ i b)
+pattern ENextR' a = ExpR a ENext_
+pattern ETypeR' a b = ExpR a (EType_ b)
 
 pattern Exp a b = Exp' (a, b)
 pattern ELit' a b = Exp a (ELit_ b)
-pattern EVar' a b = Exp a (EVar_ () b)
-pattern EApp' a b c = Exp a (EApp_ () b c)
+pattern EVar' a b <- Exp a (EVar_ _ b)
+pattern EVarT' a t b = Exp a (EVar_ t b)
+pattern EApp' a b c <- Exp a (EApp_ _ b c)
+pattern EAppT' a t b c = Exp a (EApp_ t b c)
 pattern ELam' a b c = Exp a (ELam_ b c)
 pattern ELet' a b c d = Exp a (ELet_ b c d)
 pattern ETuple' a b = Exp a (ETuple_ b)
@@ -296,12 +310,18 @@ pattern EType' a b = Exp a (EType_ b)
 
 --------------------------------------------
 
-type Exp = Exp' Var Ty Pat Identity
+type Exp = Exp' Name Ty Pat Identity
+
+newtype Ty
+    = Ty (Exp_ Ty IdN Void Void Ty)
+    deriving (Eq, Ord)
 
 pattern Exp'' a = Exp' (Identity a)
 pattern ELit a = Exp'' (ELit_ a)
-pattern EVar a = Exp'' (EVar_ () a)
-pattern EApp a b = Exp'' (EApp_ () a b)
+pattern EVar a <- Exp'' (EVar_ _ a)
+pattern EVarT t a <- Exp'' (EVar_ t a)
+pattern EApp a b <- Exp'' (EApp_ _ a b)
+pattern EAppT t a b = Exp'' (EApp_ t a b)
 pattern ELam a b = Exp'' (ELam_ a b)
 pattern ELet a b c = Exp'' (ELet_ a b c)
 pattern ETuple a = Exp'' (ETuple_ a)
@@ -314,7 +334,7 @@ pattern ENext = Exp'' ENext_
 pattern EInt a = ELit (LInt a)
 pattern EFloat a = ELit (LFloat a)
 
-pattern Va x <- VarE (ExpIdN x) _
+pattern Va x <- (ExpIdN x)
 pattern A0 x <- EVar (Va x)
 pattern A1 f x <- EApp (A0 f) x
 pattern A2 f x y <- EApp (A1 f x) y
@@ -330,8 +350,8 @@ pattern A11 f x y z v w q r s t a b <-  EApp (A10 f x y z v w q r s t a) b
 
 --------------------------------------------
 
-type Thunk = Exp' Var Ty Pat ((,) TEnv)
-type Thunk' = Exp_ () Var Ty Pat Thunk
+type Thunk = Exp' Name Ty Pat ((,) TEnv)
+type Thunk' = Exp_ Ty Name Ty Pat Thunk
 
 -------------------------------------------------------------------------------- tag handling
 
@@ -339,6 +359,9 @@ class GetTag c where
     type Tag c
     getTag :: c -> Tag c
 
+instance GetTag ExpR where
+    type Tag ExpR = Range
+    getTag (ExpR a _) = a
 instance GetTag (Exp' n t p ((,) a)) where
     type Tag (Exp' n t p ((,) a)) = a
     getTag (Exp a _) = a
@@ -510,7 +533,6 @@ data ConDef = ConDef Name [FieldTy]
 data FieldTy = FieldTy {fieldName :: Maybe Name, fieldType :: TyR}
 
 type PatR = Pat' Name Name WithRange
-type ExpR = Exp' Name TyR PatR WithRange
 type ConstraintR = Constraint' Name TyR
 type TypeFunR = TypeFun Name TyR
 type ValueDefR = ValueDef PatR ExpR
@@ -802,6 +824,14 @@ instance (PShow n, PShow t, PShow p, PShow a) => PShow (Exp' n t p ((,) a)) wher
 getLams (ELam' _ p e) = (p:) *** id $ getLams e
 getLams e = ([], e)
 
+instance PShow ExpR where
+    pShowPrec p e = case getLamsR e of
+        ([], ExpR _ e) -> pShowPrec p e
+        (ps, ExpR _ e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
+
+getLamsR (ELamR' _ p e) = (p:) *** id $ getLamsR e
+getLamsR e = ([], e)
+
 instance (PShow n, PShow t, PShow p) => PShow (Exp' n t p Identity) where
     pShowPrec p e = case getLams' e of
         ([], Exp'' e) -> pShowPrec p e
@@ -959,7 +989,7 @@ s2 `composeSubst` s1 = (subst s2 <$> s1) <> s2
 tyOf :: Exp -> Ty
 tyOf = \case
     ETuple es -> TTuple $ map tyOf es
-    EVar (VarE _ t) -> t
+    EVarT t _ -> t
     EApp (tyOf -> TArr _ t) _ -> t
     ELam (tyOfPat -> a) (tyOf -> b) -> TArr a b
 --    _ -> TUnit -- hack!
@@ -1016,10 +1046,7 @@ thunk :: Thunk' -> Thunk
 thunk = Exp mempty
 
 peelThunk :: Thunk -> Thunk'
-peelThunk (Exp env e) = mapExp vf (subst' env) (subst' env) $ applyEnv env <$> e
-  where
-    vf = \case
-        VarE v t -> VarE v $ subst' env t
+peelThunk (Exp env e) = mapExp_ (subst' env) id (subst' env) (subst' env) $ applyEnv env <$> e
 
 --------------------------------------------------------------------------------
 

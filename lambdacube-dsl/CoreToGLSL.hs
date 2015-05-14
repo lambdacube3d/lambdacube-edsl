@@ -135,7 +135,7 @@ genGLSLSubst s e = case e of
   ELit (LFloat a) -> [show a]
   ELit (LChar a) -> [show a]
   ELit (LString a) -> [show a]
-  EVar (VarE (showN -> a) _) -> [Map.findWithDefault a a s]
+  EVar (showN -> a) -> [Map.findWithDefault a a s]
   A1 "Uni" (A1 _ (ELString s)) -> [s]
   A1 "Smooth" a -> genGLSLSubst s a
   A1 "Flat" a -> genGLSLSubst s a
