@@ -33,7 +33,6 @@ import Debug.Trace
 
 import Pretty
 import Type
-import Typecheck
 
 -------------------------------------------------------------------------------- reduce to Head Normal Form
 

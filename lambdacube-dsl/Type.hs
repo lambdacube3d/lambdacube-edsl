@@ -248,13 +248,13 @@ mapExp_ kf vf tf f = \case
 
 --------------------------------------------
 
-data Exp' m = Exp' (m (Exp_ Exp Name Exp Pat (Exp' m)))
+data Exp' m = Exp' m (Exp_ Exp Name Exp Pat (Exp' m))
 
-newtype ExpR = ExpR_ (WithRange (Exp_ () Name TyR PatR ExpR))
+data ExpR = ExpR_ Range (Exp_ () Name TyR PatR ExpR)
 
 type TyR = ExpR
 
-pattern ExpR a b = ExpR_ (a, b)
+pattern ExpR a b = ExpR_ a b
 pattern ELitR' a b = ExpR a (ELit_ b)
 pattern EVarR' a b = ExpR a (EVar_ () b)
 pattern EAppR' a b c = ExpR a (EApp_ () b c)
@@ -269,7 +269,7 @@ pattern EAltsR' a i b = ExpR a (EAlts_ i b)
 pattern ENextR' a = ExpR a ENext_
 pattern ETypeR' a b = ExpR a (EType_ b)
 
-pattern ExpTh a b = Exp' (a, b)
+pattern ExpTh a b = Exp' a b
 pattern ELit' a b = ExpTh a (ELit_ b)
 pattern EVar' a b <- ExpTh a (EVar_ _ b)
 pattern TVar' a t b = ExpTh a (EVar_ t b)
@@ -288,10 +288,10 @@ pattern EType' a b = ExpTh a (EType_ b)
 
 --------------------------------------------
 
-type Exp = Exp' Identity
+type Exp = Exp' ()
 type Ty = Exp
 
-pattern Exp a = Exp' (Identity a)
+pattern Exp a = Exp' () a
 
 pattern TCon k a <- Exp (TCon_ k (TypeIdN a)) where
     TCon k a = Exp (TCon_ k (TypeIdN' a "typecon"))
@@ -348,7 +348,7 @@ infix 4 ~~, ~~~
 
 --------------------------------------------
 
-type Thunk = Exp' ((,) TEnv)
+type Thunk = Exp' TEnv
 type Thunk' = Exp_ Exp Name Exp Pat Thunk
 
 -------------------------------------------------------------------------------- tag handling
@@ -360,8 +360,8 @@ class GetTag c where
 instance GetTag ExpR where
     type Tag ExpR = Range
     getTag (ExpR a _) = a
-instance GetTag (Exp' ((,) a)) where
-    type Tag (Exp' ((,) a)) = a
+instance GetTag (Exp' a) where
+    type Tag (Exp' a) = a
     getTag (ExpTh a _) = a
 instance GetTag (Pat' c n ((,) a)) where
     type Tag (Pat' c n ((,) a)) = a
@@ -577,7 +577,7 @@ type Subst = Env Exp  -- substitutions
 
 data TEnv = TEnv EnvMap       -- TODO: merge into this:   Env (Either Exp (Maybe Thunk))
 
-type EnvMap = Env (Maybe Thunk)   -- Nothing: statically unknown but defined
+type EnvMap = Env (Maybe Thunk)   -- either substitution or type signature
 
 data ClassD = ClassD InstEnv
 
@@ -807,7 +807,7 @@ instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b)
 
 showRecord = braces . hsep . punctuate (pShow ',') . map (\(a, b) -> pShow a <> ":" <+> pShow b)
 
-instance (PShow a) => PShow (Exp' ((,) a)) where
+instance (PShow a) => PShow (Exp' a) where
     pShowPrec p e = case getLams e of
         ([], ExpTh _ e) -> pShowPrec p e
         (ps, ExpTh _ e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
@@ -822,14 +822,6 @@ instance PShow ExpR where
 
 getLamsR (ELamR' _ p e) = (p:) *** id $ getLamsR e
 getLamsR e = ([], e)
-
-instance PShow (Exp' Identity) where
-    pShowPrec p e = case getLams' e of
-        ([], Exp e) -> pShowPrec p e
-        (ps, Exp e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
-
-getLams' (ELam p e) = (p:) *** id $ getLams' e
-getLams' e = ([], e)
 
 instance (PShow c, PShow v, PShow b) => PShow (Pat_ c v b) where
     pShowPrec p = \case
