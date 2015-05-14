@@ -226,13 +226,13 @@ tcExp = try' "type context" $ do
   let tyC = addPos addC (eqC <$> try (ty <* operator "~") <*> ty)
         <|> addPos addC (CClass <$> typeConstraint <*> typeAtom)
       addC :: Range -> ConstraintR -> TyR -> TyR
-      addC r c = Ty' r . Forall_ Nothing (Ty' r $ ConstraintKind_ c)
+      addC r c = ExpR r . Forall_ Nothing (ExpR r $ ConstraintKind_ c)
       eqC t1 t2 = CEq t1 (mkTypeFun t2)
   t <- tyC <|> parens (foldr (.) id <$> sepBy tyC comma)
   operator "=>"
   return t
 
-pattern Tyy a <- Ty' _ a
+pattern Tyy a <- ExpR _ a
 pattern TyApp1 s t <- Tyy (EApp_ () (Tyy (TCon_ () (TypeN s))) t)
 pattern TyApp2 s t t' <- Tyy (EApp_ () (TyApp1 s t) t')
 
@@ -255,7 +255,7 @@ typeExp = choice
   [ do
         keyword "forall"
         choice
-            [ addPos Ty' $ do
+            [ addPos ExpR $ do
                 (v, k) <- parens ((,) <$> typeVar <* operator "::" <*> ty)
                 operator "."
                 t <- typeExp
@@ -275,14 +275,14 @@ ty = do
     t <- tyApp
     maybe t (tArr t) <$> optional (operator "->" *> typeExp)
   where
-    tArr t a = Ty' (t <-> a) $ Forall_ Nothing t a
+    tArr t a = ExpR (t <-> a) $ Forall_ Nothing t a
 
 tyApp :: P TyR
 tyApp = typeAtom >>= f
   where
     f t = do
         a <- typeAtom
-        f $ Ty' (t <-> a) $ EApp_ () t a
+        f $ ExpR (t <-> a) $ EApp_ () t a
       <|> return t
 
 typeAtom :: P TyR
@@ -292,13 +292,13 @@ typeAtom = typeRecord
     <|> addTPos (ELit_ <$> (LNat . fromIntegral <$> natural <|> literal))
     <|> addTPos (TCon_ () <$> typeConstructor)
     <|> addPos tTuple (parens (sepBy ty comma))
-    <|> addPos (\p -> Ty' p . EApp_ () (Ty' p $ TCon_ () (TypeN' "List" "List"))) (brackets ty)
+    <|> addPos (\p -> ExpR p . EApp_ () (ExpR p $ TCon_ () (TypeN' "List" "List"))) (brackets ty)
 
 tTuple :: Range -> [TyR] -> TyR
 tTuple p [t] = t
-tTuple p ts = Ty' p $ TTuple_ ts
+tTuple p ts = ExpR p $ TTuple_ ts
 
-addTPos = addPos Ty'
+addTPos = addPos ExpR
 
 addDPos m = addPos (,) m
 
@@ -310,7 +310,7 @@ typeFamily = addDPos $ do
     res <- optional $ do
         operator "::"
         ty
-    return $ TypeFamilyDef tc tvs $ fromMaybe (Ty' mempty Star_) res
+    return $ TypeFamilyDef tc tvs $ fromMaybe (ExpR mempty Star_) res
 
 dataDef :: P PreDefinitionR
 dataDef = addDPos $ do

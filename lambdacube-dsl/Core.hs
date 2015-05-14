@@ -97,7 +97,7 @@ reduceHNF' x f = case reduceHNF x of
 matchPattern :: Thunk -> Pat -> Either String (Maybe TEnv)       -- Left: pattern match failure; Right Nothing: can't reduce
 matchPattern e = \case
     Wildcard -> Right $ Just mempty
-    PVar (VarE v _) -> Right $ Just $ TEnv mempty $ Map.singleton v (Just e)
+    PVar (VarE v _) -> Right $ Just $ TEnv $ Map.singleton v (Just e)
     PTuple ps -> reduceHNF' e $ \e -> case e of
         ETuple_ xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
         _ -> Right Nothing
@@ -125,7 +125,7 @@ reduce :: Thunk -> Exp
 reduce = either (error "pattern match failure.") id . reduceEither
 
 reduce' :: Pat -> Thunk -> Exp
-reduce' p = reduce . applyEnvBefore (TEnv mempty $ Map.fromList [(v, Nothing) | v <- patternEVars p])
+reduce' p = reduce . applyEnvBefore (TEnv $ Map.fromList [(v, Nothing) | v <- patternEVars p])
 
 reduceEither :: Thunk -> Either String Exp
 reduceEither e = reduceHNF' e $ \e -> Right $ case e of
@@ -135,6 +135,12 @@ reduceEither e = reduceHNF' e $ \e -> Right $ case e of
         [e] -> e
         es -> EAlts i es
     e -> Exp $ reduce <$> e
+
+subst' :: Substitute a => TEnv -> a -> a
+subst' (TEnv e) = subst $ maybe (error "subst'") reduce <$> e --error "subst'" --subst s
+
+peelThunk :: Thunk -> Thunk'
+peelThunk (ExpTh env e) = mapExp_ (subst' env) id (subst' env) (subst' env) $ applyEnv env <$> e
 
 
 --------------------------------------------------------------------------------

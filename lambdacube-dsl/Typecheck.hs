@@ -518,7 +518,7 @@ inferKind_ = {-appSES .-} inferKind
 
 -- TODO: ambiguity check
 inferKind :: TyR -> TCMS Exp
-inferKind ty_@(Ty' r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ appSES $ case ty of
+inferKind ty_@(ExpR r ty) = addRange r $ addCtx ("kind inference of" <+> pShow ty) $ appSES $ case ty of
     Forall_ (Just n) k t -> removeMonoVars $ do
         k <- inferKind k
         addConstraints $ Map.singleton n $ Right k
@@ -630,7 +630,7 @@ inferTyping e_@(ExpR r e) = addRange r $ addCtx ("type inference of" <+> pShow e
         return (EType' mempty t, kindOf t)
     EVar_ _ n -> do
         (ty, t) <- lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
-        return (foldl (EAppT' mempty (error "et")) (EVarT' mempty (foldr TArr t ty) (IdN n)) $ map (EType' mempty) ty, t)
+        return (foldl (EAppT' mempty (error "et")) (TVar' mempty (foldr TArr t ty) (IdN n)) $ map (EType' mempty) ty, t)
     _ -> do
         e <- traverse inferTyping e
         t <- case e of
@@ -683,7 +683,7 @@ typingToTy env ty = foldr forall_ ty $ orderEnv env
 --------------------------------------------------------------------------------
 
 tyConKind :: [TyR] -> TCM InstType'
-tyConKind = tyConKind_ $ Ty' mempty Star_
+tyConKind = tyConKind_ $ ExpR mempty Star_
 
 tyConKind_ :: TyR -> [TyR] -> TCM InstType'
 tyConKind_ res vs = instantiateTyping "tyconkind" $ foldr (liftA2 (~>)) (inferKind res) $ map inferKind vs
@@ -698,9 +698,9 @@ inferConDef con (unzip -> (vn, vt)) (r, ConDef n tys) = addRange r $ do
         withTyping (Map.fromList $ zip vn $ zipWith mkInstType vn ks) $ do
             let tyConResTy :: TCMS Exp
                 tyConResTy
-                    = inferKind $ foldl app (Ty' mempty $ TCon_ () con) $ map (Ty' mempty . EVar_ ()) vn
+                    = inferKind $ foldl app (ExpR mempty $ TCon_ () con) $ map (ExpR mempty . EVar_ ()) vn
                   where
-                    app a b = Ty' mempty $ EApp_ () a b
+                    app a b = ExpR mempty $ EApp_ () a b
 
             foldr (liftA2 (~>)) tyConResTy $ map inferFieldKind tys
     return $ Map.singleton n ty
@@ -731,11 +731,11 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
         return $ (,) (Set.fromList [n, tv]) (exp, te) 
     (fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se te
     the <- asks thunkEnv
-    let th = recEnv (PVar $ VarE n undefined) $ applyEnvBefore (TEnv mempty the)
+    let th = recEnv (PVar $ VarE n undefined) $ applyEnvBefore (TEnv the)
             $ flip (foldr eLam) fs
             $ applyEnvBefore
-                ( TEnv mempty $ Map.singleton n $ Just
-                $ foldl (EAppT' mempty (error "et")) (EVarT' mempty (error "ev") n) $ map (\(n, t) -> EType' mempty $ TVar t n) fs
+                ( TEnv $ Map.singleton n $ Just
+                $ foldl (EAppT' mempty (error "et")) (TVar' mempty (error "ev") n) $ map (\(n, t) -> EType' mempty $ TVar t n) fs
                 ) exp
     return (Map.singleton n $ Just th, withTyping $ Map.singleton n f)
 
@@ -752,7 +752,7 @@ inferDef' ty (ValueDef p@(PVar' _ n) e) = do
     (_fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se te
     -- TODO: unify fs - _fs
     the <- asks thunkEnv
-    let th = recEnv (PVar $ VarE n undefined) $ applyEnvBefore (TEnv mempty the)        -- recEnv not needed?
+    let th = recEnv (PVar $ VarE n undefined) $ applyEnvBefore (TEnv the)        -- recEnv not needed?
             $ flip (foldr eLam) [(n, v) | v@(TVar    _ n) <- fs] exp
     return (Map.singleton n $ Just th, withTyping $ Map.singleton n f)
 

@@ -71,10 +71,10 @@ mapConstraint nf af = \case
 data TypeFun n a = TypeFun n [a]
     deriving (Eq,Ord,Functor,Foldable,Traversable)
 
-data Witness
+data Witness b
     = Refl
-    | WInstance (Env Thunk)
-    deriving (Eq, Ord)
+    | WInstance (Env b)
+    deriving (Eq,Ord,Functor,Foldable,Traversable)
 
 -- TODO: remove
 instance Eq Thunk where
@@ -95,31 +95,6 @@ instance Eq Void
 instance Ord Void
 
 -------------------------------------------- kinded types
-
-pattern TApp k a b = Exp (EApp_ k a b)
-pattern TCon k a <- Exp (TCon_ k (TypeIdN a)) where
-    TCon k a = Exp (TCon_ k (TypeIdN' a "typecon"))
-pattern TVar k b = Exp (EVar_ k b)
-pattern TLit b = Exp (ELit_ b)
-
-pattern Star = Exp Star_
-
-pattern TRecord b = Exp (TRecord_ b)
-pattern TTuple b = Exp (TTuple_ b)
-pattern TUnit = TTuple []
-pattern ConstraintKind c = Exp (ConstraintKind_ c)
-pattern Forall a b c = Exp (Forall_ (Just a) b c)
-pattern TArr a b = Exp (Forall_ Nothing a b)
-
-infixr 7 ~>, ~~>
-a ~> b = TArr a b
-
-(~~>) :: [Exp] -> Exp -> Exp
-args ~~> res = foldr (~>) res args
-
-infix 4 ~~, ~~~
-(~~) = CEq
-(~~~) = CUnify
 
 inferLit :: Lit -> Exp
 inferLit a = case a of
@@ -234,7 +209,7 @@ data Exp_ k v t p b       -- TODO: elim t parameter
     | TTuple_  [b]
     | TRecord_ (Map v b)
     | ConstraintKind_ (Constraint' v b)        -- flatten?
-    | Witness  k Witness      -- TODO: make this polymorphic
+    | Witness  k (Witness Thunk)      -- TODO: make this polymorphic?
     deriving (Eq,Ord,Functor,Foldable,Traversable) -- TODO: elim Eq instance
 
 
@@ -279,9 +254,6 @@ newtype ExpR = ExpR_ (WithRange (Exp_ () Name TyR PatR ExpR))
 
 type TyR = ExpR
 
-pattern Ty' a b = ExpR_ (a, b)
-
-
 pattern ExpR a b = ExpR_ (a, b)
 pattern ELitR' a b = ExpR a (ELit_ b)
 pattern EVarR' a b = ExpR a (EVar_ () b)
@@ -300,7 +272,7 @@ pattern ETypeR' a b = ExpR a (EType_ b)
 pattern ExpTh a b = Exp' (a, b)
 pattern ELit' a b = ExpTh a (ELit_ b)
 pattern EVar' a b <- ExpTh a (EVar_ _ b)
-pattern EVarT' a t b = ExpTh a (EVar_ t b)
+pattern TVar' a t b = ExpTh a (EVar_ t b)
 pattern EApp' a b c <- ExpTh a (EApp_ _ b c)
 pattern EAppT' a t b c = ExpTh a (EApp_ t b c)
 pattern ELam' a b c = ExpTh a (ELam_ b c)
@@ -321,11 +293,23 @@ type Ty = Exp
 
 pattern Exp a = Exp' (Identity a)
 
+pattern TCon k a <- Exp (TCon_ k (TypeIdN a)) where
+    TCon k a = Exp (TCon_ k (TypeIdN' a "typecon"))
+
+pattern Star = Exp Star_
+
+pattern TRecord b = Exp (TRecord_ b)
+pattern TTuple b = Exp (TTuple_ b)
+pattern TUnit = TTuple []
+pattern ConstraintKind c = Exp (ConstraintKind_ c)
+pattern Forall a b c = Exp (Forall_ (Just a) b c)
+pattern TArr a b = Exp (Forall_ Nothing a b)
+
 pattern ELit a = Exp (ELit_ a)
 pattern EVar a <- Exp (EVar_ _ a)
-pattern EVarT t a <- Exp (EVar_ t a)
+pattern TVar k b = Exp (EVar_ k b)
 pattern EApp a b <- Exp (EApp_ _ a b)
-pattern EAppT t a b = Exp (EApp_ t a b)
+pattern TApp k a b = Exp (EApp_ k a b)
 pattern ELam a b = Exp (ELam_ a b)
 pattern ELet a b c = Exp (ELet_ a b c)
 pattern ETuple a = Exp (ETuple_ a)
@@ -351,6 +335,16 @@ pattern A8 f x y z v w q r s <-  EApp (A7 f x y z v w q r) s
 pattern A9 f x y z v w q r s t <-  EApp (A8 f x y z v w q r s) t
 pattern A10 f x y z v w q r s t a <-  EApp (A9 f x y z v w q r s t) a
 pattern A11 f x y z v w q r s t a b <-  EApp (A10 f x y z v w q r s t a) b
+
+infixr 7 ~>, ~~>
+a ~> b = TArr a b
+
+(~~>) :: [Exp] -> Exp -> Exp
+args ~~> res = foldr (~>) res args
+
+infix 4 ~~, ~~~
+(~~) = CEq
+(~~~) = CUnify
 
 --------------------------------------------
 
@@ -581,7 +575,7 @@ type SubstEnv = Env (Either Exp Exp)  -- either substitution or type signature  
 
 type Subst = Env Exp  -- substitutions
 
-data TEnv = TEnv Subst EnvMap       -- TODO: merge into this:   Env (Either Exp (Maybe Thunk))
+data TEnv = TEnv EnvMap       -- TODO: merge into this:   Env (Either Exp (Maybe Thunk))
 
 type EnvMap = Env (Maybe Thunk)   -- Nothing: statically unknown but defined
 
@@ -591,7 +585,7 @@ type InstEnv = Env' InstType'
 
 type PrecMap = Env' Fixity
 
-type InstanceDefs = Env' (Map Exp Witness)
+type InstanceDefs = Env' (Map Exp (Witness Thunk))
 
 --------------------------------------------------------------------------------
 
@@ -773,7 +767,7 @@ instance PShow Lit where
         LFloat  i -> pShow i
         LNat    i -> pShow i
 
-instance PShow Witness where
+instance PShow (Witness a) where
     pShowPrec p = \case
         Refl -> "Refl"
         WInstance _ -> "WInstance ..."       
@@ -983,7 +977,7 @@ s2 `composeSubst` s1 = (subst s2 <$> s1) <> s2
 tyOf :: Exp -> Exp
 tyOf = \case
     ETuple es -> TTuple $ map tyOf es
-    EVarT t _ -> t
+    TVar t _ -> t
     EApp (tyOf -> TArr _ t) _ -> t
     ELam (tyOfPat -> a) (tyOf -> b) -> TArr a b
 --    _ -> TUnit -- hack!
@@ -1004,15 +998,12 @@ patternEVars (Pat'' p) = case p of
 -------------------------------------------------------------------------------- thunks
 
 instance Monoid TEnv where
-    mempty = TEnv mempty mempty
+    mempty = TEnv mempty
     -- semantics: apply (m1 <> m2) = apply m1 . apply m2;  see 'composeSubst'
-    m1@(TEnv x1 y1) `mappend` TEnv x2 y2 = TEnv (x1 `composeSubst` x2) $ ((applyEnv m1 <$>) <$> y2) <> y1
+    m1@(TEnv y1) `mappend` TEnv y2 = TEnv $ ((applyEnv m1 <$>) <$> y2) <> y1
 
 envMap :: Thunk -> EnvMap
-envMap (ExpTh (TEnv _ m) _) = m
-
-subst' :: Substitute a => TEnv -> a -> a
-subst' (TEnv s _) = subst s
+envMap (ExpTh (TEnv m) _) = m
 
 applyEnv :: TEnv -> Thunk -> Thunk
 applyEnv m1 (ExpTh m exp) = ExpTh (m1 <> m) exp
@@ -1020,14 +1011,12 @@ applyEnv m1 (ExpTh m exp) = ExpTh (m1 <> m) exp
 applyEnvBefore :: TEnv -> Thunk -> Thunk
 applyEnvBefore m1 (ExpTh m exp) = ExpTh (m <> m1) exp
 
---   applySubst s  ===  applyEnv (TEnv s mempty)
--- but the following is more efficient
 applySubst :: Subst -> Thunk -> Thunk
-applySubst s' (ExpTh (TEnv s m) exp) = ExpTh (TEnv (s' `composeSubst` s) m) exp
+applySubst s = applyEnv $ TEnv $ Just . mkThunk <$> s
 
 -- build recursive environment  -- TODO: generalize
 recEnv :: Pat -> Thunk -> Thunk
-recEnv (PVar (VarE v _)) th_ = th where th = applyEnvBefore (TEnv mempty (Map.singleton v (Just th))) th_
+recEnv (PVar (VarE v _)) th_ = th where th = applyEnvBefore (TEnv (Map.singleton v (Just th))) th_
 recEnv _ th = th
 
 mkThunk :: Exp -> Thunk
@@ -1038,9 +1027,6 @@ mkThunk' (Exp e) = mkThunk <$> e
 
 thunk :: Thunk' -> Thunk
 thunk = ExpTh mempty
-
-peelThunk :: Thunk -> Thunk'
-peelThunk (ExpTh env e) = mapExp_ (subst' env) id (subst' env) (subst' env) $ applyEnv env <$> e
 
 --------------------------------------------------------------------------------
 
