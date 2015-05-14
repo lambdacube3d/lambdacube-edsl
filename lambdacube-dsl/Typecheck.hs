@@ -399,7 +399,7 @@ joinSE = \case
                          , WithExplanation (expl <+> "typesig") [s | Right s <- ss]) of 
         (WithExplanation _ [], ss) -> [ss]
         (ss, WithExplanation _ []) -> [ss]
-        (subs@(WithExplanation i (s:_)), sigs@(WithExplanation i' (s':_))) -> [subs, sigs, WithExplanation ("subskind" <+> i <+> i') [kindOf s, s']]
+        (subs@(WithExplanation i (s:_)), sigs@(WithExplanation i' (s':_))) -> [subs, sigs, WithExplanation ("subskind" <+> i <+> i') [tyOf s, s']]
 
     untilNoUnif :: SubstEnv -> m SubstEnv
     untilNoUnif es = do
@@ -527,7 +527,7 @@ inferKind ty_@(ExpR r ty) = addRange r $ addCtx ("kind inference of" <+> pShow t
         return $ (,) (Set.fromList [n]) $ Exp $ Forall_ (Just n) k t
     _ -> do
         ty <- traverse inferKind ty
-        k <- case kindOf <$> ty of
+        k <- case tyOf <$> ty of
             ELit_ l -> return $ inferLit l
             Star_ -> star
             ConstraintKind_ c -> case c of
@@ -628,7 +628,7 @@ inferTyping e_@(ExpR r e) = addRange r $ addCtx ("type inference of" <+> pShow e
         return (e, te)
     EType_ ta -> do
         t <- inferKind ta
-        return (EType' mempty t, kindOf t)
+        return (EType' mempty t, tyOf t)
     EVar_ _ n -> do
         (ty, t) <- lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
         return (foldl (EAppT' mempty (error "et")) (TVar' mempty (foldr TArr t ty) (IdN n)) $ map (EType' mempty) ty, t)
@@ -659,7 +659,7 @@ inferTyping e_@(ExpR r e) = addRange r $ addCtx ("type inference of" <+> pShow e
             EAlts_ _ xs -> newStarVar "ealts" >>= \v -> mapM_ (addUnif v . snd) xs >> return v
             ENext_ -> newStarVar "enext"          -- TODO: review
             x -> error $ "inferTyping: " ++ ppShow x
-        return (ExpTh mempty $ mapExp_ (error "e0") (error "e1") (error "e2") (error "e3") $ fst <$> e, t)
+        return (ExpTh mempty $ mapExp_ (const t) (error "e1") (error "e2") (error "e3") $ fst <$> e, t)
 
 --------------------------------------------------------------------------------
 

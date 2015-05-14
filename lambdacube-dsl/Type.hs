@@ -104,16 +104,17 @@ inferLit a = case a of
     LString _ -> TString
     LNat _    -> TNat
 
-kindOf :: Exp -> Exp
-kindOf = \case
+tyOf :: Exp -> Exp
+tyOf = \case
     Exp t -> case t of
         ELit_ l -> inferLit l
         EVar_ k _ -> k
         EApp_ k _ _ -> k
---        ETuple_    [b]
+        ETuple_ es -> TTuple $ map tyOf es 
+        ELam_ (tyOfPat -> a) (tyOf -> b) -> TArr a b
 --        ELam_      p b
 --        ETypeSig_ b t -> t  -- TODO?
---        EType_ t -> kindOf t        -- ??
+--        EType_ t -> tyOf t        -- ??
 {-
         | ELet_      p b b
         | ENamedRecord_ Name [(Name, b)]
@@ -132,7 +133,15 @@ kindOf = \case
         TRecord_ _ -> Star
         ConstraintKind_ _ -> Star
         Witness k _ -> k
-        _ -> error "kindOf"
+        _ -> error "tyOf"
+
+tyOfPat :: Pat -> Exp
+tyOfPat = \case
+    PCon (VarE _ t) ps -> stripArgs (length ps) t
+    e -> error $ "tyOfPat " ++ ppShow e
+  where
+    stripArgs 0 t = t
+    stripArgs n (TArr _ t) = stripArgs (n-1) t
 
 isStar = \case
     Star -> True
@@ -962,23 +971,6 @@ s2 `composeSubst` s1 = (subst s2 <$> s1) <> s2
 
 
 -------------------------------------------------------------------------------- utility
-
-tyOf :: Exp -> Exp
-tyOf = \case
-    ETuple es -> TTuple $ map tyOf es
-    TVar t _ -> t
-    EApp (tyOf -> TArr _ t) _ -> t
-    ELam (tyOfPat -> a) (tyOf -> b) -> TArr a b
---    _ -> TUnit -- hack!
-    e -> error $ "tyOf " ++ ppShow e
-
-tyOfPat :: Pat -> Exp
-tyOfPat = \case
-    PCon (VarE _ t) ps -> stripArgs (length ps) t
-    e -> error $ "tyOfPat " ++ ppShow e
-  where
-    stripArgs 0 t = t
-    stripArgs n (TArr _ t) = stripArgs (n-1) t
 
 patternEVars (Pat'' p) = case p of
     PVar_ (VarE v t) -> [(v, t)]
