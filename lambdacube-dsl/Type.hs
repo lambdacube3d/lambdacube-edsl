@@ -826,14 +826,14 @@ pattern TFJoinTupleType a b     = TypeFunS "JoinTupleType" [a, b]
 
 -------------------------------------------------------------------------------- reduce to Head Normal Form
 
-type ReduceM = Except String
+type ReduceM = ExceptT String (State Int)
 
 reduceFail = throwError
 
 reduceHNF :: Exp -> ReduceM Exp       -- Left: pattern match failure
 reduceHNF (Exp exp) = case exp of
 
-    PrimFun (ExpN f) acc 0 -> return $ evalPrimFun f $ map reduce $ reverse acc
+    PrimFun (ExpN f) acc 0 -> evalPrimFun f <$> mapM reduceEither (reverse acc)
 
     ExtractInstance acc [] n m -> reduceHNF (acc Map.! n) >>= \case
         Witness _ (WInstance im) -> reduceHNF $ (im Map.! m) acc
@@ -897,14 +897,17 @@ evalPrimFun x args = error $ "evalPrimFun: " ++ x ++ " " ++ ppShow args
 -------------------------------------------------------------------------------- full reduction
 
 reduce :: Exp -> Exp
-reduce = either (error "pattern match failure.") id . runExcept . reduceEither
+reduce = either (error "pattern match failure.") id . flip evalState 0 . runExceptT . reduceEither
 
 reduceEither :: Exp -> ReduceM Exp
-reduceEither e = reduceHNF e >>= \e -> return $ case e of
+reduceEither e = reduceHNF e >>= \e -> case e of
+    EAlts i [e] -> return e
+{-
     EAlts i es -> case [e | Right e <- runExcept . reduceEither <$> es] of     -- simplification
         [e] -> e
         es -> EAlts i es
-    Exp e -> Exp $ mapExp' reduce id id e
+-}
+    Exp e -> Exp <$> traverse reduceEither e --TODO! traverseExp
 
 -------------------------------------------------------------------------------- Pretty show instances
 
