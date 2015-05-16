@@ -72,7 +72,7 @@ isRec t = isVar t
 isVar TVar{} = True
 isVar _ = False
 
-nat234 (TENat i) = i `elem` [2..4]
+nat234 (ENat i) = i `elem` [2..4]
 nat234 _ = False
 
 floatIntWordBool = \case
@@ -212,18 +212,18 @@ reduceConstraint_ cvar orig x = do
             TMat n m t -> keep [WithExplanation "Mat res 1" [a, TVec n t], WithExplanation "Mat res 2" [b, TVec m t]]
             _ -> fail "no instance"
 
-        TFVec (TENat n) ty | n `elem` [2,3,4] {- && ty `elem'` floatIntWordBool -} -> reduced $ TVec n ty
+        TFVec (ENat n) ty | n `elem` [2,3,4] {- && ty `elem'` floatIntWordBool -} -> reduced $ TVec n ty
         TFVec a b -> check (a `matches` nat234 && b `matches` floatIntWordBool {- -- FIXME -}) $ observe res $ \case
-            TVec n t -> keep [WithExplanation "Vec res 1" [a, TENat n], WithExplanation "Vec res 2" [b, t]]
+            TVec n t -> keep [WithExplanation "Vec res 1" [a, ENat n], WithExplanation "Vec res 2" [b, t]]
             _ -> fail "no instance tfvec"
 
         TFVecScalar a b -> case a of
-            TENat 1 -> case b of
+            ENat 1 -> case b of
                 TVar{} | res `matches` floatIntWordBool -> keep [WithExplanation "VecScalar dim 1" [b, res]]
                 b -> check (b `elem'` floatIntWordBool) $ reduced b
             TVar{} -> check (b `matches` floatIntWordBool) $ observe res $ \case
-                t | t `elem'` floatIntWordBool -> keep [WithExplanation "VecScalar res 1" [a, TENat 1], WithExplanation "VecScalar res 2" [b, t]]
-                TVec n t -> keep [WithExplanation "VecScalar res 1" [a, TENat n], WithExplanation "VecScalar res 2" [b, t]]
+                t | t `elem'` floatIntWordBool -> keep [WithExplanation "VecScalar res 1" [a, ENat 1], WithExplanation "VecScalar res 2" [b, t]]
+                TVec n t -> keep [WithExplanation "VecScalar res 1" [a, ENat n], WithExplanation "VecScalar res 2" [b, t]]
                 _ -> nothing --like $ TFVec a b
             _ -> like $ TFVec a b
 
@@ -253,12 +253,12 @@ reduceConstraint_ cvar orig x = do
 
         TFFrameBuffer ty -> caseTuple "expected (Image Nat)" ty end $ \case
             TImage a b -> observe' a $ \case
-                TENat n -> reduce' (n, b)
+                ENat n -> reduce' (n, b)
                 _ -> fail'
             _ -> fail'
           where
             end (unzip -> (n: ns, tys))
-                | all (==n) ns = reduced $ TFrameBuffer (TENat n) $ tTuple tys
+                | all (==n) ns = reduced $ TFrameBuffer (ENat n) $ tTuple tys
                 | otherwise = fail "frambuffer number of layers differ"
 
         TFJoinTupleType (TTuple []) x -> reduced x
@@ -616,22 +616,21 @@ inferTyping e_@(ExpR r e) = addRange r $ addCtx ("type inference of" <+> pShow e
         ty <- inferKind ty
         addUnif (tyOf e) ty  -- TODO: one directional
         return e
-    EType_ ta -> do
-        t <- inferKind ta
-        return $ EType t
+    ETyApp_ () f t -> do
+        f <- inferTyping f
+        t <- inferKind t
+        x <- newName "apptype"
+        addUnif t (TVar (tyOf t) x)
+        v <- newStarVar "etyapp"
+        addUnif (tyOf f) (Forall x (tyOf t) v)
+        return $ Exp $ EApp_ v f t
     EVar_ _ n -> do
         (ty, t) <- lookEnv n $ lift $ throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
-        return $ buildApp (`TVar` n) t $ map EType ty
+        return $ buildApp (`TVar` n) t ty
     _ -> do
         e <- traverse inferTyping e
         t <- case e of
-            EApp_ _ tf (EType t) -> do
-                x <- newName "apptype"
-                addUnif t (TVar (tyOf t) x)
-                v <- newStarVar "etyapp"
-                addUnif (tyOf tf) (Forall x (tyOf t) v)
-                return v
-            EApp_ _ tf ta -> appTy (tyOf tf) (tyOf ta)
+            EApp_ () tf ta -> appTy (tyOf tf) (tyOf ta)
             EFieldProj_ () fn -> do
                 a <- newStarVar "fp1"
                 r <- newStarVar "fp2"
@@ -726,7 +725,7 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
     let th = th' where
          th' = subst the
            $ subst
-                ( singSubst n $ foldl (TApp (error "et")) th' $ map (\(n, t) -> EType $ TVar t n) fs
+                ( singSubst n $ foldl (TApp (error "et")) th' $ map (\(n, t) -> TVar t n) fs
                 )
            $ flip (foldr eLam) fs exp
     return (singSubst n th, withTyping $ Map.singleton n f)

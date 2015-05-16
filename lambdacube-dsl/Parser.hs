@@ -562,7 +562,7 @@ expressionAtom = do
         typeAtom
     return $ foldl eTyApp e ts
 
-eTyApp a b = EAppR' (a <-> b) a $ ETypeR' (getTag b) b
+eTyApp a b = ETyAppR (a <-> b) a b
 
 expressionAtom_ :: P PrecExpR
 expressionAtom_ =

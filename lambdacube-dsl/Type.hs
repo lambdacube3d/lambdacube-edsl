@@ -54,6 +54,12 @@ data Lit
     | LFloat  Double
     deriving (Eq, Ord)
 
+pattern EInt a = ELit (LInt a)
+pattern ENat a = ELit (LNat a)
+pattern EChar a = ELit (LChar a)
+pattern EString a = ELit (LString a)
+pattern EFloat a = ELit (LFloat a)
+
 -------------------------------------------------------------------------------- patterns
 
 data Pat_ t c v b
@@ -137,7 +143,7 @@ data Exp_ k v t p b       -- TODO: elim t parameter
     | ETuple_    [b]
     | ELam_      p b
     | ETypeSig_  b t
-    | EType_     t          -- TODO: elim
+    | ETyApp_ k b t
 
     | ELet_      p b b
     | ENamedRecord_ Name [(Name, b)]
@@ -173,7 +179,7 @@ mapExp_ kf vf tf f = \case
     ETypeSig_  x y     -> ETypeSig_ x $ tf y
     EAlts_     x y     -> EAlts_ x y
     ENext_ k           -> ENext_ (kf k)
-    EType_ t           -> EType_ $ tf t
+    ETyApp_ k b t      -> ETyApp_ (kf k) b $ tf t
     ExtractInstance i j n -> ExtractInstance i j n
     PrimFun a b c      -> PrimFun a b c
     Star_              -> Star_
@@ -202,10 +208,10 @@ tyOf = \case
         ELit_ l -> inferLit l
         EVar_ k _ -> k
         EApp_ k _ _ -> k
+        ETyApp_ k _ _ -> k
         ETuple_ es -> TTuple $ map tyOf es 
         ELam_ (tyOfPat -> a) (tyOf -> b) -> TArr a b
 --        ETypeSig_ b t -> t  -- TODO?
---        EType_ t -> tyOf t        -- ??
         ELet_ _ _ e -> tyOf e
 --        | ENamedRecord_ Name [(Name, b)]
         ERecord_ (unzip -> (fs, es)) -> TRecord $ Map.fromList $ zip fs $ map tyOf es
@@ -260,7 +266,7 @@ pattern EFieldProjR' a c = ExpR a (EFieldProj_ () c)
 pattern ETypeSigR' a b c = ExpR a (ETypeSig_ b c)
 pattern EAltsR' a i b = ExpR a (EAlts_ i b)
 pattern ENextR' a = ExpR a (ENext_ ())
-pattern ETypeR' a b = ExpR a (EType_ b)
+pattern ETyAppR a b c = ExpR a (ETyApp_ () b c)
 
 --------------------------------------------------------------------------------
 
@@ -295,18 +301,15 @@ pattern EVar a <- Exp (EVar_ _ a)
 pattern TVar k b = Exp (EVar_ k b)
 pattern EApp a b <- Exp (EApp_ _ a b)
 pattern TApp k a b = Exp (EApp_ k a b)
+pattern ETyApp k a b = Exp (ETyApp_ k a b)
 pattern ELam a b = Exp (ELam_ a b)
 pattern ELet a b c = Exp (ELet_ a b c)
 pattern ETuple a = Exp (ETuple_ a)
 pattern ERecord b = Exp (ERecord_ b)
 pattern EFieldProj k a = Exp (EFieldProj_ k a)
-pattern EType a = Exp (EType_ a)
 pattern EAlts i b = Exp (EAlts_ i b)
 pattern ENext k = Exp (ENext_ k)
 pattern Witness k w = Exp (Witness_ k w)
-
-pattern EInt a = ELit (LInt a)
-pattern EFloat a = ELit (LFloat a)
 
 pattern A0 x <- EVar (ExpIdN x)
 pattern A1 f x <- EApp (A0 f) x
@@ -772,10 +775,8 @@ pattern TCon2 a b c = TApp Star (TApp StarStar (TCon (TArr Star StarStar) a) b) 
 pattern TCon2' a b c = TApp Star (TApp StarStar (TCon VecKind a) b) c
 pattern TCon3' a b c d = TApp Star (TApp StarStar (TApp VecKind (TCon (TArr Star VecKind) a) b) c) d
 
-pattern TENat' a = EType (TENat a)
-pattern TENat a = ELit (LNat a)
-pattern TVec a b = TCon2' "Vec" (TENat a) b
-pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (TENat a)) (TENat b)) c
+pattern TVec a b = TCon2' "Vec" (ENat a) b
+pattern TMat a b c = TApp Star (TApp StarStar (TApp VecKind (TCon MatKind "Mat") (ENat a)) (ENat b)) c
 
 -- basic types
 pattern TChar = TCon0 "Char"
@@ -843,7 +844,7 @@ reduceHNF (Exp exp) = case exp of
 --            | otherwise -> error $ "too much argument for primfun " ++ ppShow f ++ ": " ++ ppShow exp
 
         ExtractInstance acc 0 n -> reduceHNF' x $ \case
-            EType_ (Witness _ (WInstance m)) -> reduceHNF $ foldl (TApp (error "eae")) (m Map.! n) $ reverse acc
+            Witness_ _ (WInstance m) -> reduceHNF $ foldl (TApp (error "eae")) (m Map.! n) $ reverse acc
             x -> error $ "expected instance witness instead of " ++ ppShow x
         ExtractInstance acc j n -> Right $ ExtractInstance (x: acc) (j-1) n
 
@@ -853,17 +854,10 @@ reduceHNF (Exp exp) = case exp of
                 [e] -> reduceHNF e
             _ -> keep
 
-        ELam_ p e -> case p of
-            PVar _ v -> reduceHNF' x $ \case
-                EType_ x -> reduceHNF $ subst (singSubst v x) e
-                _  -> case matchPattern x p of
-                    Left err -> Left err
-                    Right (Just m') -> reduceHNF $ subst m' e
-                    Right _ -> keep
-            _ -> case matchPattern x p of
-                Left err -> Left err
-                Right (Just m') -> reduceHNF $ subst m' e
-                Right _ -> keep
+        ELam_ p e -> case matchPattern x p of
+            Left err -> Left err
+            Right (Just m') -> reduceHNF $ subst m' e
+            Right _ -> keep
 
         _ -> keep
     _ -> keep
@@ -955,10 +949,10 @@ instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b)
         ELit_ l -> pShowPrec p l
         EVar_ k v -> pShowPrec p v
         EApp_ k a b -> pApp p a b
+        ETyApp_ k a b -> pTyApp p a b -- "'" <> pShowPrec p t
         ETuple_ a -> tupled $ map pShow a
         ELam_ p b -> "\\" <> pShow p <+> "->" <+> pShow b
         ETypeSig_ b t -> pShow b <+> "::" <+> pShow t
-        EType_ t -> "'" <> pShowPrec p t
         ELet_ a b c -> "let" <+> pShow a <+> "=" <+> pShow b <+> "in" </> pShow c
         ENamedRecord_ n xs -> pShow n <+> showRecord xs
         ERecord_ xs -> showRecord xs
