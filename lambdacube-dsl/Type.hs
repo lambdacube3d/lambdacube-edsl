@@ -136,7 +136,7 @@ data Witness b
 
 -------------------------------------------------------------------------------- expressions
 
-data Exp_ k v t p b       -- TODO: elim t parameter
+data Exp_ k v t p b
     = ELit_      Lit
     | EVar_      k v
     | EApp_      k b b
@@ -586,13 +586,12 @@ instance Monoid TEnv where
 singSubst a b = TEnv $ Map.singleton a $ ISubst b
 singSubstTy a b = TEnv $ Map.singleton a $ ISig b
     
---applyEnvBefore :: TEnv -> Exp -> Exp
---applyEnvBefore m1 (ExpTh m exp) = ExpTh (m <> m1) exp
-
 -- build recursive environment  -- TODO: generalize
 recEnv :: Pat -> Exp -> Exp
 recEnv (PVar _ v) th_ = th where th = subst (singSubst v th) th_
 recEnv _ th = th
+
+mapExp' f nf pf e = mapExp_ f nf f pf $ f <$> e
 
 peelThunk :: Exp -> Exp'
 peelThunk (ExpTh env@(Subst m) e) = case e of
@@ -603,7 +602,7 @@ peelThunk (ExpTh env@(Subst m) e) = case e of
     EVar_ k v -> case Map.lookup v m of
         Just e -> peelThunk e
         _ -> EVar_ (f k) v
-    _ -> mapExp_ f id f (error "peelT") $ f <$> e
+    _ -> mapExp' f id (error "peelT") e
   where
     f = subst_ env
 
@@ -630,7 +629,6 @@ instance FreeVars Exp where
             x -> foldMap freeVars x
 
 instance FreeVars a => FreeVars [a]                 where freeVars = foldMap freeVars
---instance FreeVars Typing where freeVars (TypingConstr m t) = freeVars m <> freeVars t
 instance FreeVars a => FreeVars (TypeFun n a)       where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (Env a)         where freeVars = foldMap freeVars
 instance FreeVars a => FreeVars (Constraint' n a)    where freeVars = foldMap freeVars
@@ -650,8 +648,7 @@ instance Replace Exp where
             ELam_ _ _ -> error "repl lam"
             ELet_ _ _ _ -> error "repl let"
             Forall_ (Just n) a b -> Forall_ (Just n) (f a) (repl (Map.delete n st) b)
---            EVar_ k a | Just t <- Map.lookup a st -> EVar_ (f k) t
-            t -> mapExp_ f rn f (error "repl") $ f <$> t
+            t -> mapExp' f rn (error "repl") t
       where
         f = repl st
         rn a
@@ -903,12 +900,10 @@ reduce = either (error "pattern match failure.") id . reduceEither
 
 reduceEither :: Exp -> Either String Exp
 reduceEither e = reduceHNF' e $ \e -> Right $ case e of
-    ELam_ p e -> ELam p $ reduce e
-    ELet_ p x e' -> ELet p (reduce x) $ reduce e'
-    EAlts_ i es -> case [e | Right e <- reduceEither <$> es] of
+    EAlts_ i es -> case [e | Right e <- reduceEither <$> es] of     -- simplification
         [e] -> e
         es -> EAlts i es
-    e -> Exp $ reduce <$> e
+    e -> Exp $ mapExp' reduce id id e
 
 
 -------------------------------------------------------------------------------- Pretty show instances
@@ -1062,14 +1057,16 @@ instance (Monoid' e, MonoidConstraint e m, MonadError err m) => MonadError err (
 
 mapWriterT' f (WriterT' m) = WriterT' $ f m
 
---------------------------------------------
+-------------------------------------------------------------------------------- utils
+
+liftIdentity :: Monad m => Identity a -> m a
+liftIdentity = return . runIdentity
+
+-------------------------------------------------------------------------------- not used
 
 data Void
 
 instance PShow Void where pShowPrec = error "PShow Void"
 instance Eq Void where (==) = error "Eq Void"
 instance Ord Void where compare = error "Ord Void"
-
-liftIdentity :: Monad m => Identity a -> m a
-liftIdentity = return . runIdentity
 
