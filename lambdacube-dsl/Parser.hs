@@ -103,7 +103,7 @@ compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
 
 compileGuardedRHS :: GuardedRHS -> PrecExpR
 compileGuardedRHS (NoGuards e) = e
-compileGuardedRHS (Guards p gs) = foldr addGuard (ExpR p{-TODO-} ENext_) gs
+compileGuardedRHS (Guards p gs) = foldr addGuard (ExpR p{-TODO-} (ENext_ ())) gs
   where
     addGuard (b, x) y = eApp (eApp (eApp (eVar p{-TODO-} (ExpN "ifThenElse")) b) x) y
 
@@ -354,7 +354,7 @@ typeRecord = undef "trec" $ do
 infixl 9 <->
 a <-> b = getTag a `mappend` getTag b
 
-addPPos = addPos Pat
+addPPos = addPos PatR
 
 addPos :: (Range -> a -> b) -> P a -> P b
 addPos f m = do
@@ -422,14 +422,14 @@ valuePatternOpAtom = do
     f e op e' = appP [op, e, e']
 
     op :: P PatR
-    op = addPPos $ (\x -> PCon_ x []) <$> operator'
+    op = addPPos $ (\x -> PCon_ () x []) <$> operator'
 
 valuePatternAtom :: P PatR
 valuePatternAtom
-    =   addPPos (const Wildcard_ <$> operator "_")
+    =   addPPos (Wildcard_ () <$ operator "_")
     <|> addPPos (PAt_ <$> try' "at pattern" (var <* operator "@") <*> valuePatternAtom)
-    <|> addPPos (PVar_ <$> var)
-    <|> addPPos ((\c -> PCon_ c []) <$> try dataConstructor)
+    <|> addPPos (PVar_ () <$> var)
+    <|> addPPos ((\c -> PCon_ () c []) <$> try dataConstructor)
     <|> tuplePattern
     <|> recordPat
     <|> listPat
@@ -588,7 +588,7 @@ expressionAtom_ =
   recordFieldProjection = try $ flip eApp <$> addPos eVar var <*>
         addPos EFieldProjR' ({-runUnspaced $-} dot *> {-Unspaced-} var)
 
-  eLit p l@LInt{} = eApp' (EVarR' p (ExpN "fromInt")) $ ELitR' p l
+  eLit p l@LInt{} = eApp' (eVar p (ExpN "fromInt")) $ ELitR' p l
   eLit p l = ELitR' p l
 
   listExp :: P PrecExpR
@@ -605,11 +605,9 @@ literal =
     LString <$> stringLiteral
 
 eTuple _ [x] = x
-eTuple p xs = ETupleR' p xs
+eTuple p xs = ExpR p $ ETuple_ xs
 eRecord p xs = ERecordR' p xs
 eNamedRecord p n xs = ENamedRecordR' p n xs
-ret f x y = const $ f x y
-ret' f x y = f x y
 eVar p n = EVarR' p n
 
 parseLC :: FilePath -> ErrorT IO (String, ModuleR)

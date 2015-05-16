@@ -21,7 +21,6 @@ import qualified Data.Foldable as F
 
 import Pretty
 import Type
-import Core
 
 toGLSLType msg t = case t of
   TBool  -> "bool"
@@ -59,7 +58,7 @@ genUniforms e = case e of
   Exp e -> F.foldMap genUniforms e
 
 genStreamInput i = do
-  let input (PVar (x@(VarE (showN -> n) t))) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]] >> return [n]
+  let input (PVar t x@(showN -> n)) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]] >> return [n]
       input a = error $ "genStreamInput " ++ ppShow a
   case i of
     PTuple l -> foldM (\a b -> (a ++) <$> input b) [] l
@@ -104,10 +103,10 @@ genFragmentGLSL s e@(ELam i fragOut) = unlines $ execWriter $ do
   let o = case fragOut of
         A1 "FragmentOutRastDepth" o -> o
         A1 "FragmentOut" o -> o
-      makeSubst (PVar (VarE (showN -> x) _)) [(_,_,n)] = Map.singleton x n
+      makeSubst (PVar _ (showN -> x)) [(_,_,n)] = Map.singleton x n
       makeSubst (PTuple l) x = Map.fromList $ go l x where
         go [] [] = []
-        go (PVar (VarE (showN -> x) _):al) ((_,_,n):bl) = (x,n) : go al bl
+        go (PVar _ (showN -> x):al) ((_,_,n):bl) = (x,n) : go al bl
         go _ _ = error $ "genFragmentGLSL illegal input " ++ ppShow i ++ " " ++ show s
   tell ["#version 330 core"]
   F.mapM_ tell $ genUniforms e

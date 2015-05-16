@@ -14,7 +14,6 @@ import Control.Exception
 import Pretty hiding ((</>))
 import Type
 import Typecheck
-import Core
 import Parser
 import Driver
 import CoreToIR

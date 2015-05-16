@@ -19,7 +19,6 @@ import qualified Data.Map as Map
 import Pretty
 import qualified Type as AST
 import Type
-import Core
 import CoreToGLSL
 import qualified IR as IR
 

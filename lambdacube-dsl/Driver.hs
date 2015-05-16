@@ -21,7 +21,6 @@ import Debug.Trace
 
 import Pretty hiding ((</>))
 import Type
-import Core
 import qualified IR as IR
 import qualified CoreToIR as IR
 import Parser
@@ -36,7 +35,7 @@ compileMain path fname = fmap IR.compilePipeline <$> reducedMain path fname
 
 reducedMain :: FilePath -> MName -> IO (Either String Exp)
 reducedMain path fname =
-    runMM [path] $ mkReduce <$> parseAndToCoreMain fname
+    runMM [path] $ reduce <$> parseAndToCoreMain fname
 
 runMM :: [FilePath] -> MM a -> IO (Either String a) 
 runMM paths
@@ -83,23 +82,23 @@ loadModule mname = do
 lcModuleFile path n = path </> (showN n ++ ".lc")
 
 getType = getType_ "Prelude"
-getType_ m n = either putStrLn (putStrLn . ppShow) =<< runMM ["./tests/accept"] (snd <$> getDef__ (ExpN m) (ExpN n))
+getType_ m n = either putStrLn (putStrLn . ppShow) =<< runMM ["./tests/accept"] (getDef__ (ExpN m) (ExpN n))
 
 getDef :: MName -> EName -> MM (Either String Exp)
 getDef = getDef_
 
-getDef__ :: MName -> EName -> MM ExpT
+getDef__ :: MName -> EName -> MM Exp
 getDef__ m d = do
     clearImports
     (fm, pe) <- loadModule m
-    fmap (\(m, (_, x)) -> (undefined, typingToTy m x)) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
+    fmap (\(m, (_, x)) -> typingToTy m x) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
 
 getDef_ :: MName -> EName -> MM (Either String Exp)
 getDef_ m d = do
     clearImports
     (fm, pe) <- loadModule m
-    case Map.lookup d $ thunkEnv pe of
-        Just (Left th) -> return $ Right $ reduce th
+    case Map.lookup d $ getTEnv $ thunkEnv pe of
+        Just (ISubst th) -> return $ Right $ reduce th
         Nothing -> return $ Left "not found"
         _ -> throwErrorTCM "not found?"
 

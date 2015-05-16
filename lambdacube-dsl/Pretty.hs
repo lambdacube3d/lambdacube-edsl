@@ -55,6 +55,8 @@ pInfix  i = pOp i i i
 pApp = pInfixl 10 mempty
 pApps p x xs = pParens (p > 9) $ hsep $ pShowPrec 9 x: map (pShowPrec 10) xs
 
+showRecord = braces . hsep . punctuate (pShow ',') . map (\(a, b) -> pShow a <> ":" <+> pShow b)
+
 --------------------------------------------------------------------------------
 
 instance (PShow a, PShow b) => PShow (a, b) where

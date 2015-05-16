@@ -30,7 +30,6 @@ library
     Typecheck
     Parser
     ParserUtil
-    Core
     IR
     CoreToIR
     CoreToGLSL
