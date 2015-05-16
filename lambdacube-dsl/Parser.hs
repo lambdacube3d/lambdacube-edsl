@@ -19,6 +19,7 @@ import Data.Monoid
 import Control.Applicative (some,liftA2,Alternative())
 import Control.Arrow
 import Control.Monad
+import Control.Monad.State
 import Control.Monad.Trans
 import qualified Text.Parsec.Indentation.Char as I
 import Text.Parsec.Indentation
@@ -557,13 +558,39 @@ eTyping a b = ETypeSigR' (a <-> b) a b
 
 expressionOpAtom :: P PrecExpR
 expressionOpAtom = do
-    e <- application <$> some expressionAtom
-    f e <$> op <*> expression  <|>  return e
+    e <- exp
+    calcPrec e =<< many ((,) <$> op <*> exp)
   where
+    exp = application <$> some expressionAtom
+    --         a * b + c * d     -->     |$| a;  |$| a |*| b;  |$| a*b |+| c;  |$| a*b |+| c |*| d;  |$| a*b |+| c*d;  a*b+c*d
+    calcPrec e es = do
+        ps <- getState
+        compileOps ps [((Nothing, -1), undefined, e)] es
+
     f e op e' = application [op, e, e']
 
     op = addPos eVar $ operator'
         <|> try' "backquote operator" ({-runUnspaced-} ({-Unspaced-} (operator "`") *> {-Unspaced-} (var <|> upperCaseIdent) <* {-Unspaced-} (operator "`")))
+
+compileOps _ [(_, _, e)] [] = return e
+compileOps ps acc [] = compileOps ps (shrink acc) []
+compileOps ps acc@((p, g, e1): ee) es_@((op@(EVarR' _ n), e'): es) = case compareFixity (pr, op) (p, g) of
+    Right GT -> compileOps ps ((pr, op, e'): acc) es
+    Right LT -> compileOps ps (shrink acc) es_
+    Left err -> error $ show err --throwErrorTCM err
+  where
+    pr = fromMaybe (Just FDLeft, 9) $ Map.lookup n ps
+
+shrink ((_, op, e): (pr, op', e'): es) = (pr, op', eApp (eApp op e') e): es
+
+compareFixity ((dir, i), op) ((dir', i'), op')
+    | i > i' = Right GT
+    | i < i' = Right LT
+    | otherwise = case (dir, dir') of
+        (Just FDLeft, Just FDLeft) -> Right LT
+        (Just FDRight, Just FDRight) -> Right GT
+        _ -> Left $ "fixity error:" P.<+> P.pShow (op, op')
+
 
 expressionAtom :: P PrecExpR
 expressionAtom = do
