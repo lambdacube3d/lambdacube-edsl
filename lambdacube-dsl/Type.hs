@@ -1033,6 +1033,21 @@ instance PShow Range where
         Range a b -> text (show a) <+> "--" <+> text (show b)
         NoRange -> ""
 
+instance PShow Definition where
+    pShowPrec p = \case
+        DValueDef (ValueDef x _) -> "ValueDef" <+> pShow x
+        DAxiom (TypeSig x _) -> "axiom" <+> pShow x
+        DDataDef n _ _ -> "data" <+> pShow n
+        GADT n _ _ -> "gadt" <+> pShow n
+        ClassDef n _ _ -> "class" <+> pShow n
+        InstanceDef n _ _ -> "instance" <+> pShow n
+        TypeFamilyDef n _ _ -> "type family" <+> pShow n
+    -- used only during parsing
+        PreValueDef (_, n) _ _ -> "pre valuedef" <+> pShow n
+        DTypeSig (TypeSig n _) -> "typesig" <+> pShow n
+        PreInstanceDef n _ _ -> "pre instance" <+> pShow n
+        ForeignDef n _ -> "foreign" <+> pShow n
+
 -------------------------------------------------------------------------------- WriterT'
 
 class Monoid' e where

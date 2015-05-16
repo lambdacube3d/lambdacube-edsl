@@ -801,6 +801,7 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
         let w = WInstance $ mconcat xs
         local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t w) (Map.insert t w)) c $ instanceDefs pe}) $ do
             cont
+    _ -> error $ "inferDefs: " ++ ppShow d
 
 inference_ :: PolyEnv -> ModuleR -> ErrorT (VarMT Identity) PolyEnv
 inference_ penv@PolyEnv{..} Module{..} = flip runReaderT penv $ diffEnv <$> inferDefs definitions

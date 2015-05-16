@@ -84,7 +84,12 @@ operator' = try' "operator" (do
                   i <- ident lcOps
                   if head i == ':' then fail "operator cannot start with ':'" else return $ ExpN' i $ P.text $ show p)
         <|> (operator "." *> pure (ExpN "."))
-        <|> (operator ":" *> pure (ExpN "Cons"))
+        <|> conoperator'
+
+conoperator' = try' "constructor operator" (do
+                  p <- position
+                  i <- ident lcOps
+                  if head i /= ':' then fail "constructor operator should start with ':'" else return $ ExpN' (if i == ":" then "Cons" else i) $ P.text $ show p)
 
 varId :: P N
 varId = var <|> parens operator'
@@ -422,7 +427,7 @@ valuePatternOpAtom = do
     f e op e' = appP [op, e, e']
 
     op :: P PatR
-    op = addPPos $ (\x -> PCon_ () x []) <$> operator'
+    op = addPPos $ (\x -> PCon_ () x []) <$> conoperator'
 
 valuePatternAtom :: P PatR
 valuePatternAtom
@@ -462,9 +467,15 @@ valueDef = addDPos $ do
    <|>
     try' "node definition" (do
       n <- valuePattern
+      n2 <- optional $ do
+          op <- addPos (,) operator'
+          n2 <- valuePattern
+          return (op, n2)
       localIndentation Gt $ do
         lookAhead $ operator "=" <|> operator "|"
-        return $ \e -> DValueDef $ ValueDef n $ alts 0 [compileWhereRHS e]
+        return $ case n2 of
+            Nothing -> \e -> DValueDef $ ValueDef n $ alts 0 [compileWhereRHS e]
+            Just (op, n2) -> PreValueDef op [n, n2]
     )
   localIndentation Gt $ do
     e <- whereRHS $ operator "="
