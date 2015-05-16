@@ -61,10 +61,11 @@ type family FragOps a
 type family JoinTupleType t1 t2
 
 data Vec (n :: Nat) a where
-  V2 :: Component a => a -> a -> Vec 2 a
-  V3 :: Component a => a -> a -> a -> Vec 3 a
-  V4 :: Component a => a -> a -> a -> a -> Vec 4 a
+  V2 :: a -> a -> Vec 2 a
+  V3 :: a -> a -> a -> Vec 3 a
+  V4 :: a -> a -> a -> a -> Vec 4 a
 
+axioms
   V2B :: Bool -> Bool -> Vec 2 Bool
   V3B :: Bool -> Bool -> Bool -> Vec 3 Bool
   V4B :: Bool -> Bool -> Bool -> Bool -> Vec 4 Bool
@@ -77,6 +78,35 @@ data Vec (n :: Nat) a where
   V2F :: Float -> Float -> Vec 2 Float
   V3F :: Float -> Float -> Float -> Vec 3 Float
   V4F :: Float -> Float -> Float -> Float -> Vec 4 Float
+
+class Component a where
+  vec2 :: a -> a -> Vec 2 a
+  vec3 :: a -> a -> a -> Vec 3 a
+  vec4 :: a -> a -> a -> a -> Vec 4 a
+
+instance Component Bool where -- ++ vectors TBool
+  vec2 = V2B
+  vec3 = V3B
+  vec4 = V4B
+
+instance Component Int where
+  vec2 = V2I
+  vec3 = V3I
+  vec4 = V4I
+
+instance Component Word where
+  vec2 = V2U
+  vec3 = V3U
+  vec4 = V4U
+
+instance Component Float where
+  vec2 = V2F
+  vec3 = V3F
+  vec4 = V4F
+
+instance Component      (Vec 2 Float)
+instance Component      (Vec 3 Float)
+instance Component      (Vec 4 Float)
 
 data Mat (i :: Nat) (j :: Nat) a where
   M22F :: Vec 2 Float -> Vec 2 Float -> Mat 2 2 Float
@@ -143,16 +173,6 @@ instance NumComponent   Float
 instance NumComponent   (Vec 2 Float)
 instance NumComponent   (Vec 3 Float)
 instance NumComponent   (Vec 4 Float)
-
-class Component a
-
-instance Component      Bool -- ++ vectors TBool
-instance Component      Int
-instance Component      Word
-instance Component      Float
-instance Component      (Vec 2 Float)
-instance Component      (Vec 3 Float)
-instance Component      (Vec 4 Float)
 
 class Floating a
 

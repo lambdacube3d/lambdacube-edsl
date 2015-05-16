@@ -867,21 +867,29 @@ reduceHNF (Exp exp) = case exp of
   where
     keep = return $ Exp exp
 
+newRVar = do
+    i <- get
+    modify (+1)
+    return $ ExpN $ "r" ++ show i
+
 -- TODO: make this more efficient (memoize reduced expressions)
-matchPattern :: Exp -> Pat -> ReduceM (Maybe TEnv)       -- Left: pattern match failure; Right Nothing: can't reduce
+matchPattern :: Exp -> Pat -> ReduceM (Maybe TEnv{-TODO: Subst-})       -- Left: pattern match failure; Right Nothing: can't reduce
 matchPattern e = \case
     Wildcard _ -> return $ Just mempty
     PVar _ v -> return $ Just $ singSubst v e
     PTuple ps -> reduceHNF e >>= \e -> case e of
         ETuple xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
         _ -> return Nothing
-    PCon _ c ps -> getApp [] e >>= \case
-        Nothing -> return Nothing
+    PCon t c ps -> getApp [] e >>= \case
         Just (xx, xs) -> case xx of
           EVar c'
             | c == c' -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
             | otherwise -> reduceFail $ "constructors doesn't match: " ++ ppShow (c, c')
           q -> error $ "match rj: " ++ ppShow q
+        Nothing | ppShow c == "V3" {-hack!-} -> do
+            vs <- replicateM 3 newRVar
+            return $ Just $ TEnv $ Map.fromList $ zip vs $ map (\n -> ISubst $ TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V3x","V3y","V3z"]
+        _ -> return Nothing
     p -> error $ "matchPattern: " ++ ppShow p
   where
     getApp acc e = reduceHNF e >>= \e -> case e of
@@ -949,7 +957,7 @@ instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b)
         EApp_ k a b -> pApp p a b
         ETyApp_ k a b -> pTyApp p a b
         ETuple_ a -> tupled $ map pShow a
---        ELam_ p b -> "(\\" <> pShow p <+> "->" <+> pShow b <> ")"
+        ELam_ p b -> "(\\" <> pShow p <+> "->" <+> pShow b <> ")"
         ETypeSig_ b t -> pShow b <+> "::" <+> pShow t
         ELet_ a b c -> "let" <+> pShow a <+> "=" <+> pShow b <+> "in" </> pShow c
         ENamedRecord_ n xs -> pShow n <+> showRecord xs
