@@ -898,6 +898,7 @@ matchPattern e = \case
 
 evalPrimFun :: String -> [Exp] -> Exp
 evalPrimFun "primIntToFloat" [EInt i] = EFloat $ fromIntegral i
+evalPrimFun "primNegateFloat" [EFloat i] = EFloat $ negate i
 evalPrimFun x args = error $ "evalPrimFun: " ++ x ++ " " ++ ppShow args
 
 -------------------------------------------------------------------------------- full reduction

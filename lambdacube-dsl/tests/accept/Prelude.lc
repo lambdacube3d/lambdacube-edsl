@@ -105,6 +105,7 @@ instance Signed         Float
 class Num a where
   fromInt :: Int -> a
   compare :: a -> a -> Ordering
+  negate :: a -> a
 
 axioms
   primIntToWord  :: Int -> Word
@@ -112,16 +113,22 @@ axioms
   primCompareInt   :: Int   -> Int   -> Ordering
   primCompareWord  :: Word  -> Word  -> Ordering
   primCompareFloat :: Float -> Float -> Ordering
+  primNegateInt   :: Int   -> Int
+  primNegateWord  :: Word  -> Word
+  primNegateFloat :: Float -> Float
 
 instance Num Int where
   fromInt = id
   compare = primCompareInt
+  negate = primNegateInt
 instance Num Word where
   fromInt = primIntToWord
   compare = primCompareWord
+  negate = primNegateWord
 instance Num Float where
   fromInt = primIntToFloat
   compare = primCompareFloat
+  negate = primNegateFloat
 
 class Integral a
 
@@ -481,7 +488,4 @@ colorImage1 = ColorImage @1
 colorImage2 = ColorImage @2
 
 depthImage1 = DepthImage @1
-
---negate = PrimNeg
-negate = PrimSubS 0
 
