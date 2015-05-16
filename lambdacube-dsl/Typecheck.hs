@@ -723,9 +723,10 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
         return $ (,) (Set.fromList [n, tv]) exp
     (fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
     the <- asks thunkEnv
-    let th = subst the
+    let th = th' where
+         th' = subst the
            $ subst
-                ( singSubst n $ foldl (TApp (error "et")) (TVar (error "ev") n) $ map (\(n, t) -> EType $ TVar t n) fs
+                ( singSubst n $ foldl (TApp (error "et")) th' $ map (\(n, t) -> EType $ TVar t n) fs
                 )
            $ flip (foldr eLam) fs exp
     return (singSubst n th, withTyping $ Map.singleton n f)
