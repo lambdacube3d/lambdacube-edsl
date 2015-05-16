@@ -876,6 +876,10 @@ newRVar = do
 matchPattern :: Exp -> Pat -> ReduceM (Maybe TEnv{-TODO: Subst-})       -- Left: pattern match failure; Right Nothing: can't reduce
 matchPattern e = \case
     Wildcard _ -> return $ Just mempty
+    PLit l -> reduceHNF e >>= \case
+        ELit l'
+            | l == l' -> return $ Just mempty
+            | otherwise -> reduceFail $ "literals doesn't match: " ++ ppShow (l, l')
     PVar _ v -> return $ Just $ singSubst v e
     PTuple ps -> reduceHNF e >>= \e -> case e of
         ETuple xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)

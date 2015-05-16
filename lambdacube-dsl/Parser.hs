@@ -433,6 +433,7 @@ valuePatternOpAtom = do
 valuePatternAtom :: P PatR
 valuePatternAtom
     =   addPPos (Wildcard_ () <$ operator "_")
+    <|> addPPos (PLit_ <$> literal)
     <|> addPPos (PAt_ <$> try' "at pattern" (var <* operator "@") <*> valuePatternAtom)
     <|> addPPos (PVar_ () <$> var)
     <|> addPPos ((\c -> PCon_ () c []) <$> try dataConstructor)
@@ -595,10 +596,16 @@ compareFixity ((dir, i), op) ((dir', i'), op')
 expressionAtom :: P PrecExpR
 expressionAtom = do
     e <- expressionAtom_
+    sw <- optional $ do
+        operator "%"
+        ident lcIdents
     ts <- many $ do
         operator "@"
         typeAtom
-    return $ foldl eTyApp e ts
+    return $ foldl eTyApp (maybe id desugarSwizzling sw e) ts
+
+desugarSwizzling :: [Char] -> ExpR -> ExpR
+desugarSwizzling cs e = eTuple mempty [eApp (EFieldProjR' mempty $ ExpN [c]) e | c <- cs]
 
 eTyApp a b = ETyAppR (a <-> b) a b
 
