@@ -835,8 +835,8 @@ reduceHNF (Exp exp) = case exp of
 
     PrimFun (ExpN f) acc 0 -> evalPrimFun f <$> mapM reduceEither (reverse acc)
 
-    ExtractInstance acc [] n m -> reduceHNF (acc Map.! n) >>= \case
-        Witness _ (WInstance im) -> reduceHNF $ (im Map.! m) acc
+    ExtractInstance acc [] n m -> reduceHNF (fromMaybe (error "impossible") $ Map.lookup n acc) >>= \case
+        Witness t (WInstance im) -> reduceHNF $ (fromMaybe (error $ show $ "member" <+> pShow m <+> "is not defined for" <+> pShow t) $ Map.lookup m im) acc
         x -> error $ "expected instance witness instead of " ++ ppShow x
 
     ENext_ _ -> reduceFail "? err"
@@ -889,6 +889,9 @@ matchPattern e = \case
         Nothing | ppShow c == "V3" {-hack!-} -> do
             vs <- replicateM 3 newRVar
             return $ Just $ TEnv $ Map.fromList $ zip vs $ map (\n -> ISubst $ TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V3x","V3y","V3z"]
+        Nothing | ppShow c == "V4" {-hack!-} -> do
+            vs <- replicateM 4 newRVar
+            return $ Just $ TEnv $ Map.fromList $ zip vs $ map (\n -> ISubst $ TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V4x","V4y","V4z","V4v"]
         _ -> return Nothing
     p -> error $ "matchPattern: " ++ ppShow p
   where

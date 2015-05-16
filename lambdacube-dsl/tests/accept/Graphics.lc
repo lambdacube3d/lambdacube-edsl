@@ -22,8 +22,8 @@ otherwise = True
 clamp' = PrimClamp
 sin' = PrimSin
 cos' = PrimCos
-zero' = PrimZero
-one' = PrimOne
+zero' = zeroComp
+one' = oneComp
 normalize' = PrimNormalize
 texture' = PrimTexture
 

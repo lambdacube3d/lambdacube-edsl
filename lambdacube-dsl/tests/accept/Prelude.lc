@@ -83,8 +83,12 @@ class Component a where
   vec2 :: a -> a -> Vec 2 a
   vec3 :: a -> a -> a -> Vec 3 a
   vec4 :: a -> a -> a -> a -> Vec 4 a
+  zeroComp :: a
+  oneComp :: a
+--  PrimZero, PrimOne :: {- (Component a) => -- TODO -} a
 
-instance Component Bool where -- ++ vectors TBool
+
+instance Component Bool where
   vec2 = V2B
   vec3 = V3B
   vec4 = V4B
@@ -104,9 +108,18 @@ instance Component Float where
   vec3 = V3F
   vec4 = V4F
 
-instance Component      (Vec 2 Float)
-instance Component      (Vec 3 Float)
-instance Component      (Vec 4 Float)
+instance Component (Vec 2 Float) where
+instance Component (Vec 3 Float) where
+  zeroComp = V3F 0.0 0.0 0.0
+  oneComp = V3F 1.0 1.0 1.0
+instance Component (Vec 4 Float) where
+  zeroComp = V4F 0.0 0.0 0.0 0.0
+  oneComp = V4F 1.0 1.0 1.0 1.0
+
+instance Component (Vec 2 Bool) where
+instance Component (Vec 3 Bool) where
+instance Component (Vec 4 Bool) where
+  oneComp = V4B True True True True
 
 data Mat (i :: Nat) (j :: Nat) a where
   M22F :: Vec 2 Float -> Vec 2 Float -> Mat 2 2 Float
@@ -415,8 +428,6 @@ data Output where
   ScreenOut           :: FrameBuffer a b -> Output
 
 axioms
-  PrimZero, PrimOne :: {- (Component a) => -- TODO -} a
-
   -- * Primitive Functions *
   -- Arithmetic Functions (componentwise)
 

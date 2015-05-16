@@ -103,6 +103,7 @@ genFragmentGLSL s e@(ELam i fragOut) = unlines $ execWriter $ do
   let o = case fragOut of
         A1 "FragmentOutRastDepth" o -> o
         A1 "FragmentOut" o -> o
+        _ -> error $ "genFragmentGLSL fragOut " ++ ppShow fragOut
       makeSubst (PVar _ (showN -> x)) [(_,_,n)] = Map.singleton x n
       makeSubst (PTuple l) x = Map.fromList $ go l x where
         go [] [] = []
@@ -141,6 +142,7 @@ genGLSLSubst s e = case e of
   A1 "NoPerspecitve" a -> genGLSLSubst s a
   A1 "Const" a -> genGLSLSubst s a
   A4 "V4F" a b c d -> functionCall s "vec4" [a,b,c,d]
+  A4 "V4" a b c d -> functionCall s "vec4" [a,b,c,d]       -- TODO!!!
   --ETuple a -> ["*TUPLE*"]
   -- Primitive Functions
   A2 "PrimMulMatVec" a b -> binOp s "*" a b
