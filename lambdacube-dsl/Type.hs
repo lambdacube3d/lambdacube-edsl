@@ -826,25 +826,26 @@ pattern TFJoinTupleType a b     = TypeFunS "JoinTupleType" [a, b]
 
 -------------------------------------------------------------------------------- reduce to Head Normal Form
 
-reduceHNF :: Exp -> Either String Exp'       -- Left: pattern match failure
+type ReduceM = Except String
+
+reduceFail = throwError
+
+reduceHNF :: Exp -> ReduceM Exp       -- Left: pattern match failure
 reduceHNF (Exp exp) = case exp of
 
-    PrimFun (ExpN f) acc 0 -> Right $ peelThunk $ evalPrimFun f $ map reduce $ reverse acc
+    PrimFun (ExpN f) acc 0 -> return $ evalPrimFun f $ map reduce $ reverse acc
 
-    ExtractInstance acc [] n m -> reduceHNF' (acc Map.! n) $ \case
-        Witness_ _ (WInstance im) -> reduceHNF $ (im Map.! m) acc
+    ExtractInstance acc [] n m -> reduceHNF (acc Map.! n) >>= \case
+        Witness _ (WInstance im) -> reduceHNF $ (im Map.! m) acc
         x -> error $ "expected instance witness instead of " ++ ppShow x
 
-    ENext_ _ -> Left "? err"
-    EAlts_ 0 (map reduceHNF -> es) -> case [e | Right e <- es] of
-        (thu:_) -> Right thu
-        [] -> error $ "pattern match failure " ++ show [err | Left err <- es]
-    ELet_ p x e -> case matchPattern (recEnv p x) p of
-        Left err -> Left err
-        Right (Just m') -> reduceHNF $ subst m' e
-        Right _ -> keep
+    ENext_ _ -> reduceFail "? err"
+    EAlts_ 0 (map reduceHNF -> es) -> msum $ es -- ++ error ("pattern match failure " ++ show [err | Left err <- es])
+    ELet_ p x e -> matchPattern (recEnv p x) p >>= \case
+        Just m' -> reduceHNF $ subst m' e
+        _ -> keep
 
-    EApp_ _ f x -> reduceHNF' f $ \f -> case f of
+    EApp_ _ f x -> reduceHNF f >>= \(Exp f) -> case f of
 
         PrimFun f acc i
             | i > 0 -> reduceHNF $ Exp $ PrimFun f (x: acc) (i-1)
@@ -853,48 +854,40 @@ reduceHNF (Exp exp) = case exp of
         ExtractInstance acc (j:js) n m -> reduceHNF $ Exp $ ExtractInstance (Map.insert j x acc) js n m
 
         EAlts_ i es | i > 0 -> reduceHNF $ Exp $ EAlts_ (i-1) $ Exp . (\f -> EApp_ (error "eae2") f x) <$> es
-        EFieldProj_ _ fi -> reduceHNF' x $ \case
-            ERecord_ fs -> case [e | (fi', e) <- fs, fi' == fi] of
+        EFieldProj_ _ fi -> reduceHNF x >>= \case
+            ERecord fs -> case [e | (fi', e) <- fs, fi' == fi] of
                 [e] -> reduceHNF e
             _ -> keep
 
-        ELam_ p e -> case matchPattern x p of
-            Left err -> Left err
-            Right (Just m') -> reduceHNF $ subst m' e
-            Right _ -> keep
-
+        ELam_ p e -> matchPattern x p >>= \case
+            Just m' -> reduceHNF $ subst m' e
+            _ -> keep
         _ -> keep
     _ -> keep
   where
-    keep = Right exp
-
-reduceHNF' :: Exp -> (Exp' -> Either String b) -> Either String b
-reduceHNF' x f = case reduceHNF x of
-    Left e -> Left e
-    Right t -> f t
+    keep = return $ Exp exp
 
 -- TODO: make this more efficient (memoize reduced expressions)
-matchPattern :: Exp -> Pat -> Either String (Maybe TEnv)       -- Left: pattern match failure; Right Nothing: can't reduce
+matchPattern :: Exp -> Pat -> ReduceM (Maybe TEnv)       -- Left: pattern match failure; Right Nothing: can't reduce
 matchPattern e = \case
-    Wildcard _ -> Right $ Just mempty
-    PVar _ v -> Right $ Just $ singSubst v e
-    PTuple ps -> reduceHNF' e $ \e -> case e of
-        ETuple_ xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
-        _ -> Right Nothing
-    PCon _ c ps -> case getApp [] e of
-        Left err -> Left err
-        Right Nothing -> Right Nothing
-        Right (Just (xx, xs)) -> case xx of
-          EVar_ _ c'
+    Wildcard _ -> return $ Just mempty
+    PVar _ v -> return $ Just $ singSubst v e
+    PTuple ps -> reduceHNF e >>= \e -> case e of
+        ETuple xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
+        _ -> return Nothing
+    PCon _ c ps -> getApp [] e >>= \case
+        Nothing -> return Nothing
+        Just (xx, xs) -> case xx of
+          EVar c'
             | c == c' -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
-            | otherwise -> Left $ "constructors doesn't match: " ++ ppShow (c, c')
+            | otherwise -> reduceFail $ "constructors doesn't match: " ++ ppShow (c, c')
           q -> error $ "match rj: " ++ ppShow q
     p -> error $ "matchPattern: " ++ ppShow p
   where
-    getApp acc e = reduceHNF' e $ \e -> case e of
-        EApp_ _ a b -> getApp (b: acc) a
-        EVar_ _ n | isConstr n -> Right $ Just (e, acc)
-        _ -> Right Nothing
+    getApp acc e = reduceHNF e >>= \e -> case e of
+        EApp a b -> getApp (b: acc) a
+        EVar n | isConstr n -> return $ Just (e, acc)
+        _ -> return Nothing
 
 evalPrimFun :: String -> [Exp] -> Exp
 evalPrimFun "primIntToFloat" [EInt i] = EFloat $ fromIntegral i
@@ -904,15 +897,14 @@ evalPrimFun x args = error $ "evalPrimFun: " ++ x ++ " " ++ ppShow args
 -------------------------------------------------------------------------------- full reduction
 
 reduce :: Exp -> Exp
-reduce = either (error "pattern match failure.") id . reduceEither
+reduce = either (error "pattern match failure.") id . runExcept . reduceEither
 
-reduceEither :: Exp -> Either String Exp
-reduceEither e = reduceHNF' e $ \e -> Right $ case e of
-    EAlts_ i es -> case [e | Right e <- reduceEither <$> es] of     -- simplification
+reduceEither :: Exp -> ReduceM Exp
+reduceEither e = reduceHNF e >>= \e -> return $ case e of
+    EAlts i es -> case [e | Right e <- runExcept . reduceEither <$> es] of     -- simplification
         [e] -> e
         es -> EAlts i es
-    e -> Exp $ mapExp' reduce id id e
-
+    Exp e -> Exp $ mapExp' reduce id id e
 
 -------------------------------------------------------------------------------- Pretty show instances
 
@@ -952,9 +944,9 @@ instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b)
         ELit_ l -> pShowPrec p l
         EVar_ k v -> pShowPrec p v
         EApp_ k a b -> pApp p a b
-        ETyApp_ k a b -> pTyApp p a b -- "'" <> pShowPrec p t
+        ETyApp_ k a b -> pTyApp p a b
         ETuple_ a -> tupled $ map pShow a
-        ELam_ p b -> "\\" <> pShow p <+> "->" <+> pShow b
+--        ELam_ p b -> "(\\" <> pShow p <+> "->" <+> pShow b <> ")"
         ETypeSig_ b t -> pShow b <+> "::" <+> pShow t
         ELet_ a b c -> "let" <+> pShow a <+> "=" <+> pShow b <+> "in" </> pShow c
         ENamedRecord_ n xs -> pShow n <+> showRecord xs
@@ -977,7 +969,7 @@ instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b)
 instance PShow Exp where
     pShowPrec p e = case getLams e of
         ([], Exp e) -> pShowPrec p e
-        (ps, Exp e) -> "\\" <> hsep (map pShow ps) <+> "->" <+> pShow e
+        (ps, Exp e) -> pParens (p > 0) $ "\\" <> hsep (map (pShowPrec 10) ps) <+> "->" <+> pShow e
       where
         getLams (ELam p e) = (p:) *** id $ getLams e
         getLams e = ([], e)
