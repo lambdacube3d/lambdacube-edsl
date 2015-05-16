@@ -31,7 +31,7 @@ import ParserUtil
 
 -------------------------------------------------------------------------------- parser specific types
 
-type P = P_ PrecMap
+type P = P_ ()
 
 type PreDefinitionR = DefinitionR
 type PrecExpR = ExpR
@@ -175,7 +175,7 @@ moduleDef fname = do
         , const [] <$> typeSynonym
         , (:[]) <$> typeClassDef
         , (:[]) <$> valueDef
-        , const [] <$> fixityDef
+        , fixityDef
         , (:[]) <$> typeClassInstanceDef
         ])
     return $ Module
@@ -361,6 +361,7 @@ infixl 9 <->
 a <-> b = getTag a `mappend` getTag b
 
 addPPos = addPos PatR
+addEPos = addPos ExpR
 
 addPos :: (Range -> a -> b) -> P a -> P b
 addPos f m = do
@@ -399,15 +400,15 @@ typeClassInstanceDef = addDPos $ do
         valueDef
     return $ PreInstanceDef c t $ fromMaybe [] ds
 
-fixityDef :: P ()
+fixityDef :: P [PreDefinitionR]
 fixityDef = do
   dir <-    Nothing      <$ keyword "infix" 
         <|> Just FDLeft  <$ keyword "infixl"
         <|> Just FDRight <$ keyword "infixr"
   localIndentation Gt $ do
     i <- natural
-    ns <- sepBy1 operator' comma
-    modifyState $ Map.union $ Map.fromList [(n, (dir, fromIntegral i)) | n <- ns]
+    ns <- sepBy1 (addPos (,) (operator' <|> backquoteOp)) comma
+    return [(p, PrecDef n (dir, fromIntegral i)) | (p, n) <- ns]
 
 undef msg = (const (error $ "not implemented: " ++ msg) <$>)
 
@@ -558,40 +559,28 @@ eTyping :: PrecExpR -> TyR -> PrecExpR
 eTyping a b = ETypeSigR' (a <-> b) a b
 
 expressionOpAtom :: P PrecExpR
-expressionOpAtom = do
-    e <- exp
-    calcPrec e =<< many ((,) <$> op <*> exp)
+expressionOpAtom = addEPos $ EPrec_ <$> exp <*> opExps
   where
+    opExps = do
+        do
+            o <- op
+            expression' o
+      <|> return []
+
+    expression' o = do
+            (e, o') <- try $ (,) <$> exp <*> op
+            es <- expression' o'
+            return $ (o, e): es
+        <|> do
+            e <- expression
+            return [(o, e)]
+
     exp = application <$> some expressionAtom
     --         a * b + c * d     -->     |$| a;  |$| a |*| b;  |$| a*b |+| c;  |$| a*b |+| c |*| d;  |$| a*b |+| c*d;  a*b+c*d
-    calcPrec e es = do
-        ps <- getState
-        compileOps ps [((Nothing, -1), undefined, e)] es
-
-    f e op e' = application [op, e, e']
-
     op = addPos eVar $ operator'
-        <|> try' "backquote operator" ({-runUnspaced-} ({-Unspaced-} (operator "`") *> {-Unspaced-} (var <|> upperCaseIdent) <* {-Unspaced-} (operator "`")))
+        <|> backquoteOp
 
-compileOps _ [(_, _, e)] [] = return e
-compileOps ps acc [] = compileOps ps (shrink acc) []
-compileOps ps acc@((p, g, e1): ee) es_@((op@(EVarR' _ n), e'): es) = case compareFixity (pr, op) (p, g) of
-    Right GT -> compileOps ps ((pr, op, e'): acc) es
-    Right LT -> compileOps ps (shrink acc) es_
-    Left err -> error $ show err --throwErrorTCM err
-  where
-    pr = fromMaybe (Just FDLeft, 9) $ Map.lookup n ps
-
-shrink ((_, op, e): (pr, op', e'): es) = (pr, op', eApp (eApp op e') e): es
-
-compareFixity ((dir, i), op) ((dir', i'), op')
-    | i > i' = Right GT
-    | i < i' = Right LT
-    | otherwise = case (dir, dir') of
-        (Just FDLeft, Just FDLeft) -> Right LT
-        (Just FDRight, Just FDRight) -> Right GT
-        _ -> Left $ "fixity error:" P.<+> P.pShow (op, op')
-
+backquoteOp = try' "backquote operator" ({-runUnspaced-} ({-Unspaced-} (operator "`") *> {-Unspaced-} (var <|> upperCaseIdent) <* {-Unspaced-} (operator "`")))
 
 expressionAtom :: P PrecExpR
 expressionAtom = do
@@ -658,7 +647,11 @@ eVar p n = EVarR' p n
 parseLC :: FilePath -> ErrorT IO (String, ModuleR)
 parseLC fname = do
   src <- lift $ readFile fname
-  let setName = setPosition =<< flip setSourceName fname <$> getPosition
-  case runParser (setName *> whiteSpace *> moduleDef fname <* eof) mempty "" (mkIndentStream 0 infIndentation True Ge $ I.mkCharIndentStream src) of
+  let p = do
+        setPosition =<< flip setSourceName fname <$> getPosition
+        whiteSpace
+        moduleDef fname <* eof
+      res = runParser p mempty "" $ mkIndentStream 0 infIndentation True Ge $ I.mkCharIndentStream src
+  case res of
     Left err -> throwParseError err
     Right e  -> return (src, e)

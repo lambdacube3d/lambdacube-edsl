@@ -1,5 +1,11 @@
 module Prelude where
 
+infixr 9 .
+infixl 7 `PrimMulMatVec`, `PrimDot`
+infixr 3 ***
+infixr 5 :
+infixr 0 $
+
 id x = x
 ($) = \f1 x -> f1 x
 (.) = \f2 g x -> f2 (g x)

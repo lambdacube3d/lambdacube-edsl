@@ -47,6 +47,7 @@ import Text.Parsec.Pos
 
 import Pretty
 import Type
+import Parser (application)
 
 --------------------------------------------------------------------------------
 
@@ -502,6 +503,31 @@ dependentVars ie s = cycle mempty s
         a --> b = \s -> if Set.null $ a `Set.intersection` s then mempty else b
         a <-> b = (a --> b) <> (b --> a)
 
+--------------------------------------------------------------------------------
+
+calcPrec ps e es = do
+    compileOps [((Nothing, -1), undefined, e)] es
+  where
+    compileOps [(_, _, e)] [] = return e
+    compileOps acc [] = compileOps (shrink acc) []
+    compileOps acc@((p, g, e1): ee) es_@((op@(EVarR' _ n), e'): es) = case compareFixity (pr, op) (p, g) of
+        Right GT -> compileOps ((pr, op, e'): acc) es
+        Right LT -> compileOps (shrink acc) es_
+        Left err -> error $ show err --throwErrorTCM err
+      where
+        pr = fromMaybe --(error $ "no prec for " ++ ppShow n)
+                       (Just FDLeft, 9)
+                       $ Map.lookup n ps
+
+    shrink ((_, op, e): (pr, op', e'): es) = (pr, op', application [op, e', e]): es
+
+    compareFixity ((dir, i), op) ((dir', i'), op')
+        | i > i' = Right GT
+        | i < i' = Right LT
+        | otherwise = case (dir, dir') of
+            (Just FDLeft, Just FDLeft) -> Right LT
+            (Just FDRight, Just FDRight) -> Right GT
+            _ -> Left $ "fixity error:" <+> pShow (op, op')
 
 --------------------------------------------------------------------------------
 
@@ -556,6 +582,9 @@ inferTyping = inferType_ False
 
 inferType_ :: Bool -> ExpR -> TCMS Exp
 inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" <+> pShow e) $ appSES $ case e of
+    EPrec_ e es -> do
+        ps <- asks precedences
+        inferType_ allowNewVar =<< calcPrec ps e es
     -- hack
     ENamedRecord_ n (unzip -> (fs, es)) ->
         inferTyping $ foldl (EAppR' mempty) (EVarR' mempty n) es
@@ -750,6 +779,7 @@ inferDef' ty (ValueDef p@(PVar' _ n) e) = do
 inferDefs :: [DefinitionR] -> TCM PolyEnv
 inferDefs [] = ask
 inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
+    PrecDef n p -> local (\pe -> pe {precedences = Map.insert n p $ precedences pe}) cont
     DValueDef d -> do
         (e, f) <- addRange r (inferDef d)
         addPolyEnv (emptyPolyEnv {thunkEnv = e}) $ f cont

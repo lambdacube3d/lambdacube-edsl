@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE LambdaCase #-}
 module Pretty
     ( module Pretty
     , Doc
@@ -68,6 +69,11 @@ instance (PShow a, PShow b, PShow c) => PShow (a, b, c) where
 
 instance PShow a => PShow [a] where
     pShowPrec p = brackets . sep . punctuate comma . map pShow
+
+instance PShow a => PShow (Maybe a) where
+    pShowPrec p = \case
+        Nothing -> "Nothing"
+        Just x -> "Just" <+> pShow x
 
 instance PShow a => PShow (Set a) where
     pShowPrec p = pShowPrec p . Set.toList

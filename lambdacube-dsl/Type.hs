@@ -167,6 +167,9 @@ data Exp_ k v t p b
     | TRecord_ (Map v b)
     | ConstraintKind_ (Constraint' v b)        -- flatten?
     | Witness_ k (Witness)      -- TODO: make this polymorphic?
+
+    -- aux
+    | EPrec_ b [(b, b)]     -- before precedence calculation
     deriving (Eq,Ord,Functor,Foldable,Traversable) -- TODO: elim Eq instance
 
 
@@ -498,6 +501,7 @@ data Definition
     | ClassDef ClassName [(Name, TyR)] [TypeSig Name TyR]
     | InstanceDef ClassName TyR [ValueDef PatR ExpR]
     | TypeFamilyDef Name [(Name, TyR)] TyR
+    | PrecDef Name Fixity
 -- used only during parsing
     | PreValueDef (Range, EName) [PatR] WhereRHS
     | DTypeSig (TypeSig EName TyR)
@@ -959,6 +963,7 @@ instance PShow Witness where
 --        Exp k i -> pInfix (-2) "::" p i k
 instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b) where
     pShowPrec p = \case
+        EPrec_ e es -> pApps p e $ concatMap (\(a, b) -> [a, b]) es
         ELit_ l -> pShowPrec p l
         EVar_ k v -> pShowPrec p v
         EApp_ k a b -> pApp p a b
@@ -1051,6 +1056,12 @@ instance PShow Definition where
         DTypeSig (TypeSig n _) -> "typesig" <+> pShow n
         PreInstanceDef n _ _ -> "pre instance" <+> pShow n
         ForeignDef n _ -> "foreign" <+> pShow n
+        PrecDef n p -> "precdef" <+> pShow n
+
+instance PShow FixityDir where
+    pShowPrec p = \case
+        FDLeft -> "infixl"
+        FDRight -> "infixr"
 
 -------------------------------------------------------------------------------- WriterT'
 
