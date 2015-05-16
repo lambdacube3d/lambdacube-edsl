@@ -682,13 +682,12 @@ inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" 
 
 --------------------------------------------------------------------------------
 
--- TODO: review applications of this
 typingToTy :: TEnv -> Exp -> Exp
 typingToTy env ty = foldr forall_ ty $ orderEnv env
   where
     forall_ (n, k) t = Forall n k t
 
-    -- TODO: make more efficient
+    -- TODO: make more efficient?
     orderEnv :: TEnv -> [(IdN, Exp)]
     orderEnv env = f mempty [(n, t) | (n, ISig t) <- Map.toList $ getTEnv env]
       where
@@ -760,16 +759,14 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
            $ flip (foldr eLam) fs exp
     return (singSubst n th, withTyping $ Map.singleton n f)
 
--- non recursive
 inferDef' :: InstType -> ValueDefR -> TCM (Env' (Env' Exp -> Exp))
 inferDef' ty (ValueDef p@(PVar' _ n) e) = do
-    (se, (exp, fs)) <- runWriterT'' $ removeMonoVars $ do
+    (se, (exp, fs)) <- runWriterT'' $ do
         exp <- inferTyping e
         (fn, t) <- toTCMS ty
         addUnif t $ tyOf exp
-        return $ (,) (mempty{-Set.fromList [n, tv]-}) (exp, fn)
+        return (exp, fn)
     (fs', f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
-    -- TODO: unify fs - _fs
     the <- asks thunkEnv
     let th e = subst the
             $ subst (toTEnv (Subst e) <> se)
@@ -779,7 +776,7 @@ inferDef' ty (ValueDef p@(PVar' _ n) e) = do
 inferDefs :: [DefinitionR] -> TCM PolyEnv
 inferDefs [] = ask
 inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
-    PrecDef n p -> local (\pe -> pe {precedences = Map.insert n p $ precedences pe}) cont
+    PrecDef n p -> addPolyEnv (emptyPolyEnv {precedences = Map.singleton n p}) cont
     DValueDef d -> do
         (e, f) <- addRange r (inferDef d)
         addPolyEnv (emptyPolyEnv {thunkEnv = e}) $ f cont
@@ -822,14 +819,14 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
             return (singSubst n $ Exp $ ExtractInstance mempty (map fst fs) find n, Map.singleton n t)
         addPolyEnv (emptyPolyEnv {thunkEnv = mconcat ths, classDefs = Map.singleton con $ ClassD $ mconcat cdefs})
             $ withTyping (mconcat cdefs) cont
-    InstanceDef c t xs -> do  -- TODO: check types
+    InstanceDef c t xs -> do
         (ClassD cs) <- lookEnv'' c >>= maybe (throwErrorTCM "can't find class") return
         (ce, t) <- runWriterT'' $ inferType t     -- TODO: ce
-        xs <- local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t Refl) (Map.insert t Refl)) c $ instanceDefs pe}) -- fake
+        xs <- addPolyEnv (emptyPolyEnv {instanceDefs = Map.singleton c $ Map.singleton t Refl}) -- fake
                 $ forM xs $ \x@(ValueDef (PVar' _ n)  _) -> do
             inferDef' (cs Map.! n $ "instance") x
         let w = WInstance $ mconcat xs
-        local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t w) (Map.insert t w)) c $ instanceDefs pe}) $ do
+        addPolyEnv (emptyPolyEnv {instanceDefs = Map.singleton c $ Map.singleton t w}) $ do
             cont
     _ -> error $ "inferDefs: " ++ ppShow d
 
@@ -843,51 +840,4 @@ inference_ penv@PolyEnv{..} Module{..} = flip runReaderT penv $ diffEnv <$> infe
         (p Map.\\ precedences)
         (TEnv $ th Map.\\ getTEnv thunkEnv)
         (tf Map.\\ typeFamilies)
-
-{-
-class Num' a where
-    fromInt' :: (Read a, Show x) => Int -> [x] -> a
-
-data Dict (c :: Constraint) = c => D
-
-fromInt'' :: forall a x . (Num' a, Read a, Show x) => Int -> [x] -> a
-fromInt'' = fromInt_ (D :: Dict (Num' a))
-
-fromInt_ :: Dict (Num' a) -> forall a x . (Num' a, Read a, Show x) => Int -> [x] -> a
-fromInt_ D = fromInt'
-
-primIntToFloat :: (Show c) => Int -> c -> Float
-primIntToFloat = undefined
-
-instance Num' Float where
-    fromInt' = primIntToFloat
-
------------------------------------------------------
-given:  a :: *, cn :: Num a, cc :: Read a, x :: *, cx :: Show x  |  Int -> [x] -> a
-given:             x :: *, cx :: Show x  |  Int -> [x] -> Float
-
-needed:            c :: *,  cd :: Show c    | Int -> c -> Float
-
-result:
-    c  :=  [x]
-    cd :=  dictShowList cx
-
-
-needed:            c = [x], x :: *, cd = dictShowList cx, cx :: Show x    | Int -> [x] -> Float
-
----------------------------------------
-
-    fromInt' 1 [True]           :: Float
-
-    fromInt' Float (cn :: Num Float) (cc :: Read Float) Bool (cx :: Show Bool) 1 [True]
-
-    (ExtractInstance {} [a, cn, cc, x, cx] cn "fromInt'") Float (cn :: Num Float) (cc :: Read Float) Bool (cx :: Show Bool) 1 [True]
-
-    (ExtractInstance {a = Float, cn :: Num Float, cc :: Read Float, x = Bool, cx :: Show Bool} [] cn "fromInt'") 1 [True]
-
-    ((Num Float -> fromInt') {a = Float, cn :: Num Float, cc :: Read Float, x = Bool, cx :: Show Bool}) 1 [True]
-
-    primIntToFloat [Bool] (dictShowList dictShowBool) 1 [True]
-
--}
 
