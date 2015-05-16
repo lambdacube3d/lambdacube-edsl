@@ -129,10 +129,14 @@ mapConstraint nf af = \case
 data TypeFun n a = TypeFun n [a]
     deriving (Eq,Ord,Functor,Foldable,Traversable)
 
-data Witness b
+data Witness
     = Refl
-    | WInstance (Env b)
-    deriving (Eq,Ord,Functor,Foldable,Traversable)
+    | WInstance (Env (Env Exp -> Exp))
+--    deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance Eq Witness where a == b = error "Eq Witness"
+instance Ord Witness where a `compare` b = error "Ord Witness"
+
 
 -------------------------------------------------------------------------------- expressions
 
@@ -151,7 +155,7 @@ data Exp_ k v t p b
     | EFieldProj_ k Name
     | EAlts_     Int [b]  -- function alternatives; Int: arity
     | ENext_     k        -- go to next alternative
-    | ExtractInstance [b] Int Name
+    | ExtractInstance (Env b) [Name] Name Name
     | PrimFun Name [b] Int
 
     -- was types
@@ -162,8 +166,10 @@ data Exp_ k v t p b
     | TTuple_  [b]
     | TRecord_ (Map v b)
     | ConstraintKind_ (Constraint' v b)        -- flatten?
-    | Witness_ k (Witness Exp)      -- TODO: make this polymorphic?
+    | Witness_ k (Witness)      -- TODO: make this polymorphic?
     deriving (Eq,Ord,Functor,Foldable,Traversable) -- TODO: elim Eq instance
+
+
 
 mapExp_ :: Ord v' => (k -> k') -> (v -> v') -> (t -> t') -> (p -> p') -> Exp_ k v t p b -> Exp_ k' v' t' p' b
 mapExp_ kf vf tf f = \case
@@ -180,7 +186,7 @@ mapExp_ kf vf tf f = \case
     EAlts_     x y     -> EAlts_ x y
     ENext_ k           -> ENext_ (kf k)
     ETyApp_ k b t      -> ETyApp_ (kf k) b $ tf t
-    ExtractInstance i j n -> ExtractInstance i j n
+    ExtractInstance i j n m -> ExtractInstance i j n m
     PrimFun a b c      -> PrimFun a b c
     Star_              -> Star_
     TCon_    k v       -> TCon_ (kf k) (vf v)
@@ -702,7 +708,7 @@ type InstEnv = Env' InstType'
 
 type PrecMap = Env' Fixity
 
-type InstanceDefs = Env' (Map Exp (Witness Exp))
+type InstanceDefs = Env' (Map Exp Witness)
 
 emptyPolyEnv :: PolyEnv
 emptyPolyEnv = PolyEnv mempty mempty mempty mempty mempty mempty
@@ -754,7 +760,7 @@ type TCM = TCMT Identity
 type TCMS = TypingT TCM
 
 toTCMS :: InstType -> TCMS ([Exp], Exp)
-toTCMS = mapWriterT' $ lift . lift --mapStateT lift
+toTCMS = mapWriterT' $ lift . lift
 
 -------------------------------------------------------------------------------- typecheck output
 
@@ -825,6 +831,10 @@ reduceHNF (Exp exp) = case exp of
 
     PrimFun (ExpN f) acc 0 -> Right $ peelThunk $ evalPrimFun f $ map reduce $ reverse acc
 
+    ExtractInstance acc [] n m -> reduceHNF' (acc Map.! n) $ \case
+        Witness_ _ (WInstance im) -> reduceHNF $ (im Map.! m) acc
+        x -> error $ "expected instance witness instead of " ++ ppShow x
+
     ENext_ _ -> Left "? err"
     EAlts_ 0 (map reduceHNF -> es) -> case [e | Right e <- es] of
         (thu:_) -> Right thu
@@ -837,13 +847,10 @@ reduceHNF (Exp exp) = case exp of
     EApp_ _ f x -> reduceHNF' f $ \f -> case f of
 
         PrimFun f acc i
-            | i > 0 -> Right $ PrimFun f (x: acc) (i-1)
+            | i > 0 -> reduceHNF $ Exp $ PrimFun f (x: acc) (i-1)
 --            | otherwise -> error $ "too much argument for primfun " ++ ppShow f ++ ": " ++ ppShow exp
 
-        ExtractInstance acc 0 n -> reduceHNF' x $ \case
-            Witness_ _ (WInstance m) -> reduceHNF $ foldl (TApp (error "eae")) (m Map.! n) $ reverse acc
-            x -> error $ "expected instance witness instead of " ++ ppShow x
-        ExtractInstance acc j n -> Right $ ExtractInstance (x: acc) (j-1) n
+        ExtractInstance acc (j:js) n m -> reduceHNF $ Exp $ ExtractInstance (Map.insert j x acc) js n m
 
         EAlts_ i es | i > 0 -> reduceHNF $ Exp $ EAlts_ (i-1) $ Exp . (\f -> EApp_ (error "eae2") f x) <$> es
         EFieldProj_ _ fi -> reduceHNF' x $ \case
@@ -933,7 +940,7 @@ instance PShow Lit where
         LFloat  i -> pShow i
         LNat    i -> pShow i
 
-instance PShow (Witness a) where
+instance PShow Witness where
     pShowPrec p = \case
         Refl -> "Refl"
         WInstance _ -> "WInstance ..."       
@@ -954,7 +961,7 @@ instance (PShow k, PShow v, PShow t, PShow p, PShow b) => PShow (Exp_ k v t p b)
         EFieldProj_ k n -> "." <> pShow n
         EAlts_ i b -> pShow i <> braces (vcat $ punctuate (pShow ';') $ map pShow b)
         ENext_ k -> "SKIP"
-        ExtractInstance i j n -> "extract" <+> pShow i <+> pShow j <+> pShow n
+        ExtractInstance i j n m -> "extract" <+> pShow i <+> pShow j <+> pShow n <+> pShow m
         PrimFun a b c -> "primfun" <+> pShow a <+> pShow b <+> pShow c
 
         Star_ -> "*"

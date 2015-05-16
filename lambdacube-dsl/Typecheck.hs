@@ -732,21 +732,20 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
     return (singSubst n th, withTyping $ Map.singleton n f)
 
 -- non recursive
-inferDef' :: InstType -> ValueDefR -> TCM (Env' Exp, TCM a -> TCM a)
+inferDef' :: InstType -> ValueDefR -> TCM (Env' (Env' Exp -> Exp))
 inferDef' ty (ValueDef p@(PVar' _ n) e) = do
-    (se, (exp, (te, fs))) <- runWriterT'' $ removeMonoVars $ do
-        (fn, t) <- toTCMS ty
-        tn@(TVar _ tv) <- newStarVar $ pShow n
-        addConstraints $ singSubstTy n tn
+    (se, (exp, fs)) <- runWriterT'' $ removeMonoVars $ do
         exp <- inferTyping e
+        (fn, t) <- toTCMS ty
         addUnif t $ tyOf exp
-        return $ (,) (Set.fromList [n, tv]) (exp, (tyOf exp, fn))
-    (_fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se te
+        return $ (,) (mempty{-Set.fromList [n, tv]-}) (exp, fn)
+    (fs', f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
     -- TODO: unify fs - _fs
     the <- asks thunkEnv
-    let th = recEnv (PVar undefined n) $ subst the        -- recEnv not needed?
-            $ flip (foldr eLam) [(n, v) | v@(TVar _ n) <- fs] exp
-    return (Map.singleton n th, withTyping $ Map.singleton n f)
+    let th e = subst the
+            $ subst (toTEnv (Subst e) <> se)
+            $ flip (foldr eLam) fs' exp
+    return (Map.singleton n th)
 
 inferDefs :: [DefinitionR] -> TCM PolyEnv
 inferDefs [] = ask
@@ -770,17 +769,6 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
                 ty <- instantiateTyping ("GADT" <+> pShow c) $ inferType t
                 return $ Map.singleton c ty
             withTyping (mconcat cdefs) cont
-    ClassDef con [(vn, vark)] cdefs -> do
-        (unzip -> (ths, cdefs)) <- forM cdefs $ \(TypeSig n t_) -> do
-            ((fs, t), _) <- instantiateTyping'' True (pShow n) $ do
-                vark <- inferType vark
-                addConstraint $ CClass (IdN con) $ TVar vark $ IdN vn
-                inferType t_
-            let find = head $ [i | (i, ConstraintKind (CClass n _)) <- zip [0..] $ map snd fs, n == con] ++ error (show $ "classDef:" <+> showVar con <$$> pShow fs <$$> pShow t_)
---            let t' = (mapWriterT' ((id *** ((ConstraintKind cstr:) *** id)) <$>)) <$> t
---                rearrange cs = head [b: as ++ bs | (as, b@(_, ConstraintKind _): bs) <- zip (inits cs) (tails cs)]
-            return (singSubst n $ Exp $ ExtractInstance [] find n, Map.singleton n t)
-        addPolyEnv (emptyPolyEnv {thunkEnv = mconcat ths, classDefs = Map.singleton con $ ClassD $ mconcat cdefs}) $ withTyping (mconcat cdefs) cont
     DAxiom (TypeSig n t) -> do
         ((_, t), t') <- instantiateTyping'' False (pShow n) $ inferType t
         let res (TArr a b) = res b
@@ -793,17 +781,25 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
             f | isPrim n = addPolyEnv (emptyPolyEnv {thunkEnv = singSubst n $ Exp $ PrimFun n [] arity})
               | otherwise = id
         f $ withTyping (Map.singleton n' t) cont
+    ClassDef con [(vn, vark)] cdefs -> do
+        (unzip -> (ths, cdefs)) <- forM cdefs $ \(TypeSig n t_) -> do
+            ((fs, t), _) <- instantiateTyping'' True (pShow n) $ do
+                vark <- inferType vark
+                addConstraint $ CClass (IdN con) $ TVar vark $ IdN vn
+                inferType t_
+            let find = head $ [i | (i, ConstraintKind (CClass n _)) <- fs, n == con]
+                    ++ error (show $ "classDef:" <+> showVar con <$$> pShow fs <$$> pShow t_)
+            return (singSubst n $ Exp $ ExtractInstance mempty (map fst fs) find n, Map.singleton n t)
+        addPolyEnv (emptyPolyEnv {thunkEnv = mconcat ths, classDefs = Map.singleton con $ ClassD $ mconcat cdefs})
+            $ withTyping (mconcat cdefs) cont
     InstanceDef c t xs -> do  -- TODO: check types
         (ClassD cs) <- lookEnv'' c >>= maybe (throwErrorTCM "can't find class") return
         (ce, t) <- runWriterT'' $ inferType t     -- TODO: ce
---        let ce' = Map.filter (either (const False) (const True)) ce
---        when (not $ Map.null ce') $ throwErrorTCM $ "not null ce" <+> pShow ce'
         xs <- local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t Refl) (Map.insert t Refl)) c $ instanceDefs pe}) -- fake
                 $ forM xs $ \x@(ValueDef (PVar' _ n)  _) -> do
             inferDef' (cs Map.! n $ "instance") x
-        let w = WInstance $ mconcat $ map fst xs
+        let w = WInstance $ mconcat xs
         local (\pe -> pe {instanceDefs = Map.alter (Just . maybe (Map.singleton t w) (Map.insert t w)) c $ instanceDefs pe}) $ do
---            foldr ($) cont xs
             cont
 
 inference_ :: PolyEnv -> ModuleR -> ErrorT (VarMT Identity) PolyEnv
@@ -834,14 +830,33 @@ primIntToFloat = undefined
 
 instance Num' Float where
     fromInt' = primIntToFloat
+
 -----------------------------------------------------
 given:  a :: *, cn :: Num a, cc :: Read a, x :: *, cx :: Show x  |  Int -> [x] -> a
+given:             x :: *, cx :: Show x  |  Int -> [x] -> Float
 
 needed:            c :: *,  cd :: Show c    | Int -> c -> Float
 
 result:
     c  :=  [x]
     cd :=  dictShowList cx
+
+
+needed:            c = [x], x :: *, cd = dictShowList cx, cx :: Show x    | Int -> [x] -> Float
+
+---------------------------------------
+
+    fromInt' 1 [True]           :: Float
+
+    fromInt' Float (cn :: Num Float) (cc :: Read Float) Bool (cx :: Show Bool) 1 [True]
+
+    (ExtractInstance {} [a, cn, cc, x, cx] cn "fromInt'") Float (cn :: Num Float) (cc :: Read Float) Bool (cx :: Show Bool) 1 [True]
+
+    (ExtractInstance {a = Float, cn :: Num Float, cc :: Read Float, x = Bool, cx :: Show Bool} [] cn "fromInt'") 1 [True]
+
+    ((Num Float -> fromInt') {a = Float, cn :: Num Float, cc :: Read Float, x = Bool, cx :: Show Bool}) 1 [True]
+
+    primIntToFloat [Bool] (dictShowList dictShowBool) 1 [True]
 
 -}
 
