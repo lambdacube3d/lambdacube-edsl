@@ -395,11 +395,11 @@ writerT' x = WriterT' $ do
     return (me, t)
 
 addUnif :: Exp -> Exp -> TCMS ()
-addUnif a b = addUnifs [a, b]
+addUnif a b = addUnifs [[a, b]]
 
-addUnifs :: [Exp] -> TCMS ()
+addUnifs :: [[Exp]] -> TCMS ()
 addUnifs ts = writerT' $ do
-    m <- addCtx "untilNoUnif" (unifyTypes True [WithExplanation "~~~" ts])
+    m <- addCtx "untilNoUnif" (unifyTypes True $ map (WithExplanation "~~~") ts)
     return (toTEnv m, ())
 
 untilNoUnif :: forall m . (MonadPlus m, MonadState Int m, MonadReader PolyEnv m, MonadError ErrorMsg m) => TEnv -> m TEnv
@@ -540,6 +540,10 @@ calcPrec ps e es = do
 appTy (TArr ta v) ta' = addUnif ta ta' >> return v      -- optimalization
 appTy tf ta = newStarVar ("tapp" <+> pShow tf <+> "|" <+> pShow ta) >>= \v -> addUnif tf (ta ~> v) >> return v
 
+getRes 0 x = Just ([], x)
+getRes i (TArr a b) = ((a:) *** id) <$> getRes (i-1) b
+getRes _ _ = Nothing
+
 inferPatTyping :: Bool -> PatR -> TCMS (Pat, InstEnv)
 inferPatTyping polymorph p_@(PatR pt p) = addRange pt $ addCtx ("type inference of pattern" <+> pShow p_) $ case p of
 
@@ -553,8 +557,14 @@ inferPatTyping polymorph p_@(PatR pt p) = addRange pt $ addCtx ("type inference 
     (res, tr) <- case p of
       PCon_ () n ps -> do
             (_, tn) <- lookEnv n $ lift $ throwErrorTCM $ "Constructor" <+> pShow n <+> "is not in scope."
-            v <- newStarVar "pcon"
-            addUnif tn $ map (tyOfPat . fst) ps ~~> v
+            v <- case getRes (length ps) tn of
+                Just (ts, x) -> do
+                    addUnifs $ zipWith (\a b -> [a, b]) ts $ map (tyOfPat . fst) ps
+                    return x
+                _ -> do
+                    v <- newStarVar "pcon"
+                    addUnif tn $ map (tyOfPat . fst) ps ~~> v
+                    return v
             return (PCon v n $ fst <$> ps, mempty)
       _ -> do
        (t, tr) <- case p of
@@ -622,8 +632,12 @@ inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" 
     ETyApp_ () f t -> do
         f <- inferTyping f
         t <- inferType t
-        x <- newName "apptype"
-        addUnif t (TVar (tyOf t) x)
+        x <- case t of
+            TVar k x -> addUnif k (tyOf t) >> return x
+            _ -> do
+                x <- newName "apptype"
+                addUnif t (TVar (tyOf t) x)
+                return x
         v <- newStarVar "etyapp"
         addUnif (tyOf f) (Forall x (tyOf t) v)
         return $ Exp $ EApp_ v f t
@@ -655,7 +669,7 @@ inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" 
                 addUnif t $ es ~~> v
                 return v
 
-            EAlts_ _ xs -> addUnifs xs >> return (error "impossible")
+            EAlts_ _ xs -> addUnifs [xs] >> return (error "impossible")
             ENext_ () -> newStarVar "enext"          -- TODO: review
             ETuple_ te -> return $ TTuple te
             TTuple_ ts -> mapM_ checkStarKind ts >> return (error "impossible")
