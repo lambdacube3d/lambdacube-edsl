@@ -54,7 +54,10 @@ import Parser (application)
 pairsWith f xs = zipWith f xs $ drop 1 xs
 
 unifyMaps_ :: (Ord a) => (a -> Doc) -> [Map a b] -> [WithExplanation [b]]
-unifyMaps_ f = map (f *** id) . filter (not . null . drop 1 . snd) . Map.toList . Map.unionsWith (++) . map ((:[]) <$>)
+unifyMaps_ f ms = {-case filter (not . Map.null) ms of
+    [] -> []
+    [m] -> []
+    ms -> -} map (f *** id) . filter (not . null . drop 1 . snd) . Map.toList . Map.unionsWith (++) . map ((:[]) <$>) $ ms
 
 unifyMaps :: (Ord a, PShow a) => [Map a b] -> [WithExplanation [b]]
 unifyMaps = unifyMaps_ pShow
@@ -326,10 +329,10 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
             then throwErrorTCM $ "Infinite type, type variable" <+> pShow n <+> "occurs in" <+> pShow t'
             else put $ singSubst' n t' <> s
 
-    bindVars (TVar tu u) (TVar tv v)
-        | u == v = return ()
-        | u < v = bindVar u (TVar tv v)
-        | otherwise = bindVar v (TVar tu u)
+    bindVars a@(TVar tu u) b@(TVar tv v) = case (compare u v, bidirectional) of
+        (EQ, _) -> return ()
+        (GT, True) -> bindVar v (TVar tu u)
+        _ -> bindVar u (TVar tv v)
 
 --    unifyTy :: Exp -> Exp -> StateT Subst m ()
     unifyTy (Exp t) (Exp t') = unifyTy' t t'
@@ -367,7 +370,10 @@ closeSubst (TEnv m) = s where s = TEnv $ subst (toSubst s) <$> m
 
 --  { x = (a, b),         z = x,   z = (b, a)
 joinSubsts :: forall m . (MonadPlus m, MonadState Int m, MonadError ErrorMsg m) => [TEnv] -> m TEnv
-joinSubsts (map getTEnv -> ss) = do
+joinSubsts (map getTEnv -> ss) = case filter (not . Map.null) ss of
+  [] -> return mempty
+  [x] -> return $ TEnv x
+  ss -> do
     s <- addCtx "joinSubsts" $ unifyTypes True $ concatMap ff $ unifyMaps ss
     if nullSubst s
         then return $ closeSubst $ TEnv $ Map.unionsWith gg ss
@@ -394,18 +400,19 @@ writerT' x = WriterT' $ do
     me <- untilNoUnif me
     return (me, t)
 
-addUnif :: Exp -> Exp -> TCMS ()
-addUnif a b = addUnifs [[a, b]]
+addUnif, addUnifOneDir :: Exp -> Exp -> TCMS ()
+addUnif a b = addUnifs True [[a, b]]
+addUnifOneDir a b = addUnifs False [[a, b]]
 
-addUnifs :: [[Exp]] -> TCMS ()
-addUnifs ts = writerT' $ do
-    m <- addCtx "untilNoUnif" (unifyTypes True $ map (WithExplanation "~~~") ts)
+addUnifs :: Bool -> [[Exp]] -> TCMS ()
+addUnifs twodir ts = writerT' $ do
+    m <- addCtx "untilNoUnif" (unifyTypes twodir $ map (WithExplanation "~~~") ts)
     return (toTEnv m, ())
 
 untilNoUnif :: forall m . (MonadPlus m, MonadState Int m, MonadReader PolyEnv m, MonadError ErrorMsg m) => TEnv -> m TEnv
 untilNoUnif es = do
     let cs = [(n, c) | (n, ISig (ConstraintKind c)) <- Map.toList $ getTEnv es]
-    (unzip -> (ss, concat -> eqs)) <- sequence $ map (uncurry reduceConstraint) $ cs
+    (unzip -> (ss, concat -> eqs)) <- mapM (uncurry reduceConstraint) $ cs
     s0 <- addCtx "untilNoUnif" $ unifyTypes True
         -- unify left hand sides where the right hand side is equal:  (t1 ~ F a, t2 ~ F a)  -->  t1 ~ t2
          $ groupByFst [(f, ty) | CEq ty f <- map snd cs]
@@ -559,7 +566,7 @@ inferPatTyping polymorph p_@(PatR pt p) = addRange pt $ addCtx ("type inference 
             (_, tn) <- lookEnv n $ lift $ throwErrorTCM $ "Constructor" <+> pShow n <+> "is not in scope."
             v <- case getRes (length ps) tn of
                 Just (ts, x) -> do
-                    addUnifs $ zipWith (\a b -> [a, b]) ts $ map (tyOfPat . fst) ps
+                    addUnifs True $ zipWith (\a b -> [a, b]) ts $ map (tyOfPat . fst) ps
                     return x
                 _ -> do
                     v <- newStarVar "pcon"
@@ -627,7 +634,7 @@ inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" 
     ETypeSig_ e ty -> do
         e <- inferTyping e
         ty <- inferType ty
-        addUnif (tyOf e) ty  -- TODO: one directional
+        addUnifOneDir (tyOf e) ty
         return e
     ETyApp_ () f t -> do
         f <- inferTyping f
@@ -669,7 +676,7 @@ inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" 
                 addUnif t $ es ~~> v
                 return v
 
-            EAlts_ _ xs -> addUnifs [xs] >> return (error "impossible")
+            EAlts_ _ xs -> addUnifs True [xs] >> return (error "impossible")
             ENext_ () -> newStarVar "enext"          -- TODO: review
             ETuple_ te -> return $ TTuple te
             TTuple_ ts -> mapM_ checkStarKind ts >> return (error "impossible")
@@ -774,12 +781,12 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
            $ flip (foldr eLam) fs exp
     return $ addPolyEnv (emptyPolyEnv {thunkEnv = singSubst n th}) . withTyping (Map.singleton n f)
 
-inferDef' :: InstType -> ValueDefR -> TCM (Env' (Env' Exp -> Exp))
-inferDef' ty (ValueDef p@(PVar' _ n) e) = do
+inferDef' :: Exp -> InstType -> ValueDefR -> TCM (Env' (Env' Exp -> Exp))
+inferDef' tt ty (ValueDef p@(PVar' _ n) e) = do
     (se, (exp, fs)) <- runWriterT'' $ do
         exp <- inferTyping e
         (fn, t) <- toTCMS ty
-        addUnif t $ tyOf exp
+        addUnif (tyOf exp) t
         return (exp, fn)
     (fs', f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
     the <- asks thunkEnv
@@ -836,9 +843,9 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
     InstanceDef c t xs -> do
         (ClassD cs) <- lookEnv'' c
         (ce, t) <- runWriterT'' $ inferType t     -- TODO: ce
-        xs <- addPolyEnv (emptyPolyEnv {instanceDefs = Map.singleton c $ Map.singleton t Refl}) -- fake
+        xs <- addRange r $ addPolyEnv (emptyPolyEnv {instanceDefs = Map.singleton c $ Map.singleton t Refl}) -- fake
                 $ forM xs $ \x@(ValueDef (PVar' _ n)  _) -> do
-            inferDef' (cs Map.! n $ "instance") x
+            inferDef' t (cs Map.! n $ "instance") x
         let w = WInstance $ mconcat xs
         addPolyEnv (emptyPolyEnv {instanceDefs = Map.singleton c $ Map.singleton t w}) $ do
             cont
@@ -849,7 +856,6 @@ inference_ penv@PolyEnv{..} Module{..} = flip runReaderT penv $ diffEnv <$> infe
   where
     diffEnv (PolyEnv i g p (TEnv th) tf) = PolyEnv
         (Map.differenceWith (\a b -> Just $ a Map.\\ b) i instanceDefs)
---        (c Map.\\ classDefs)
         (g Map.\\ getPolyEnv)
         (p Map.\\ precedences)
         (TEnv $ th Map.\\ getTEnv thunkEnv)
