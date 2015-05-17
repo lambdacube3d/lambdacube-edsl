@@ -463,11 +463,13 @@ instantiateTyping i = fmap (snd . fst) . instantiateTyping'' False i
 
 --lookEnv :: IdN -> T
 lookEnv :: Name -> TCMS ([Exp], Exp) -> TCMS ([Exp], Exp)
-lookEnv n m = asks (Map.lookup n . getPolyEnv) >>= maybe m (toTCMS . ($ pShow n))
+lookEnv n m = asks (Map.lookup n . getPolyEnv) >>= maybe m (either (const $ throwErrorTCM $ pShow n <+> "is a class") (toTCMS . ($ pShow n)))
 
 lookEnv' n m = asks (Map.lookup n . typeFamilies) >>= maybe m (toTCMS . ($ pShow n))
 
-lookEnv'' n = asks (Map.lookup n . classDefs) -- >>= maybe (undefined <$> throwErrorTCM n)
+lookEnv'' n = asks (Map.lookup n . getPolyEnv)
+    >>= maybe (throwErrorTCM "can't find class")
+            (either return (const $ throwErrorTCM $ pShow n <+> "is not a class"))
 
 -- Ambiguous: (Int ~ F a) => Int
 -- Not ambiguous: (Show a, a ~ F b) => b
@@ -815,10 +817,10 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
             let find = head $ [i | (i, ConstraintKind (CClass n _)) <- fs, n == con]
                     ++ error (show $ "classDef:" <+> showVar con <$$> pShow fs <$$> pShow t_)
             return (singSubst n $ Exp $ ExtractInstance mempty (map fst fs) find n, Map.singleton n t)
-        addPolyEnv (emptyPolyEnv {thunkEnv = mconcat ths, classDefs = Map.singleton con $ ClassD $ mconcat cdefs})
+        addPolyEnv (emptyPolyEnv {thunkEnv = mconcat ths, getPolyEnv = Map.singleton con $ Left $ ClassD $ mconcat cdefs})
             $ withTyping (mconcat cdefs) cont
     InstanceDef c t xs -> do
-        (ClassD cs) <- lookEnv'' c >>= maybe (throwErrorTCM "can't find class") return
+        (ClassD cs) <- lookEnv'' c
         (ce, t) <- runWriterT'' $ inferType t     -- TODO: ce
         xs <- addPolyEnv (emptyPolyEnv {instanceDefs = Map.singleton c $ Map.singleton t Refl}) -- fake
                 $ forM xs $ \x@(ValueDef (PVar' _ n)  _) -> do
@@ -831,9 +833,9 @@ inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
 inference_ :: PolyEnv -> ModuleR -> ErrorT (VarMT Identity) PolyEnv
 inference_ penv@PolyEnv{..} Module{..} = flip runReaderT penv $ diffEnv <$> inferDefs definitions
   where
-    diffEnv (PolyEnv i c g p (TEnv th) tf) = PolyEnv
+    diffEnv (PolyEnv i g p (TEnv th) tf) = PolyEnv
         (Map.differenceWith (\a b -> Just $ a Map.\\ b) i instanceDefs)
-        (c Map.\\ classDefs)
+--        (c Map.\\ classDefs)
         (g Map.\\ getPolyEnv)
         (p Map.\\ precedences)
         (TEnv $ th Map.\\ getTEnv thunkEnv)

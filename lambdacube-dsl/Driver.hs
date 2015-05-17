@@ -86,7 +86,7 @@ getDef = getDef_
 getDef__ :: MName -> EName -> MM Exp
 getDef__ m d = do
     (fm, pe) <- loadModule m
-    fmap (\(m, (_, x)) -> typingToTy m x) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
+    fmap (\(m, (_, x)) -> typingToTy m x) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ either undefined id (getPolyEnv pe Map.! d) $ ""
 
 getDef_ :: MName -> EName -> MM (Either String Exp)
 getDef_ m d = do

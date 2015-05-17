@@ -715,8 +715,7 @@ instance Substitute Subst TEnv where subst s (TEnv m) = TEnv $ subst s <$> m
 
 data PolyEnv = PolyEnv
     { instanceDefs :: InstanceDefs
-    , classDefs  :: Env' ClassD
-    , getPolyEnv :: InstEnv
+    , getPolyEnv :: Env' (Either ClassD InstType')
     , precedences :: PrecMap
     , thunkEnv :: TEnv          -- TODO: merge with getPolyEnv
     , typeFamilies :: InstEnv
@@ -731,12 +730,12 @@ type PrecMap = Env' Fixity
 type InstanceDefs = Env' (Map Exp Witness)
 
 emptyPolyEnv :: PolyEnv
-emptyPolyEnv = PolyEnv mempty mempty mempty mempty mempty mempty
+emptyPolyEnv = PolyEnv mempty mempty mempty mempty mempty
 
 joinPolyEnvs :: forall m. MonadError ErrorMsg m => [PolyEnv] -> m PolyEnv
 joinPolyEnvs ps = PolyEnv
     <$> mkJoin' instanceDefs
-    <*> mkJoin classDefs
+--    <*> mkJoin classDefs
     <*> mkJoin getPolyEnv
     <*> mkJoin precedences
     <*> (TEnv <$> mkJoin (getTEnv . thunkEnv))
@@ -763,7 +762,7 @@ addPolyEnv pe m = do
     local (const env) m
 
 --withTyping :: Env InstType -> TCM a -> TCM a
-withTyping ts = addPolyEnv $ emptyPolyEnv {getPolyEnv = ts}
+withTyping ts = addPolyEnv $ emptyPolyEnv {getPolyEnv = Right <$> ts}
 
 -------------------------------------------------------------------------------- monads
 
