@@ -39,7 +39,7 @@ reducedMain path fname =
 
 runMM :: [FilePath] -> MM a -> IO (Either String a) 
 runMM paths
-    = flip evalStateT ['t': show i | i <- [0..]]
+    = flip evalStateT 0
     . flip evalStateT mempty
     . fmap (either (Left . show) Right)
     . runExceptT

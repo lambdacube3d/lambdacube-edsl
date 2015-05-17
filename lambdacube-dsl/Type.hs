@@ -433,6 +433,10 @@ data ErrorMsg
     | EParseError ParseError
     | UnificationError Exp Exp [WithExplanation [Exp]]
 
+instance Monoid ErrorMsg where
+    mempty = ErrorMsg "<<>>"
+    mappend a b = a
+
 instance Show ErrorMsg where
     show = show . f Nothing Nothing where
         f file rng = \case
@@ -540,20 +544,21 @@ pattern TypeIdN' n i = IdN (TypeN' n i)
 pattern ExpIdN n <- IdN (ExpN n)
 pattern ExpIdN' n i = IdN (ExpN' n i)
 
-type FreshVars = [String]     -- fresh typevar names
+type FreshVars = Int --[String]     -- fresh typevar names
 
 type VarMT = StateT FreshVars
 
 newName :: MonadState FreshVars m => Doc -> m IdN
-newName i = do
-  (n: ns) <- get
-  put ns
-  return $ TypeIdN' n i
+newName info = do
+    i <- get
+    modify (+1)
+    return $ TypeN' ("t" ++ show i) info
 
 newEName = do
-  (n: ns) <- get
-  put ns
-  return $ ExpIdN' n ""
+    i <- get
+    modify (+1)
+    return $ ExpN $ "r" ++ show i
+
 
 -------------------------------------------------------------------------------- environments
 
@@ -604,7 +609,9 @@ recEnv _ th = th
 mapExp' f nf pf e = mapExp_ f nf f pf $ f <$> e
 
 peelThunk :: Exp -> Exp'
-peelThunk (ExpTh env@(Subst m) e) = case e of
+peelThunk (ExpTh env@(Subst m) e)
+--  | Map.null m = e
+  | otherwise = case e of
     Forall_ (Just n) a b -> Forall_ (Just n) (f a) $ subst_ (delEnv n (f a) env) b
     ELam_ x y -> ELam_ (mapPat' x) $ subst_ (delEnvs (patternVars x) env) y
     ELet_ x y z -> ELet_ (mapPat' x) (g y) (g z) where
@@ -843,9 +850,9 @@ pattern TFJoinTupleType a b     = TypeFunS "JoinTupleType" [a, b]
 
 type ReduceM = ExceptT String (State Int)
 
-reduceFail = throwError
+reduceFail = throwErrorTCM
 
-reduceHNF :: Exp -> ReduceM Exp       -- Left: pattern match failure
+reduceHNF :: forall m . (MonadPlus m, MonadError ErrorMsg m, MonadState Int m) => Exp -> m Exp       -- Left: pattern match failure
 reduceHNF (Exp exp) = case exp of
 
     PrimFun (ExpN f) acc 0 -> evalPrimFun f <$> mapM reduceEither (reverse acc)
@@ -882,19 +889,14 @@ reduceHNF (Exp exp) = case exp of
   where
     keep = return $ Exp exp
 
-newRVar = do
-    i <- get
-    modify (+1)
-    return $ ExpN $ "r" ++ show i
-
 -- TODO: make this more efficient (memoize reduced expressions)
-matchPattern :: Exp -> Pat -> ReduceM (Maybe Subst)       -- Left: pattern match failure; Right Nothing: can't reduce
+matchPattern :: forall m . (MonadPlus m, MonadError ErrorMsg m, MonadState Int m) => Exp -> Pat -> m (Maybe Subst)       -- Left: pattern match failure; Right Nothing: can't reduce
 matchPattern e = \case
     Wildcard _ -> return $ Just mempty
     PLit l -> reduceHNF e >>= \case
         ELit l'
             | l == l' -> return $ Just mempty
-            | otherwise -> reduceFail $ "literals doesn't match: " ++ ppShow (l, l')
+            | otherwise -> reduceFail $ "literals doesn't match:" <+> pShow (l, l')
     PVar _ v -> return $ Just $ singSubst' v e
     PTuple ps -> reduceHNF e >>= \e -> case e of
         ETuple xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
@@ -903,13 +905,13 @@ matchPattern e = \case
         Just (xx, xs) -> case xx of
           EVar c'
             | c == c' -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
-            | otherwise -> reduceFail $ "constructors doesn't match: " ++ ppShow (c, c')
+            | otherwise -> reduceFail $ "constructors doesn't match:" <+> pShow (c, c')
           q -> error $ "match rj: " ++ ppShow q
         Nothing | ppShow c == "V3" {-hack!-} -> do
-            vs <- replicateM 3 newRVar
+            vs <- replicateM 3 newEName
             return $ Just $ Subst $ Map.fromList $ zip vs $ map (\n -> TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V3x","V3y","V3z"]
         Nothing | ppShow c == "V4" {-hack!-} -> do
-            vs <- replicateM 4 newRVar
+            vs <- replicateM 4 newEName
             return $ Just $ Subst $ Map.fromList $ zip vs $ map (\n -> TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V4x","V4y","V4z","V4v"]
         _ -> return Nothing
     p -> error $ "matchPattern: " ++ ppShow p
@@ -929,7 +931,7 @@ evalPrimFun x args = error $ "evalPrimFun: " ++ x ++ " " ++ ppShow args
 reduce :: Exp -> Exp
 reduce = either (error "pattern match failure.") id . flip evalState 0 . runExceptT . reduceEither
 
-reduceEither :: Exp -> ReduceM Exp
+reduceEither :: forall m . (MonadPlus m, MonadError ErrorMsg m, MonadState Int m) => Exp -> m Exp
 reduceEither e = reduceHNF e >>= \e -> case e of
     EAlts i [e] -> return e
 {-

@@ -309,11 +309,14 @@ reduceConstraint_ cvar orig x = do
 --------------------------------------------------------------------------------
 
 -- unify each types in the sublists
-unifyTypes :: forall m . (MonadError ErrorMsg m) => Bool -> [WithExplanation [Exp]] -> m Subst
+unifyTypes :: forall m . (MonadPlus m, MonadState Int m, MonadError ErrorMsg m) => Bool -> [WithExplanation [Exp]] -> m Subst
 unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . pairsWith uni . snd
   where
 --    uni :: Exp -> Exp -> StateT TEnv TCM ()
-    uni a b = gets subst1{-could be subst-} >>= \f -> unifyTy (f a) (f b)
+    uni a b = do
+        a' <- lift $ reduceHNF a
+        b' <- lift $ reduceHNF b
+        gets subst1{-could be subst-} >>= \f -> unifyTy (f a') (f b')
 
     -- make single tvar substitution; check infinite types
     bindVar n t = do
@@ -363,7 +366,7 @@ runWriterT'' = runWriterT' . appSES
 closeSubst (TEnv m) = s where s = TEnv $ subst (toSubst s) <$> m
 
 --  { x = (a, b),         z = x,   z = (b, a)
-joinSubsts :: forall m . (MonadError ErrorMsg m) => [TEnv] -> m TEnv
+joinSubsts :: forall m . (MonadPlus m, MonadState Int m, MonadError ErrorMsg m) => [TEnv] -> m TEnv
 joinSubsts (map getTEnv -> ss) = do
     s <- addCtx "joinSubsts" $ unifyTypes True $ concatMap ff $ unifyMaps ss
     if nullSubst s
@@ -379,7 +382,7 @@ joinSubsts (map getTEnv -> ss) = do
         (ss, WithExplanation _ []) -> [ss]
         (subs@(WithExplanation i (s:_)), sigs@(WithExplanation i' (s':_))) -> [subs, sigs, WithExplanation ("subskind" <+> i <+> i') [tyOf s, s']]
 
-joinSE :: forall m . (MonadReader PolyEnv m, MonadError ErrorMsg m) => [TEnv] -> m TEnv
+joinSE :: forall m . (MonadPlus m, MonadState Int m, MonadReader PolyEnv m, MonadError ErrorMsg m) => [TEnv] -> m TEnv
 joinSE = \case
     [a, b]
         | Map.null $ getTEnv a -> return b     -- optimization
@@ -396,7 +399,7 @@ addUnif t1 t2 = writerT' $ do
     m <- addCtx "untilNoUnif" (unifyTypes True [WithExplanation "~~~" [t1, t2]])
     return (toTEnv m, ())
 
-untilNoUnif :: forall m . (MonadReader PolyEnv m, MonadError ErrorMsg m) => TEnv -> m TEnv
+untilNoUnif :: forall m . (MonadPlus m, MonadState Int m, MonadReader PolyEnv m, MonadError ErrorMsg m) => TEnv -> m TEnv
 untilNoUnif es = do
     let cs = [(n, c) | (n, ISig (ConstraintKind c)) <- Map.toList $ getTEnv es]
     (unzip -> (ss, concat -> eqs)) <- sequence $ map (uncurry reduceConstraint) $ cs
@@ -414,7 +417,7 @@ untilNoUnif es = do
         joinSubsts (toTEnv s0: es: map toTEnv ss) >>= untilNoUnif
 
 instance Monoid' TEnv where
-    type MonoidConstraint TEnv m = (MonadReader PolyEnv m, MonadError ErrorMsg m)
+    type MonoidConstraint TEnv m = (MonadPlus m, MonadState Int m, MonadReader PolyEnv m, MonadError ErrorMsg m)
     mempty' = mempty
     mappend' a b = joinSE [a, b]
 
