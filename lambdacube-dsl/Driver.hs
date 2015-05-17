@@ -26,7 +26,7 @@ import qualified CoreToIR as IR
 import Parser
 import Typecheck hiding (Exp(..))
 
-type Modules = ([FilePath], Map FilePath PolyEnv)
+type Modules = Map FilePath PolyEnv
 
 type MM = ReaderT [FilePath] (ErrorT (StateT Modules (VarMT IO)))
 
@@ -51,8 +51,6 @@ catchMM = mapReaderT $ \m -> lift $ either (Left . show) Right <$> runExceptT m
 parseAndToCoreMain :: MName -> MM Exp
 parseAndToCoreMain m = either (throwErrorTCM . text) return =<< getDef m (ExpN "main")
 
-clearImports = modify (const [] *** id)
-
 loadModule :: MName -> MM (FilePath, PolyEnv)
 loadModule mname = do
   fnames <- asks $ map $ flip lcModuleFile mname
@@ -63,18 +61,16 @@ loadModule mname = do
      b <- liftIO $ doesFileExist fname
      if not b then find fs
      else do
-       c <- gets $ Map.lookup fname . snd
+       c <- gets $ Map.lookup fname
        case c of
-         Just m -> do
-            modify $ (\x -> if fname `elem` x then x else fname: x) *** id
-            return (fname, m)
+         Just m -> return (fname, m)
          _ -> do
             (src, e) <- lift $ mapExceptT (lift . lift) $ parseLC fname
             ms <- mapM loadModule $ moduleImports e
             mapError (InFile src) $ trace ("loading " ++ fname) $ do
                 env <- joinPolyEnvs $ map snd ms
                 x <- lift $ mapExceptT (lift . mapStateT liftIdentity) $ inference_ env e
-                modify $ (fname:) *** Map.insert fname x
+                modify $ Map.insert fname x
                 return (fname, x)
 
   find fnames
@@ -89,13 +85,11 @@ getDef = getDef_
 
 getDef__ :: MName -> EName -> MM Exp
 getDef__ m d = do
-    clearImports
     (fm, pe) <- loadModule m
     fmap (\(m, (_, x)) -> typingToTy m x) $ lift $ lift $ lift $ mapStateT liftIdentity $ runWriterT' $ getPolyEnv pe Map.! d $ ""
 
 getDef_ :: MName -> EName -> MM (Either String Exp)
 getDef_ m d = do
-    clearImports
     (fm, pe) <- loadModule m
     case Map.lookup d $ getTEnv $ thunkEnv pe of
         Just (ISubst th) -> return $ Right $ reduce th
