@@ -373,7 +373,7 @@ joinSubsts (map getTEnv -> ss) = do
     s <- addCtx "joinSubsts" $ unifyTypes True $ concatMap ff $ unifyMaps ss
     if nullSubst s
         then return $ closeSubst $ TEnv $ Map.unionsWith gg ss
-        else joinSubsts [toTEnv s, subst_ s $ TEnv $ Map.unionsWith gg ss]
+        else joinSubsts [toTEnv s, TEnv $ Map.unionsWith gg ss]
   where
     gg (ISubst s) _ = ISubst s
     gg _ b = b
@@ -387,9 +387,19 @@ joinSubsts (map getTEnv -> ss) = do
 joinSE :: forall m . (MonadReader PolyEnv m, MonadError ErrorMsg m) => [TEnv] -> m TEnv
 joinSE = \case
     [a, b]
-        | Map.null $ getTEnv a -> untilNoUnif b     -- optimization
-        | Map.null $ getTEnv b -> untilNoUnif a     -- optimization
+        | Map.null $ getTEnv a -> return b     -- optimization
+        | Map.null $ getTEnv b -> return a     -- optimization
     ab -> joinSubsts ab >>= untilNoUnif
+
+writerT' x = WriterT' $ do
+    (me, t) <- x
+    me <- untilNoUnif me
+    return (me, t)
+
+addUnif :: Exp -> Exp -> TCMS ()
+addUnif t1 t2 = writerT' $ do
+    m <- addCtx "untilNoUnif" (unifyTypes True [WithExplanation "~~~" [t1, t2]])
+    return (toTEnv m, ())
 
 untilNoUnif :: forall m . (MonadReader PolyEnv m, MonadError ErrorMsg m) => TEnv -> m TEnv
 untilNoUnif es = do
@@ -422,11 +432,8 @@ newStarVar i = do
     addConstraints $ singSubstTy n Star
     return v
 
-addConstraints m = WriterT' $ pure (m, ())
+addConstraints m = writerT' $ pure (m, ())
 addConstraint c = newName "constraint" >>= \n -> addConstraints $ singSubstTy n $ ConstraintKind c
-
-addUnif :: Exp -> Exp -> TCMS ()
-addUnif t1 t2 = addConstraint $ t1 ~~~ t2
 
 checkStarKind t = addUnif Star t
 
@@ -707,7 +714,7 @@ tyConKind = tyConKind_ $ ExpR mempty Star_
 tyConKind_ :: TyR -> [TyR] -> TCM InstType'
 tyConKind_ res vs = instantiateTyping "tyconkind" $ foldr (liftA2 (~>)) (inferType res) $ map inferType vs
 
-mkInstType v k = \d -> WriterT' $ pure (singSubstTy v k, ([], k))
+mkInstType v k = \d -> WriterT' $ pure (singSubstTy v k, ([], k))   -- TODO: elim
 monoInstType v k = \d -> WriterT' $ pure (mempty, ([], k))
 
 inferConDef :: Name -> [(Name, TyR)] -> WithRange ConDef -> TCM InstEnv
@@ -751,11 +758,8 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
         return $ (,) (Set.fromList [n, tv]) exp
     (fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
     the <- asks thunkEnv
-    let th = th' where
-         th' = subst the
-           $ subst
-                ( singSubst n $ foldl (TApp (error "et")) th' $ map (\(n, t) -> TVar t n) fs
-                )
+    let th = subst ( the
+                   <> singSubst n (foldl (TApp (error "et")) th $ map (\(n, t) -> TVar t n) fs))
            $ flip (foldr eLam) fs exp
     return (singSubst n th, withTyping $ Map.singleton n f)
 
