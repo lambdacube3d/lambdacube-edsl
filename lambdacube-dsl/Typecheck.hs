@@ -395,8 +395,11 @@ writerT' x = WriterT' $ do
     return (me, t)
 
 addUnif :: Exp -> Exp -> TCMS ()
-addUnif t1 t2 = writerT' $ do
-    m <- addCtx "untilNoUnif" (unifyTypes True [WithExplanation "~~~" [t1, t2]])
+addUnif a b = addUnifs [a, b]
+
+addUnifs :: [Exp] -> TCMS ()
+addUnifs ts = writerT' $ do
+    m <- addCtx "untilNoUnif" (unifyTypes True [WithExplanation "~~~" ts])
     return (toTEnv m, ())
 
 untilNoUnif :: forall m . (MonadPlus m, MonadState Int m, MonadReader PolyEnv m, MonadError ErrorMsg m) => TEnv -> m TEnv
@@ -433,9 +436,8 @@ newStarVar i = do
 addConstraints m = writerT' $ pure (m, ())
 addConstraint c = newName "constraint" >>= \n -> addConstraints $ singSubstTy n $ ConstraintKind c
 
+checkStarKind Star = return ()
 checkStarKind t = addUnif Star t
-
-star = return Star
 
 ----------------------------
 
@@ -653,29 +655,27 @@ inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" 
                 addUnif t $ es ~~> v
                 return v
 
-            ELit_ l -> return $ inferLit l
-
-            EAlts_ _ xs -> newStarVar "ealts" >>= \v -> mapM_ (addUnif v) xs >> return v
+            EAlts_ _ xs -> addUnifs xs >> return (error "impossible")
             ENext_ () -> newStarVar "enext"          -- TODO: review
             ETuple_ te -> return $ TTuple te
-            TTuple_ ts -> mapM_ checkStarKind ts >> star
+            TTuple_ ts -> mapM_ checkStarKind ts >> return (error "impossible")
 
-            ERecord_ (unzip -> (fs, es)) -> return $ TRecord $ Map.fromList $ zip fs es
+            ERecord_ _ -> return (error "impossible")
 
-            Star_ -> star
             ConstraintKind_ c -> case c of
                 CEq t (TypeFun f ts) -> do
                     (_, tf) <- lookEnv' f $ throwErrorTCM $ "Type family" <+> pShow f <+> "is not in scope."
                     addUnif tf $ ts ~~> t
-                    star
-                CClass _ t -> checkStarKind t >> star           -- TODO
-                _ -> star
-            Forall_ Nothing a b -> checkStarKind a >> checkStarKind b >> star
+                    return (error "impossible")
+                CClass _ t -> checkStarKind t >> return (error "impossible")           -- TODO
+                _ -> return (error "impossible")
+            Forall_ Nothing a b -> checkStarKind a >> checkStarKind b >> return (error "impossible")
             EApp_ _ tf ta -> appTy tf ta
-            EVar_ _ n -> fmap snd . lookEnv n $ newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (singSubstTy n t) >> return ([], t)
-            TCon_ _ n -> fmap snd . lookEnv n $ lookEnv (toExpN n) $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
+            TCon_ _ n -> fmap snd . lookEnv n $ lookLifted $ throwErrorTCM $ "Type constructor" <+> pShow n <+> "is not in scope."
+              where
+                lookLifted = if isTypeVar n then lookEnv (toExpN n) else id
 
-            x -> error $ "inferTyping : " ++ ppShow x
+            x -> return $ error $ "inferTyping : " ++ ppShow x
         case e of
             Forall_ Nothing (ConstraintKind c) b -> do
                 addConstraint c
@@ -745,7 +745,7 @@ selectorDefs (r, DDataDef n _ cs) =
     , FieldTy (Just sel) _ <- tys
     ]
 
-inferDef :: ValueDefR -> TCM (TEnv, TCM a -> TCM a)
+inferDef :: ValueDefR -> TCM (TCM a -> TCM a)
 inferDef (ValueDef p@(PVar' _ n) e) = do
     (se, exp) <- runWriterT' $ removeMonoVars $ do
         tn@(TVar _ tv) <- newStarVar $ pShow n
@@ -758,7 +758,7 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
     let th = subst ( toSubst the
                    <> singSubst' n (foldl (TApp (error "et")) th $ map (\(n, t) -> TVar t n) fs))
            $ flip (foldr eLam) fs exp
-    return (singSubst n th, withTyping $ Map.singleton n f)
+    return $ addPolyEnv (emptyPolyEnv {thunkEnv = singSubst n th}) . withTyping (Map.singleton n f)
 
 inferDef' :: InstType -> ValueDefR -> TCM (Env' (Env' Exp -> Exp))
 inferDef' ty (ValueDef p@(PVar' _ n) e) = do
@@ -778,8 +778,8 @@ inferDefs [] = ask
 inferDefs (dr@(r, d): ds@(inferDefs -> cont)) = case d of
     PrecDef n p -> addPolyEnv (emptyPolyEnv {precedences = Map.singleton n p}) cont
     DValueDef d -> do
-        (e, f) <- addRange r (inferDef d)
-        addPolyEnv (emptyPolyEnv {thunkEnv = e}) $ f cont
+        f <- addRange r (inferDef d)
+        f cont
     TypeFamilyDef con vars res -> do
         tk <- tyConKind_ res $ map snd vars
         addPolyEnv (emptyPolyEnv {typeFamilies = Map.singleton con tk}) cont
