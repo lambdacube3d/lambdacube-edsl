@@ -574,7 +574,7 @@ instance Monoid Subst where
     -- example2: subst ({x -> z} <> {x -> y}) = subst {x -> z} . subst {x -> y} = subst {x -> y}
     m1@(Subst y1) `mappend` Subst y2 = Subst $ (subst_ m1 <$> y2) <> y1
 
-subst_ = subst . toTEnv
+subst_ = subst -- . toTEnv
 singSubst' a b = Subst $ Map.singleton a b
 
 nullSubst (Subst s) = Map.null s
@@ -678,13 +678,14 @@ instance Replace Item where
 -------------------------------------------------------------------------------- substitution
 
 -- TODO: review usage (use only after unification)
-class Substitute a where subst :: TEnv -> a -> a
+class Substitute x a where subst :: x -> a -> a
 
 --instance Substitute a => Substitute (Constraint' n a)      where subst = fmap . subst
-instance Substitute a => Substitute [a]                    where subst = fmap . subst
-instance (Substitute a, Substitute b) => Substitute (a, b) where subst s (a, b) = (subst s a, subst s b)
-instance (Substitute a, Substitute b) => Substitute (Either a b) where subst s = subst s +++ subst s
-instance Substitute Item where subst s = eitherItem (ISubst . subst s) (ISig . subst s)
+instance Substitute x a => Substitute x [a]                    where subst = fmap . subst
+instance (Substitute x a, Substitute x b) => Substitute x (a, b) where subst s (a, b) = (subst s a, subst s b)
+instance (Substitute x a, Substitute x b) => Substitute x (Either a b) where subst s = subst s +++ subst s
+instance Substitute TEnv Item where subst s = eitherItem (ISubst . subst s) (ISig . subst s)
+instance Substitute Subst Item where subst s = eitherItem (ISubst . subst s) (ISig . subst s)
 {-
 instance Substitute Pat where
     subst s = \case
@@ -692,8 +693,10 @@ instance Substitute Pat where
         PCon t n l -> PCon (VarE n $ subst s ty) $ subst s l
         Pat p -> Pat $ subst s <$> p
 -}
-instance Substitute Exp where subst m1 (ExpTh m exp) = ExpTh (toSubst m1 <> m) exp
-instance Substitute TEnv where subst s (TEnv m) = TEnv $ subst s <$> m
+instance Substitute TEnv Exp where subst m1 (ExpTh m exp) = ExpTh (toSubst m1 <> m) exp
+instance Substitute Subst Exp where subst m1 (ExpTh m exp) = ExpTh (m1 <> m) exp
+instance Substitute TEnv TEnv where subst s (TEnv m) = TEnv $ subst s <$> m
+instance Substitute Subst TEnv where subst s (TEnv m) = TEnv $ subst s <$> m
 
 --------------------------------------------------------------------------------
 

@@ -355,11 +355,8 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
     subst1 = subst_  -- TODO
 
 -- TODO: revise applications
-appSES :: (Substitute x, PShow x, Monad m) => TypingT m x -> TypingT m x
-appSES (WriterT' m) = WriterT' $ do
-    (se, x) <- m
---    trace (ppShow (se,x)) $ 
-    return $ (se, subst se x)
+appSES :: (Substitute TEnv x, PShow x, Monad m) => TypingT m x -> TypingT m x
+appSES = mapWriterT' $ fmap $ \(se, x) -> (se, subst se x)
 
 removeMonoVars = mapWriterT' $ fmap $ \(en@(TEnv se), (s, x)) -> (TEnv $ foldr Map.delete se $ Set.toList s, subst en x)
 
@@ -750,7 +747,7 @@ selectorDefs (r, DDataDef n _ cs) =
 
 inferDef :: ValueDefR -> TCM (TEnv, TCM a -> TCM a)
 inferDef (ValueDef p@(PVar' _ n) e) = do
-    (se, exp) <- runWriterT'' $ removeMonoVars $ do
+    (se, exp) <- runWriterT' $ removeMonoVars $ do
         tn@(TVar _ tv) <- newStarVar $ pShow n
         addConstraints $ singSubstTy n tn
         exp <- withTyping (Map.singleton n $ monoInstType n tn) $ inferTyping e
