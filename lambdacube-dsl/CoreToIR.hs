@@ -24,7 +24,7 @@ import qualified IR as IR
 
 type CG = State IR.Pipeline
 
-emptyPipeline = IR.Pipeline mempty mempty mempty mempty mempty mempty
+emptyPipeline b = IR.Pipeline b mempty mempty mempty mempty mempty mempty
 updateList i x xs = take i xs ++ x : drop (i+1) xs
 
 imageToSemantic :: IR.Image -> (IR.ImageSemantic, IR.Value)
@@ -40,8 +40,8 @@ newRenderTarget a = do
   modify (\s -> s {IR.targets = tv ++ [t]})
   return $ length tv
 
-compilePipeline :: Exp -> IR.Pipeline
-compilePipeline e = flip execState emptyPipeline $ do
+compilePipeline :: IR.Backend -> Exp -> IR.Pipeline
+compilePipeline b e = flip execState (emptyPipeline b) $ do
     c <- getCommands e
     modify (\s -> s {IR.commands = c})
 
@@ -85,8 +85,9 @@ addProgramToSlot prgName slotName = do
 
 getProgram :: [(String,IR.InputType)] -> IR.SlotName -> Exp -> Exp -> CG IR.ProgramName
 getProgram input slot vert frag = do
-  let ((vertexInput,vertOut),vertSrc) = genVertexGLSL vert
-      fragSrc = genFragmentGLSL vertOut frag
+  backend <- gets IR.backend
+  let ((vertexInput,vertOut),vertSrc) = genVertexGLSL backend vert
+      fragSrc = genFragmentGLSL backend vertOut frag
       prg = IR.Program
         { IR.programUniforms    = Map.fromList $ Set.toList $ getUniforms vert <> getUniforms frag
         , IR.programStreams     = Map.fromList $ zip vertexInput input

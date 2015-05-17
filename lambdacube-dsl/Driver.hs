@@ -3,6 +3,7 @@
 module Driver
     ( module Driver
     , pattern ExpN
+    , IR.Backend(..)
     ) where
 
 import Data.List
@@ -30,8 +31,8 @@ type Modules = Map FilePath PolyEnv
 
 type MM = ReaderT [FilePath] (ErrorT (StateT Modules (VarMT IO)))
 
-compileMain :: FilePath -> MName -> IO (Either String IR.Pipeline)
-compileMain path fname = fmap IR.compilePipeline <$> reducedMain path fname
+compileMain :: IR.Backend -> FilePath -> MName -> IO (Either String IR.Pipeline)
+compileMain backend path fname = fmap (IR.compilePipeline backend) <$> reducedMain path fname
 
 reducedMain :: FilePath -> MName -> IO (Either String Exp)
 reducedMain path fname =

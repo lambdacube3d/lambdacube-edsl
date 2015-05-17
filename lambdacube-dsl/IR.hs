@@ -368,9 +368,15 @@ data RenderTarget
     }
     deriving Show
 
+data Backend
+    = WebGL1
+    | OpenGL33
+    deriving Show
+
 data Pipeline
     = Pipeline
-    { textures      :: [TextureDescriptor]
+    { backend       :: Backend
+    , textures      :: [TextureDescriptor]
     , samplers      :: [SamplerDescriptor]
     , targets       :: [RenderTarget]
     , programs      :: [Program]

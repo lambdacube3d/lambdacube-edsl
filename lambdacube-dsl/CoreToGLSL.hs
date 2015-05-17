@@ -21,6 +21,7 @@ import qualified Data.Foldable as F
 
 import Pretty
 import Type
+import IR(Backend(..))
 
 toGLSLType msg t = case t of
   TBool  -> "bool"
@@ -57,35 +58,50 @@ genUniforms e = case e of
   A1 "Uni" (A1 _ (ELString s)) -> Set.singleton [unwords ["uniform",toGLSLType "1" $ tyOf e,s,";"]]
   Exp e -> F.foldMap genUniforms e
 
-genStreamInput i = do
-  let input (PVar t x@(showN -> n)) = tell [unwords ["in",toGLSLType (ppShow x ++ "\n") t,n,";"]] >> return [n]
+genStreamInput backend i = do
+  let inputDef = case backend of
+        OpenGL33  -> "in"
+        WebGL1    -> "attribute"
+      input (PVar t x@(showN -> n)) = tell [unwords [inputDef,toGLSLType (ppShow x ++ "\n") t,n,";"]] >> return [n]
       input a = error $ "genStreamInput " ++ ppShow a
   case i of
     PTuple l -> foldM (\a b -> (a ++) <$> input b) [] l
     x -> input x
 
-genStreamOutput a = do
+genStreamOutput backend a = do
   let f "Smooth" = "smooth"
       f "Flat" = "flat"
       f "NoPerspective" = "noperspective"
       go n (A1 i (toGLSLType "3" . tyOf -> t)) = do
         let var = "v" <> show n
-        tell [unwords [f i,"out",t,var,";"]] >> return [(f i,t,var)]
+        case backend of
+          WebGL1    -> tell [unwords ["varying",t,var,";"]]
+          OpenGL33  -> tell [unwords [f i,"out",t,var,";"]]
+        return [(f i,t,var)]
   case a of
     ETuple l -> concat <$> sequence (map (uncurry go) $ zip [0..] l)
     x -> go 0 x
 
-genFragmentInput s = tell [unwords [i,"in",t,n,";"] | (i,t,n) <- s]
-genFragmentOutput a@(toGLSLType "4" . tyOf -> t) = case tyOf a of
+genFragmentInput OpenGL33 s = tell [unwords [i,"in",t,n,";"] | (i,t,n) <- s]
+genFragmentInput WebGL1 s = tell [unwords ["varying",t,n,";"] | (i,t,n) <- s]
+genFragmentOutput backend a@(toGLSLType "4" . tyOf -> t) = case tyOf a of
   TUnit -> return False
-  _ -> tell [unwords ["out",t,"f0",";"]] >> return True
+  _ -> case backend of
+    OpenGL33  -> tell [unwords ["out",t,"f0",";"]] >> return True
+    WebGL1    -> return True
 
-genVertexGLSL :: Exp -> (([String],[(String,String,String)]),String)
-genVertexGLSL e@(ELam i (A4 "VertexOut" p s c o)) = id *** unlines $ runWriter $ do
-  tell ["#version 330 core"]
+genVertexGLSL :: Backend -> Exp -> (([String],[(String,String,String)]),String)
+genVertexGLSL backend e@(ELam i (A4 "VertexOut" p s c o)) = id *** unlines $ runWriter $ do
+  case backend of
+    OpenGL33 -> do
+      tell ["#version 330 core"]
+    WebGL1 -> do
+      tell ["#version 100"]
+      tell ["precision highp float;"]
+      tell ["precision highp int;"]
   F.mapM_ tell $ genUniforms e
-  input <- genStreamInput i
-  out <- genStreamOutput o
+  input <- genStreamInput backend i
+  out <- genStreamOutput backend o
   tell ["void main() {"]
   unless (null out) $ do
     let go ((_,_,var),x) = tell $ [var <> " = " <> unwords (genGLSL x) <> ";"]
@@ -96,10 +112,10 @@ genVertexGLSL e@(ELam i (A4 "VertexOut" p s c o)) = id *** unlines $ runWriter $
   tell $ ["gl_PointSize = " <> unwords (genGLSL s) <> ";"]
   tell ["}"]
   return (input,out)
-genVertexGLSL e = error $ "genVertexGLSL: " ++ ppShow e
+genVertexGLSL _ e = error $ "genVertexGLSL: " ++ ppShow e
 
-genFragmentGLSL :: [(String,String,String)] -> Exp -> String
-genFragmentGLSL s e@(ELam i fragOut) = unlines $ execWriter $ do
+genFragmentGLSL :: Backend -> [(String,String,String)] -> Exp -> String
+genFragmentGLSL backend s e@(ELam i fragOut) = unlines $ execWriter $ do
   let o = case fragOut of
         A1 "FragmentOutRastDepth" o -> o
         A1 "FragmentOut" o -> o
@@ -109,15 +125,22 @@ genFragmentGLSL s e@(ELam i fragOut) = unlines $ execWriter $ do
         go [] [] = []
         go (PVar _ (showN -> x):al) ((_,_,n):bl) = (x,n) : go al bl
         go _ _ = error $ "genFragmentGLSL illegal input " ++ ppShow i ++ " " ++ show s
-  tell ["#version 330 core"]
+  case backend of
+    OpenGL33 -> do
+      tell ["#version 330 core"]
+    WebGL1 -> do
+      tell ["#version 100"]
+      tell ["precision highp float;"]
+      tell ["precision highp int;"]
   F.mapM_ tell $ genUniforms e
-  genFragmentInput s
-  hasOutput <- genFragmentOutput o
+  genFragmentInput backend s
+  hasOutput <- genFragmentOutput backend o
   tell ["void main() {"]
-  when hasOutput $ do
-    tell $ ["f0 = " <> unwords (genGLSLSubst (makeSubst i s) o) <> ";"]
+  when hasOutput $ case backend of
+    OpenGL33  -> tell $ ["f0 = " <> unwords (genGLSLSubst (makeSubst i s) o) <> ";"]
+    WebGL1    -> tell $ ["gl_FragColor = " <> unwords (genGLSLSubst (makeSubst i s) o) <> ";"]
   tell ["}"]
-genFragmentGLSL _ e = error $ "genFragmentGLSL: " ++ ppShow e
+genFragmentGLSL _ _ e = error $ "genFragmentGLSL: " ++ ppShow e
 
 
 genGLSL :: Exp -> [String]
