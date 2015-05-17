@@ -599,7 +599,7 @@ instance Monoid TEnv where
         gg _ b = b
 
 singSubst a b = TEnv $ Map.singleton a $ ISubst b
-singSubstTy a b = TEnv $ Map.singleton a $ ISig b
+singSubstTy_ a b = TEnv $ Map.singleton a $ ISig b
     
 -- build recursive environment  -- TODO: generalize
 recEnv :: Pat -> Exp -> Exp

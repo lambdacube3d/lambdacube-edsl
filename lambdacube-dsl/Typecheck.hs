@@ -433,15 +433,22 @@ instance Monoid' TEnv where
 
 --------------------------------------------------------------------------------
 
+singSubstTy a b = addConstraints $ singSubstTy_ a b
+singSubstTy' a b = WriterT' $ pure (singSubstTy_ a b, ())
+
+newStarVar' i n = do
+    t <- newStarVar $ i <+> pShow n
+    singSubstTy' n t
+    return t
+
 newStarVar :: Doc -> TCMS Exp
 newStarVar i = do
     n <- newName i
-    let v = TVar Star n
-    addConstraints $ singSubstTy n Star
-    return v
+    singSubstTy' n Star
+    return $ TVar Star n
 
 addConstraints m = writerT' $ pure (m, ())
-addConstraint c = newName "constraint" >>= \n -> addConstraints $ singSubstTy n $ ConstraintKind c
+addConstraint c = newName "constraint" >>= \n -> singSubstTy n $ ConstraintKind c
 
 checkStarKind Star = return ()
 checkStarKind t = addUnif Star t
@@ -470,7 +477,6 @@ instantiateTyping'' typ i ty = do
 
 instantiateTyping i = fmap (snd . fst) . instantiateTyping'' False i
 
---lookEnv :: IdN -> T
 lookEnv :: Name -> TCMS ([Exp], Exp) -> TCMS ([Exp], Exp)
 lookEnv n m = asks (Map.lookup n . getPolyEnv) >>= maybe m (either (const $ throwErrorTCM $ pShow n <+> "is a class") (toTCMS . ($ pShow n)))
 
@@ -555,10 +561,8 @@ inferPatTyping :: Bool -> PatR -> TCMS (Pat, InstEnv)
 inferPatTyping polymorph p_@(PatR pt p) = addRange pt $ addCtx ("type inference of pattern" <+> pShow p_) $ case p of
 
   PVar_ () n -> do
-        t <- newStarVar ("pvar" <+> pShow n)
-        addConstraints $ singSubstTy n t
-        let tr = Map.singleton n $ monoInstType n t
-        return (PVar t n, tr)
+        t <- newStarVar' "pvar" n
+        return (PVar t n, monoInstType n t)
   _ -> do
     p <- traverse (inferPatTyping polymorph) p
     (res, tr) <- case p of
@@ -574,19 +578,19 @@ inferPatTyping polymorph p_@(PatR pt p) = addRange pt $ addCtx ("type inference 
                     return v
             return (PCon v n $ fst <$> ps, mempty)
       _ -> do
-       (t, tr) <- case p of
-        PLit_ n -> noTr $ pure $ inferLit n
+       (t, tr) <- case tyOfPat . fst <$> p of
         Wildcard_ () -> noTr $ newStarVar "_" >>= pure
 
-        PAt_ n p -> addTr (\t -> Map.singleton n $ monoInstType n t) $ pure $ tyOfPat . fst $ p
+        PAt_ n p -> return (error "impossible patty", monoInstType n p)
 
-        PTuple_ ps -> noTr $ pure $ TTuple $ map (tyOfPat . fst) ps
+        PTuple_ ps -> {-mapM_ checkStarKind (map tyOf ps) >> -}return (error "impossible patty", mempty)
 
         PRecord_ (unzip -> (fs, ps)) -> noTr $ do
             v <- newStarVar "pfp2"
             v' <- newStarVar "pfp3"
-            addConstraint $ Split v v' $ TRecord $ Map.fromList $ zip fs $ map (tyOfPat . fst) ps
+            addConstraint $ Split v v' $ TRecord $ Map.fromList $ zip fs ps
             return v
+        _ -> return (error "impossible patty", mempty)
        return (Pat $ mapPat (const t) id id $ fst <$> p, tr)
 
     let trs = Map.unionsWith (++) . map ((:[]) <$>) $ tr: map snd (toList p)
@@ -651,13 +655,13 @@ inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" 
 
     Forall_ (Just n) k t -> removeMonoVars $ do
         k <- inferType k
-        addConstraints $ singSubstTy n k
-        t <- withTyping (Map.singleton n $ monoInstType n k) $ inferType t
+        singSubstTy n k
+        t <- withTyping (monoInstType n k) $ inferType t
         return $ (,) (Set.fromList [n]) $ Exp $ Forall_ (Just n) k t
 
     EVar_ _ n -> do
         (ty, t) <- lookEnv n $ if allowNewVar
-                then newStarVar ("tvar" <+> pShow r) >>= \t -> addConstraints (singSubstTy n t) >> return ([], t)
+                then newStarVar' "tvar" n >>= \t -> return ([], t)
                 else throwErrorTCM $ "Variable" <+> pShow n <+> "is not in scope."
         return $ buildApp (`TVar` n) t ty
 
@@ -732,8 +736,8 @@ tyConKind = tyConKind_ $ ExpR mempty Star_
 tyConKind_ :: TyR -> [TyR] -> TCM InstType'
 tyConKind_ res vs = instantiateTyping "tyconkind" $ foldr (liftA2 (~>)) (inferType res) $ map inferType vs
 
-mkInstType v k = \d -> WriterT' $ pure (singSubstTy v k, ([], k))   -- TODO: elim
-monoInstType v k = \d -> WriterT' $ pure (mempty, ([], k))
+mkInstType v k = \d -> WriterT' $ pure (singSubstTy_ v k, ([], k))   -- TODO: elim
+monoInstType v k = Map.singleton v $ \_ -> WriterT' $ pure (mempty, ([], k))
 
 inferConDef :: Name -> [(Name, TyR)] -> WithRange ConDef -> TCM InstEnv
 inferConDef con (unzip -> (vn, vt)) (r, ConDef n tys) = addRange r $ do
@@ -769,9 +773,8 @@ selectorDefs (r, DDataDef n _ cs) =
 inferDef :: ValueDefR -> TCM (TCM a -> TCM a)
 inferDef (ValueDef p@(PVar' _ n) e) = do
     (se, exp) <- runWriterT' $ removeMonoVars $ do
-        tn@(TVar _ tv) <- newStarVar $ pShow n
-        addConstraints $ singSubstTy n tn
-        exp <- withTyping (Map.singleton n $ monoInstType n tn) $ inferTyping e
+        tn@(TVar _ tv) <- newStarVar' "" n
+        exp <- withTyping (monoInstType n tn) $ inferTyping e
         addUnif tn $ tyOf exp
         return $ (,) (Set.fromList [n, tv]) exp
     (fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
@@ -786,7 +789,7 @@ inferDef' tt ty (ValueDef p@(PVar' _ n) e) = do
     (se, (exp, fs)) <- runWriterT'' $ do
         exp <- inferTyping e
         (fn, t) <- toTCMS ty
-        addUnif (tyOf exp) t
+        addUnif (tyOf exp) t        -- TODO: one directional
         return (exp, fn)
     (fs', f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
     the <- asks thunkEnv
