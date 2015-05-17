@@ -588,7 +588,7 @@ inferType = inferType_ True
 inferTyping = inferType_ False
 
 inferType_ :: Bool -> ExpR -> TCMS Exp
-inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" <+> pShow e) $ appSES $ case e of
+inferType_ allowNewVar e_@(ExpR r e) = addRange r $ addCtx ("type inference of" <+> pShow e) $ case e of
     EPrec_ e es -> do
         ps <- asks precedences
         inferType_ allowNewVar =<< calcPrec ps e es
