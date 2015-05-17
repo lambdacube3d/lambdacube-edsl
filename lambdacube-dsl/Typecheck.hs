@@ -313,7 +313,7 @@ unifyTypes :: forall m . (MonadError ErrorMsg m) => Bool -> [WithExplanation [Ex
 unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . pairsWith uni . snd
   where
 --    uni :: Exp -> Exp -> StateT TEnv TCM ()
-    uni a b = gets subst1 >>= \f -> unifyTy (f a) (f b)
+    uni a b = gets subst1{-could be subst-} >>= \f -> unifyTy (f a) (f b)
 
     -- make single tvar substitution; check infinite types
     bindVar n t = do
@@ -328,7 +328,7 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
         | u < v = bindVar u (TVar tv v)
         | otherwise = bindVar v (TVar tu u)
 
-    unifyTy :: Exp -> Exp -> StateT Subst m ()
+--    unifyTy :: Exp -> Exp -> StateT Subst m ()
     unifyTy (Exp t) (Exp t') = unifyTy' t t'
       where
         unifyTy' (Forall_ (Just a) k t) (Forall_ (Just a') k' t') = uni k k' >>
@@ -352,17 +352,15 @@ unifyTypes bidirectional tys = flip execStateT mempty $ forM_ tys $ sequence_ . 
         unifyTy' _ _
           | otherwise = throwError $ UnificationError (Exp t) (Exp t') $ filter (not . null . drop 1 . snd) tys
 
-    subst1 = subst_  -- TODO
-
 -- TODO: revise applications
-appSES :: (Substitute TEnv x, PShow x, Monad m) => TypingT m x -> TypingT m x
-appSES = mapWriterT' $ fmap $ \(se, x) -> (se, subst se x)
+appSES :: (Substitute Subst x, PShow x, Monad m) => TypingT m x -> TypingT m x
+appSES = mapWriterT' $ fmap $ \(se, x) -> (se, subst (toSubst se) x)
 
-removeMonoVars = mapWriterT' $ fmap $ \(en@(TEnv se), (s, x)) -> (TEnv $ foldr Map.delete se $ Set.toList s, subst en x)
+removeMonoVars = mapWriterT' $ fmap $ \(en@(TEnv se), (s, x)) -> (TEnv $ foldr Map.delete se $ Set.toList s, subst (toSubst en) x)
 
 runWriterT'' = runWriterT' . appSES
 
-closeSubst (TEnv m) = s where s = TEnv $ subst s <$> m
+closeSubst (TEnv m) = s where s = TEnv $ subst (toSubst s) <$> m
 
 --  { x = (a, b),         z = x,   z = (b, a)
 joinSubsts :: forall m . (MonadError ErrorMsg m) => [TEnv] -> m TEnv
@@ -441,10 +439,7 @@ star = return Star
 instantiateTyping_' :: Bool -> Doc -> TEnv -> Exp -> TCM ([(IdN, Exp)], InstType')
 instantiateTyping_' typ info se ty = do
     ambiguityCheck ("ambcheck" <+> info) se ty
---    pe <- asks $ getPolyEnv
-    let p n (ISig _) = True --n `Map.notMember` pe
-        p _ _ = False
-        se' = Map.filterWithKey p $ getTEnv se
+    let se' = Map.filter (eitherItem (const False) (const True)) $ getTEnv se
         fv = Map.keys se'
     return $ (,) (if typ then [(n, t) | (n, ISig t) <- Map.toList se'] else []) $ \info' -> WriterT' $ do
         newVars <- forM fv $ \case
@@ -755,8 +750,8 @@ inferDef (ValueDef p@(PVar' _ n) e) = do
         return $ (,) (Set.fromList [n, tv]) exp
     (fs, f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
     the <- asks thunkEnv
-    let th = subst ( the
-                   <> singSubst n (foldl (TApp (error "et")) th $ map (\(n, t) -> TVar t n) fs))
+    let th = subst ( toSubst the
+                   <> singSubst' n (foldl (TApp (error "et")) th $ map (\(n, t) -> TVar t n) fs))
            $ flip (foldr eLam) fs exp
     return (singSubst n th, withTyping $ Map.singleton n f)
 
@@ -769,8 +764,7 @@ inferDef' ty (ValueDef p@(PVar' _ n) e) = do
         return (exp, fn)
     (fs', f) <- addCtx ("inst" <+> pShow n) $ instantiateTyping_' True (pShow n) se $ tyOf exp
     the <- asks thunkEnv
-    let th e = subst the
-            $ subst (toTEnv (Subst e) <> se)
+    let th e = subst (toSubst the <> Subst e <> toSubst se)
             $ flip (foldr eLam) fs' exp
     return (Map.singleton n th)
 

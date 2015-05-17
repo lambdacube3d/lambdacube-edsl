@@ -4,6 +4,7 @@ module ParserUtil
     ) where
 
 import Control.Monad.Reader
+import Control.Monad.Identity
 import qualified Text.Parsec.Indentation.Char as I
 import qualified Text.Parsec.Indentation.Token as I
 import qualified Text.Parsec.Token as P
@@ -13,6 +14,12 @@ import Text.Parsec hiding (optional)
 
 type P_ st = Parsec (I.IndentStream (I.CharIndentStream String)) st
 
+{-# NoInline lexer #-}
+lexer :: P.GenTokenParser
+       (I.IndentStream
+          (I.CharIndentStream String))
+       u
+       Identity
 lexer = I.makeTokenParser $ I.makeIndentLanguageDef haskellDef
 
 position :: P_ st SourcePos

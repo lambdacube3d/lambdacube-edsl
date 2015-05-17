@@ -574,7 +574,7 @@ instance Monoid Subst where
     -- example2: subst ({x -> z} <> {x -> y}) = subst {x -> z} . subst {x -> y} = subst {x -> y}
     m1@(Subst y1) `mappend` Subst y2 = Subst $ (subst_ m1 <$> y2) <> y1
 
-subst_ = subst -- . toTEnv
+subst_ = subst
 singSubst' a b = Subst $ Map.singleton a b
 
 nullSubst (Subst s) = Map.null s
@@ -588,7 +588,7 @@ instance Monoid TEnv where
     -- semantics: apply (m1 <> m2) = apply m1 . apply m2
     -- example:  subst ({y -> z} <> {x -> y}) = subst {y -> z} . subst {x -> y} = subst {y -> z, x -> z}
     -- example2: subst ({x -> z} <> {x -> y}) = subst {x -> z} . subst {x -> y} = subst {x -> y}
-    m1@(TEnv y1) `mappend` TEnv y2 = TEnv $ Map.unionWith gg (subst m1 <$> y2) y1
+    m1@(TEnv y1) `mappend` TEnv y2 = TEnv $ Map.unionWith gg (subst (toSubst m1) <$> y2) y1
       where
         gg (ISubst s) _ = ISubst s
         gg _ b = b
@@ -598,7 +598,7 @@ singSubstTy a b = TEnv $ Map.singleton a $ ISig b
     
 -- build recursive environment  -- TODO: generalize
 recEnv :: Pat -> Exp -> Exp
-recEnv (PVar _ v) th_ = th where th = subst (singSubst v th) th_
+recEnv (PVar _ v) th_ = th where th = subst (singSubst' v th) th_
 recEnv _ th = th
 
 mapExp' f nf pf e = mapExp_ f nf f pf $ f <$> e
@@ -621,6 +621,13 @@ peelThunk (ExpTh env@(Subst m) e) = case e of
 
     delEnvs xs (Subst env) = Subst $ foldr Map.delete env $ map fst xs
     delEnv n x = delEnvs [(n, x)]
+
+subst1 :: Subst -> Exp -> Exp
+subst1 s@(Subst m) = \case
+    TVar k v -> case Map.lookup v m of
+        Just e -> subst1 s e
+        _ -> TVar k v
+    e -> e
 
 -------------------------------------------------------------------------------- free variables
 
@@ -684,8 +691,7 @@ class Substitute x a where subst :: x -> a -> a
 instance Substitute x a => Substitute x [a]                    where subst = fmap . subst
 instance (Substitute x a, Substitute x b) => Substitute x (a, b) where subst s (a, b) = (subst s a, subst s b)
 instance (Substitute x a, Substitute x b) => Substitute x (Either a b) where subst s = subst s +++ subst s
-instance Substitute TEnv Item where subst s = eitherItem (ISubst . subst s) (ISig . subst s)
-instance Substitute Subst Item where subst s = eitherItem (ISubst . subst s) (ISig . subst s)
+instance Substitute x Exp => Substitute x Item where subst s = eitherItem (ISubst . subst s) (ISig . subst s)
 {-
 instance Substitute Pat where
     subst s = \case
@@ -693,9 +699,9 @@ instance Substitute Pat where
         PCon t n l -> PCon (VarE n $ subst s ty) $ subst s l
         Pat p -> Pat $ subst s <$> p
 -}
-instance Substitute TEnv Exp where subst m1 (ExpTh m exp) = ExpTh (toSubst m1 <> m) exp
+--instance Substitute TEnv Exp where subst = subst . toSubst --m1 (ExpTh m exp) = ExpTh (toSubst m1 <> m) exp
 instance Substitute Subst Exp where subst m1 (ExpTh m exp) = ExpTh (m1 <> m) exp
-instance Substitute TEnv TEnv where subst s (TEnv m) = TEnv $ subst s <$> m
+--instance Substitute TEnv TEnv where subst s (TEnv m) = TEnv $ subst s <$> m
 instance Substitute Subst TEnv where subst s (TEnv m) = TEnv $ subst s <$> m
 
 --------------------------------------------------------------------------------
@@ -730,11 +736,13 @@ joinPolyEnvs ps = PolyEnv
     <*> mkJoin typeFamilies
   where
     mkJoin :: (PolyEnv -> Env a) -> m (Env a)
-    mkJoin f = case filter (not . null . drop 1 . snd) $ Map.toList ms' of
-        [] -> return $ fmap head $ Map.filter (not . null) ms'
-        xs -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xs)
-       where
-        ms' = Map.unionsWith (++) $ map (((:[]) <$>) . f) ps
+    mkJoin f = case filter (not . Map.null) . map f $ ps of
+        [m] -> return m
+        ms -> case filter (not . null . drop 1 . snd) $ Map.toList ms' of
+            [] -> return $ fmap head $ Map.filter (not . null) ms'
+            xs -> throwErrorTCM $ "Definition clash:" <+> pShow (map fst xs)
+          where
+            ms' = Map.unionsWith (++) $ map ((:[]) <$>) ms
 
     mkJoin' f = case [(n, x) | (n, s) <- Map.toList ms', (x, is) <- Map.toList s, not $ null $ drop 1 is] of
         [] -> return $ fmap head . Map.filter (not . null) <$> ms'
@@ -744,7 +752,7 @@ joinPolyEnvs ps = PolyEnv
 
 addPolyEnv pe m = do
     env <- ask
-    env <- joinPolyEnvs [env, pe]
+    env <- joinPolyEnvs [pe, env]
     local (const env) m
 
 --withTyping :: Env InstType -> TCM a -> TCM a
@@ -880,14 +888,14 @@ newRVar = do
     return $ ExpN $ "r" ++ show i
 
 -- TODO: make this more efficient (memoize reduced expressions)
-matchPattern :: Exp -> Pat -> ReduceM (Maybe TEnv{-TODO: Subst-})       -- Left: pattern match failure; Right Nothing: can't reduce
+matchPattern :: Exp -> Pat -> ReduceM (Maybe Subst)       -- Left: pattern match failure; Right Nothing: can't reduce
 matchPattern e = \case
     Wildcard _ -> return $ Just mempty
     PLit l -> reduceHNF e >>= \case
         ELit l'
             | l == l' -> return $ Just mempty
             | otherwise -> reduceFail $ "literals doesn't match: " ++ ppShow (l, l')
-    PVar _ v -> return $ Just $ singSubst v e
+    PVar _ v -> return $ Just $ singSubst' v e
     PTuple ps -> reduceHNF e >>= \e -> case e of
         ETuple xs -> fmap mconcat . sequence <$> sequence (zipWith matchPattern xs ps)
         _ -> return Nothing
@@ -899,10 +907,10 @@ matchPattern e = \case
           q -> error $ "match rj: " ++ ppShow q
         Nothing | ppShow c == "V3" {-hack!-} -> do
             vs <- replicateM 3 newRVar
-            return $ Just $ TEnv $ Map.fromList $ zip vs $ map (\n -> ISubst $ TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V3x","V3y","V3z"]
+            return $ Just $ Subst $ Map.fromList $ zip vs $ map (\n -> TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V3x","V3y","V3z"]
         Nothing | ppShow c == "V4" {-hack!-} -> do
             vs <- replicateM 4 newRVar
-            return $ Just $ TEnv $ Map.fromList $ zip vs $ map (\n -> ISubst $ TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V4x","V4y","V4z","V4v"]
+            return $ Just $ Subst $ Map.fromList $ zip vs $ map (\n -> TApp (error "x1") (TVar (error "x2") (ExpN n)) e) ["V4x","V4y","V4z","V4v"]
         _ -> return Nothing
     p -> error $ "matchPattern: " ++ ppShow p
   where
