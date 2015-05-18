@@ -1,3 +1,0 @@
-main =
-    let frame = FrameBuffer (ColorImage @1 @2)
-    in ScreenOut frame

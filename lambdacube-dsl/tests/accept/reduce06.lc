@@ -1,4 +1,0 @@
-constf = \e x -> e
-
-main = (\x -> constf x False) True  -- should be True
-
