@@ -2,12 +2,18 @@
 <html>
 <head>
   <title>Thermite Example</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.1.3/ace.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.4/jquery.min.js" type="text/javascript" charset="utf-8"></script>
   <style>
     body {
       font-family: sans-serif;
     }
     .ace_editor { 
         height: 300px;
+    }
+    .lc_error {
+        background: red;
+        position: absolute;
     }
   </style>
 </head>
@@ -18,8 +24,7 @@
     </canvas>
   <div id="ui"></div>
   <div id="editor"></div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.1.3/ace.js" type="text/javascript" charset="utf-8"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.4/jquery.min.js" type="text/javascript" charset="utf-8"></script>
+  <script src="token_tooltip.js"></script>
   <script src="index.js"></script>
   <script type="text/javascript"> var gl; onload = PS.Main.run;</script>
 </body>

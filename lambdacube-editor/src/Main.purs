@@ -8,6 +8,7 @@ import Ace
 import Ace.Types
 import qualified Ace.Editor as Editor
 import qualified Ace.EditSession as Session
+import qualified Ace.Range as Range
 
 import qualified Graphics.WebGL as GL
 import qualified Control.Monad.JQuery as J
@@ -30,18 +31,55 @@ import Input
 import PipelineJsonDecode
 import qualified Data.Argonaut as A
 
+import qualified Data.Matrix as M
+import qualified Data.Matrix4 as M
+
 main = return unit
 {-
   done - websocket setup
   done - compile button
   done - lc compiler in snap server
-  json serializer for Pipeline
+  done - json serializer for Pipeline
   done - embed lambdacube-webgl
     done - setup pipeline input
     done - compile/replace pipeline
   show error messages
   trace result
 -}
+
+{-
+  control-b - compile/build
+  control-n - new
+-}
+foreign import addCommand """
+  function addCommand(editor) {
+    return function(cmdName) {
+      return function(winKey) {
+        return function(macKey) {
+          return function(cmd) {
+            return function() {
+              editor.commands.addCommand({
+                name: cmdName,
+                bindKey: {win: winKey,  mac: macKey},
+                exec: function(editor) {
+                  cmd(editor)();
+                }
+              });
+            };
+          };
+        };
+      };
+    };
+  }
+""" :: forall eff . Editor -> String -> String -> String -> (Editor -> Eff (ace :: EAce | eff) Unit) -> Eff (ace :: EAce | eff) Unit
+
+foreign import tokenTooltip """
+  function tokenTooltip(editor) {
+    return function() {
+        editor.tokenTooltip = new myTokenTooltip(editor);
+    };
+  }
+""" :: forall eff . Editor -> Eff (ace :: EAce | eff) Unit
 
 run = GL.runWebGL "glcanvas" (\s -> trace s) $ \context -> do
   -- setup pipeline input
@@ -65,6 +103,9 @@ run = GL.runWebGL "glcanvas" (\s -> trace s) $ \context -> do
   Editor.setTheme "ace/theme/terminal" editor
   Session.setMode "ace/mode/haskell" session
   Session.setValue defaultSrc session
+  range <- Range.create 8 0 9 0
+  Session.addMarker range "lc_error" "line" false session
+  tokenTooltip editor
 
   b <- J.body
   ui <- J.find "ui" b
@@ -72,7 +113,11 @@ run = GL.runWebGL "glcanvas" (\s -> trace s) $ \context -> do
   J.setText "Compile" btnCompile
   btnCompile `J.append` b
 
-  let render ir = do
+  let compile s = do
+        src <- Session.getValue session
+        send s src
+
+      render ir = do
         trace "WebGL ready"
         ppl <- allocPipeline ir -- gfx03Pipeline -- samplePipeline
         trace "Pipeline allocated"
@@ -87,7 +132,9 @@ run = GL.runWebGL "glcanvas" (\s -> trace s) $ \context -> do
         trace "Pipeline disposed"
 
   socket <- webSocket "ws://localhost:8000/console/bash" $
-    { onOpen    : \s -> trace "socket is ready"
+    { onOpen    : \s -> do
+        trace "socket is ready"
+        compile s
     , onClose   : trace "socket is closed"
     , onMessage : \s m -> do
         trace m
@@ -101,7 +148,7 @@ run = GL.runWebGL "glcanvas" (\s -> trace s) $ \context -> do
     Left m -> trace $ "error: " ++ m
     Right ws -> do
       flip (J.on "click") btnCompile $ \_ _ -> do
-        src <- Session.getValue session
-        send ws src
+        compile ws
         trace "clicked compile"
+      addCommand editor "Compile" "Ctrl-B" "Command-B" (\_ -> compile ws)
       return unit
