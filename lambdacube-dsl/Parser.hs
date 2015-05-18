@@ -5,7 +5,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Parser where
+module Parser
+    ( parseLC
+    , application
+    ) where
 
 import Data.Function
 import Data.Char
@@ -31,92 +34,70 @@ import ParserUtil
 
 -------------------------------------------------------------------------------- parser specific types
 
-type P = P_ ()
-
-type PreDefinitionR = DefinitionR
-type PrecExpR = ExpR
+type P = P_ ()      -- no state for the parser
 
 ---------------------
 
-void_ a = a >> return ()
-
-typeConstraint :: P ClassName
-typeConstraint = do
-  i <- ident lcIdents
-  if isUpper $ head i then return $ TypeN' i (P.text i) else fail "type constraint must start with capital letter"
-
-typeConstructor :: P N
-typeConstructor = do
-  i <- ident lcIdents
-  if isUpper $ head i then return $ TypeN' i (P.text i) else fail "type name must start with capital letter"
-
-upperCaseIdent :: P N
-upperCaseIdent = do
-  i <- ident lcIdents
-  if isUpper $ head i then return $ ExpN i else fail "upper case ident expected"
+(<&>) = flip (<$>)
 
 -- see http://blog.ezyang.com/2014/05/parsec-try-a-or-b-considered-harmful/comment-page-1/#comment-6602
 try' s m = try m <?> s
 
-typeVar :: P N
-typeVar = try' "type variable" $ do
-  p <- position
+upperCase, lowerCase, symbols, colonSymbols :: P String
+upperCase = try $ do
   i <- ident lcIdents
-  if isUpper $ head i then fail "type variable name must start with lower case letter" else return $ TypeN' i (P.text $ i ++ show p)
-
-dataConstructor :: P N
-dataConstructor = try' "data constructor" $ do
+  if isUpper $ head i then return i else fail "upper case ident expected"
+lowerCase = try $ do
   i <- ident lcIdents
-  if isUpper $ head i then return $ ExpN i else fail "data constructor must start with capital letter"
+  if isLower $ head i then return i else fail "lower case ident expected"
+symbols = try $ do
+  i <- ident lcOps <|>  "." <$ operator "."
+  if head i /= ':' then return i else fail "symbols expected"
+colonSymbols = do
+    "Cons" <$ operator ":"
+  <|> do
+    try $ do
+      i <- ident lcOps
+      if head i == ':' then return i else fail "colon symbols expected"
 
-var :: P N
-var = try' "variable" $ do
-  p <- position
-  i <- ident lcIdents
-  if isUpper $ head i then fail "variable name must start with lower case letter" else return $ ExpN' i (P.text $ i ++ show p)
+qualified_ id = do
+    qs <- optional {-runUnspaced-} $ try' "qualified" $ sepBy1 ({-Unspaced-} upperCase) dot <* dot
+    (N t [] n i) <- id
+    return $ N t (fromMaybe [] qs) n i
 
--- qualified variable
-qVar :: P N    -- TODO
-qVar = var <|> {-runUnspaced-} (try' "qualified var" $ sepBy ({-Unspaced-} upperCaseIdent) dot *> dot *> {-Unspaced-} var)
-
-operator' :: P N
-operator' = try' "operator" (do
-                  p <- position
-                  i <- ident lcOps
-                  if head i == ':' then fail "operator cannot start with ':'" else return $ ExpN' i $ P.text $ show p)
-        <|> (operator "." *> pure (ExpN "."))
-        <|> conoperator'
-
-conoperator' = try' "constructor operator" (do
-                  p <- position
-                  i <- ident lcOps
-                  if head i /= ':' then fail "constructor operator should start with ':'" else return $ ExpN' (if i == ":" then "Cons" else i) $ P.text $ show p)
-
-varId :: P N
-varId = var <|> parens operator'
+typeConstructor, upperCaseIdent, typeVar, var, varId, qVar, operator', conoperator' :: P Name
+typeConstructor = upperCase <&> \i -> TypeN' i (P.text i)
+upperCaseIdent  = upperCase <&> ExpN
+typeVar         = (\p i -> TypeN' i $ P.text $ i ++ show p) <$> position <*> lowerCase
+var             = (\p i -> ExpN' i $ P.text $ i ++ show p) <$> position <*> lowerCase
+qVar            = qualified_ var
+conoperator'    = (\p i -> ExpN' i $ P.text $ i ++ show p) <$> position <*> colonSymbols
+varId           = var <|> parens operator'
+operator'       = (\p i -> ExpN' i $ P.text $ i ++ show p) <$> position <*> symbols
+                  <|> conoperator'
 
 --------------------------------------------------------------------------------
 
 sepBy2 a b = (:) <$> a <* b <*> sepBy1 a b
 
-alts :: Int -> [PrecExpR] -> PrecExpR
+alts :: Int -> [ExpR] -> ExpR
 alts _ [e] = e
 alts i es = EAltsR' (foldMap getTag es) i es
 
-compileWhereRHS :: WhereRHS -> PrecExpR
+compileWhereRHS :: WhereRHS -> ExpR
 compileWhereRHS (WhereRHS r md) = maybe x (flip eLets x) md where
     x = compileGuardedRHS r
 
-compileGuardedRHS :: GuardedRHS -> PrecExpR
+compileGuardedRHS :: GuardedRHS -> ExpR
 compileGuardedRHS (NoGuards e) = e
 compileGuardedRHS (Guards p gs) = foldr addGuard (ExpR p{-TODO-} (ENext_ ())) gs
   where
     addGuard (b, x) y = eApp (eApp (eApp (eVar p{-TODO-} (ExpN "ifThenElse")) b) x) y
 
-compileCases :: Range -> PrecExpR -> [(PatR, WhereRHS)] -> PrecExpR
+compileCases :: Range -> ExpR -> [(PatR, WhereRHS)] -> ExpR
 compileCases r e rs = eApp (alts 1 [eLam p $ compileWhereRHS r | (p, r) <- rs]) e
 
-compileRHS :: [PreDefinitionR] -> PreDefinitionR
+compileRHS :: [DefinitionR] -> DefinitionR
 compileRHS ds = case ds of
     ((r1, DTypeSig (TypeSig _ t)): ds@((r2, PreValueDef{}): _)) -> (r1 `mappend` r2, mkAlts (`eTyping` t) ds)
     ds@((r, PreValueDef{}): _) -> (r, mkAlts id ds)
@@ -130,7 +111,7 @@ compileRHS ds = case ds of
 
 allSame (n:ns) | all (==n) ns = n
 
-groupDefinitions :: [PreDefinitionR] -> [DefinitionR]
+groupDefinitions :: [DefinitionR] -> [DefinitionR]
 groupDefinitions defs = concatMap mkDef . map compileRHS . groupBy (f `on` snd) $ defs
   where
     f (h -> Just x) (h -> Just y) = x == y
@@ -189,7 +170,7 @@ importDef = do
   keyword "import"
   optional $ keyword "qualified"
   n <- moduleName
-  let importlist = parens (commaSep (varId <|> dataConstructor))
+  let importlist = parens (commaSep (varId <|> upperCaseIdent))
   optional $
         (keyword "hiding" >> importlist)
     <|> importlist
@@ -199,15 +180,15 @@ importDef = do
   return n
 
 typeSynonym :: P ()
-typeSynonym = void_ $ do
+typeSynonym = void $ do
   keyword "type"
   localIndentation Gt $ do
     typeConstructor
     many typeVar
     operator "="
-    void_ typeExp
+    void typeExp
 
-typeSignature :: P [PreDefinitionR]
+typeSignature :: P [DefinitionR]
 typeSignature = do
   ns <- try' "type signature" $ do
     ns <- sepBy1 varId comma
@@ -217,10 +198,10 @@ typeSignature = do
     optional (operator "!") *> typeExp
   return [(mempty, DTypeSig $ TypeSig n t) | n <- ns]
 
-axiom :: P [PreDefinitionR]
+axiom :: P [DefinitionR]
 axiom = do
   ns <- try' "axiom" $ do
-    ns <- sepBy1 (varId <|> dataConstructor) comma
+    ns <- sepBy1 (varId <|> upperCaseIdent) comma
     localIndentation Gt $ operator "::"
     return ns
   t <- localIndentation Gt $ do
@@ -230,7 +211,7 @@ axiom = do
 tcExp :: P (TyR -> TyR)   -- TODO
 tcExp = try' "type context" $ do
   let tyC = addPos addC (eqC <$> try (ty <* operator "~") <*> ty)
-        <|> addPos addC (CClass <$> typeConstraint <*> typeAtom)
+        <|> addPos addC (CClass <$> typeConstructor <*> typeAtom)
       addC :: Range -> ConstraintR -> TyR -> TyR
       addC r c = ExpR r . Forall_ Nothing (ExpR r $ ConstraintKind_ c)
       eqC t1 t2 = CEq t1 (mkTypeFun t2)
@@ -308,7 +289,7 @@ addTPos = addPos ExpR
 
 addDPos m = addPos (,) m
 
-typeFamily :: P PreDefinitionR
+typeFamily :: P DefinitionR
 typeFamily = addDPos $ do
     try $ keyword "type" >> keyword "family"
     tc <- typeConstructor
@@ -318,14 +299,14 @@ typeFamily = addDPos $ do
         ty
     return $ TypeFamilyDef tc tvs $ fromMaybe (ExpR mempty Star_) res
 
-dataDef :: P PreDefinitionR
+dataDef :: P DefinitionR
 dataDef = addDPos $ do
  keyword "data"
  localIndentation Gt $ do
   tc <- typeConstructor
   tvs <- many typeVarKind
   let dataConDef = addDPos $ do
-        tc <- dataConstructor
+        tc <- upperCaseIdent
         tys <-   braces (sepBy (FieldTy <$> (Just <$> varId) <*> (keyword "::" *> optional (operator "!") *> typeExp)) comma)
             <|>  many (optional (operator "!") *> (FieldTy Nothing <$> typeAtom))
         return $ ConDef tc tys
@@ -334,7 +315,7 @@ dataDef = addDPos $ do
       keyword "where"
       ds <- localIndentation Ge $ localAbsoluteIndentation $ many $ do
         cs <- do
-            cs <- sepBy1 dataConstructor comma
+            cs <- sepBy1 upperCaseIdent comma
             localIndentation Gt $ do
                 operator "::"
             return cs
@@ -350,11 +331,11 @@ dataDef = addDPos $ do
       return $ DDataDef tc tvs ds
 
 
-derivingStm = optional $ keyword "deriving" <* (void_ typeConstraint <|> void_ (parens $ sepBy typeConstraint comma))
+derivingStm = optional $ keyword "deriving" <* (void typeConstructor <|> void (parens $ sepBy typeConstructor comma))
 
 typeRecord :: P TyR
 typeRecord = undef "trec" $ do
-  braces (commaSep1 typeSignature >> optional (operator "|" >> void_ typeVar))
+  braces (commaSep1 typeSignature >> optional (operator "|" >> void typeVar))
 
 -- compose ranges through getTag
 infixl 9 <->
@@ -370,12 +351,12 @@ addPos f m = do
     p2 <- position
     return $ f (Range p1 p2) a
 
-typeClassDef :: P PreDefinitionR
+typeClassDef :: P DefinitionR
 typeClassDef = addDPos $ do
   keyword "class"
   localIndentation Gt $ do
     optional tcExp
-    c <- typeConstraint
+    c <- typeConstructor
     tvs <- many typeVarKind
     ds <- optional $ do
       keyword "where"
@@ -387,12 +368,12 @@ typeVarKind =
       parens ((,) <$> typeVar <* operator "::" <*> ty)
   <|> (,) <$> typeVar <*> addTPos (pure Star_)
 
-typeClassInstanceDef :: P PreDefinitionR
+typeClassInstanceDef :: P DefinitionR
 typeClassInstanceDef = addDPos $ do
   keyword "instance"
   localIndentation Gt $ do
     optional tcExp
-    c <- typeConstraint
+    c <- typeConstructor
     t <- typeAtom
     ds <- optional $ do
       keyword "where"
@@ -400,7 +381,7 @@ typeClassInstanceDef = addDPos $ do
         valueDef
     return $ PreInstanceDef c t $ fromMaybe [] ds
 
-fixityDef :: P [PreDefinitionR]
+fixityDef :: P [DefinitionR]
 fixityDef = do
   dir <-    Nothing      <$ keyword "infix" 
         <|> Just FDLeft  <$ keyword "infixl"
@@ -437,7 +418,7 @@ valuePatternAtom
     <|> addPPos (PLit_ <$> literal)
     <|> addPPos (PAt_ <$> try' "at pattern" (var <* operator "@") <*> valuePatternAtom)
     <|> addPPos (PVar_ () <$> var)
-    <|> addPPos ((\c -> PCon_ () c []) <$> try dataConstructor)
+    <|> addPPos ((\c -> PCon_ () c []) <$> try upperCaseIdent)
     <|> tuplePattern
     <|> recordPat
     <|> listPat
@@ -457,7 +438,7 @@ valuePatternAtom
 
 eLam p e = ELamR' (p <-> e) p e
 
-valueDef :: P PreDefinitionR
+valueDef :: P DefinitionR
 valueDef = addDPos $ do
   f <- 
     try' "definition" (do
@@ -500,17 +481,17 @@ rhs delim = NoGuards <$> xx
   where
     xx = delim *> expression
 
-application :: [PrecExpR] -> PrecExpR
+application :: [ExpR] -> ExpR
 application [e] = e
 application es = eApp (application $ init es) (last es)
 
-eApp :: PrecExpR -> PrecExpR -> PrecExpR
+eApp :: ExpR -> ExpR -> ExpR
 eApp = eApp'
 
 eApp' :: ExpR -> ExpR -> ExpR
 eApp' a b = EAppR' (a <-> b) a b
 
-expression :: P PrecExpR
+expression :: P ExpR
 expression = do
   e <-
       ifthenelse <|>
@@ -526,14 +507,14 @@ expression = do
         return $ eTyping e t
     <|> return e
  where
-  lambda :: P PrecExpR
+  lambda :: P ExpR
   lambda = (\(ps, e) -> foldr eLam e ps) <$> (operator "\\" *> ((,) <$> many valuePatternAtom <* operator "->" <*> expression))
 
-  ifthenelse :: P PrecExpR
+  ifthenelse :: P ExpR
   ifthenelse = addPos (\r (a, b, c) -> eApp (eApp (eApp (eVar r (ExpN "ifThenElse")) a) b) c) $
         (,,) <$ keyword "if" <*> expression <* keyword "then" <*> expression <* keyword "else" <*> expression
 
-  caseof :: P PrecExpR
+  caseof :: P ExpR
   caseof = addPos (uncurry . compileCases) $ do
     keyword "case"
     e <- expression
@@ -542,7 +523,7 @@ expression = do
         (,) <$> valuePattern <*> localIndentation Gt (whereRHS $ operator "->")
     return (e, pds)
 
-  letin :: P PrecExpR
+  letin :: P ExpR
   letin = do
       keyword "let"
       l <- localIndentation Ge $ localAbsoluteIndentation $ some valueDef
@@ -550,15 +531,15 @@ expression = do
       a <- expression
       return $ eLets l a
 
-eLets :: [PreDefinitionR] -> PrecExpR -> PrecExpR
+eLets :: [DefinitionR] -> ExpR -> ExpR
 eLets l a = foldr ($) a $ map eLet $ groupDefinitions l
   where
     eLet (r, DValueDef (ValueDef a b)) = ELetR' r a b
 
-eTyping :: PrecExpR -> TyR -> PrecExpR
+eTyping :: ExpR -> TyR -> ExpR
 eTyping a b = ETypeSigR' (a <-> b) a b
 
-expressionOpAtom :: P PrecExpR
+expressionOpAtom :: P ExpR
 expressionOpAtom = addEPos $ EPrec_ <$> exp <*> opExps
   where
     opExps = do
@@ -582,7 +563,7 @@ expressionOpAtom = addEPos $ EPrec_ <$> exp <*> opExps
 
 backquoteOp = try' "backquote operator" ({-runUnspaced-} ({-Unspaced-} (operator "`") *> {-Unspaced-} (var <|> upperCaseIdent) <* {-Unspaced-} (operator "`")))
 
-expressionAtom :: P PrecExpR
+expressionAtom :: P ExpR
 expressionAtom = do
     e <- expressionAtom_
     sw <- optional $ do
@@ -598,7 +579,7 @@ desugarSwizzling cs e = eTuple mempty [eApp (EFieldProjR' mempty $ ExpN [c]) e |
 
 eTyApp a b = ETyAppR (a <-> b) a b
 
-expressionAtom_ :: P PrecExpR
+expressionAtom_ :: P ExpR
 expressionAtom_ =
   listExp <|>
   addPos eLit literal <|>
@@ -606,26 +587,26 @@ expressionAtom_ =
   recordExp' <|>
   recordFieldProjection <|>
   addPos eVar qVar <|>
-  addPos eVar dataConstructor <|>
+  addPos eVar upperCaseIdent <|>
   tuple
  where
-  tuple :: P PrecExpR
+  tuple :: P ExpR
   tuple = addPos eTuple $ parens $ sepBy expression comma
 
-  recordExp :: P PrecExpR
+  recordExp :: P ExpR
   recordExp = addPos eRecord $ braces $ sepBy ((,) <$> var <* colon <*> expression) comma
 
-  recordExp' :: P PrecExpR
-  recordExp' = try $ addPos (uncurry . eNamedRecord) ((,) <$> dataConstructor <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma))
+  recordExp' :: P ExpR
+  recordExp' = try $ addPos (uncurry . eNamedRecord) ((,) <$> upperCaseIdent <*> braces (sepBy ((,) <$> var <* keyword "=" <*> expression) comma))
 
-  recordFieldProjection :: P PrecExpR
+  recordFieldProjection :: P ExpR
   recordFieldProjection = try $ flip eApp <$> addPos eVar var <*>
         addPos EFieldProjR' ({-runUnspaced $-} dot *> {-Unspaced-} var)
 
   eLit p l@LInt{} = eApp' (eVar p (ExpN "fromInt")) $ ELitR' p l
   eLit p l = ELitR' p l
 
-  listExp :: P PrecExpR
+  listExp :: P ExpR
   listExp = addPos (\p -> foldr cons (nil p)) $ brackets $ commaSep expression
     where
       nil r = eVar (r{-TODO-}) $ ExpN "Nil"
