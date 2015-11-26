@@ -41,7 +41,7 @@ Library
         bytestring-trie >=0.2 && <0.3,
         OpenGLRaw >=1.5 && <1.6,
         bitmap >= 0.0.2 && <0.0.3,
-        language-glsl,
+        language-glsl >=0.2 && <0.3,
 
         lambdacube-core == 0.2.0,
         lambdacube-edsl == 0.2.0
