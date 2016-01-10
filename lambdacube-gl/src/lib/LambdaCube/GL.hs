@@ -64,6 +64,7 @@ module LambdaCube.GL (
     enableObject,
 
     -- texture (temporary)
+    compileTexture2DRGBAF',
     compileTexture2DRGBAF,
     updateTexture2DRGBAF,
 

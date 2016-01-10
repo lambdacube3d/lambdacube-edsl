@@ -66,6 +66,9 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_DEPTH_COMPONENT32
     , gl_DEPTH_COMPONENT
     , glGenTextures
+
+    , glEnable
+    , gl_FRAMEBUFFER_SRGB
     )
 
 import LambdaCube.Core.Type
@@ -402,6 +405,7 @@ compileRenderer dag outExp = do
     --          all uniform with same name have the same type
     --          all stream input with same name have the same type
     objIDSeed <- newIORef 1
+    glEnable gl_FRAMEBUFFER_SRGB
     return $! Renderer
         -- public
         { slotUniform           = slotUniformTrie

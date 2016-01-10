@@ -62,6 +62,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , gl_RGB
     , gl_RGBA
     , gl_RGBA8
+    , gl_SRGB8_ALPHA8
     , gl_TEXTURE_2D
     , gl_TEXTURE_BASE_LEVEL
     , gl_TEXTURE_MAG_FILTER
@@ -290,7 +291,10 @@ enableObject obj b = writeIORef (objectEnabledIORef obj) b
 
 -- FIXME: Temporary implemenation
 compileTexture2DRGBAF :: Bool -> Bool -> Bitmap Word8 -> IO TextureData
-compileTexture2DRGBAF isMip isClamped bitmap = do
+compileTexture2DRGBAF = compileTexture2DRGBAF' False
+
+compileTexture2DRGBAF' :: Bool -> Bool -> Bool -> Bitmap Word8 -> IO TextureData
+compileTexture2DRGBAF' isSRGB isMip isClamped bitmap = do
     glPixelStorei gl_UNPACK_ALIGNMENT 1
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     glBindTexture gl_TEXTURE_2D to
@@ -308,7 +312,7 @@ compileTexture2DRGBAF isMip isClamped bitmap = do
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL $ fromIntegral maxLevel
     withBitmap bitmap $ \(w,h) nchn 0 ptr -> do
-        let internalFormat  = fromIntegral gl_RGBA8
+        let internalFormat  = fromIntegral $ if isSRGB then gl_SRGB8_ALPHA8 else gl_RGBA8
             dataFormat      = fromIntegral $ case nchn of
                 3   -> gl_RGB
                 4   -> gl_RGBA
