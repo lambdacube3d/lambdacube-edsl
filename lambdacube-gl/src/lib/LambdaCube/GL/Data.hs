@@ -56,6 +56,7 @@ import Graphics.Rendering.OpenGL.Raw.Core32
     , glTexSubImage2D
     , glTexParameteri
     , gl_CLAMP_TO_EDGE
+    , gl_NEAREST
     , gl_LINEAR
     , gl_LINEAR_MIPMAP_LINEAR
     , gl_REPEAT
@@ -291,24 +292,25 @@ enableObject obj b = writeIORef (objectEnabledIORef obj) b
 
 -- FIXME: Temporary implemenation
 compileTexture2DRGBAF :: Bool -> Bool -> Bitmap Word8 -> IO TextureData
-compileTexture2DRGBAF = compileTexture2DRGBAF' False
+compileTexture2DRGBAF = compileTexture2DRGBAF' True False
 
-compileTexture2DRGBAF' :: Bool -> Bool -> Bool -> Bitmap Word8 -> IO TextureData
-compileTexture2DRGBAF' isSRGB isMip isClamped bitmap = do
+compileTexture2DRGBAF' :: Bool -> Bool -> Bool -> Bool -> Bitmap Word8 -> IO TextureData
+compileTexture2DRGBAF' isFiltered isSRGB isMip isClamped bitmap = do
     glPixelStorei gl_UNPACK_ALIGNMENT 1
     to <- alloca $! \pto -> glGenTextures 1 pto >> peek pto
     glBindTexture gl_TEXTURE_2D to
     let (width,height) = bitmapSize bitmap
+        texFilter = if isFiltered then gl_LINEAR else gl_NEAREST
         wrapMode = case isClamped of
             True    -> gl_CLAMP_TO_EDGE
             False   -> gl_REPEAT
-        (minFilter,maxLevel) = case isMip of
-            False   -> (gl_LINEAR,0)
+        (minFilter,maxLevel) = case isFiltered && isMip of
+            False   -> (texFilter,0)
             True    -> (gl_LINEAR_MIPMAP_LINEAR, floor $ log (fromIntegral $ max width height) / log 2)
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S $ fromIntegral wrapMode
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T $ fromIntegral wrapMode
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral minFilter
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral texFilter
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_BASE_LEVEL 0
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAX_LEVEL $ fromIntegral maxLevel
     withBitmap bitmap $ \(w,h) nchn 0 ptr -> do
