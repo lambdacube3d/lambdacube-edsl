@@ -1,3 +1,5 @@
+#Previous version of LambdaCube 3D as Embedded Domain Specific Language in Haskell. Check the latest system: http://lambdacube3d.com
+
 #LambdaCube 3D
   LambdaCube 3D is a domain specific language and library that makes it possible to program GPUs in a purely functional style.  
   You can find more info in the development blog. http://lambdacube3d.wordpress.com/
