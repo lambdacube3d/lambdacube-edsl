@@ -6,13 +6,35 @@ Check the latest system: http://lambdacube3d.com
   LambdaCube 3D is a domain specific language and library that makes it possible to program GPUs in a purely functional style.  
   You can find more info in the development blog. http://lambdacube3d.wordpress.com/
 
-## Lambdacube-core
+## Setup
+
+#### On **Linux** install the following libraries.
+   i.e. on Ubuntu:
+   ```
+   sudo apt install libgl1-mesa-dev libxi-dev libxcursor-dev libxinerama-dev libxrandr-dev zlib1g-dev libpulse-dev
+   ```
+   For other Linux distributions make sure the corresponing packages are installed.
+
+   *These libraries required for OpenGL development.*
+
+
+#### Compile & Run:
+
+To compile you will need [Haskell Stack](https://docs.haskellstack.org/en/stable/README/).
+
+```
+stack setup
+stack build
+
+stack exec -- lambdacube-hello
+stack exec -- lambdacube-shadowmapping
+stack exec -- lambdacube-cubemap
+stack exec -- lambdacube-convolutionfilter
+```
+
+## Lambdacube-edsl
 
   Lambdacube-core contains the graphics EDSL and the OpenGL 3.2 backend.
-
-    Install:
-        cd lambdacube-core
-        cabal install
 
 ## Q3Demo
   Quake III level viewer demo application for lambdacube-core.
@@ -20,14 +42,6 @@ Check the latest system: http://lambdacube3d.com
   Addtionally custom made game levels are available from http://lvlworld.com. 
   During startup the application will find all .pk3 files available in the current directory.
   The map name can be given as an argument of the q3demo executable.
-    
-    Install:
-        git clone https://github.com/csabahruska/quake3
-        cd quake3
-        cabal install
-
-    Example usage:
-        q3demo q3dm1
 
 ## Stunts
   A revival of the classic racing game Stunts to serve as a non-toy-sized example for LambdaCube.
@@ -35,14 +49,7 @@ Check the latest system: http://lambdacube3d.com
   *git clone git://github.com/csabahruska/bullet.git*    
   The bullet installation instructions can be found in *bullet/README*.
   In order to make the stunts demo work, you need to download the original game as per the instructions given by the program.
-    
-    Install:
-        git clone https://github.com/csabahruska/stunts
-        cd stunts
-        cabal install
 
-    Usage:
-        stunts
 
 ## Screenshots
 
