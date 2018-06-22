@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds, FlexibleContexts, GADTs #-}
 
-import "GLFW-b" Graphics.UI.GLFW as GLFW
+import qualified Graphics.UI.GLFW as GLFW
 import Control.Monad
 import Data.Vect
 import qualified Data.Trie as T

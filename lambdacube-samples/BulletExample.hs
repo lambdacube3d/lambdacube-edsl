@@ -31,7 +31,7 @@ import Data.Vector ((!))
 import qualified Data.Vector as V 
 import Foreign hiding (unsafePerformIO)
 import FRP.Elerea.Simple
-import "GLFW-b" Graphics.UI.GLFW
+import qualified Graphics.UI.GLFW as GLFW
 import Physics.Bullet.Raw
 import Physics.Bullet.Raw.Class
 import Physics.Bullet.Raw.Types

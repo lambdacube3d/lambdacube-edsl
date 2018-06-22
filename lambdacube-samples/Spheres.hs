@@ -8,7 +8,7 @@ import qualified Data.Trie as T
 import Data.Vect hiding (reflect')
 import Data.Vect.Float.Instances ()
 import FRP.Elerea.Param
-import "GLFW-b" Graphics.UI.GLFW as GLFW
+import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf
 
 import LambdaCube.GL

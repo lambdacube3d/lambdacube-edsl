@@ -8,7 +8,7 @@ import qualified Data.Trie as T
 import Data.Vect
 import Data.Vect.Float.Instances ()
 import FRP.Elerea.Param
-import "GLFW-b" Graphics.UI.GLFW as GLFW
+import qualified Graphics.UI.GLFW as GLFW
 
 import LambdaCube.GL
 import LambdaCube.GL.Mesh
@@ -38,7 +38,7 @@ main = do
         pipeline = PrjFrameBuffer "outFB" tix0 vsm
 
     (win,windowSize) <- initWindow "LambdaCube 3D Shadow Mapping Demo" 1280 720
-    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
+    let keyIsPressed k = fmap (==GLFW.KeyState'Pressed) $ GLFW.getKey win k
 
     (duration, renderer) <- measureDuration $ compileRenderer (ScreenOut pipeline)
     putStrLn $ "Renderer compiled - " ++ show duration
@@ -69,7 +69,7 @@ main = do
         draw command = do
             render renderer
             command
-            swapBuffers win >> pollEvents
+            GLFW.swapBuffers win >> GLFW.pollEvents
 
     sceneSignal <- start $ do
         thread <- scene win keyIsPressed (setScreenSize renderer) sceneSlots objectSlots windowSize
@@ -79,14 +79,14 @@ main = do
     dispose renderer
     putStrLn "Renderer destroyed."
 
-    destroyWindow win
-    terminate
+    GLFW.destroyWindow win
+    GLFW.terminate
 
 scene win keyIsPressed setSize sceneSlots (planeSlot:cubeSlots) windowSize = do
-    pause <- toggle =<< risingEdge =<< effectful (keyIsPressed (Key'P))
+    pause <- toggle =<< risingEdge =<< effectful (keyIsPressed (GLFW.Key'P))
     time <- transfer 0 (\dt paused time -> time + if paused then 0 else dt) pause 
     
-    capture <- risingEdge =<< effectful (keyIsPressed (Key'C))
+    capture <- risingEdge =<< effectful (keyIsPressed (GLFW.Key'C))
     frameCount <- stateful (0 :: Int) (const (+1))
     
     fpsTracking <- stateful (0, 0, Nothing) $ \dt (time, count, _) -> 
@@ -97,14 +97,14 @@ scene win keyIsPressed setSize sceneSlots (planeSlot:cubeSlots) windowSize = do
            else (time', count + 1, Nothing)
 
     mousePosition <- effectful $ do
-        (x, y) <- getCursorPos win
+        (x, y) <- GLFW.getCursorPos win
         return $ Vec2 (realToFrac x) (realToFrac y)
     directionControl <- effectful $ (,,,,)
-                 <$> keyIsPressed Key'Left
-                 <*> keyIsPressed Key'Up
-                 <*> keyIsPressed Key'Down
-                 <*> keyIsPressed Key'Right
-                 <*> keyIsPressed Key'RightShift
+                 <$> keyIsPressed GLFW.Key'Left
+                 <*> keyIsPressed GLFW.Key'Up
+                 <*> keyIsPressed GLFW.Key'Down
+                 <*> keyIsPressed GLFW.Key'Right
+                 <*> keyIsPressed GLFW.Key'RightShift
     
     mousePosition' <- delay zero mousePosition
     camera <- userCamera (Vec3 (-4) 0 0) (mousePosition - mousePosition') directionControl
@@ -157,10 +157,10 @@ scene win keyIsPressed setSize sceneSlots (planeSlot:cubeSlots) windowSize = do
 
 --readInput :: IO (Maybe Float)
 readInput keyIsPressed = do
-    Just t <- getTime
-    setTime 0
+    Just t <- GLFW.getTime
+    GLFW.setTime 0
 
-    k <- keyIsPressed Key'Escape
+    k <- keyIsPressed GLFW.Key'Escape
     return $ if k then Nothing else Just (realToFrac t)
 
 shadowMapSize :: Num a => a

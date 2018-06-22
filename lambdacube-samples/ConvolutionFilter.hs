@@ -8,7 +8,7 @@ import Data.Time.Clock
 import Data.Vect
 import Data.Vect.Float.Instances ()
 import qualified Data.Vector.Storable as V
-import "GLFW-b" Graphics.UI.GLFW as GLFW
+import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf
 
 import LambdaCube.GL
@@ -40,7 +40,7 @@ main = do
         pipeline = PrjFrameBuffer "outFB" tix0 finalImage
 
     (win,_) <- initWindow "LambdaCube 3D Convolution Filter Demo" windowWidth windowHeight
-    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
+    let keyIsPressed k = fmap (==GLFW.KeyState'Pressed) $ GLFW.getKey win k
 
     (duration, renderer) <- measureDuration $ compileRenderer (ScreenOut pipeline)
     putStrLn $ "Renderer compiled - " ++ show duration
@@ -73,10 +73,10 @@ main = do
         case input of
             Nothing -> return ()
             Just dt -> do
-                (w, h) <- getWindowSize win
+                (w, h) <- GLFW.getWindowSize win
                 setScreenSize renderer (fromIntegral w) (fromIntegral h)
                 render renderer
-                swapBuffers win >> pollEvents
+                GLFW.swapBuffers win >> GLFW.pollEvents
                 currentTime <- getCurrentTime
                 let elapsedTime = realToFrac (diffUTCTime currentTime lastTime) :: Float
                     next = case elapsedTime > 5.0 of 
@@ -91,15 +91,15 @@ main = do
     dispose renderer
     putStrLn "Renderer destroyed."
 
-    destroyWindow win
-    terminate
+    GLFW.destroyWindow win
+    GLFW.terminate
 
 --readInput :: IO (Maybe Float)
 readInput keyIsPressed = do
-    Just t <- getTime
-    setTime 0
+    Just t <- GLFW.getTime
+    GLFW.setTime 0
 
-    k <- keyIsPressed Key'Escape
+    k <- keyIsPressed GLFW.Key'Escape
     return $ if k then Nothing else Just (realToFrac t)
 
 -- the threshold and offsetWeight optimisations can be commented out independently

@@ -1,6 +1,6 @@
-{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds #-}
+{-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds, FlexibleContexts #-}
 
-import "GLFW-b" Graphics.UI.GLFW as GLFW
+import qualified Graphics.UI.GLFW as GLFW
 import Control.Applicative hiding (Const)
 import Control.Monad
 import Data.ByteString.Char8 (ByteString)
@@ -220,7 +220,7 @@ main = do
         diffuse = uniformFTexture2D "diffuse" slotU
         normal  = uniformFTexture2D "normal" slotU
         draw _ = do
-            render renderer >> swapBuffers win >> pollEvents
+            render renderer >> GLFW.swapBuffers win >> GLFW.pollEvents
             return ()
     Right img <- loadImage "Panels_Diffuse.png"
     diffuse =<< compileTexture2DRGBAF True False img
@@ -236,8 +236,8 @@ main = do
 
     dispose renderer
     print "renderer destroyed"
-    destroyWindow win
-    terminate
+    GLFW.destroyWindow win
+    GLFW.terminate
 
 scene :: (Word -> Word -> IO ())
       -> T.Trie InputSetter
@@ -275,17 +275,17 @@ mat4ToM44F (Mat4 a b c d) = V4 (vec4ToV4F a) (vec4ToV4F b) (vec4ToV4F c) (vec4To
           -> IO (Maybe Float)
 -}
 readInput win s mousePos fblrPress = do
-    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
-    Just t <- getTime
-    setTime 0
+    let keyIsPressed k = fmap (==GLFW.KeyState'Pressed) $ GLFW.getKey win k
+    Just t <- GLFW.getTime
+    GLFW.setTime 0
 
-    (x,y) <- getCursorPos win
+    (x,y) <- GLFW.getCursorPos win
     mousePos (realToFrac x,realToFrac y)
 
-    fblrPress =<< ((,,,,) <$> keyIsPressed Key'Left <*> keyIsPressed Key'Up <*> keyIsPressed Key'Down <*> keyIsPressed Key'Right <*> keyIsPressed Key'RightShift)
+    fblrPress =<< ((,,,,) <$> keyIsPressed GLFW.Key'Left <*> keyIsPressed GLFW.Key'Up <*> keyIsPressed GLFW.Key'Down <*> keyIsPressed GLFW.Key'Right <*> keyIsPressed GLFW.Key'RightShift)
 
     updateFPS s t
-    k <- keyIsPressed Key'Escape
+    k <- keyIsPressed GLFW.Key'Escape
     return $ if k then Nothing else Just (realToFrac t)
 
 -- FRP boilerplate
@@ -300,21 +300,21 @@ driveNetwork network driver = do
 
 -- OpenGL/GLFW boilerplate
 
-initCommon :: String -> IO (Window,Signal (Int, Int))
+initCommon :: String -> IO (GLFW.Window,Signal (Int, Int))
 initCommon title = do
     GLFW.init
     GLFW.defaultWindowHints
-    mapM_ windowHint
-      [ WindowHint'ContextVersionMajor 3
-      , WindowHint'ContextVersionMinor 3
-      , WindowHint'OpenGLProfile OpenGLProfile'Core
-      , WindowHint'OpenGLForwardCompat True
+    mapM_ GLFW.windowHint
+      [ GLFW.WindowHint'ContextVersionMajor 3
+      , GLFW.WindowHint'ContextVersionMinor 3
+      , GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
+      , GLFW.WindowHint'OpenGLForwardCompat True
       ]
     Just win <- GLFW.createWindow 1024 768 title Nothing Nothing
-    makeContextCurrent $ Just win
+    GLFW.makeContextCurrent $ Just win
 
     (windowSize,windowSizeSink) <- external (1024,768)
-    setWindowSizeCallback win $ Just $ \_ w h -> do
+    GLFW.setWindowSizeCallback win $ Just $ \_ w h -> do
         glViewport 0 0 (fromIntegral w) (fromIntegral h)
         putStrLn $ "window size changed " ++ show (w,h)
         windowSizeSink (fromIntegral w, fromIntegral h)
@@ -337,11 +337,11 @@ updateFPS state t1 = do
     t0' <- readIORef tR
     writeIORef tR $ t0' + t
     when (t + t0' >= 5000) $ do
-    f <- readIORef fR
-    let seconds = (t + t0') / 1000
-        fps = fromIntegral f / seconds
-    writeIORef tR 0
-    writeIORef fR 0
+      f <- readIORef fR
+      let seconds = (t + t0') / 1000
+          fps = fromIntegral f / seconds
+      writeIORef tR 0
+      writeIORef fR 0
 
 -- Continuous camera state (rotated with mouse, moved with arrows)
 userCamera :: Real p => Vec3 -> Signal (Float, Float) -> Signal (Bool, Bool, Bool, Bool, Bool)

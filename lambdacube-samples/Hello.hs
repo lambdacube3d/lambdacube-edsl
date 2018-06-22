@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, PackageImports, TypeOperators, DataKinds, FlexibleContexts #-}
 
-import "GLFW-b" Graphics.UI.GLFW as GLFW
+import qualified Graphics.UI.GLFW as GLFW
 import Control.Monad
 import Data.Vect
 import qualified Data.Trie as T
@@ -146,15 +146,15 @@ smp t = Sampler LinearFilter ClampToEdge t
 main :: IO ()
 main = do
     GLFW.init
-    defaultWindowHints
-    mapM_ windowHint
-      [ WindowHint'ContextVersionMajor 3
-      , WindowHint'ContextVersionMinor 3
-      , WindowHint'OpenGLProfile OpenGLProfile'Core
-      , WindowHint'OpenGLForwardCompat True
+    GLFW.defaultWindowHints
+    mapM_ GLFW.windowHint
+      [ GLFW.WindowHint'ContextVersionMajor 3
+      , GLFW.WindowHint'ContextVersionMinor 3
+      , GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
+      , GLFW.WindowHint'OpenGLForwardCompat True
       ]
-    Just win <- createWindow 1024 768 "LambdaCube 3D Textured Cube" Nothing Nothing
-    makeContextCurrent $ Just win
+    Just win <- GLFW.createWindow 1024 768 "LambdaCube 3D Textured Cube" Nothing Nothing
+    GLFW.makeContextCurrent $ Just win
 
     let frameImage :: Exp Obj (Image 1 V4F)
         frameImage = PrjFrameBuffer "" tix0 $ texturing $ Fetch "stream" Triangles (IV3F "vertexPosition_modelspace", IV2F "vertexUV")
@@ -173,24 +173,24 @@ main = do
     gpuCube <- compileMesh cube
     addMesh renderer "stream" gpuCube []
 
-    let keyIsPressed k = fmap (==KeyState'Pressed) $ getKey win k
+    let keyIsPressed k = fmap (==GLFW.KeyState'Pressed) $ GLFW.getKey win k
         cm  = fromProjective (lookat (Vec3 4 3 3) (Vec3 0 0 0) (Vec3 0 1 0))
         pm  = perspective 0.1 100 (pi/4) (1024 / 768)
         loop = do
-            Just t <- getTime
+            Just t <- GLFW.getTime
             let angle = pi / 2 * realToFrac t
                 mm = fromProjective $ rotationEuler $ Vec3 angle 0 0
             mvp $! mat4ToM44F $! mm .*. cm .*. pm
             render renderer
-            swapBuffers win >> pollEvents
+            GLFW.swapBuffers win >> GLFW.pollEvents
 
-            k <- keyIsPressed Key'Escape
+            k <- keyIsPressed GLFW.Key'Escape
             unless k $ loop
     loop
 
     dispose renderer
-    destroyWindow win
-    terminate
+    GLFW.destroyWindow win
+    GLFW.terminate
 
 vec4ToV4F :: Vec4 -> V4F
 vec4ToV4F (Vec4 x y z w) = V4 x y z w

@@ -5,7 +5,7 @@ module Common.Utils where
 import Control.Applicative
 import Control.Monad
 import Data.Time.Clock
-import "GLFW-b" Graphics.UI.GLFW as GLFW
+import Graphics.UI.GLFW as GLFW
 import Graphics.Rendering.OpenGL.Raw.Core32 (glViewport)
 import FRP.Elerea.Param
 
