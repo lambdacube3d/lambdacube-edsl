@@ -36,12 +36,21 @@ stack exec -- lambdacube-convolutionfilter
 
   Lambdacube-core contains the graphics EDSL and the OpenGL 3.2 backend.
 
+## LambdaCube Font Engine
+
+  Work-in-progress [project](https://github.com/cobbpg/lafonten) to provide font rendering capabilities for LambdaCube 3D.
+  
+  ![Lafonten demo](https://raw.githubusercontent.com/cobbpg/lafonten/master/lafonten-demo.png)
+
+
 ## Q3Demo
   Quake III level viewer demo application for lambdacube-core.
   It requires the *.pk3 data files from original Quake 3 demo or full version of game.
   Addtionally custom made game levels are available from http://lvlworld.com. 
   During startup the application will find all .pk3 files available in the current directory.
   The map name can be given as an argument of the q3demo executable.
+
+![Quake III level viewer](https://github.com/csabahruska/lc-dsl/raw/master/lc-q3.png)
 
 ## Stunts
   A revival of the classic racing game Stunts to serve as a non-toy-sized example for LambdaCube.
@@ -50,11 +59,6 @@ stack exec -- lambdacube-convolutionfilter
   The bullet installation instructions can be found in *bullet/README*.
   In order to make the stunts demo work, you need to download the original game as per the instructions given by the program.
 
-
-## Screenshots
-
 ![Stunts demo 1](https://github.com/csabahruska/lc-dsl/raw/master/lc-stunts-1.png)
 
 ![Stunts demo 2](https://github.com/csabahruska/lc-dsl/raw/master/lc-stunts-2.png)
-
-![Quake III level viewer](https://github.com/csabahruska/lc-dsl/raw/master/lc-q3.png)
