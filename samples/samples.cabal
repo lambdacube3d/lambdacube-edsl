@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 
 
-executable lambdacube-deffered
+executable lambdacube-deferred
   main-is:             deferredTest.hs
   -- other-modules:
   other-extensions:    OverloadedStrings, TypeOperators, NoMonomorphismRestriction, ExistentialQuantification, PackageImports, DoRec, ParallelListComp, DataKinds, NamedFieldPuns
