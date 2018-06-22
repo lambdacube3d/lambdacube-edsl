@@ -31,17 +31,17 @@ Library
   hs-source-dirs:    src/lib
   Build-Depends: 
         base >=4.7 && <5,
-        binary >=0.7 && <0.8,
-        bytestring >=0.10 && <0.11,
-        containers >=0.5 && <0.6,
-        mtl >=2.2 && <2.3,
-        vector >=0.10 && <0.11,
-        prettyclass >=1.0 && <1.1,
+        binary >=0.7,
+        bytestring >=0.10,
+        containers >=0.5,
+        mtl >=2.2,
+        vector >=0.10,
+        prettyclass >=1.0,
 
-        bytestring-trie >=0.2 && <0.3,
-        OpenGLRaw >=1.5 && <1.6,
-        bitmap >= 0.0.2 && <0.0.3,
-        language-glsl >=0.2 && <0.3,
+        bytestring-trie >=0.2,
+        OpenGLRaw >=1.5,
+        bitmap >= 0.0.2,
+        language-glsl >=0.2,
 
         lambdacube-core == 0.2.0,
         lambdacube-edsl == 0.2.0
