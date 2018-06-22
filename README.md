@@ -32,9 +32,9 @@ stack exec -- lambdacube-cubemap
 stack exec -- lambdacube-convolutionfilter
 ```
 
-## Lambdacube-edsl
+## lambdacube-edsl
 
-  Lambdacube-core contains the graphics EDSL and the OpenGL 3.2 backend.
+  The *lambdacube-edsl* package contains the graphics EDSL and the OpenGL 3.2 backend.
 
 ## LambdaCube Font Engine
 
