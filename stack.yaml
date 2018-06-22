@@ -1,0 +1,14 @@
+resolver: lts-6.35
+
+packages:
+  - 'lambdacube-core'
+  - 'lambdacube-edsl'
+  - 'lambdacube-gl'
+  - 'lambdacube-samples'
+  - 'samples'
+
+extra-deps:
+  - OpenGLRaw-1.5.0.1
+  - bitmap-0.0.2
+  - elerea-2.8.0
+  - stb-image-0.2.1
