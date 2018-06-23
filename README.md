@@ -44,7 +44,7 @@ stack exec -- lambdacube-convolutionfilter
 
 ## Demo Scene: Knot Theory
 
-![Knot Theory demo](http://content.pouet.net/files/screenshots/00064/00064479.jpg)
+  ![Knot Theory demo](https://raw.githubusercontent.com/csabahruska/demoscene/master/knot-theory.jpg)
   Also check the [code](https://github.com/csabahruska/demoscene).
 
 
