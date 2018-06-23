@@ -42,6 +42,11 @@ stack exec -- lambdacube-convolutionfilter
   
   ![Lafonten demo](https://raw.githubusercontent.com/cobbpg/lafonten/master/lafonten-demo.png)
 
+## Demo Scene: Knot Theory
+
+![Knot Theory demo](http://content.pouet.net/files/screenshots/00064/00064479.jpg)
+  Also check the [code](https://github.com/csabahruska/demoscene).
+
 
 ## Q3Demo
   Quake III level viewer demo application for lambdacube-core.
